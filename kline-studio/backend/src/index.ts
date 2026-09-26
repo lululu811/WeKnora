@@ -2,9 +2,12 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import { symbolsRoutes } from './routes/symbols.js';
 import { klineRoutes } from './routes/kline.js';
+import { mergedKLineRoutes } from './routes/kline-merged.js';
 import { snapshotRoutes } from './routes/snapshot.js';
 import { marketRoutes } from './routes/market.js';
 import { syncRoutes } from './routes/sync.js';
+import { indicatorsRoutes } from './routes/indicators.js';
+import { picksRoutes } from './routes/picks.js';
 import { registerPluginRoutes } from './plugins/index.js';
 import { nameCache } from './services/name-cache.js';
 
@@ -23,9 +26,12 @@ await nameCache.loadAll();
 // 基础路由
 await app.register(symbolsRoutes, { prefix: '/api' });
 await app.register(klineRoutes, { prefix: '/api' });
+await app.register(mergedKLineRoutes, { prefix: '/api' });
 await app.register(snapshotRoutes, { prefix: '/api' });
 await app.register(marketRoutes, { prefix: '/api' });
 await app.register(syncRoutes, { prefix: '/api' });
+await app.register(indicatorsRoutes, { prefix: '/api' });
+await app.register(picksRoutes, { prefix: '/api' });
 
 // 插件路由（Zettaranc 等）
 await registerPluginRoutes(app);

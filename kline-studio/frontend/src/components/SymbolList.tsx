@@ -10,10 +10,16 @@ interface Symbol {
   exchange: string | null;
 }
 
-type Tab = 'watch' | 'SH' | 'SZ' | 'BJ';
+type Tab = 'watch' | 'picks' | 'SH' | 'SZ' | 'BJ';
 
 export function SymbolList() {
-  const [tab, setTab] = useState<Tab>('watch');
+  // URL ?tab=picks|watch|SH|SZ|BJ 深链：WeKnora agent tool 返回的 URL 直接打开对应 tab
+  const initialTab = (() => {
+    const t = new URLSearchParams(window.location.search).get('tab');
+    if (t === 'picks' || t === 'watch' || t === 'SH' || t === 'SZ' || t === 'BJ') return t;
+    return 'watch';
+  })();
+  const [tab, setTab] = useState<Tab>(initialTab);
   const [search, setSearch] = useState('');
   const [items, setItems] = useState<Symbol[]>([]);
   const [loading, setLoading] = useState(false);
@@ -52,6 +58,32 @@ export function SymbolList() {
           const map = new Map(fetched.filter((s): s is Symbol => !!s).map((s) => [s.thscode, s]));
           const ordered = entries
             .map((e) => map.get(`${e.ticker}.${e.exchange}`))
+            .filter((s): s is Symbol => !!s);
+          setItems(ordered);
+          setSymbols(
+            ordered.map((s) => ({
+              ticker: s.ticker,
+              exchange: s.exchange ?? 'SH',
+              name: s.name,
+            })),
+          );
+          setLoading(false);
+          return;
+        } else if (tab === 'picks') {
+          // 今日 picks tab：来自 data/picks.json（上级 KB 推送）
+          const env = await (await fetch('/api/picks', { signal: ctrl.signal })).json();
+          const list: { ticker: string; exchange: string }[] = env.data ?? [];
+          const fetched = await Promise.all(
+            list.map((p) =>
+              fetch(`/api/symbols/${p.ticker}.${p.exchange}`, { signal: ctrl.signal })
+                .then((r) => r.json())
+                .then((env) => env.data as Symbol | null)
+                .catch(() => null),
+            ),
+          );
+          const map = new Map(fetched.filter((s): s is Symbol => !!s).map((s) => [s.thscode, s]));
+          const ordered = list
+            .map((p) => map.get(`${p.ticker}.${p.exchange}`))
             .filter((s): s is Symbol => !!s);
           setItems(ordered);
           setSymbols(
@@ -113,6 +145,9 @@ export function SymbolList() {
       <div style={styles.tabs}>
         <TabButton active={tab === 'watch'} onClick={() => setTab('watch')} count={wl.list.length}>
           自选
+        </TabButton>
+        <TabButton active={tab === 'picks'} onClick={() => setTab('picks')}>
+          今日 picks
         </TabButton>
         <TabButton active={tab === 'SH'} onClick={() => setTab('SH')}>
           沪 A
@@ -201,6 +236,8 @@ export function SymbolList() {
           <div style={styles.empty}>
             {tab === 'watch'
               ? '当前分组暂无自选，点右侧 ☆ 加自选'
+              : tab === 'picks'
+              ? '暂无 picks，检查 data/picks.json'
               : '无匹配标的'}
           </div>
         )}
