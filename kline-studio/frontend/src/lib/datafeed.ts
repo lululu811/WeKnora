@@ -73,21 +73,49 @@ export class ZettarancDatafeed {
   ): Promise<KLineData[]> {
     const timespan = period?.timespan;
     const periodParam = timespan === 'week' ? 'week' : timespan === 'month' ? 'month' : 'day';
-    const rows = await httpGet<BackendKLine[]>(
-      `/kline?symbol=${encodeURIComponent(symbol.ticker + '.' + symbol.exchange)}` +
-        `&adjust=${this.adjust}&period=${periodParam}&limit=5000`,
-    );
-    return rows.map((r) => ({
-      // KLineChart Pro 用 new Date(timestamp) 解析，期望毫秒级；
-      // 后端 DuckDB DATE 转的 ts 是秒级，乘 1000 上送。
-      timestamp: r.ts * 1000,
-      open: r.open,
-      high: r.high,
-      low: r.low,
-      close: r.close,
-      volume: r.volume,
-      turnover: r.turnover,
-    }));
+    const symbolStr = `${symbol.ticker}.${symbol.exchange}`;
+
+    // 并行获取 K 线和指标
+    const [klineRows, indicatorRows] = await Promise.all([
+      httpGet<BackendKLine[]>(
+        `/kline?symbol=${encodeURIComponent(symbolStr)}` +
+          `&adjust=${this.adjust}&period=${periodParam}&limit=5000`,
+      ),
+      httpGet<any[]>(
+        `/indicators?symbol=${encodeURIComponent(symbolStr)}` +
+          `&days=5000&categories=zettaranc`,
+      ).catch(() => []),
+    ]);
+
+    // 建立日期 → 指标 映射
+    const indMap = new Map<string, any>();
+    indicatorRows.forEach((row) => {
+      const date = String(row.date).slice(0, 10);
+      indMap.set(date, row);
+    });
+
+    return klineRows.map((r) => {
+      const date = new Date(r.ts * 1000).toISOString().slice(0, 10);
+      const ind = indMap.get(date) || {};
+      return {
+        // KLineChart Pro 用 new Date(timestamp) 解析，期望毫秒级；
+        // 后端 DuckDB DATE 转的 ts 是秒级，乘 1000 上送。
+        timestamp: r.ts * 1000,
+        open: r.open,
+        high: r.high,
+        low: r.low,
+        close: r.close,
+        volume: r.volume,
+        turnover: r.turnover,
+        // Zettaranc 专属指标（注入到 KLineData，供自定义指标使用）
+        zg_white: ind.zettaranc_zg_white_10 || null,
+        dg_yellow: ind.zettaranc_dg_yellow_14 || null,
+        bbi: ind.zettaranc_bbi || null,
+        brick: ind.zettaranc_brick_value || null,
+        rsl_short: ind.zettaranc_rsl_short_3 || null,
+        rsl_long: ind.zettaranc_rsl_long_21 || null,
+      } as KLineData;
+    });
   }
 
   // 复盘场景不需要订阅：保留接口以满足 KLineChart Pro 类型约束，但 no-op。
