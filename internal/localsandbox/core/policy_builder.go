@@ -35,10 +35,9 @@ func (m ApprovalMode) Known() bool {
 //
 // This is the single source of truth for "which modes exist today", and it
 // lives beside the enum rather than in whatever reads the preferences file.
-// Both of the other two need machinery above the sandbox that is phase 2:
 // ModeAsk compiles to a valid policy with nothing writable and relies on an
-// approval round-trip to widen it per command, and ModeFull is by definition
-// the absence of a policy.
+// approval round-trip to widen it per command; ModeFull is the absence of a
+// policy. Neither path is wired yet, so only ModeAuto is served.
 func (m ApprovalMode) Shipped() bool {
 	return m == ModeAuto
 }
@@ -99,30 +98,35 @@ var toolchainBinNames = []string{
 }
 
 // extraPrivateRoots tighten Seatbelt's blanket file-read* on darwin.
-// /Users and /Volumes cover other homes and mounted disks; /tmp and /var
-// (plus their /private aliases) cover host temp dirs that hold tokens.
-// Seatbelt matches the resolved vnode, so denying /private/tmp also
-// blocks /tmp and denying /private/var also blocks /var/folders.
+// /Users and /Volumes cover other homes and mounted disks. /var (and
+// /private/var) covers /var/folders, where per-user temp tokens live.
+// /tmp is not in this list: the base Seatbelt profile opens it for read
+// and write. A private deny here is emitted after that allow and would
+// close reads again.
 var extraPrivateRoots = []string{
 	"/Users", "/Volumes",
-	"/tmp", "/private/tmp",
 	"/var", "/private/var",
 }
 
 // platformReadRoots are extra readable paths for Windows / PathGuard.
 // Darwin Seatbelt ignores them for availability: the base profile already
-// grants unfiltered file-read* (see spec 6.1). Keeping the list makes the
-// Policy fingerprint comparable across platforms.
+// grants unfiltered file-read*. Keeping the list makes the Policy fingerprint
+// comparable across platforms.
 var platformReadRoots = []string{
 	"/usr/lib", "/usr/share", "/usr/bin", "/bin", "/sbin", "/usr/sbin",
 	"/usr/libexec", "/System", "/Library/Apple", "/private/etc",
 	"/opt/homebrew", "/usr/local",
 }
 
+// ErrInstallDirOutsideSkillsRoot refuses an install policy for any directory
+// that is not inside the configured skills root.
+var ErrInstallDirOutsideSkillsRoot = errors.New("localsandbox: install directory is outside the skills root")
+
 // PolicyBuilder derives a Policy from an approval mode and a workspace.
 type PolicyBuilder struct {
 	homeDir    string
 	appDataDir string
+	skillsRoot string
 }
 
 // NewPolicyBuilder returns a builder scoped to the user's home and app-data dirs.
@@ -144,7 +148,10 @@ func (b *PolicyBuilder) Build(mode ApprovalMode, ws Workspace) (Policy, error) {
 	}
 
 	p := Policy{
-		Network:       NetworkDenied,
+		// Auto-mode chat commands need outbound access for package installs,
+		// APIs, and skill tests. Ask mode keeps it denied below: a network
+		// denial is what routes a command to the approval prompt.
+		Network:       NetworkUnrestricted,
 		Cwd:           ws.Root,
 		ReadableRoots: b.readableRoots(ws),
 		PrivateRoots:  b.privateRoots(),
@@ -161,9 +168,11 @@ func (b *PolicyBuilder) Build(mode ApprovalMode, ws Workspace) (Policy, error) {
 		}
 		p.WritableRoots = []WritableRoot{root}
 	case ModeAsk:
-		// Nothing is writable up front; approved commands are re-prepared
-		// through Relax. Cwd stays the workspace so the process has a home.
+		// Nothing is writable and nothing leaves the machine up front;
+		// approved commands are re-prepared through Relax. Cwd stays the
+		// workspace so the process has a home.
 		p.WritableRoots = nil
+		p.Network = NetworkDenied
 		p.Cwd = ws.Root
 	default:
 		return Policy{}, fmt.Errorf("localsandbox: unknown approval mode %q", mode)
@@ -201,7 +210,44 @@ func (b *PolicyBuilder) readableRoots(ws Workspace) []string {
 	for _, name := range homeReadableNames {
 		roots = append(roots, filepath.Join(b.homeDir, filepath.FromSlash(name)))
 	}
+	if b.skillsRoot != "" {
+		roots = append(roots, b.skillsRoot)
+	}
 	return roots
+}
+
+// WithSkillsRoot makes installed skills readable to every chat command.
+func (b *PolicyBuilder) WithSkillsRoot(root string) *PolicyBuilder {
+	if root = strings.TrimSpace(root); root != "" {
+		b.skillsRoot = filepath.Clean(root)
+	}
+	return b
+}
+
+// BuildInstall is the policy one skill install runs under: only dir is
+// writable, the network is open for package downloads, and deny-read is the
+// same set auto mode enforces.
+func (b *PolicyBuilder) BuildInstall(dir string) (Policy, error) {
+	dir = filepath.Clean(strings.TrimSpace(dir))
+	if b.skillsRoot == "" || !filepath.IsAbs(dir) ||
+		!PathUnder(dir, b.skillsRoot) || samePath(dir, b.skillsRoot) {
+		return Policy{}, fmt.Errorf("%w: %q", ErrInstallDirOutsideSkillsRoot, dir)
+	}
+	if err := b.rejectBroadWorkspace(dir); err != nil {
+		return Policy{}, err
+	}
+	p := Policy{
+		Network:       NetworkUnrestricted,
+		Cwd:           dir,
+		WritableRoots: []WritableRoot{{Path: dir}},
+		ReadableRoots: b.readableRoots(Workspace{Root: dir}),
+		PrivateRoots:  b.privateRoots(),
+		DenyRead:      b.denyRead(),
+	}
+	if err := p.Validate(); err != nil {
+		return Policy{}, err
+	}
+	return p, nil
 }
 
 // ToolchainBins returns existing per-user and platform toolchain directories

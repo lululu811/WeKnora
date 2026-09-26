@@ -12,22 +12,22 @@ import (
 )
 
 // RegisterHithinkFinanceTools registers all hithink finance tools to the tool registry.
-func RegisterHithinkFinanceTools(registry *tools.ToolRegistry, pool *hithink_finance.DBPool) error {
+func RegisterHithinkFinanceTools(registry *tools.ToolRegistry, config *hithink_finance.Config) error {
 	// Register discovery tool
 	registry.RegisterTool(hithink_finance.NewDiscoverTool(registry))
 
 	// Register market tools
-	registry.RegisterTool(market.NewPriceSnapshotTool(pool))
-	registry.RegisterTool(market.NewPriceHistoricalTool(pool))
+	registry.RegisterTool(market.NewPriceSnapshotTool(config))
+	registry.RegisterTool(market.NewPriceHistoricalTool(config))
 
 	// Register financial tools
-	registry.RegisterTool(financial.NewValuationSnapshotTool(pool))
+	registry.RegisterTool(financial.NewValuationSnapshotTool(config))
 
 	// Register indicator tools
-	registry.RegisterTool(indicator.NewTrendMATool(pool))
+	registry.RegisterTool(indicator.NewTrendMATool(config))
 
 	// Register query tools
-	registry.RegisterTool(query.NewSQLQueryTool(pool))
+	registry.RegisterTool(query.NewSQLQueryTool(config))
 
 	return nil
 }
