@@ -1,0 +1,25 @@
+# WeKnora Python Service v2.0
+# 数据源管理层 + HTTP API
+
+# Web 框架
+fastapi==0.109.0
+uvicorn==0.27.0
+pydantic==2.5.3
+
+# DuckDB
+duckdb==1.5.5
+
+# 异步 HTTP 客户端（远程 API 数据源）
+aiohttp==3.9.1
+
+# Redis（可选，按需启用）
+redis==5.0.1
+
+# 数据处理
+pandas==2.1.4
+numpy==1.26.3
+
+# 工具
+python-dotenv==1.0.0
+python-dateutil==2.8.2
+requests==2.31.0

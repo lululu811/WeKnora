@@ -1,0 +1,276 @@
+"""
+技术形态信号检测 — 30+ 种买卖形态信号
+
+对应 Go: internal/agent/tools/hithink_finance/pattern/signals.go
+
+行序：rows[0] 是最新一根 K 线，rows[1] 是前一交易日。
+
+缺数据 = 不发信号
+------------------
+旧实现在 SQL 层写 `COALESCE(col, 0)`，于是"指标没算出来"变成
+`RSI6 = 0 → RSI6超卖`、`MFI = 0 → MFI超卖`，一只没有任何指标数据的
+标的被报成"偏多"。现在缺失值是 `None`，所有阈值型信号都要先确认
+底层字段真的有数据。
+"""
+
+from typing import Dict, List, Optional
+
+from .utils import num, round2
+
+
+def _v(row: Optional[Dict], key: str) -> Optional[float]:
+    return None if row is None else num(row.get(key))
+
+
+def detect_signals(rows: List[Dict]) -> List[Dict]:
+    """从预计算指标中检测所有形态信号。rows[0] 最新，rows[1] 前一天。"""
+    signals: List[Dict] = []
+    if not rows:
+        return signals
+
+    latest = rows[0]
+    prev = rows[1] if len(rows) > 1 else None
+
+    def add(category: str, name: str, signal: str, strength: float, desc: str) -> None:
+        signals.append({
+            "category": category,
+            "name": name,
+            "signal": signal,
+            "strength": round(min(max(strength, 0.0), 1.0), 2),
+            "date": latest["date"],
+            "desc": desc,
+        })
+
+    def crossed_up(key_fast: str, key_slow: str) -> bool:
+        pf, ps = _v(prev, key_fast), _v(prev, key_slow)
+        cf, cs = _v(latest, key_fast), _v(latest, key_slow)
+        if None in (pf, ps, cf, cs):
+            return False
+        return pf <= ps and cf > cs
+
+    def crossed_down(key_fast: str, key_slow: str) -> bool:
+        pf, ps = _v(prev, key_fast), _v(prev, key_slow)
+        cf, cs = _v(latest, key_fast), _v(latest, key_slow)
+        if None in (pf, ps, cf, cs):
+            return False
+        return pf >= ps and cf < cs
+
+    # ── 动量买入信号 ──
+
+    if crossed_up("dif", "dea"):
+        add("buy", "MACD金叉", "bullish", 0.8,
+            f"DIF({_v(latest, 'dif'):.2f}) 上穿 DEA({_v(latest, 'dea'):.2f})")
+    if crossed_down("dif", "dea"):
+        add("sell", "MACD死叉", "bearish", 0.8,
+            f"DIF({_v(latest, 'dif'):.2f}) 下穿 DEA({_v(latest, 'dea'):.2f})")
+
+    latest_k = _v(latest, "k")
+    if crossed_up("k", "d") and latest_k is not None and latest_k < 20:
+        add("buy", "KDJ超卖金叉", "bullish", 0.85,
+            f"K({latest_k:.1f}) 上穿 D({_v(latest, 'd'):.1f})，超卖区")
+    if crossed_down("k", "d") and latest_k is not None and latest_k > 80:
+        add("sell", "KDJ超买死叉", "bearish", 0.85,
+            f"K({latest_k:.1f}) 下穿 D({_v(latest, 'd'):.1f})，超买区")
+
+    rsi6 = _v(latest, "rsi6")
+    if rsi6 is not None and rsi6 < 20:
+        add("buy", "RSI6超卖", "bullish", 0.7, f"RSI6={rsi6:.1f} (<20 超卖区)")
+    if rsi6 is not None and rsi6 > 80:
+        add("sell", "RSI6超买", "bearish", 0.7, f"RSI6={rsi6:.1f} (>80 超买区)")
+
+    latest_stoch_k = _v(latest, "stoch_k")
+    if crossed_up("stoch_k", "stoch_d") and latest_stoch_k is not None and latest_stoch_k < 20:
+        add("buy", "Stochastic超卖金叉", "bullish", 0.75,
+            f"K({latest_stoch_k:.1f}) 上穿 D({_v(latest, 'stoch_d'):.1f})，超卖区")
+    if crossed_down("stoch_k", "stoch_d") and latest_stoch_k is not None and latest_stoch_k > 80:
+        add("sell", "Stochastic超买死叉", "bearish", 0.75,
+            f"K({latest_stoch_k:.1f}) 下穿 D({_v(latest, 'stoch_d'):.1f})，超买区")
+
+    cci = _v(latest, "cci")
+    if cci is not None and cci < -100:
+        add("buy", "CCI超卖", "bullish", 0.8 if cci < -200 else 0.6,
+            f"CCI={cci:.1f} (<-100 超卖)")
+    if cci is not None and cci > 100:
+        add("sell", "CCI超买", "bearish", 0.6, f"CCI={cci:.1f} (>100 超买)")
+
+    willr = _v(latest, "willr")
+    if willr is not None and willr < -80:
+        add("buy", "Williams%R超卖", "bullish", 0.65, f"Williams%R={willr:.1f} (<-80)")
+    if willr is not None and willr > -20:
+        add("sell", "Williams%R超买", "bearish", 0.65, f"Williams%R={willr:.1f} (>−20)")
+
+    mfi = _v(latest, "mfi")
+    if mfi is not None and mfi < 20:
+        add("buy", "MFI超卖", "bullish", 0.7, f"MFI={mfi:.1f} (<20 资金超卖)")
+    if mfi is not None and mfi > 80:
+        add("sell", "MFI超买", "bearish", 0.7, f"MFI={mfi:.1f} (>80 资金超买)")
+
+    # ── 趋势信号 ──
+
+    if crossed_up("st_dir", "st_dir_zero") or (
+        (_v(prev, "st_dir") is not None and _v(latest, "st_dir") is not None)
+        and _v(prev, "st_dir") < 0 < _v(latest, "st_dir")
+    ):
+        add("buy", "Supertrend翻转", "bullish", 0.8,
+            f"Supertrend 由空转多 (趋势值={_v(latest, 'st_val') or 0.0:.2f})")
+    if (
+        _v(prev, "st_dir") is not None and _v(latest, "st_dir") is not None
+        and _v(prev, "st_dir") > 0 > _v(latest, "st_dir")
+    ):
+        add("sell", "Supertrend翻空", "bearish", 0.8,
+            f"Supertrend 由多转空 (趋势值={_v(latest, 'st_val') or 0.0:.2f})")
+
+    adx = _v(latest, "adx")
+    di_plus, di_minus = _v(latest, "di_plus"), _v(latest, "di_minus")
+    if adx is not None and adx > 25 and di_plus is not None and di_minus is not None:
+        strength = min(0.9, 0.5 + adx / 100)
+        if di_plus > di_minus:
+            add("trend", "ADX多头趋势", "bullish", strength,
+                f"ADX={adx:.1f} (>25), DI+({di_plus:.1f}) > DI-({di_minus:.1f})")
+        else:
+            add("trend", "ADX空头趋势", "bearish", strength,
+                f"ADX={adx:.1f} (>25), DI+({di_plus:.1f}) < DI-({di_minus:.1f})")
+
+    if crossed_up("di_plus", "di_minus"):
+        add("trend", "DI金叉", "bullish", 0.75,
+            f"DI+({di_plus:.1f}) 上穿 DI-({di_minus:.1f})")
+    if crossed_down("di_plus", "di_minus"):
+        add("trend", "DI死叉", "bearish", 0.75,
+            f"DI+({di_plus:.1f}) 下穿 DI-({di_minus:.1f})")
+
+    prev_st, latest_st = _v(prev, "st_dir"), _v(latest, "st_dir")
+    latest_st_val = _v(latest, "st_val") or 0.0
+    if prev_st is not None and latest_st is not None and prev_st < 0 < latest_st:
+        add("buy", "Supertrend翻转", "bullish", 0.8,
+            f"Supertrend 由空转多 (趋势值={latest_st_val:.2f})")
+    if prev_st is not None and latest_st is not None and prev_st > 0 > latest_st:
+        add("sell", "Supertrend翻空", "bearish", 0.8,
+            f"Supertrend 由多转空 (趋势值={latest_st_val:.2f})")
+
+    aroon_up, aroon_down = _v(latest, "aroon_up"), _v(latest, "aroon_down")
+    if aroon_up is not None and aroon_down is not None:
+        if aroon_up > 70 and aroon_down < 30:
+            add("trend", "Aroon多头排列", "bullish", 0.7,
+                f"AroonUp={aroon_up:.0f} (>70), AroonDown={aroon_down:.0f} (<30)")
+        if aroon_down > 70 and aroon_up < 30:
+            add("trend", "Aroon空头排列", "bearish", 0.7,
+                f"AroonDown={aroon_down:.0f} (>70), AroonUp={aroon_up:.0f} (<30)")
+
+    if crossed_up("vi_plus", "vi_minus"):
+        add("trend", "Vortex金叉", "bullish", 0.7,
+            f"VI+({_v(latest, 'vi_plus'):.2f}) 上穿 VI-({_v(latest, 'vi_minus'):.2f})")
+    if crossed_down("vi_plus", "vi_minus"):
+        add("trend", "Vortex死叉", "bearish", 0.7,
+            f"VI+({_v(latest, 'vi_plus'):.2f}) 下穿 VI-({_v(latest, 'vi_minus'):.2f})")
+
+    # ── 波动率信号 ──
+
+    latest_width = _v(latest, "bb_width")
+    if latest_width is not None and latest_width > 0:
+        recent = [_v(rows[i], "bb_width") for i in range(min(5, len(rows)))]
+        if all(w is not None for w in recent):
+            avg_w = sum(recent) / len(recent)
+            if avg_w > 0 and latest_width < avg_w * 0.5:
+                add("volatility", "布林带收口", "neutral", 0.6,
+                    f"BB宽度={latest_width:.2f} 低于5日均值{avg_w:.2f}的50%，变盘前兆")
+
+    # Donchian 上轨突破：价格真的站上 Donchian 上轨。
+    # 旧判据是 `bb_upper == dc_upper`（两个独立计算量的浮点精确相等），
+    # 近一个月 19 万行里命中 0 次，策略 anomaly 因此永远选不出票。
+    dc_upper = _v(latest, "dc_upper")
+    close = _v(latest, "close")
+    prev_close = _v(prev, "close")
+    if None not in (dc_upper, close, prev_close) and close > dc_upper >= prev_close:
+        add("volatility", "Donchian上轨突破", "bullish", 0.65,
+            f"收盘价 {close:.2f} 站上 Donchian 上轨 {dc_upper:.2f}")
+
+    latest_atr = _v(latest, "atr")
+    if latest_atr is not None:
+        prior = [_v(rows[i], "atr") for i in range(1, min(5, len(rows)))]
+        if prior and all(a is not None for a in prior):
+            avg_atr = sum(prior) / len(prior)
+            if avg_atr > 0 and latest_atr > avg_atr * 1.5:
+                add("volatility", "ATR扩张", "neutral", 0.55,
+                    f"ATR={latest_atr:.2f} 为5日均值{avg_atr:.2f}的"
+                    f"{latest_atr / avg_atr:.1f}倍，波动加剧")
+
+    # ── 量能信号 ──
+
+    cmf = _v(latest, "cmf")
+    if cmf is not None:
+        if cmf > 0.1:
+            add("volume", "CMF资金流入", "bullish", min(0.8, 0.5 + cmf),
+                f"CMF={cmf:.2f} (>0.1 资金净流入)")
+        elif cmf < -0.1:
+            add("volume", "CMF资金流出", "bearish", min(0.8, 0.5 + abs(cmf)),
+                f"CMF={cmf:.2f} (<-0.1 资金净流出)")
+
+    # ── 统计信号 ──
+
+    zscore = _v(latest, "zscore")
+    if zscore is not None:
+        if zscore < -2:
+            add("buy", "Z-Score超卖", "bullish", 0.75,
+                f"Z-Score={zscore:.2f} (<-2 统计超卖)")
+        elif zscore > 2:
+            add("sell", "Z-Score超买", "bearish", 0.75,
+                f"Z-Score={zscore:.2f} (>2 统计超买)")
+
+    lin_slope = _v(latest, "lin_slope")
+    if lin_slope is not None and lin_slope != 0:
+        direction = "上升" if lin_slope > 0 else "下降"
+        add("trend", f"线性回归{direction}",
+            "bullish" if lin_slope > 0 else "bearish",
+            min(0.7, abs(lin_slope) / 10),
+            f"14日线性回归斜率={lin_slope:.4f} ({direction})")
+
+    # ── 蜡烛图形态 ──
+    candle_patterns = [
+        ("cdl_morning_star", "Morning Star晨星", "bullish", "底部反转形态"),
+        ("cdl_evening_star", "Evening Star暮星", "bearish", "顶部反转形态"),
+        ("cdl_hammer", "Hammer锤子线", "bullish", "下影线长，潜在底部"),
+        ("cdl_shooting_star", "Shooting Star流星", "bearish", "上影线长，潜在顶部"),
+        ("cdl_doji", "Doji十字星", "neutral", "多空平衡，变盘信号"),
+        ("cdl_engulfing", "Engulfing吞没", "bullish", "看涨吞没形态"),
+        ("cdl_harami", "Harami孕线", "neutral", "趋势放缓信号"),
+        ("cdl_piercing", "Piercing刺透", "bullish", "看涨刺透形态"),
+        ("cdl_dark_cloud", "Dark Cloud乌云盖顶", "bearish", "看跌乌云形态"),
+        ("cdl_3white", "Three White Soldiers三白兵", "bullish", "连续三阳，强势上涨"),
+        ("cdl_3black", "Three Black Crows三乌鸦", "bearish", "连续三阴，强势下跌"),
+    ]
+    for key, name, sig, desc in candle_patterns:
+        value = num(latest.get(key))
+        if value is not None and value != 0:
+            add("candle", name, sig, 0.85 if abs(value) > 100 else 0.7, desc)
+
+    return signals
+
+
+def summarize_signals(signals: List[Dict]) -> Dict:
+    """汇总信号。无任何买卖信号时 verdict 必须是中性。"""
+    buy_count = sell_count = 0
+    buy_strength = sell_strength = 0.0
+
+    for s in signals:
+        if s["signal"] == "bullish":
+            buy_count += 1
+            buy_strength += s["strength"]
+        elif s["signal"] == "bearish":
+            sell_count += 1
+            sell_strength += s["strength"]
+
+    if buy_count > sell_count and buy_strength > sell_strength:
+        verdict = "偏多"
+    elif sell_count > buy_count and sell_strength > buy_strength:
+        verdict = "偏空"
+    else:
+        verdict = "中性"
+
+    return {
+        "verdict": verdict,
+        "buy_signals": buy_count,
+        "sell_signals": sell_count,
+        "total": len(signals),
+        "buy_strength": round2(buy_strength),
+        "sell_strength": round2(sell_strength),
+    }
