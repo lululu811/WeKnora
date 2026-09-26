@@ -83,15 +83,15 @@ func (t *PriceSnapshotTool) Execute(ctx context.Context, args json.RawMessage) (
 	}
 
 	// Query DuckDB via Python service
-	query := fmt.Sprintf(`
+	query := `
 		SELECT date, open, high, low, close, volume, turnover
 		FROM v_daily_qfq
-		WHERE thscode = '%s'
+		WHERE thscode = ?
 		ORDER BY date DESC
 		LIMIT 1
-	`, params.Thscode)
+	`
 
-	results, err := hithink_finance.QueryDuckDB(ctx, t.config, "market", query)
+	results, err := hithink_finance.QueryDuckDBParams(ctx, t.config, "market", query, params.Thscode)
 	if err != nil {
 		return &types.ToolResult{
 			Success: false,

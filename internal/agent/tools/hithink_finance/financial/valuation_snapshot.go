@@ -58,9 +58,9 @@ func (t *ValuationSnapshotTool) Execute(ctx context.Context, args json.RawMessag
 		return &types.ToolResult{Success: false, Error: "参数错误：thscode 不能为空"}, nil
 	}
 
-	query := fmt.Sprintf(`SELECT date, pe_ttm, pb, ps_ttm, market_cap, circ_market_cap FROM v_valuation_latest WHERE thscode = '%s'`, params.Thscode)
+	query := `SELECT date, pe_ttm, pb, ps_ttm, market_cap, circ_market_cap FROM v_valuation_latest WHERE thscode = ?`
 
-	results, err := hithink_finance.QueryDuckDB(ctx, t.config, "financials", query)
+	results, err := hithink_finance.QueryDuckDBParams(ctx, t.config, "financials", query, params.Thscode)
 	if err != nil {
 		return &types.ToolResult{Success: false, Error: err.Error()}, nil
 	}

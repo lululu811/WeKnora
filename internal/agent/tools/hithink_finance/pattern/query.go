@@ -10,7 +10,8 @@ import (
 
 // row represents one day of indicator data from DuckDB.
 type row struct {
-	Date string  `json:"date"`
+	Date  string  `json:"date"`
+	Close float64 `json:"close"`
 	// Momentum
 	DIF      float64 `json:"dif"`
 	DEA      float64 `json:"dea"`
@@ -71,9 +72,11 @@ type row struct {
 // queryIndicatorRows fetches recent indicator rows from DuckDB.
 // rows are ordered newest-first (index 0 = latest day).
 func queryIndicatorRows(ctx context.Context, config *hithink_finance.Config, thscode string, days int) ([]row, error) {
-	sql := fmt.Sprintf(`
+	// thscode and days are bound parameters, never formatted into the SQL.
+	sql := `
 		SELECT
 			CAST(date AS VARCHAR) AS date,
+			close,
 			COALESCE(momentum_macd_12_26_9_macd, 0) AS dif,
 			COALESCE(momentum_macd_12_26_9_signal, 0) AS dea,
 			COALESCE(momentum_macd_12_26_9_hist, 0) AS macd_hist,
@@ -124,12 +127,13 @@ func queryIndicatorRows(ctx context.Context, config *hithink_finance.Config, ths
 			COALESCE(candles_cdl_3whitesoldiers_0, 0) AS cdl_3white,
 			COALESCE(candles_cdl_3blackcrows_0, 0) AS cdl_3black
 		FROM v_indicators_daily
-		WHERE thscode = '%s'
+		WHERE thscode = ?
 		ORDER BY date DESC
-		LIMIT %d
-	`, thscode, days)
+		LIMIT ?
+	`
 
-	results, err := hithink_finance.QueryDuckDB(ctx, config, "indicators", sql)
+	results, err := hithink_finance.QueryDuckDBParams(
+		ctx, config, "indicators", sql, thscode, days)
 	if err != nil {
 		return nil, err
 	}
@@ -144,6 +148,7 @@ func queryIndicatorRows(ctx context.Context, config *hithink_finance.Config, ths
 func mapToRow(m map[string]interface{}) row {
 	return row{
 		Date:              str(m, "date"),
+		Close:             f64(m, "close"),
 		DIF:               f64(m, "dif"),
 		DEA:               f64(m, "dea"),
 		MACDHist:          f64(m, "macd_hist"),

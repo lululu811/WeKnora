@@ -177,15 +177,20 @@ func analyzeDowStructure(rows []marketRow) (direction, description string) {
 		return "consolidation", "摆动点不足，无法判断趋势结构"
 	}
 
-	// rows[0] is newest. Smallest index = most recent.
-	// For Dow analysis we want to compare recent swings vs prior swings.
-	// highs is sorted by index ascending (older first? no - findSwings iterates i from window to n-window).
-	// rows[i] with larger i = older. So highs[0] is oldest, highs[len-1] is most recent.
-	// Compare most recent high vs previous high.
-	recentHighIdx := highs[len(highs)-1]
-	prevHighIdx := highs[len(highs)-2]
-	recentLowIdx := lows[len(lows)-1]
-	prevLowIdx := lows[len(lows)-2]
+	// Direction check.
+	//
+	// findSwings walks i from window to n-window, so the returned index slice
+	// is ASCENDING. The rows are DESCENDING (rows[0] is newest). The two
+	// cancel out: **the head of the slice is the most recent swing**, the tail
+	// is the oldest. So "recent vs previous" is highs[0] vs highs[1].
+	//
+	// The old code took highs[len-1]/highs[len-2] while calling them
+	// recentHigh/prevHigh, i.e. it compared the two OLDEST swings — which
+	// reported a textbook Higher-High + Higher-Low uptrend as "downtrend".
+	recentHighIdx := highs[0]
+	prevHighIdx := highs[1]
+	recentLowIdx := lows[0]
+	prevLowIdx := lows[1]
 
 	hh := rows[recentHighIdx].High > rows[prevHighIdx].High
 	hl := rows[recentLowIdx].Low > rows[prevLowIdx].Low

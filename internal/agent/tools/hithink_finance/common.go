@@ -33,10 +33,15 @@ func DefaultConfig() *Config {
 }
 
 // QueryRequest represents a DuckDB query request.
+//
+// Params carries the bind values for the `?` placeholders in SQL, in order.
+// Anything derived from user input (thscode above all) must go here rather
+// than be formatted into the SQL string.
 type QueryRequest struct {
-	DB    string `json:"db"`
-	SQL   string `json:"sql"`
-	Limit int    `json:"limit"`
+	DB     string        `json:"db"`
+	SQL    string        `json:"sql"`
+	Limit  int           `json:"limit"`
+	Params []interface{} `json:"params,omitempty"`
 }
 
 // QueryResponse represents a DuckDB query response.
@@ -45,25 +50,36 @@ type QueryResponse struct {
 	DB      string                   `json:"db"`
 	Count   int                      `json:"count"`
 	Data    []map[string]interface{} `json:"data"`
+	Error   string                   `json:"error,omitempty"`
 }
 
 // QueryDuckDB executes a SQL query on a DuckDB database via Python service.
+// The query must not embed user input; use QueryDuckDBParams for that.
 func QueryDuckDB(ctx context.Context, config *Config, dbName, query string) ([]map[string]interface{}, error) {
+	return QueryDuckDBParams(ctx, config, dbName, query)
+}
+
+// QueryDuckDBParams executes a parameterised SQL query.
+//
+// The LIMIT handling here mirrors what python-service does: the service
+// wraps every statement in an outer LIMIT, so a "LIMIT" substring check on
+// the caller's SQL (the old `strings.Contains(..., "LIMIT")`) was both
+// redundant and bypassable via a SQL comment.
+func QueryDuckDBParams(ctx context.Context, config *Config, dbName, query string, params ...interface{}) ([]map[string]interface{}, error) {
 	if config == nil {
 		config = DefaultConfig()
 	}
 
-	// Add LIMIT if not present
-	if !strings.Contains(strings.ToUpper(query), "LIMIT") {
-		query = fmt.Sprintf("%s LIMIT 1000", strings.TrimRight(query, "; \n"))
-	}
-
+	// No LIMIT is appended here: python-service wraps every statement in an
+	// outer `SELECT * FROM (...) LIMIT n`, so appending one client-side was
+	// redundant — and the old `strings.Contains(..., "LIMIT")` guard that
+	// decided whether to append was defeated by a `-- limit` comment.
 	request := QueryRequest{
-		DB:    dbName,
-		SQL:   query,
-		Limit: 1000,
+		DB:     dbName,
+		SQL:    query,
+		Limit:  1000,
+		Params: params,
 	}
-
 	reqBody, err := json.Marshal(request)
 	if err != nil {
 		return nil, fmt.Errorf("请求序列化失败：%v", err)
@@ -72,7 +88,7 @@ func QueryDuckDB(ctx context.Context, config *Config, dbName, query string) ([]m
 	ctx, cancel := context.WithTimeout(ctx, config.Timeout)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, "POST", config.ServiceURL+"/query", bytes.NewBuffer(reqBody))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, config.ServiceURL+"/query/", bytes.NewBuffer(reqBody))
 	if err != nil {
 		return nil, fmt.Errorf("创建请求失败：%v", err)
 	}
@@ -100,6 +116,9 @@ func QueryDuckDB(ctx context.Context, config *Config, dbName, query string) ([]m
 	}
 
 	if !result.Success {
+		if result.Error != "" {
+			return nil, fmt.Errorf("查询失败：%s", result.Error)
+		}
 		return nil, fmt.Errorf("查询失败")
 	}
 

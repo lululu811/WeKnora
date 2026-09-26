@@ -70,9 +70,9 @@ func (t *PriceHistoricalTool) Execute(ctx context.Context, args json.RawMessage)
 		params.Days = 500
 	}
 
-	query := fmt.Sprintf(`SELECT date, open, high, low, close, volume, turnover FROM v_daily_qfq WHERE thscode = '%s' ORDER BY date DESC LIMIT %d`, params.Thscode, params.Days)
+	query := `SELECT date, open, high, low, close, volume, turnover FROM v_daily_qfq WHERE thscode = ? ORDER BY date DESC LIMIT ?`
 
-	results, err := hithink_finance.QueryDuckDB(ctx, t.config, "market", query)
+	results, err := hithink_finance.QueryDuckDBParams(ctx, t.config, "market", query, params.Thscode, params.Days)
 	if err != nil {
 		return &types.ToolResult{Success: false, Error: err.Error()}, nil
 	}

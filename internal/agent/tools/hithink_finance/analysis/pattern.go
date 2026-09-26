@@ -153,13 +153,16 @@ func detectHeadAndShoulders(rows []marketRow) map[string]interface{} {
 	avgShoulder := (ls + rs) / 2
 	if math.Abs(ls-rs)/avgShoulder > 0.05 { return nil }
 
-	// Neckline: average of the two valleys between shoulders
-	valley1 := rows[highs[0]].Low // between right shoulder and head
-	valley2 := rows[highs[1]].Low // between head and left shoulder
-	neckline := (valley1 + valley2) / 2
+	// Neckline: the two reaction lows that bracket the head, i.e. the lows at
+	// the left shoulder (highs[2]) and the right shoulder (highs[0]).
+	valleyLeft := rows[highs[2]].Low
+	valleyRight := rows[highs[0]].Low
+	neckline := (valleyLeft + valleyRight) / 2
 
-	// Target: head - (head - neckline)
-	target := head - (head - neckline)
+	// Measured-move target: the neckline minus the head-to-neckline height.
+	// The old expression was `head - (head - neckline)`, which algebraically
+	// collapses to `neckline` — the "target" was always the neckline.
+	target := neckline - (head - neckline)
 	confidence := 0.6
 	if rows[0].Close < neckline { confidence += 0.2 } // neckline broken
 
@@ -270,18 +273,38 @@ func detectWedge(rows []marketRow) map[string]interface{} {
 	}
 	peaks := n / 3
 
-	// Rising wedge: both rising but converging
-	if peakTrend < 0 && troughTrend < 0 {
-		return map[string]interface{}{
-			"name": "上升楔形", "type": "reversal", "direction": "bearish", "confidence": 0.6,
-			"desc": "高点和低点都在上升但收敛，看跌反转形态",
-		}
+	// Sign convention: rows are newest-first, so `rows[i] - rows[i+1]` is
+	// (newer - older). A POSITIVE sum therefore means highs and lows are RISING.
+	// The old code mapped positive -> "下降楔形/bullish", labelling every clean
+	// uptrend as a falling wedge and saying so in the desc.
+	nearSpan := 0.0
+	for i := 0; i < 5 && i < n; i++ {
+		if i == 0 { nearSpan = rows[i].High - rows[i].Low }
 	}
-	// Falling wedge: both falling but converging
+	farSpan := 0.0
+	for i := 5; i < 12 && i < n; i++ {
+		if i == 5 { farSpan = rows[i].High - rows[i].Low }
+	}
+	converging := farSpan > 0 && nearSpan < farSpan
+	conf := 0.55
+	convergeNote := "但未见收敛"
+	if converging {
+		conf = 0.65
+		convergeNote = "且振幅收敛"
+	}
+
+	// Rising wedge: highs and lows both rising -> bearish reversal.
 	if peakTrend > 0 && troughTrend > 0 {
 		return map[string]interface{}{
-			"name": "下降楔形", "type": "reversal", "direction": "bullish", "confidence": 0.6,
-			"desc": "高点和低点都在下降但收敛，看涨反转形态",
+			"name": "上升楔形", "type": "reversal", "direction": "bearish", "confidence": conf,
+			"desc": fmt.Sprintf("高点和低点同时上升（高点斜率%.3f，低点斜率%.3f）%s → 上涨动能衰减，看跌反转形态", peakTrend, troughTrend, convergeNote),
+		}
+	}
+	// Falling wedge: highs and lows both falling -> bullish reversal.
+	if peakTrend < 0 && troughTrend < 0 {
+		return map[string]interface{}{
+			"name": "下降楔形", "type": "reversal", "direction": "bullish", "confidence": conf,
+			"desc": fmt.Sprintf("高点和低点同时下降（高点斜率%.3f，低点斜率%.3f）%s → 下跌动能衰减，看涨反转形态", peakTrend, troughTrend, convergeNote),
 		}
 	}
 	_ = peaks
@@ -289,38 +312,40 @@ func detectWedge(rows []marketRow) map[string]interface{} {
 }
 
 func detectFlag(rows []marketRow) map[string]interface{} {
-	// Look for a sharp move (5%+ in 3-5 days) followed by counter-trend consolidation
+	// A flag is a sharp pole followed by a drift.
+	//
+	// Row order matters: rows are NEWEST-first, so the pole is the OLDER
+	// segment (rows[consolidationLen:]) and the drift is the RECENT one
+	// (rows[:consolidationLen]). The old code had the two swapped, so it
+	// searched for "recent impulse + older drift" — the exact inverse of a
+	// flag — and matched none of the canonical shapes.
 	if len(rows) < 15 { return nil }
 
-	// Check for sharp move in last 5-8 days
-	for flagStart := 3; flagStart <= 8; flagStart++ {
-		if flagStart >= len(rows)-5 { continue }
-		moves := rows[:flagStart]
-		first, last := moves[len(moves)-1], moves[0]
-		changePct := (last.Close - first.Close) / first.Close * 100
+	for consolidationLen := 3; consolidationLen <= 10; consolidationLen++ {
+		consolidation := rows[:consolidationLen]
+		pole := rows[consolidationLen:]
+		if len(pole) < 2 { continue }
+
+		poleStart, poleEnd := pole[len(pole)-1], pole[0]
+		if poleStart.Close <= 0 { continue }
+		changePct := (poleEnd.Close - poleStart.Close) / poleStart.Close * 100
 		if math.Abs(changePct) < 5 { continue }
 
-		// Check consolidation after the move
-		consolidation := rows[flagStart:]
-		if len(consolidation) < 3 || len(consolidation) > 10 { continue }
+		// Net drift across the consolidation, as a fraction of its oldest close.
+		first := consolidation[len(consolidation)-1].Close
+		if first <= 0 { continue }
+		consChange := (consolidation[0].Close - first) / first
 
-		var consChange float64
-		for i := 1; i < len(consolidation); i++ {
-			consChange += consolidation[i-1].Close - consolidation[i].Close
-		}
-		consChange /= float64(len(consolidation) - 1)
-
-		// Consolidation should be against the trend
-		if changePct > 0 && consChange > -0.2 && consChange < 0.5 {
+		if changePct > 0 && consChange > -0.03 && consChange < 0.03 {
 			return map[string]interface{}{
 				"name": "牛市旗形", "type": "continuation", "direction": "bullish", "confidence": 0.55,
-				"desc": fmt.Sprintf("%.1f%%急涨后小幅回调整理，看涨中继形态", changePct),
+				"desc": fmt.Sprintf("%.1f%% 急涨后横向整理%d日（净漂移%+.2f%%），看涨中继形态", changePct, consolidationLen, consChange*100),
 			}
 		}
-		if changePct < 0 && consChange < 0.2 && consChange > -0.5 {
+		if changePct < 0 && consChange > -0.03 && consChange < 0.03 {
 			return map[string]interface{}{
 				"name": "熊市旗形", "type": "continuation", "direction": "bearish", "confidence": 0.55,
-				"desc": fmt.Sprintf("%.1f%%急跌后小幅反弹整理，看跌中继形态", changePct),
+				"desc": fmt.Sprintf("%.1f%% 急跌后横向整理%d日（净漂移%+.2f%%），看跌中继形态", changePct, consolidationLen, consChange*100),
 			}
 		}
 	}

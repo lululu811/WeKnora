@@ -187,13 +187,19 @@ func detectSignals(rows []row) []Signal {
 		}
 	}
 
-	// Donchian 突破
+	// Donchian 突破: the close must actually clear the Donchian upper band.
+	//
+	// The old check was `BBUpper == DCUpper` — exact float equality between two
+	// independently computed quantities. Over a month of real indicator rows
+	// that matched zero times, which is one reason the `anomaly` screener
+	// strategy could never return a match.
 	if len(rows) >= 2 {
-		// We don't have close price here, but we can check if indicators suggest breakout
-		// This is a simplified version
-		if latest.BBUpper > 0 && latest.BBUpper == latest.DCUpper {
+		prev := rows[1]
+		if latest.Close > 0 && latest.DCUpper > 0 &&
+			latest.Close > latest.DCUpper && prev.Close > 0 &&
+			latest.DCUpper >= prev.Close {
 			signals = append(signals, Signal{"volatility", "Donchian上轨突破", "bullish", 0.65, latest.Date,
-				fmt.Sprintf("价格触及布林上轨(%.2f) = Donchian上轨", latest.BBUpper)})
+				fmt.Sprintf("收盘价 %.2f 站上 Donchian 上轨 %.2f", latest.Close, latest.DCUpper)})
 		}
 	}
 

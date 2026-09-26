@@ -70,9 +70,9 @@ func (t *TrendMATool) Execute(ctx context.Context, args json.RawMessage) (*types
 		params.Days = 500
 	}
 
-	query := fmt.Sprintf(`SELECT date, overlap_sma_5 AS ma5, overlap_sma_10 AS ma10, overlap_sma_20 AS ma20, overlap_sma_60 AS ma60, overlap_sma_120 AS ma120, overlap_sma_250 AS ma250 FROM v_indicators_daily WHERE thscode = '%s' ORDER BY date DESC LIMIT %d`, params.Thscode, params.Days)
+	query := `SELECT date, overlap_sma_5 AS ma5, overlap_sma_10 AS ma10, overlap_sma_20 AS ma20, overlap_sma_60 AS ma60, overlap_sma_120 AS ma120, overlap_sma_250 AS ma250 FROM v_indicators_daily WHERE thscode = ? ORDER BY date DESC LIMIT ?`
 
-	results, err := hithink_finance.QueryDuckDB(ctx, t.config, "indicators", query)
+	results, err := hithink_finance.QueryDuckDBParams(ctx, t.config, "indicators", query, params.Thscode, params.Days)
 	if err != nil {
 		return &types.ToolResult{Success: false, Error: err.Error()}, nil
 	}

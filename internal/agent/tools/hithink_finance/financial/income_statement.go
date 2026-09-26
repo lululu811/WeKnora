@@ -70,9 +70,9 @@ func (t *IncomeStatementTool) Execute(ctx context.Context, args json.RawMessage)
 		params.Periods = 20
 	}
 
-	query := fmt.Sprintf(`SELECT report_date, revenue, operating_cost, net_profit, eps FROM v_income_statement WHERE thscode = '%s' ORDER BY report_date DESC LIMIT %d`, params.Thscode, params.Periods)
+	query := `SELECT report_date, revenue, operating_cost, net_profit, eps FROM v_income_statement WHERE thscode = ? ORDER BY report_date DESC LIMIT ?`
 
-	results, err := hithink_finance.QueryDuckDB(ctx, t.config, "financials", query)
+	results, err := hithink_finance.QueryDuckDBParams(ctx, t.config, "financials", query, params.Thscode, params.Periods)
 	if err != nil {
 		return &types.ToolResult{Success: false, Error: err.Error()}, nil
 	}

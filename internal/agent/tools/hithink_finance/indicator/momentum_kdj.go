@@ -70,9 +70,9 @@ func (t *MomentumKDJTool) Execute(ctx context.Context, args json.RawMessage) (*t
 		params.Days = 500
 	}
 
-	query := fmt.Sprintf(`SELECT date, momentum_kdj_9_3_k AS k, momentum_kdj_9_3_d AS d, momentum_kdj_9_3_j AS j FROM v_indicators_daily WHERE thscode = '%s' ORDER BY date DESC LIMIT %d`, params.Thscode, params.Days)
+	query := `SELECT date, momentum_kdj_9_3_k AS k, momentum_kdj_9_3_d AS d, momentum_kdj_9_3_j AS j FROM v_indicators_daily WHERE thscode = ? ORDER BY date DESC LIMIT ?`
 
-	results, err := hithink_finance.QueryDuckDB(ctx, t.config, "indicators", query)
+	results, err := hithink_finance.QueryDuckDBParams(ctx, t.config, "indicators", query, params.Thscode, params.Days)
 	if err != nil {
 		return &types.ToolResult{Success: false, Error: err.Error()}, nil
 	}

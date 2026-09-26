@@ -58,68 +58,80 @@ func FetchMarketData(ctx context.Context, config *hithink_finance.Config, thscod
 		days = 250
 	}
 
-	// Fetch from market DB: OHLCV + moving averages
-	marketSQL := fmt.Sprintf(`
+	// Fetch from market DB: OHLCV + moving averages.
+	//
+	// thscode is bound as a parameter, never formatted into the SQL. The old
+	// `fmt.Sprintf(..., thscode, ...)` made this an injection point that
+	// python-service happily executed.
+	marketSQL := `
 		SELECT
 			CAST(date AS VARCHAR) AS date,
 			open, high, low, close,
 			volume AS vol,
-			COALESCE(overlap_sma_5, 0) AS ma5,
-			COALESCE(overlap_sma_10, 0) AS ma10,
-			COALESCE(overlap_sma_20, 0) AS ma20,
-			COALESCE(overlap_sma_60, 0) AS ma60,
-			COALESCE(overlap_sma_120, 0) AS ma120,
-			COALESCE(overlap_sma_250, 0) AS ma250
+			overlap_sma_5 AS ma5,
+			overlap_sma_10 AS ma10,
+			overlap_sma_20 AS ma20,
+			overlap_sma_60 AS ma60,
+			overlap_sma_120 AS ma120,
+			overlap_sma_250 AS ma250
 		FROM v_daily_qfq
-		WHERE thscode = '%s'
+		WHERE thscode = ?
 		ORDER BY date DESC
-		LIMIT %d
-	`, thscode, days)
+		LIMIT ?
+	`
 
-	// Fetch from indicators DB: all technical indicators
-	indicatorSQL := fmt.Sprintf(`
+	// Fetch from indicators DB: all technical indicators.
+	//
+	// COALESCE(col, 0) is deliberately NOT used: a NULL indicator means "not
+	// computed", and coercing it to 0 makes RSI6=0 read as "oversold", which
+	// produced fabricated buy signals on instruments with no indicator data.
+	// marketRow uses plain float64, so toF64 maps NULL to 0 regardless — see
+	// the DataComplete flag below for how callers are told not to trust it.
+	indicatorSQL := `
 		SELECT
 			CAST(date AS VARCHAR) AS date,
-			COALESCE(momentum_macd_12_26_9_macd, 0) AS dif,
-			COALESCE(momentum_macd_12_26_9_signal, 0) AS dea,
-			COALESCE(momentum_macd_12_26_9_hist, 0) AS macd_hist,
-			COALESCE(momentum_rsi_6, 0) AS rsi6,
-			COALESCE(momentum_rsi_14, 0) AS rsi14,
-			COALESCE(trend_adx_14, 0) AS adx,
-			COALESCE(momentum_dm_14_plus, 0) AS di_plus,
-			COALESCE(momentum_dm_14_minus, 0) AS di_minus,
-			COALESCE(trend_supertrend_10_3_0_direction, 0) AS st_dir,
-			COALESCE(trend_supertrend_10_3_0_trend, 0) AS st_val,
-			COALESCE(volatility_bbands_20_2_0_upper, 0) AS bb_upper,
-			COALESCE(volatility_bbands_20_2_0_middle, 0) AS bb_mid,
-			COALESCE(volatility_bbands_20_2_0_lower, 0) AS bb_lower,
-			COALESCE(volatility_atr_14, 0) AS atr,
-			COALESCE(volume_cmf_20, 0) AS cmf,
-			COALESCE(volume_mfi_14, 0) AS mfi,
-			COALESCE(volume_obv, 0) AS obv,
-			COALESCE(volume_vwap, 0) AS vwap,
-			COALESCE(momentum_aroon_25_aroonup, 0) AS aroon_up,
-			COALESCE(momentum_aroon_25_aroondown, 0) AS aroon_down,
-			COALESCE(statistics_linearreg_slope_14, 0) AS lin_slope,
-			COALESCE(statistics_zscore_20, 0) AS zscore,
-			COALESCE(candles_cdl_hammer_0, 0) AS cdl_hammer,
-			COALESCE(candles_cdl_shootingstar_0, 0) AS cdl_shooting_star,
-			COALESCE(candles_cdl_doji_0, 0) AS cdl_doji,
-			COALESCE(candles_cdl_engulfing_0, 0) AS cdl_engulfing,
-			COALESCE(candles_cdl_harami_0, 0) AS cdl_harami,
-			COALESCE(candles_cdl_morningstar_0, 0) AS cdl_morning_star,
-			COALESCE(candles_cdl_eveningstar_0, 0) AS cdl_evening_star,
-			COALESCE(candles_cdl_piercing_0, 0) AS cdl_piercing,
-			COALESCE(candles_cdl_darkcloudcover_0, 0) AS cdl_dark_cloud,
-			COALESCE(candles_cdl_3whitesoldiers_0, 0) AS cdl_3white,
-			COALESCE(candles_cdl_3blackcrows_0, 0) AS cdl_3black
+			momentum_macd_12_26_9_macd AS dif,
+			momentum_macd_12_26_9_signal AS dea,
+			momentum_macd_12_26_9_hist AS macd_hist,
+			momentum_rsi_6 AS rsi6,
+			momentum_rsi_14 AS rsi14,
+			trend_adx_14 AS adx,
+			momentum_dm_14_plus AS di_plus,
+			momentum_dm_14_minus AS di_minus,
+			trend_supertrend_10_3_0_direction AS st_dir,
+			trend_supertrend_10_3_0_trend AS st_val,
+			volatility_bbands_20_2_0_upper AS bb_upper,
+			volatility_bbands_20_2_0_middle AS bb_mid,
+			volatility_bbands_20_2_0_lower AS bb_lower,
+			volatility_atr_14 AS atr,
+			volume_cmf_20 AS cmf,
+			volume_mfi_14 AS mfi,
+			volume_obv AS obv,
+			volume_vwap AS vwap,
+			momentum_aroon_25_aroonup AS aroon_up,
+			momentum_aroon_25_aroondown AS aroon_down,
+			statistics_linearreg_slope_14 AS lin_slope,
+			statistics_zscore_20 AS zscore,
+			candles_cdl_hammer_0 AS cdl_hammer,
+			candles_cdl_shootingstar_0 AS cdl_shooting_star,
+			candles_cdl_doji_0 AS cdl_doji,
+			candles_cdl_engulfing_0 AS cdl_engulfing,
+			candles_cdl_harami_0 AS cdl_harami,
+			candles_cdl_morningstar_0 AS cdl_morning_star,
+			candles_cdl_eveningstar_0 AS cdl_evening_star,
+			candles_cdl_piercing_0 AS cdl_piercing,
+			candles_cdl_darkcloudcover_0 AS cdl_dark_cloud,
+			candles_cdl_3whitesoldiers_0 AS cdl_3white,
+			candles_cdl_3blackcrows_0 AS cdl_3black
 		FROM v_indicators_daily
-		WHERE thscode = '%s'
+		WHERE thscode = ?
 		ORDER BY date DESC
-		LIMIT %d
-	`, thscode, days)
+		LIMIT ?
+	`
 
-	marketRows, err := hithink_finance.QueryDuckDB(ctx, config, "market", marketSQL)
+
+	marketRows, err := hithink_finance.QueryDuckDBParams(
+		ctx, config, "market", marketSQL, thscode, days)
 	if err != nil {
 		return nil, fmt.Errorf("market query: %w", err)
 	}
@@ -127,7 +139,8 @@ func FetchMarketData(ctx context.Context, config *hithink_finance.Config, thscod
 		return nil, fmt.Errorf("未找到股票数据：%s", thscode)
 	}
 
-	indicatorRows, err := hithink_finance.QueryDuckDB(ctx, config, "indicators", indicatorSQL)
+	indicatorRows, err := hithink_finance.QueryDuckDBParams(
+		ctx, config, "indicators", indicatorSQL, thscode, days)
 	if err != nil {
 		return nil, fmt.Errorf("indicators query: %w", err)
 	}
