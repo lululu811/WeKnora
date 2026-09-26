@@ -1,12 +1,22 @@
-import { useEffect, useRef, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { KLineChartPro } from '@klinecharts/pro';
 import '@klinecharts/pro/dist/klinecharts-pro.css';
 import { ZettarancDatafeed } from '@/lib/datafeed';
 import { klineStyles } from '@/lib/kline-theme';
 import { StockHeader } from '@/components/StockHeader';
+import { PicksBanner } from '@/components/PicksBanner';
+import { AnnotationPanel } from '@/components/AnnotationPanel';
+import { AnnotationTimeline } from '@/components/AnnotationTimeline';
+import { IndicatorsPanel } from '@/components/IndicatorsPanel';
+import { fetchAnnotations, type Annotation, PATTERN_CONFIG } from '@/lib/annotate-api';
+import { AnnotationOverlay } from '@/lib/annotate-overlay';
+import { registerAllIndicators } from '@/lib/register-indicators';
 import { useStockNav } from '@/hooks/useStockNav';
-import type { SymbolInfo } from '@/types/klinecharts-pro';
+import type { SymbolInfo, KLineData } from '@/types/klinecharts-pro';
+
+// 应用启动时注册 Zettaranc 自定义指标
+registerAllIndicators();
 
 type Adjust = 'none' | 'forward' | 'backward';
 const ADJUST_OPTIONS: Array<{ value: Adjust; label: string }> = [
@@ -22,11 +32,43 @@ const PERIODS = [
 ];
 
 export function KLinePage() {
-  const { ticker, exchange } = useParams<{ ticker: string; exchange: string }>();
+  const params = useParams<{ ticker: string; exchange: string }>();
+  // URL 可能是 `/k/600519.SH`（thscode 合并形式），React Router 会把整段
+  // `600519.SH` 当作 `:ticker`，`:exchange` 留空。这里兼容两种写法。
+  const { ticker: rawTicker, exchange: rawExchange } = params;
+  let ticker = rawTicker;
+  let exchange = rawExchange;
+  if (!exchange && rawTicker && rawTicker.includes('.')) {
+    const [t, e] = rawTicker.split('.');
+    if (e && (e === 'SH' || e === 'SZ' || e === 'BJ')) {
+      ticker = t;
+      exchange = e;
+    }
+  }
+  console.log('[kline-page]', { rawTicker, rawExchange, ticker, exchange, url: location.href })
+  const [searchParams] = useSearchParams();
+  // ?embedded=1 — 被外站（如 WeKnora 右侧栏 iframe）嵌入时隐藏头部/横幅，
+  // 让 K 线图占满容器。Layout 仍保留（左侧 sidebar 是 Layout 里的）。
+  const embedded = useMemo(
+    () => searchParams.get('embedded') === '1',
+    [searchParams],
+  );
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<KLineChartPro | null>(null);
   const [adjust, setAdjust] = useState<Adjust>('forward');
   const [periodIdx, setPeriodIdx] = useState<number>(0);
+
+  // 标注状态
+  const [annotations, setAnnotations] = useState<Annotation[]>([]);
+  const [annotationsVisible, setAnnotationsVisible] = useState(true);
+  const [enabledPatterns, setEnabledPatterns] = useState<Set<string>>(
+    new Set(Object.keys(PATTERN_CONFIG))
+  );
+  const [dataSource, setDataSource] = useState<string>('');
+  const [hasToday, setHasToday] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const overlayRef = useRef<AnnotationOverlay | null>(null);
+  const [bars, setBars] = useState<KLineData[]>([]);
 
   const { nextStock, prevStock, focusSearch, setShowHelp } = useStockNav();
 
@@ -73,7 +115,77 @@ export function KLinePage() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [nextStock, prevStock, focusSearch, setShowHelp]);
 
-  // 销毁并重建 chart（应对 ticker / exchange / adjust / periodIdx 变化）
+  // 加载标注数据
+  useEffect(() => {
+    if (!ticker || !exchange) return;
+
+    const loadAnnotations = async () => {
+      setLoading(true);
+      try {
+        const symbol = `${ticker}.${exchange}`;
+        const result = await fetchAnnotations(symbol, 200);
+        setAnnotations(result.annotations);
+        setDataSource(result.data_source);
+        setHasToday(result.has_today);
+      } catch (err) {
+        console.error('Failed to load annotations:', err);
+        setAnnotations([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadAnnotations();
+  }, [ticker, exchange]);
+
+  // 加载 K 线数据（用于标注计算）
+  useEffect(() => {
+    if (!ticker || !exchange) return;
+
+    const loadBars = async () => {
+      try {
+        const symbol = `${ticker}.${exchange}`;
+        // 加载 1 年数据（足够标注计算）
+        const res = await fetch(`/api/kline/merged?symbol=${symbol}&days=365`);
+        const json = await res.json();
+        if (json.code === 0 && json.data) {
+          const barsData: KLineData[] = json.data.map((r: any) => ({
+            timestamp: r.ts * 1000,
+            open: r.open,
+            high: r.high,
+            low: r.low,
+            close: r.close,
+            volume: r.volume,
+            turnover: r.turnover,
+          }));
+          setBars(barsData);
+          console.log('[bars] loaded', barsData.length, 'bars for', symbol);
+        }
+      } catch (err) {
+        console.error('Failed to load bars:', err);
+      }
+    };
+
+    loadBars();
+  }, [ticker, exchange]);
+
+  // 切换标注类型
+  const handlePatternToggle = (pattern: string) => {
+    setEnabledPatterns((prev) => {
+      const next = new Set(prev);
+      if (next.has(pattern)) {
+        next.delete(pattern);
+      } else {
+        next.add(pattern);
+      }
+      return next;
+    });
+  };
+
+  // 过滤后的标注
+  const filteredAnnotations = annotations.filter((ann) => enabledPatterns.has(ann.type));
+
+  // 销毁并重建 chart
   useEffect(() => {
     if (!containerRef.current || !ticker || !exchange) return;
 
@@ -90,29 +202,48 @@ export function KLinePage() {
     containerRef.current.innerHTML = '';
     chartRef.current = null;
 
+    // 销毁旧的 overlay
+    overlayRef.current?.destroy();
+    overlayRef.current = null;
+
     chartRef.current = new KLineChartPro({
       container: containerRef.current,
       symbol,
       period: PERIODS[periodIdx],
       datafeed: new ZettarancDatafeed({ adjust }),
       styles: klineStyles,
-      mainIndicators: ['MA'],
-      subIndicators: ['VOL', 'MACD', 'KDJ'],
+      mainIndicators: ['MA', 'ZG_WHITE', 'DG_YELLOW', 'BBI'],
+      subIndicators: ['VOL', 'MACD', 'KDJ', 'Z_BBI', 'Z_BRICK', 'Z_RSL_SHORT', 'Z_RSL_LONG'],
       periods: PERIODS,
       drawingBarVisible: true,
       theme: 'dark',
     });
 
+    // 创建标注叠加层
+    if (containerRef.current) {
+      overlayRef.current = new AnnotationOverlay(containerRef.current);
+    }
+
     return () => {
+      overlayRef.current?.destroy();
+      overlayRef.current = null;
       chartRef.current = null;
     };
   }, [ticker, exchange, adjust, periodIdx]);
+
+  // 标注或数据变化时更新叠加层
+  useEffect(() => {
+    if (overlayRef.current && bars.length > 0 && annotations.length > 0) {
+      overlayRef.current.setData(bars, annotations, enabledPatterns);
+    }
+  }, [bars, annotations, enabledPatterns]);
 
   if (!ticker || !exchange) return null;
 
   return (
     <div style={styles.wrap}>
-      <StockHeader ticker={ticker} exchange={exchange} />
+      {!embedded && <StockHeader ticker={ticker} exchange={exchange} />}
+      {!embedded && <PicksBanner />}
       <div style={styles.toolbar}>
         <div style={styles.group}>
           <span style={styles.label}>周期</span>
@@ -161,6 +292,33 @@ export function KLinePage() {
         </div>
       </div>
       <div ref={containerRef} style={styles.chart} />
+      {/* 标注面板 */}
+      {!loading && annotations.length > 0 && (
+        <AnnotationPanel
+          annotations={annotations}
+          visible={annotationsVisible}
+          onToggle={() => setAnnotationsVisible(!annotationsVisible)}
+          enabledPatterns={enabledPatterns}
+          onPatternToggle={handlePatternToggle}
+          dataSource={dataSource}
+          hasToday={hasToday}
+        />
+      )}
+      {/* 标注时间轴 */}
+      {!loading && annotations.length > 0 && annotationsVisible && (
+        <AnnotationTimeline
+          annotations={filteredAnnotations}
+          enabledPatterns={enabledPatterns}
+          onAnnotationClick={(ann) => {
+            console.log('点击标注:', ann);
+          }}
+        />
+      )}
+      {/* Zettaranc 指标面板 */}
+      <IndicatorsPanel
+        symbol={ticker && exchange ? `${ticker}.${exchange}` : ''}
+        visible={annotationsVisible}
+      />
     </div>
   );
 }
@@ -171,6 +329,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     flexDirection: 'column',
     padding: 'var(--sp-2) var(--sp-3)',
+    position: 'relative',
   },
   toolbar: {
     display: 'flex',
@@ -224,5 +383,5 @@ const styles: Record<string, React.CSSProperties> = {
     color: 'var(--text-secondary)',
     fontSize: '11px',
   },
-  chart: { flex: 1, minHeight: 0 },
+  chart: { flex: 1, minHeight: 0, position: 'relative' },
 };
