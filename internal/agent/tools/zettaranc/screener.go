@@ -8,13 +8,13 @@ import (
 	"github.com/Tencent/WeKnora/internal/types"
 )
 
-// ScreenerTool performs stock screening using the Zettaranc system.
+// ScreenerTool performs stock screening using the Zettaranc system via python-service HTTP API.
 type ScreenerTool struct {
-	client *CLIClient
+	client *HTTPClient
 }
 
-// NewScreenerTool creates a new screener tool.
-func NewScreenerTool(client *CLIClient) *ScreenerTool {
+// NewScreenerTool creates a new screener tool backed by python-service.
+func NewScreenerTool(client *HTTPClient) *ScreenerTool {
 	return &ScreenerTool{client: client}
 }
 
@@ -90,13 +90,8 @@ func (t *ScreenerTool) Execute(ctx context.Context, args json.RawMessage) (*type
 		params.Limit = 100
 	}
 
-	// Call Python CLI
-	input := map[string]interface{}{
-		"strategy": params.Strategy,
-		"limit":    params.Limit,
-	}
-
-	resp, err := t.client.Execute(ctx, "screen", input)
+	// Call python-service HTTP API
+	resp, err := t.client.Screen(ctx, params.Strategy, params.Limit)
 	if err != nil {
 		return &types.ToolResult{
 			Success: false,
@@ -108,8 +103,7 @@ func (t *ScreenerTool) Execute(ctx context.Context, args json.RawMessage) (*type
 	output := map[string]interface{}{
 		"strategy": params.Strategy,
 		"limit":    params.Limit,
-		"data":     resp.Data,
-		"meta":     resp.Meta,
+		"data":     resp,
 	}
 
 	outputJSON, err := json.MarshalIndent(output, "", "  ")

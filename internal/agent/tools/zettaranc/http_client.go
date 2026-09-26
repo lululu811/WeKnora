@@ -92,3 +92,54 @@ func (c *HTTPClient) Analyze(ctx context.Context, thscode string, days int) (map
 
 	return result, nil
 }
+
+// ScreenRequest is the request body for the /zettaranc/screen endpoint.
+type ScreenRequest struct {
+	Strategy string `json:"strategy"`
+	Limit    int    `json:"limit"`
+}
+
+// Screen calls the python-service /zettaranc/screen endpoint.
+func (c *HTTPClient) Screen(ctx context.Context, strategy string, limit int) (map[string]interface{}, error) {
+	reqBody := ScreenRequest{
+		Strategy: strategy,
+		Limit:    limit,
+	}
+
+	body, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("请求序列化失败：%v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, c.timeout*4) // 选股耗时较长
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		c.serviceURL+"/zettaranc/screen", bytes.NewBuffer(body))
+	if err != nil {
+		return nil, fmt.Errorf("创建请求失败：%v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("选股服务不可用：%v。请检查 python-service 是否运行", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("读取响应失败：%v", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("选股失败（HTTP %d）：%s", resp.StatusCode, string(respBody))
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return nil, fmt.Errorf("结果解析失败：%v", err)
+	}
+
+	return result, nil
+}

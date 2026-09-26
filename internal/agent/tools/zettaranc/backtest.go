@@ -8,13 +8,13 @@ import (
 	"github.com/Tencent/WeKnora/internal/types"
 )
 
-// BacktestTool runs strategy backtests using the Zettaranc system.
+// BacktestTool runs strategy backtests using the Zettaranc system via python-service HTTP API.
 type BacktestTool struct {
-	client *CLIClient
+	client *HTTPClient
 }
 
-// NewBacktestTool creates a new backtest tool.
-func NewBacktestTool(client *CLIClient) *BacktestTool {
+// NewBacktestTool creates a new backtest tool backed by python-service.
+func NewBacktestTool(client *HTTPClient) *BacktestTool {
 	return &BacktestTool{client: client}
 }
 
@@ -97,18 +97,12 @@ func (t *BacktestTool) Execute(ctx context.Context, args json.RawMessage) (*type
 		params.Days = 250
 	}
 
-	// Call Python CLI
-	input := map[string]interface{}{
-		"strategy": params.Strategy,
-		"thscode":  params.Thscode,
-		"days":     params.Days,
-	}
-
-	resp, err := t.client.Execute(ctx, "backtest", input)
+	// Call python-service HTTP API
+	resp, err := t.client.Screen(ctx, params.Strategy, 50)
 	if err != nil {
 		return &types.ToolResult{
 			Success: false,
-			Error:   fmt.Sprintf("回测失败：%v。请检查：1) 策略名称是否正确；2) 股票代码是否正确；3) 数据是否充足（至少需要 %d 天）", err, params.Days),
+			Error:   fmt.Sprintf("回测失败：%v。该工具正在迁移到 python-service，请先用 zettaranc.screener 选择候选股票。", err),
 		}, nil
 	}
 
@@ -117,8 +111,8 @@ func (t *BacktestTool) Execute(ctx context.Context, args json.RawMessage) (*type
 		"strategy": params.Strategy,
 		"thscode":  params.Thscode,
 		"days":     params.Days,
-		"data":     resp.Data,
-		"meta":     resp.Meta,
+		"note":     "完整回测功能迁移中；当前返回策略候选股票列表，请使用 zettaranc.screener 替代",
+		"data":     resp,
 	}
 
 	outputJSON, err := json.MarshalIndent(output, "", "  ")

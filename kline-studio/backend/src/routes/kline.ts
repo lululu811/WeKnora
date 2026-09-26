@@ -98,7 +98,7 @@ export async function klineRoutes(app: FastifyInstance): Promise<void> {
           min(low) as low,
           arg_max(close, date) as close,
           sum(volume) as volume,
-          sum(amount) as amount
+          sum(turnover) as turnover
         FROM ${view}
         WHERE ${conditions.join(' AND ')}
         GROUP BY ${trunc}
@@ -107,7 +107,7 @@ export async function klineRoutes(app: FastifyInstance): Promise<void> {
       `;
     } else {
       sql = `
-        SELECT date, open, high, low, close, volume, amount
+        SELECT date, open, high, low, close, volume, turnover
         FROM ${view}
         WHERE ${conditions.join(' AND ')}
         ORDER BY date ASC
@@ -121,7 +121,7 @@ export async function klineRoutes(app: FastifyInstance): Promise<void> {
       low: number;
       close: number;
       volume: number;
-      amount: number;
+      turnover: number;
     }>(sql);
 
     reply.send({
@@ -133,7 +133,7 @@ export async function klineRoutes(app: FastifyInstance): Promise<void> {
         low: r.low,
         close: r.close,
         volume: r.volume,
-        turnover: r.amount,
+        turnover: r.turnover,
       })),
     });
   });
