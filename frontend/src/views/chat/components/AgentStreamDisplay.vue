@@ -1239,6 +1239,9 @@ const resolveToolDisplayType = (event: any): DisplayType | undefined => {
   if (event?.tool_name === 'read_skill' && event?.success !== false) {
     return 'read_skill'
   }
+  if (event?.tool_name === 'kline_studio.show' && event?.success !== false) {
+    return 'kline_studio'
+  }
   return undefined
 };
 

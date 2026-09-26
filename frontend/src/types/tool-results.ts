@@ -32,7 +32,8 @@ export type DisplayType =
     | 'edit_sandbox_file'
     | 'read_skill'
     | 'mcp_discovery'
-    | 'mcp_call';
+    | 'mcp_call'
+    | 'kline_studio';
 
 // Search result item
 export interface SearchResultItem {
@@ -445,6 +446,22 @@ export interface ReadSkillData {
     skill_dir?: string;
 }
 
+// kline_studio.show picks card (WeKnora → kline-studio deep-link).
+// Returned by the `kline_studio.show` agent tool; rendered as an interactive
+// ticker chip list with an "Open in kline-studio" button that launches the
+// deep-link URL produced by the tool.
+export interface KlineStudioPick {
+    ticker: string;
+    exchange: string;
+}
+
+export interface KlineStudioData {
+    display_type?: 'kline_studio';
+    url?: string;
+    count?: number;
+    tickers?: KlineStudioPick[];
+}
+
 // Union type for all wiki edit data
 export type WikiEditData = WikiWritePageData | WikiReplaceTextData | WikiRenamePageData | WikiDeletePageData;
 
@@ -469,7 +486,8 @@ export type ToolResultData =
     | WikiDeletePageData
     | ShellExecData
     | ListSandboxFilesData
-    | ReadSkillData;
+    | ReadSkillData
+    | KlineStudioData;
 
 // Action data (from index.vue)
 export interface ActionData {

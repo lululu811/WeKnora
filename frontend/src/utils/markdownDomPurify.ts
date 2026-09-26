@@ -99,6 +99,8 @@ export const markdownDomPurifyConfig = {
     'filterunits', 'primitiveunits', 'xmlns', 'xmlns:xlink', 'xlink:href',
     'version', 'baseprofile', 'enable-background', 'overflow', 'visibility',
     'display', 'pointer-events', 'cursor', 'data-emit', 'direction',
+    // K 线 ticker chip 属性（见 utils/klineTickerInjector.ts）。
+    'data-thscode', 'data-kline-bound',
     'mathvariant', 'encoding', 'aria-hidden',
   ],
   USE_PROFILES: { html: true, svg: true, mathMl: true },

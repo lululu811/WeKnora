@@ -4069,6 +4069,14 @@ export default {
     attachmentUploadFailed: '附件上传失败',
     attachmentParseFailed: '附件解析失败',
     attachmentStillProcessing: '附件 {name} 仍在解析，请稍候'
+    ,
+    klinePanel: {
+      title: 'K 线复盘'
+    },
+    klineStudio: {
+      openInPanel: '在右侧栏展开',
+      openNewTab: '新窗口打开'
+    }
   },
   knowledgeEditor: {
     titleCreate: '新建知识库',
@@ -5057,6 +5065,12 @@ export default {
       favoritesDescription: '在知识库卡片右上角点击星标即可收藏',
       recentsTitle: '暂无最近访问',
       recentsDescription: '最近打开过的知识库会出现在这里'
+    },
+    klineStudio: {
+      pushTooltip: '把该 KB 中提到的股票推送到 kline-studio 看 K 线图',
+      pushSuccess: '已推送 {count} 只股票到 kline-studio（{name}）',
+      noTickers: '未在「{name}」中识别到股票代码',
+      pushFailed: '推送到 kline-studio 失败'
     }
   },
   createChat: {

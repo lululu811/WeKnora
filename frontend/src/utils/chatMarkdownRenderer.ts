@@ -14,6 +14,7 @@ import {
   stripIncompleteCitationTag,
   type CitationKnowledgeRef,
 } from './citationMarkdown.ts'
+import { injectKLineTickers } from './klineTickerInjector'
 
 const STREAMING_IMAGE_PLACEHOLDER =
   '<span class="streaming-image-loading"><span class="streaming-image-loading__skeleton"></span></span>'
@@ -461,8 +462,9 @@ export function renderChatMarkdown(rawMarkdown: unknown, options: RenderChatMark
   const streamingSafeText = options.streaming
     ? stripTrailingStreamingListMarker(stripTrailingStreamingHorizontalRule(rawText))
     : rawText
+  const tickerAnnotated = injectKLineTickers(streamingSafeText)
   const imageContextSafeText = normalizeLegacyImageContextMarkup(
-    streamingSafeText,
+    tickerAnnotated,
     Boolean(options.streaming),
   )
   const citationSafeText = stripIncompleteCitationTag(imageContextSafeText)

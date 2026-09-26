@@ -1,0 +1,246 @@
+<template>
+  <div class="kline-studio-result">
+    <div class="kline-studio-header">
+      <div class="kline-studio-title">
+        <span class="kline-studio-icon" aria-hidden="true">📈</span>
+        <span>K 线挑股</span>
+        <span v-if="count > 0" class="kline-studio-count">{{ count }} 只</span>
+      </div>
+      <div class="kline-studio-actions">
+        <button
+          v-if="hasPick"
+          type="button"
+          class="kline-studio-open-panel"
+          :title="t('chat.klineStudio.openInPanel')"
+          @click="openInPanel(0)"
+        >
+          <t-icon name="chart" size="12px" />
+          <span>{{ t('chat.klineStudio.openInPanel') }}</span>
+        </button>
+        <a
+          v-if="url"
+          :href="url"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="kline-studio-open"
+          :title="t('chat.klineStudio.openNewTab')"
+          @click="trackOpen"
+        >
+          {{ t('chat.klineStudio.openNewTab') }} ↗
+        </a>
+      </div>
+    </div>
+
+    <p v-if="!hasPick" class="kline-studio-empty">
+      当前没有推送标的。
+    </p>
+
+    <ul v-else class="kline-studio-tickers">
+      <li
+        v-for="(pick, idx) in pickList"
+        :key="`${pick.ticker}-${pick.exchange}-${idx}`"
+      >
+        <button
+          type="button"
+          class="kline-studio-ticker"
+          :title="`${pick.ticker}.${pick.exchange}`"
+          @click="openInPanel(idx)"
+        >
+          <span class="ticker-code">{{ pick.ticker }}</span>
+          <span class="ticker-exchange">{{ pick.exchange }}</span>
+        </button>
+      </li>
+    </ul>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { computed, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
+import type { KlineStudioData } from '@/types/tool-results'
+import { useChatKLinePanel } from '@/composables/useChatKLinePanel'
+
+const props = defineProps<{
+  data: KlineStudioData | Record<string, unknown>
+}>()
+
+const { t } = useI18n()
+const panel = useChatKLinePanel()
+
+const record = computed(() => (props.data || {}) as Record<string, unknown>)
+
+const url = computed(() => {
+  const value = record.value.url
+  return typeof value === 'string' && value.trim() ? value.trim() : ''
+})
+
+const pickList = computed(() => {
+  const value = record.value.tickers
+  if (!Array.isArray(value)) return []
+  return value
+    .filter((item): item is { ticker: string; exchange: string } => {
+      if (!item || typeof item !== 'object') return false
+      const o = item as Record<string, unknown>
+      return typeof o.ticker === 'string' && typeof o.exchange === 'string'
+    })
+    .map((item) => ({ ticker: item.ticker, exchange: item.exchange }))
+})
+
+const hasPick = computed(() => pickList.value.length > 0)
+
+const count = computed(() => {
+  const value = record.value.count
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  return pickList.value.length
+})
+
+const openInPanel = (idx: number) => {
+  if (!panel || !hasPick.value) return
+  panel.open(pickList.value, idx)
+}
+
+const trackOpen = () => {
+  console.debug('[kline_studio] opening deep-link:', url.value)
+}
+
+// 卡片挂载时如果当前面板里已经是同一组 picks，仅切换 active；
+// 否则（首次出现或 picks 变化）自动打开右侧栏。
+onMounted(() => {
+  if (!panel || !hasPick.value) return
+  if (panel.visible.value && samePicks(panel.picks.value, pickList.value)) {
+    return
+  }
+  panel.open(pickList.value, 0)
+})
+
+const samePicks = (a: Array<{ ticker: string; exchange: string }>, b: Array<{ ticker: string; exchange: string }>) => {
+  if (a.length !== b.length) return false
+  for (let i = 0; i < a.length; i++) {
+    if (a[i].ticker !== b[i].ticker || a[i].exchange !== b[i].exchange) return false
+  }
+  return true
+}
+</script>
+
+<style lang="less" scoped>
+.kline-studio-result {
+  margin: 8px 0;
+  padding: 12px 14px;
+  border: 1px solid var(--td-component-stroke, #e7e7e7);
+  border-radius: 8px;
+  background: var(--td-bg-color-container, #fff);
+}
+
+.kline-studio-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.kline-studio-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.kline-studio-icon {
+  font-size: 16px;
+}
+
+.kline-studio-count {
+  font-size: 12px;
+  color: var(--td-text-color-secondary, #666);
+  font-weight: 400;
+}
+
+.kline-studio-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.kline-studio-open-panel {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border: 1px solid var(--td-brand-color, #0052d9);
+  border-radius: 4px;
+  background: var(--td-brand-color, #0052d9);
+  color: #fff;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+
+  &:hover {
+    background: var(--td-brand-color-active, #003fa8);
+  }
+}
+
+.kline-studio-open {
+  display: inline-block;
+  padding: 4px 10px;
+  border: 1px solid var(--td-component-stroke, #e7e7e7);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--td-text-color-secondary, #666);
+  font-size: 12px;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 0.15s ease, color 0.15s ease;
+
+  &:hover {
+    background: var(--td-bg-color-secondarycontainer, #f3f3f3);
+    color: var(--td-brand-color, #0052d9);
+  }
+}
+
+.kline-studio-empty {
+  margin: 0;
+  color: var(--td-text-color-secondary, #666);
+  font-size: 12px;
+}
+
+.kline-studio-tickers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.kline-studio-ticker {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 16px;
+  border: 1px solid var(--td-component-stroke, #e7e7e7);
+  background: transparent;
+  color: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+
+  &:hover {
+    background: var(--td-brand-color-light, rgba(0, 82, 217, 0.08));
+    border-color: var(--td-brand-color, #0052d9);
+  }
+}
+
+.ticker-code {
+  font-weight: 600;
+  font-family: var(--td-font-family-mono, monospace);
+}
+
+.ticker-exchange {
+  color: var(--td-text-color-secondary, #666);
+  font-size: 11px;
+}
+</style>

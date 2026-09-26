@@ -3,9 +3,11 @@
         'is-embedded': embeddedMode,
         'has-references-panel': referencesDrawerVisible,
         'has-sandbox-panel': sandboxPanel.visible.value,
+        'has-kline-panel': klinePanel.visible.value,
     }" :style="{
         '--sandbox-panel-width': `${sandboxPanel.width.value}px`,
         '--references-panel-width': `${referencesPanelWidth}px`,
+        '--kline-panel-width': `${klinePanel.width.value}px`,
     }">
         <div v-if="!embeddedMode" class="chat-topbar">
             <ChatHeader :session="currentSession" />
@@ -193,6 +195,7 @@
         :shift-width="referencesPanelWidth"
         :artifacts="sessionArtifacts" :artifacts-collecting="sessionArtifactsCollecting"
         @artifact-deleted="handleArtifactDeleted" />
+    <KLineSidePanel v-if="!embeddedMode" />
 </template>
 <script setup>
 import { makeSteerClientId } from '@/utils/steerId';
@@ -244,12 +247,16 @@ import { provideChatAttachmentPreviewDrawer } from '@/composables/useChatAttachm
 import { useSessionActivityStore } from '@/stores/sessionActivity';
 import { provideChatSandboxPanel } from '@/composables/useChatSandboxPanel';
 import SandboxSidePanel from '@/components/chat/SandboxSidePanel.vue';
+import KLineSidePanel from '@/components/chat/KLineSidePanel.vue';
+import { provideChatKLinePanel } from '@/composables/useChatKLinePanel';
+import { useKLineTickerObserver } from '@/composables/useKLineTickerObserver';
 import BrowserTaskPreview from './components/BrowserTaskPreview.vue';
 import { collectSessionArtifacts, markSessionArtifactDeleted } from '@/utils/sessionArtifacts';
 import { isCollectingSkillArtifacts } from '@/utils/skillArtifacts';
 const referencesDrawer = provideChatReferencesDrawer();
 provideChatAttachmentPreviewDrawer();
 const sandboxPanel = provideChatSandboxPanel();
+const klinePanel = provideChatKLinePanel();
 const { visible: referencesDrawerVisible, panelWidth: referencesPanelWidth } = referencesDrawer;
 
 const props = defineProps({
@@ -590,6 +597,15 @@ watch(historyLoading, (loading) => {
 let fullContent = ref('')
 const scrollContainer = ref(null)
 const composerElement = ref(null)
+
+// 监听 chat 流式输出，把答案里出现的 A 股 ticker（6位.SH/SZ/BJ）变成可
+// hover/click 元素，触发右侧栏抽屉打开对应 ticker 的 K 线图。
+// 必须放在 scrollContainer 声明之后，避免 TDZ。
+useKLineTickerObserver(scrollContainer, (thscode) => {
+  const [ticker, exchange] = thscode.split('.')
+  if (!ticker || !exchange) return
+  klinePanel.open([{ ticker, exchange }], 0)
+});
 const composerHeight = ref(0)
 const scrollbarGutter = ref(0)
 // Reserve space for the independent composer and keep it aligned with the
@@ -2169,5 +2185,32 @@ onBeforeRouteUpdate((to, from, next) => {
         white-space: normal;
         line-height: 1.5;
     }
+}
+
+/* Chat 答案里出现的 A 股 ticker（6位.SH/SZ/BJ）会被包成 <span class="kline-ticker">；
+ * hover/click 后右侧栏抽屉打开对应股票的 K 线图。 */
+.kline-ticker {
+    display: inline-block;
+    padding: 1px 6px;
+    margin: 0 1px;
+    border-radius: 4px;
+    background: rgba(0, 82, 217, 0.08);
+    color: var(--td-brand-color, #0052d9);
+    font-family: var(--td-font-family-mono, monospace);
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.12s ease, transform 0.12s ease;
+    user-select: none;
+}
+
+.kline-ticker:hover,
+.kline-ticker:focus {
+    background: rgba(0, 82, 217, 0.18);
+    transform: translateY(-1px);
+    outline: none;
+}
+
+.kline-ticker:focus-visible {
+    box-shadow: 0 0 0 2px rgba(0, 82, 217, 0.4);
 }
 </style>

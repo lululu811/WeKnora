@@ -61,6 +61,11 @@ const DOMPurifyConfig = {
     'ul', 'ol', 'li', 'blockquote', 'pre', 'code',
     'a', 'img', 'table', 'thead', 'tbody', 'tr', 'th', 'td',
     'div', 'span', 'figure', 'figcaption', 'details', 'summary', 'think', 'button',
+    // K 线 ticker chip（见 utils/klineTickerInjector.ts）：hover/click 触发
+    // 右侧栏抽屉显示对应股票 K 线图。data-thscode 属性必须保留才能被
+    // useKLineTickerObserver 绑定事件。改用 <span class="kline-ticker">
+    // 是因为 DOMPurify 对自定义元素会清空内容，而 span 是标准 HTML 标签。
+    // （x-kline 已被移除，保留注释以解释历史。）
     // Mermaid SVG 支持的标签
     'svg', 'g', 'path', 'rect', 'circle', 'ellipse', 'line', 'polygon',
     'polyline', 'text', 'tspan', 'defs', 'marker', 'filter', 'use',
@@ -75,6 +80,8 @@ const DOMPurifyConfig = {
     'data-artifact-index', 'data-protected-resource', 'download',
     'target', 'rel', 'width', 'height', 'open',
     'type', 'aria-label', 'disabled', 'role', 'tabindex',
+    // K 线 ticker chip 属性（见 utils/klineTickerInjector.ts）。
+    'data-thscode', 'data-kline-bound',
     // Mermaid SVG 支持的属性
     'd', 'fill', 'stroke', 'stroke-width', 'stroke-linecap', 'stroke-linejoin',
     'stroke-dasharray', 'stroke-dashoffset', 'stroke-miterlimit', 'stroke-opacity',

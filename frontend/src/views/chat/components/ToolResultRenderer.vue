@@ -74,6 +74,11 @@
       :output="output" :arguments="toolArguments" :success="success"
     />
 
+    <KLineStudioResult
+      v-else-if="displayType === 'kline_studio'"
+      :data="toolData as KlineStudioData"
+    />
+
     <!-- Fallback: Display raw output -->
     <div v-else class="fallback-output">
       <div class="fallback-header">
@@ -107,7 +112,8 @@ import type {
   ShellExecData,
   ListSandboxFilesData,
   WriteSandboxFileData,
-  ReadSkillData
+  ReadSkillData,
+  KlineStudioData
 } from '@/types/tool-results';
 
 import SearchResults from './tool-results/SearchResults.vue';
@@ -129,6 +135,7 @@ import SandboxFilesResult from './tool-results/SandboxFilesResult.vue';
 import WriteSandboxFileResult from './tool-results/WriteSandboxFileResult.vue';
 import ReadSkillResult from './tool-results/ReadSkillResult.vue';
 import McpToolResult from './tool-results/McpToolResult.vue';
+import KLineStudioResult from './tool-results/KLineStudioResult.vue';
 
 interface Props {
   success?: boolean;
