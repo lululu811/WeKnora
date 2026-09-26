@@ -47,6 +47,12 @@ func (t *ShowTool) Description() string {
 - 复盘时把今日筛出来的标的集中展示在 K 线图上
 - 把 KB 检索出来的相关标的送进 kline-studio 看走势
 - 配合 zettaranc.screener：先用 screener 选出 N 只，再用本工具一次性推送到 kline-studio
+- 用户问完 KB 后追加「去 K 线图上看一下」「推到 kline-studio」「用 k 线图复盘」时自动调用
+
+调用流程（KB 路径）：
+1. 若刚做完 search_knowledge / knowledge_search，从返回文本里抽取 6 位 ticker 与交易所（SH/SZ/BJ）
+2. 调用本工具，把 ticker 列表传过去（tickers 或 thscode 两种格式任选）
+3. 把返回的 url 转给用户；用户点击即可在 kline-studio 中查看
 
 参数支持两种格式（任选其一）：
 - tickers: [{ticker, exchange}, ...]   例如 [{ticker:"600519", exchange:"SH"}]
@@ -59,7 +65,8 @@ func (t *ShowTool) Description() string {
 
 使用示例：
 - 把 screener 结果送到 kline-studio：tickers=[{ticker:"600519", exchange:"SH"}, ...]
-- 用 thscode 列表：thscode=["600519.SH", "000001.SZ"]`
+- 用 thscode 列表：thscode=["600519.SH", "000001.SZ"]
+- KB 检索后推到 kline-studio：先 search_knowledge，抽取 ticker，再调本工具`
 }
 
 func (t *ShowTool) Parameters() json.RawMessage {
@@ -127,12 +134,13 @@ func (t *ShowTool) Execute(ctx context.Context, args json.RawMessage) (*types.To
 	}
 
 	url := strings.TrimRight(t.cfg.BaseURL, "/") + "/?tab=picks"
-	output := map[string]interface{}{
-		"url":     url,
-		"count":   len(picks),
-		"tickers": picks,
+	data := map[string]interface{}{
+		"display_type": "kline_studio",
+		"url":          url,
+		"count":        len(picks),
+		"tickers":      picks,
 	}
-	outputJSON, err := json.MarshalIndent(output, "", "  ")
+	outputJSON, err := json.MarshalIndent(data, "", "  ")
 	if err != nil {
 		return &types.ToolResult{
 			Success: false,
@@ -141,7 +149,8 @@ func (t *ShowTool) Execute(ctx context.Context, args json.RawMessage) (*types.To
 	}
 	return &types.ToolResult{
 		Success: true,
-		Output:  string(outputJSON),
+		Output:   string(outputJSON),
+		Data:     data,
 	}, nil
 }
 

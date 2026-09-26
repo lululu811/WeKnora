@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Tencent/WeKnora/internal/application/access"
+	klinestudio "github.com/Tencent/WeKnora/internal/agent/tools/kline_studio"
 	"github.com/Tencent/WeKnora/internal/application/repository"
 	"github.com/Tencent/WeKnora/internal/config"
 	"github.com/Tencent/WeKnora/internal/errors"
@@ -1143,6 +1144,67 @@ func (h *KnowledgeBaseHandler) DuplicateKnowledgeBase(c *gin.Context) {
 			Message:       "Knowledge base duplicate created",
 			KnowledgeBase: buildKBResponse(targetKB, h.resolveKBStoreView(ctx, targetKB, callerTenantID), nil),
 		},
+	})
+}
+
+// PushKBToKlineStudio godoc
+// @Summary      推送 KB 中的股票到 kline-studio
+// @Description  扫描该 KB 内所有知识条目的 Title/Description/Source，抽取 6 位 A 股 ticker 与交易所（SH/SZ/BJ），去重后推送到 kline-studio 复盘终端的 picks 列表，返回前端深链 URL。
+// @Tags         知识库
+// @Accept       json
+// @Produce      json
+// @Param        id    path      string  true   "知识库ID"
+// @Success      200   {object}  map[string]interface{}  "推送结果，含 picks 与 url"
+// @Failure      400   {object}  errors.AppError         "请求参数错误"
+// @Failure      404   {object}  errors.AppError         "知识库不存在"
+// @Security     Bearer
+// @Security     ApiKeyAuth
+// @Router       /knowledge-bases/{id}/push-to-kline-studio [post]
+func (h *KnowledgeBaseHandler) PushKBToKlineStudio(c *gin.Context) {
+	ctx := c.Request.Context()
+	kb, _, _, _, err := h.validateAndGetKnowledgeBase(c)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+
+	knowledges, err := h.knowledgeService.ListKnowledgeByKnowledgeBaseID(ctx, kb.ID)
+	if err != nil {
+		logger.ErrorWithFields(ctx, err, map[string]interface{}{
+			"kb_id": secutils.SanitizeForLog(kb.ID),
+		})
+		c.Error(apperrors.NewInternalServerError(err.Error()))
+		return
+	}
+
+	entries := make([]klinestudio.KBEntry, 0, len(knowledges))
+	for _, k := range knowledges {
+		if k == nil {
+			continue
+		}
+		entries = append(entries, klinestudio.KBEntry{
+			Title:       k.Title,
+			Description: k.Description,
+			Source:      k.Source,
+		})
+	}
+
+	result, err := klinestudio.ExtractAndPushKB(ctx, nil, kb.ID, entries)
+	if err != nil {
+		logger.ErrorWithFields(ctx, err, map[string]interface{}{
+			"kb_id": secutils.SanitizeForLog(kb.ID),
+		})
+		c.Error(apperrors.NewInternalServerError(err.Error()))
+		return
+	}
+
+	logger.Infof(ctx,
+		"KB pushed to kline-studio: kb=%s, picks=%d",
+		secutils.SanitizeForLog(kb.ID), result.Count)
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    result,
 	})
 }
 

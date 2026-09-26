@@ -376,6 +376,20 @@ export function duplicateKnowledgeBase(id: string) {
   return post(`/api/v1/knowledge-bases/${id}/duplicate`);
 }
 
+// 扫描 KB 内所有知识条目的 Title/Description/Source，抽取 A 股 ticker
+// 后推送到 kline-studio 复盘终端的 picks 列表，返回推送结果与深链 URL。
+export function pushKBToKlineStudio(id: string) {
+  return post<{
+    success: boolean;
+    data: {
+      kb_id: string;
+      picks: Array<{ ticker: string; exchange: string }>;
+      count: number;
+      url: string;
+    };
+  }>(`/api/v1/knowledge-bases/${id}/push-to-kline-studio`);
+}
+
 // 获取可移动目标知识库列表（同类型、同Embedding模型）
 export function listMoveTargets(sourceKbId: string) {
   return get(`/api/v1/knowledge-bases/${sourceKbId}/move-targets`);
