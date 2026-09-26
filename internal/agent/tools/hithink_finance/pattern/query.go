@@ -1,0 +1,228 @@
+package pattern
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+
+	"github.com/Tencent/WeKnora/internal/agent/tools/hithink_finance"
+)
+
+// row represents one day of indicator data from DuckDB.
+type row struct {
+	Date string  `json:"date"`
+	// Momentum
+	DIF      float64 `json:"dif"`
+	DEA      float64 `json:"dea"`
+	MACDHist float64 `json:"macd_hist"`
+	K        float64 `json:"k"`
+	D        float64 `json:"d"`
+	J        float64 `json:"j"`
+	RSI6     float64 `json:"rsi6"`
+	RSI14    float64 `json:"rsi14"`
+	StochK   float64 `json:"stoch_k"`
+	StochD   float64 `json:"stoch_d"`
+	CCI      float64 `json:"cci"`
+	WillR    float64 `json:"willr"`
+	MFI      float64 `json:"mfi"`
+	// Trend
+	ADX       float64 `json:"adx"`
+	DIPlus    float64 `json:"di_plus"`
+	DIMinus   float64 `json:"di_minus"`
+	STDir     float64 `json:"st_dir"`
+	STVal     float64 `json:"st_val"`
+	PSAR      float64 `json:"psar"`
+	AroonUp   float64 `json:"aroon_up"`
+	AroonDown float64 `json:"aroon_down"`
+	VIPlus    float64 `json:"vi_plus"`
+	VIMinus   float64 `json:"vi_minus"`
+	// Volatility
+	BBUpper float64 `json:"bb_upper"`
+	BBMid   float64 `json:"bb_mid"`
+	BBLower float64 `json:"bb_lower"`
+	BBWidth float64 `json:"bb_width"`
+	ATR     float64 `json:"atr"`
+	DCUpper float64 `json:"dc_upper"`
+	DCLower float64 `json:"dc_lower"`
+	KCUpper float64 `json:"kc_upper"`
+	KCMid   float64 `json:"kc_mid"`
+	KCLower float64 `json:"kc_lower"`
+	// Volume
+	CMF  float64 `json:"cmf"`
+	OBV  float64 `json:"obv"`
+	VWAP float64 `json:"vwap"`
+	// Statistics
+	ZScore    float64 `json:"zscore"`
+	LinSlope  float64 `json:"lin_slope"`
+	// Candlestick patterns (non-zero = pattern present)
+	CdlMorningStar  float64 `json:"cdl_morning_star"`
+	CdlEveningStar  float64 `json:"cdl_evening_star"`
+	CdlHammer       float64 `json:"cdl_hammer"`
+	CdlShootingStar float64 `json:"cdl_shooting_star"`
+	CdlDoji         float64 `json:"cdl_doji"`
+	CdlEngulfing    float64 `json:"cdl_engulfing"`
+	CdlHarami       float64 `json:"cdl_harami"`
+	CdlPiercing     float64 `json:"cdl_piercing"`
+	CdlDarkCloud    float64 `json:"cdl_dark_cloud"`
+	Cdl3WhiteSold   float64 `json:"cdl_3white"`
+	Cdl3BlackCrows  float64 `json:"cdl_3black"`
+}
+
+// queryIndicatorRows fetches recent indicator rows from DuckDB.
+// rows are ordered newest-first (index 0 = latest day).
+func queryIndicatorRows(ctx context.Context, config *hithink_finance.Config, thscode string, days int) ([]row, error) {
+	sql := fmt.Sprintf(`
+		SELECT
+			CAST(date AS VARCHAR) AS date,
+			COALESCE(momentum_macd_12_26_9_macd, 0) AS dif,
+			COALESCE(momentum_macd_12_26_9_signal, 0) AS dea,
+			COALESCE(momentum_macd_12_26_9_hist, 0) AS macd_hist,
+			COALESCE(momentum_kdj_9_3_k, 0) AS k,
+			COALESCE(momentum_kdj_9_3_d, 0) AS d,
+			COALESCE(momentum_kdj_9_3_j, 0) AS j,
+			COALESCE(momentum_rsi_6, 0) AS rsi6,
+			COALESCE(momentum_rsi_14, 0) AS rsi14,
+			COALESCE(momentum_stoch_14_3_3_slowk, 0) AS stoch_k,
+			COALESCE(momentum_stoch_14_3_3_slowd, 0) AS stoch_d,
+			COALESCE(momentum_cci_20, 0) AS cci,
+			COALESCE(momentum_willr_14, 0) AS willr,
+			COALESCE(volume_mfi_14, 0) AS mfi,
+			COALESCE(trend_adx_14, 0) AS adx,
+			COALESCE(momentum_dm_14_plus, 0) AS di_plus,
+			COALESCE(momentum_dm_14_minus, 0) AS di_minus,
+			COALESCE(trend_supertrend_10_3_0_direction, 0) AS st_dir,
+			COALESCE(trend_supertrend_10_3_0_trend, 0) AS st_val,
+			COALESCE(trend_psar, 0) AS psar,
+			COALESCE(momentum_aroon_25_aroonup, 0) AS aroon_up,
+			COALESCE(momentum_aroon_25_aroondown, 0) AS aroon_down,
+			COALESCE(trend_vortex_14_plus, 0) AS vi_plus,
+			COALESCE(trend_vortex_14_minus, 0) AS vi_minus,
+			COALESCE(volatility_bbands_20_2_0_upper, 0) AS bb_upper,
+			COALESCE(volatility_bbands_20_2_0_middle, 0) AS bb_mid,
+			COALESCE(volatility_bbands_20_2_0_lower, 0) AS bb_lower,
+			COALESCE(volatility_bbands_20_2_0_upper - volatility_bbands_20_2_0_lower, 0) AS bb_width,
+			COALESCE(volatility_atr_14, 0) AS atr,
+			COALESCE(volatility_donchian_20_upper, 0) AS dc_upper,
+			COALESCE(volatility_donchian_20_lower, 0) AS dc_lower,
+			COALESCE(volatility_kc_20_2_upper, 0) AS kc_upper,
+			COALESCE(volatility_kc_20_2_middle, 0) AS kc_mid,
+			COALESCE(volatility_kc_20_2_lower, 0) AS kc_lower,
+			COALESCE(volume_cmf_20, 0) AS cmf,
+			COALESCE(volume_obv, 0) AS obv,
+			COALESCE(volume_vwap, 0) AS vwap,
+			COALESCE(statistics_zscore_20, 0) AS zscore,
+			COALESCE(statistics_linearreg_slope_14, 0) AS lin_slope,
+			COALESCE(candles_cdl_morningstar_0, 0) AS cdl_morning_star,
+			COALESCE(candles_cdl_eveningstar_0, 0) AS cdl_evening_star,
+			COALESCE(candles_cdl_hammer_0, 0) AS cdl_hammer,
+			COALESCE(candles_cdl_shootingstar_0, 0) AS cdl_shooting_star,
+			COALESCE(candles_cdl_doji_0, 0) AS cdl_doji,
+			COALESCE(candles_cdl_engulfing_0, 0) AS cdl_engulfing,
+			COALESCE(candles_cdl_harami_0, 0) AS cdl_harami,
+			COALESCE(candles_cdl_piercing_0, 0) AS cdl_piercing,
+			COALESCE(candles_cdl_darkcloudcover_0, 0) AS cdl_dark_cloud,
+			COALESCE(candles_cdl_3whitesoldiers_0, 0) AS cdl_3white,
+			COALESCE(candles_cdl_3blackcrows_0, 0) AS cdl_3black
+		FROM v_indicators_daily
+		WHERE thscode = '%s'
+		ORDER BY date DESC
+		LIMIT %d
+	`, thscode, days)
+
+	results, err := hithink_finance.QueryDuckDB(ctx, config, "indicators", sql)
+	if err != nil {
+		return nil, err
+	}
+
+	var rows []row
+	for _, r := range results {
+		rows = append(rows, mapToRow(r))
+	}
+	return rows, nil
+}
+
+func mapToRow(m map[string]interface{}) row {
+	return row{
+		Date:              str(m, "date"),
+		DIF:               f64(m, "dif"),
+		DEA:               f64(m, "dea"),
+		MACDHist:          f64(m, "macd_hist"),
+		K:                 f64(m, "k"),
+		D:                 f64(m, "d"),
+		J:                 f64(m, "j"),
+		RSI6:              f64(m, "rsi6"),
+		RSI14:             f64(m, "rsi14"),
+		StochK:            f64(m, "stoch_k"),
+		StochD:            f64(m, "stoch_d"),
+		CCI:               f64(m, "cci"),
+		WillR:             f64(m, "willr"),
+		MFI:               f64(m, "mfi"),
+		ADX:               f64(m, "adx"),
+		DIPlus:            f64(m, "di_plus"),
+		DIMinus:           f64(m, "di_minus"),
+		STDir:             f64(m, "st_dir"),
+		STVal:             f64(m, "st_val"),
+		PSAR:              f64(m, "psar"),
+		AroonUp:           f64(m, "aroon_up"),
+		AroonDown:         f64(m, "aroon_down"),
+		VIPlus:            f64(m, "vi_plus"),
+		VIMinus:           f64(m, "vi_minus"),
+		BBUpper:           f64(m, "bb_upper"),
+		BBMid:             f64(m, "bb_mid"),
+		BBLower:           f64(m, "bb_lower"),
+		BBWidth:           f64(m, "bb_width"),
+		ATR:               f64(m, "atr"),
+		DCUpper:           f64(m, "dc_upper"),
+		DCLower:           f64(m, "dc_lower"),
+		KCUpper:           f64(m, "kc_upper"),
+		KCMid:             f64(m, "kc_mid"),
+		KCLower:           f64(m, "kc_lower"),
+		CMF:               f64(m, "cmf"),
+		OBV:               f64(m, "obv"),
+		VWAP:              f64(m, "vwap"),
+		ZScore:            f64(m, "zscore"),
+		LinSlope:          f64(m, "lin_slope"),
+		CdlMorningStar:    f64(m, "cdl_morning_star"),
+		CdlEveningStar:    f64(m, "cdl_evening_star"),
+		CdlHammer:         f64(m, "cdl_hammer"),
+		CdlShootingStar:   f64(m, "cdl_shooting_star"),
+		CdlDoji:           f64(m, "cdl_doji"),
+		CdlEngulfing:      f64(m, "cdl_engulfing"),
+		CdlHarami:         f64(m, "cdl_harami"),
+		CdlPiercing:       f64(m, "cdl_piercing"),
+		CdlDarkCloud:      f64(m, "cdl_dark_cloud"),
+		Cdl3WhiteSold:     f64(m, "cdl_3white"),
+		Cdl3BlackCrows:    f64(m, "cdl_3black"),
+	}
+}
+
+func f64(m map[string]interface{}, key string) float64 {
+	v, ok := m[key]
+	if !ok || v == nil {
+		return 0
+	}
+	switch x := v.(type) {
+	case float64:
+		return x
+	case int64:
+		return float64(x)
+	case json.Number:
+		f, _ := x.Float64()
+		return f
+	case string:
+		// DuckDB sometimes returns numbers as strings
+		var f float64
+		fmt.Sscanf(x, "%f", &f)
+		return f
+	default:
+		return 0
+	}
+}
+
+func str(m map[string]interface{}, key string) string {
+	v, ok := m[key]
+	if !ok || v == nil {
+		return ""
+	}
+	return fmt.Sprint(v)
+}

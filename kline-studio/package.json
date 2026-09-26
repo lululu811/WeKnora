@@ -1,0 +1,25 @@
+{
+  "name": "kline-studio",
+  "private": true,
+  "version": "0.1.0",
+  "description": "A股专业级 K 线图平台 - 支持插件化指标叠加",
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
+  "scripts": {
+    "dev": "concurrently -n FE,BE -c blue,magenta \"npm:dev:frontend\" \"npm:dev:backend\"",
+    "dev:frontend": "npm run dev --workspace=frontend",
+    "dev:backend": "npm run dev --workspace=backend",
+    "build": "npm run build --workspaces --if-present"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "allowScripts": {
+    "duckdb": true
+  }
+}

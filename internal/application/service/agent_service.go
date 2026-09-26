@@ -18,6 +18,8 @@ import (
 	"github.com/Tencent/WeKnora/internal/agent/tools/hithink_finance/market"
 	"github.com/Tencent/WeKnora/internal/agent/tools/hithink_finance/query"
 	"github.com/Tencent/WeKnora/internal/agent/tools/hithink_finance/special"
+	"github.com/Tencent/WeKnora/internal/agent/tools/hithink_finance/analysis"
+	"github.com/Tencent/WeKnora/internal/agent/tools/hithink_finance/pattern"
 	"github.com/Tencent/WeKnora/internal/agent/tools/zettaranc"
 	"github.com/Tencent/WeKnora/internal/application/repository"
 	"github.com/Tencent/WeKnora/internal/browserskill"
@@ -133,7 +135,8 @@ type agentService struct {
 	// Hithink Finance tools state
 	hithinkConfig *hithink_finance.Config
 	// Zettaranc tools state
-	zettarancClient *zettaranc.CLIClient
+	zettarancClient       *zettaranc.CLIClient
+	zettarancHTTPClient   *zettaranc.HTTPClient
 }
 
 // NewAgentService creates a new agent service
@@ -1328,7 +1331,12 @@ func (s *agentService) registerTools(
 			"hithink.finance.special.limit.limit_up_pool",
 			"hithink.finance.special.dragon_tiger.list",
 			"hithink.finance.special.hot_stock.skyrocket",
-			"hithink.finance.query.sql":
+			"hithink.finance.query.sql",
+			"hithink.finance.pattern.scan",
+			"hithink.finance.analysis.trend",
+			"hithink.finance.analysis.volume",
+			"hithink.finance.analysis.pattern",
+			"hithink.finance.analysis.levels":
 			// Lazy-initialize the config on first use
 			if s.hithinkConfig == nil {
 				s.hithinkConfig = hithink_finance.DefaultConfig()
@@ -1356,6 +1364,16 @@ func (s *agentService) registerTools(
 				toolToRegister = special.NewHotStockTool(s.hithinkConfig)
 			case "hithink.finance.query.sql":
 				toolToRegister = query.NewSQLQueryTool(s.hithinkConfig)
+			case "hithink.finance.pattern.scan":
+				toolToRegister = pattern.NewPatternScanTool(s.hithinkConfig)
+			case "hithink.finance.analysis.trend":
+				toolToRegister = analysis.NewTrendAnalysisTool(s.hithinkConfig)
+			case "hithink.finance.analysis.volume":
+				toolToRegister = analysis.NewVolumeAnalysisTool(s.hithinkConfig)
+			case "hithink.finance.analysis.pattern":
+				toolToRegister = analysis.NewChartPatternTool(s.hithinkConfig)
+			case "hithink.finance.analysis.levels":
+				toolToRegister = analysis.NewLevelsAnalysisTool(s.hithinkConfig)
 			}
 			logger.Infof(ctx, "Registered hithink finance tool: %s", toolName)
 
@@ -1367,7 +1385,10 @@ func (s *agentService) registerTools(
 			}
 			switch toolName {
 			case "zettaranc.analyze":
-				toolToRegister = zettaranc.NewAnalyzeTool(s.zettarancClient)
+				if s.zettarancHTTPClient == nil {
+					s.zettarancHTTPClient = zettaranc.NewHTTPClient("")
+				}
+				toolToRegister = zettaranc.NewAnalyzeTool(s.zettarancHTTPClient)
 			case "zettaranc.backtest":
 				toolToRegister = zettaranc.NewBacktestTool(s.zettarancClient)
 			case "zettaranc.screener":
