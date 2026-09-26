@@ -419,7 +419,7 @@ onUnmounted(() => {
 
   &.active {
     color: var(--embed-primary, var(--td-brand-color));
-    background: color-mix(in srgb, var(--embed-primary, #07c05f) 12%, transparent);
+    background: color-mix(in srgb, var(--embed-primary, #2D6A64) 12%, transparent);
   }
 }
 

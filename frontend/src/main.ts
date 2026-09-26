@@ -31,7 +31,7 @@ async function bootstrap() {
 
   // 全局错误处理：捕获未处理的组件错误，防止白屏
   app.config.errorHandler = (err, instance, info) => {
-    console.error("[WeKnora] Unhandled Vue error:", err, "\nComponent:", instance, "\nInfo:", info);
+    console.error("[小陈知识库] Unhandled Vue error:", err, "\nComponent:", instance, "\nInfo:", info);
   };
 
   app.use(TDesign);

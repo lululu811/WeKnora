@@ -230,7 +230,7 @@ export default {
     reopen: 'Product tour',
     steps: {
       welcome: {
-        title: 'Welcome to WeKnora',
+        title: 'Welcome to XiaochenKB',
         desc: 'A few quick steps to get you familiar with knowledge bases, chat and agents. Click "Next" to begin.'
       },
       knowledge: {
@@ -2427,7 +2427,7 @@ export default {
     registerSuccess: 'Registration successful. Please sign in',
     registerFailed: 'Registration failed',
     subtitle: 'RAG Q&A, ReAct Agent and Wiki — an LLM-powered enterprise knowledge framework',
-    registerSubtitle: 'Create your account and start using WeKnora',
+    registerSubtitle: 'Create your account and start using XiaochenKB',
     emailPlaceholder: 'Enter email address',
     passwordPlaceholder: 'Enter password',
     confirmPasswordPlaceholder: 'Enter password again',
@@ -2721,7 +2721,7 @@ export default {
     goToAgentSettings: 'Go to agent settings'
   },
   createChat: {
-    title: 'Hi, I am WeKnora — your knowledge, within reach',
+    title: 'Hi, this is XiaochenKB — your knowledge, within reach',
     newSessionTitle: 'New Session',
     messages: {
       createFailed: 'Failed to create session',

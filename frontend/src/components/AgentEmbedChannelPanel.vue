@@ -489,7 +489,7 @@ const agentImageUploadEnabledEffective = computed(() =>
   drawerAgent.value?.config?.image_upload_enabled === true,
 )
 
-const WEKNORA_BRAND_COLOR = '#07C05F'
+const WEKNORA_BRAND_COLOR = '#2D6A64'
 
 function getDefaultEmbedPrimaryColor(): string {
   if (typeof window === 'undefined') return WEKNORA_BRAND_COLOR

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Tencent/WeKnora/internal/types"
+	"github.com/fsnotify/fsnotify"
 	"github.com/go-viper/mapstructure/v2"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
@@ -516,8 +517,10 @@ func LoadConfig() (*Config, error) {
 		return nil, fmt.Errorf("error reading config file: %w", err)
 	}
 
+	configFileUsed := viper.ConfigFileUsed()
+
 	// 替换配置中的环境变量引用
-	configFileContent, err := os.ReadFile(viper.ConfigFileUsed())
+	configFileContent, err := os.ReadFile(configFileUsed)
 	if err != nil {
 		return nil, fmt.Errorf("error reading config file content: %w", err)
 	}
@@ -544,10 +547,10 @@ func LoadConfig() (*Config, error) {
 	}); err != nil {
 		return nil, fmt.Errorf("unable to decode config into struct: %w", err)
 	}
-	fmt.Printf("Using configuration file: %s\n", viper.ConfigFileUsed())
+	fmt.Printf("Using configuration file: %s\n", configFileUsed)
 
 	// 加载提示词模板（从目录或配置文件）
-	configDir := filepath.Dir(viper.ConfigFileUsed())
+	configDir := filepath.Dir(configFileUsed)
 	resolvedConfigDir = configDir
 	promptTemplates, err := loadPromptTemplates(configDir)
 	if err != nil {
@@ -615,6 +618,11 @@ func LoadConfig() (*Config, error) {
 		os.Getenv("WEKNORA_TENANT_ENABLE_CROSS_TENANT_ACCESS"),
 	)
 
+	// 配置调试模式：打印完整配置（脱敏）
+	if debugConfig := strings.TrimSpace(os.Getenv("WEKNORA_DEBUG_CONFIG")); strings.EqualFold(debugConfig, "true") {
+		printDebugConfig(&cfg)
+	}
+
 	return &cfg, nil
 }
 
@@ -623,6 +631,7 @@ func LoadConfig() (*Config, error) {
 func ValidateConfig(cfg *Config) error {
 	var errs []string
 
+	// OIDC 认证验证
 	if cfg.OIDCAuth != nil && cfg.OIDCAuth.Enable {
 		if strings.TrimSpace(cfg.OIDCAuth.ClientID) == "" {
 			errs = append(errs, "oidc_auth.client_id is required when OIDC is enabled")
@@ -636,6 +645,7 @@ func ValidateConfig(cfg *Config) error {
 		}
 	}
 
+	// 认证与租户验证
 	if cfg.Auth != nil {
 		mode := strings.TrimSpace(cfg.Auth.RegistrationMode)
 		if mode != "" && mode != AuthRegistrationModeSelfServe && mode != AuthRegistrationModeInviteOnly {
@@ -650,11 +660,13 @@ func ValidateConfig(cfg *Config) error {
 		}
 	}
 
+	// 审计配置验证
 	if cfg.Audit != nil && cfg.Audit.RetentionDays < 0 {
 		errs = append(errs, fmt.Sprintf("audit.retention_days must be >= 0 (got %d); use 0 to disable purge",
 			cfg.Audit.RetentionDays))
 	}
 
+	// 对话服务验证
 	if cfg.Conversation != nil {
 		if cfg.Conversation.EmbeddingTopK < 0 {
 			errs = append(errs, "conversation.embedding_top_k must be >= 0")
@@ -668,8 +680,12 @@ func ValidateConfig(cfg *Config) error {
 		if cfg.Conversation.RerankThreshold < -10 || cfg.Conversation.RerankThreshold > 10 {
 			errs = append(errs, "conversation.rerank_threshold must be between -10 and 10")
 		}
+		if cfg.Conversation.MaxRounds < 0 {
+			errs = append(errs, "conversation.max_rounds must be >= 0")
+		}
 	}
 
+	// 知识库配置验证
 	if cfg.KnowledgeBase != nil {
 		if cfg.KnowledgeBase.ChunkSize <= 0 {
 			errs = append(errs, "knowledge_base.chunk_size must be > 0")
@@ -680,12 +696,93 @@ func ValidateConfig(cfg *Config) error {
 		if cfg.KnowledgeBase.ChunkOverlap >= cfg.KnowledgeBase.ChunkSize {
 			errs = append(errs, "knowledge_base.chunk_overlap must be less than chunk_size")
 		}
+		if cfg.KnowledgeBase.DocumentProcessTimeout < 0 {
+			errs = append(errs, "knowledge_base.document_process_timeout must be >= 0")
+		}
+		if cfg.KnowledgeBase.DocReaderCallTimeout < 0 {
+			errs = append(errs, "knowledge_base.docreader_call_timeout must be >= 0")
+		}
+		// 逻辑关系校验：RPC 超时应该小于总任务超时
+		if cfg.KnowledgeBase.DocReaderCallTimeout > 0 && cfg.KnowledgeBase.DocumentProcessTimeout > 0 &&
+			cfg.KnowledgeBase.DocReaderCallTimeout >= cfg.KnowledgeBase.DocumentProcessTimeout {
+			errs = append(errs, "knowledge_base.docreader_call_timeout should be less than document_process_timeout")
+		}
 	}
 
+	// 服务器配置验证
 	if cfg.Server != nil {
 		if cfg.Server.Port <= 0 || cfg.Server.Port > 65535 {
 			errs = append(errs, "server.port must be between 1 and 65535")
 		}
+		if cfg.Server.ShutdownTimeout < 0 {
+			errs = append(errs, "server.shutdown_timeout must be >= 0")
+		}
+	}
+
+	// Agent 配置验证
+	if cfg.Agent != nil {
+		if cfg.Agent.LLMCallTimeout < 0 {
+			errs = append(errs, "agent.llm_call_timeout must be >= 0")
+		}
+		if cfg.Agent.ToolApprovalTimeoutSeconds < 0 {
+			errs = append(errs, "agent.tool_approval_timeout_seconds must be >= 0")
+		}
+	}
+
+	// IM 配置验证
+	if cfg.IM != nil {
+		if cfg.IM.Workers < 0 {
+			errs = append(errs, "im.workers must be >= 0")
+		}
+		if cfg.IM.GlobalMaxWorkers < 0 {
+			errs = append(errs, "im.global_max_workers must be >= 0")
+		}
+		if cfg.IM.MaxQueueSize < 0 {
+			errs = append(errs, "im.max_queue_size must be >= 0")
+		}
+		if cfg.IM.MaxPerUser < 0 {
+			errs = append(errs, "im.max_per_user must be >= 0")
+		}
+		if cfg.IM.RateLimitWindow < 0 {
+			errs = append(errs, "im.rate_limit_window must be >= 0")
+		}
+		if cfg.IM.RateLimitMax < 0 {
+			errs = append(errs, "im.rate_limit_max must be >= 0")
+		}
+		// 逻辑关系：MaxPerUser 应该小于等于 MaxQueueSize
+		if cfg.IM.MaxPerUser > 0 && cfg.IM.MaxQueueSize > 0 && cfg.IM.MaxPerUser > cfg.IM.MaxQueueSize {
+			errs = append(errs, "im.max_per_user should be less than or equal to max_queue_size")
+		}
+	}
+
+	// DocReader 配置验证
+	if cfg.DocReader != nil {
+		if strings.TrimSpace(cfg.DocReader.Addr) == "" {
+			errs = append(errs, "docreader.addr is required (e.g. 'localhost:50051' for gRPC or 'http://localhost:8080' for HTTP)")
+		}
+		if cfg.DocReader.Transport != "" && cfg.DocReader.Transport != "grpc" && cfg.DocReader.Transport != "http" && cfg.DocReader.Transport != "https" {
+			errs = append(errs, fmt.Sprintf("docreader.transport must be 'grpc', 'http', or 'https', got %q", cfg.DocReader.Transport))
+		}
+	}
+
+	// StreamManager 配置验证
+	if cfg.StreamManager != nil {
+		if cfg.StreamManager.Type != "" && cfg.StreamManager.Type != "memory" && cfg.StreamManager.Type != "redis" {
+			errs = append(errs, fmt.Sprintf("stream_manager.type must be 'memory' or 'redis', got %q", cfg.StreamManager.Type))
+		}
+		if cfg.StreamManager.Type == "redis" {
+			if strings.TrimSpace(cfg.StreamManager.Redis.Address) == "" {
+				errs = append(errs, "stream_manager.redis.address is required when stream_manager.type is 'redis'")
+			}
+		}
+		if cfg.StreamManager.CleanupTimeout < 0 {
+			errs = append(errs, "stream_manager.cleanup_timeout must be >= 0")
+		}
+	}
+
+	// WebSearch 配置验证
+	if cfg.WebSearch != nil && cfg.WebSearch.Timeout < 0 {
+		errs = append(errs, "web_search.timeout must be >= 0")
 	}
 
 	if len(errs) > 0 {
@@ -1145,4 +1242,180 @@ func loadPromptTemplates(configDir string) (*PromptTemplatesConfig, error) {
 // WebSearchConfig represents the web search configuration
 type WebSearchConfig struct {
 	Timeout int `yaml:"timeout" json:"timeout"` // 超时时间（秒）
+}
+
+// printDebugConfig prints the complete configuration (with sensitive values redacted)
+// when WEKNORA_DEBUG_CONFIG=true is set. This helps operators verify that configuration
+// is loaded correctly from files and environment variables.
+func printDebugConfig(cfg *Config) {
+	fmt.Println("\n[config-debug] === Configuration Dump (sensitive values redacted) ===")
+
+	// Helper to redact sensitive strings
+	redact := func(s string) string {
+		if s == "" {
+			return "<empty>"
+		}
+		if len(s) <= 4 {
+			return "****"
+		}
+		return s[:2] + "****" + s[len(s)-2:]
+	}
+
+	// Server
+	if cfg.Server != nil {
+		fmt.Printf("[config-debug] server:\n")
+		fmt.Printf("[config-debug]   port: %d\n", cfg.Server.Port)
+		fmt.Printf("[config-debug]   host: %s\n", cfg.Server.Host)
+		fmt.Printf("[config-debug]   shutdown_timeout: %v\n", cfg.Server.ShutdownTimeout)
+	}
+
+	// Conversation
+	if cfg.Conversation != nil {
+		fmt.Printf("[config-debug] conversation:\n")
+		fmt.Printf("[config-debug]   max_rounds: %d\n", cfg.Conversation.MaxRounds)
+		fmt.Printf("[config-debug]   embedding_top_k: %d\n", cfg.Conversation.EmbeddingTopK)
+		fmt.Printf("[config-debug]   rerank_top_k: %d\n", cfg.Conversation.RerankTopK)
+		fmt.Printf("[config-debug]   enable_rewrite: %v\n", cfg.Conversation.EnableRewrite)
+		fmt.Printf("[config-debug]   enable_rerank: %v\n", cfg.Conversation.EnableRerank)
+	}
+
+	// KnowledgeBase
+	if cfg.KnowledgeBase != nil {
+		fmt.Printf("[config-debug] knowledge_base:\n")
+		fmt.Printf("[config-debug]   chunk_size: %d\n", cfg.KnowledgeBase.ChunkSize)
+		fmt.Printf("[config-debug]   chunk_overlap: %d\n", cfg.KnowledgeBase.ChunkOverlap)
+		fmt.Printf("[config-debug]   document_process_timeout: %v\n", cfg.KnowledgeBase.DocumentProcessTimeout)
+		fmt.Printf("[config-debug]   docreader_call_timeout: %v\n", cfg.KnowledgeBase.DocReaderCallTimeout)
+	}
+
+	// Agent
+	if cfg.Agent != nil {
+		fmt.Printf("[config-debug] agent:\n")
+		fmt.Printf("[config-debug]   llm_call_timeout: %d seconds\n", cfg.Agent.LLMCallTimeout)
+		fmt.Printf("[config-debug]   tool_approval_timeout_seconds: %d\n", cfg.Agent.ToolApprovalTimeoutSeconds)
+	}
+
+	// Tenant
+	if cfg.Tenant != nil {
+		fmt.Printf("[config-debug] tenant:\n")
+		fmt.Printf("[config-debug]   enable_rbac: %v\n", cfg.Tenant.IsRBACEnforced())
+		fmt.Printf("[config-debug]   enable_cross_tenant_access: %v\n", cfg.Tenant.EnableCrossTenantAccess)
+		fmt.Printf("[config-debug]   max_owned_per_user: %d\n", cfg.Tenant.MaxOwnedPerUser)
+	}
+
+	// Auth
+	if cfg.Auth != nil {
+		fmt.Printf("[config-debug] auth:\n")
+		fmt.Printf("[config-debug]   registration_mode: %s\n", cfg.Auth.RegistrationMode)
+		fmt.Printf("[config-debug]   default_tenant_mode: %s\n", cfg.Auth.DefaultTenantMode)
+		fmt.Printf("[config-debug]   complex_password_enabled: %v\n", cfg.Auth.ComplexPasswordEnabled)
+	}
+
+	// OIDC
+	if cfg.OIDCAuth != nil {
+		fmt.Printf("[config-debug] oidc_auth:\n")
+		fmt.Printf("[config-debug]   enable: %v\n", cfg.OIDCAuth.Enable)
+		if cfg.OIDCAuth.Enable {
+			fmt.Printf("[config-debug]   issuer_url: %s\n", cfg.OIDCAuth.IssuerURL)
+			fmt.Printf("[config-debug]   client_id: %s\n", redact(cfg.OIDCAuth.ClientID))
+			fmt.Printf("[config-debug]   client_secret: %s\n", redact(cfg.OIDCAuth.ClientSecret))
+			fmt.Printf("[config-debug]   scopes: %v\n", cfg.OIDCAuth.Scopes)
+		}
+	}
+
+	// DocReader
+	if cfg.DocReader != nil {
+		fmt.Printf("[config-debug] docreader:\n")
+		fmt.Printf("[config-debug]   addr: %s\n", cfg.DocReader.Addr)
+		fmt.Printf("[config-debug]   transport: %s\n", cfg.DocReader.Transport)
+	}
+
+	// StreamManager
+	if cfg.StreamManager != nil {
+		fmt.Printf("[config-debug] stream_manager:\n")
+		fmt.Printf("[config-debug]   type: %s\n", cfg.StreamManager.Type)
+		if cfg.StreamManager.Type == "redis" {
+			fmt.Printf("[config-debug]   redis.address: %s\n", cfg.StreamManager.Redis.Address)
+			fmt.Printf("[config-debug]   redis.db: %d\n", cfg.StreamManager.Redis.DB)
+			fmt.Printf("[config-debug]   redis.password: %s\n", redact(cfg.StreamManager.Redis.Password))
+		}
+	}
+
+	// IM
+	if cfg.IM != nil {
+		fmt.Printf("[config-debug] im:\n")
+		fmt.Printf("[config-debug]   workers: %d\n", cfg.IM.Workers)
+		fmt.Printf("[config-debug]   global_max_workers: %d\n", cfg.IM.GlobalMaxWorkers)
+		fmt.Printf("[config-debug]   max_queue_size: %d\n", cfg.IM.MaxQueueSize)
+		fmt.Printf("[config-debug]   max_per_user: %d\n", cfg.IM.MaxPerUser)
+	}
+
+	// FrontendBaseURL
+	if cfg.FrontendBaseURL != "" {
+		fmt.Printf("[config-debug] frontend_base_url: %s\n", cfg.FrontendBaseURL)
+	}
+
+	// Models (count only, don't print API keys)
+	if len(cfg.Models) > 0 {
+		fmt.Printf("[config-debug] models: %d configured\n", len(cfg.Models))
+	}
+
+	fmt.Println("[config-debug] === End Configuration Dump ===")
+}
+
+// ConfigWatcher monitors configuration file changes and triggers reload callbacks.
+// This enables hot-reload of configuration without restarting the service.
+type ConfigWatcher struct {
+	cfg       *Config
+	watchFile string
+	onChange  func(*Config)
+	stopCh    chan struct{}
+}
+
+// WatchConfigChanges starts watching the configuration file for changes.
+// When the file is modified, the onChange callback is invoked with the new configuration.
+// This allows services to react to configuration updates without requiring a restart.
+func WatchConfigChanges(cfg *Config, onChange func(*Config)) (*ConfigWatcher, error) {
+	watchFile := viper.ConfigFileUsed()
+	if watchFile == "" {
+		return nil, fmt.Errorf("no config file to watch")
+	}
+
+	watcher := &ConfigWatcher{
+		cfg:       cfg,
+		watchFile: watchFile,
+		onChange:  onChange,
+		stopCh:    make(chan struct{}),
+	}
+
+	// Enable Viper's WatchConfig
+	viper.WatchConfig()
+	viper.OnConfigChange(func(e fsnotify.Event) {
+		fmt.Printf("[config-watcher] Configuration file changed: %v\n", e)
+
+		// Reload configuration
+		newCfg, err := LoadConfig()
+		if err != nil {
+			fmt.Printf("[config-watcher] Failed to reload configuration: %v\n", err)
+			return
+		}
+
+		// Update the shared config pointer
+		*cfg = *newCfg
+
+		// Notify listeners
+		if onChange != nil {
+			onChange(newCfg)
+		}
+
+		fmt.Printf("[config-watcher] Configuration reloaded successfully\n")
+	})
+
+	fmt.Printf("[config-watcher] Watching configuration file: %s\n", watchFile)
+	return watcher, nil
+}
+
+// Stop stops watching for configuration changes.
+func (w *ConfigWatcher) Stop() {
+	close(w.stopCh)
 }

@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <title>WeKnora</title>
+    <title>小陈知识库</title>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, minimal-ui">
     <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
@@ -9,10 +9,14 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
-    <meta name="keywords" content="知识问答、微信对话开放平台、对话开放平台、对话平台、人工智能定制、人机对话、智能问答、人机交互、自然语言处理、自然语言理解、NLP、人工智能产品、人工智能开源、人工智能算法、语音助手"/>
-    <meta name="description" content="WeKnora是一款基于大语言模型的文档理解与语义检索框架，专为结构复杂、内容异构的文档场景而打造。"/>
+    <meta name="keywords" content="知识库、知识管理、文档理解、语义检索、智能问答、自然语言处理、AI 助手、小陈知识库"/>
+    <meta name="description" content="小陈知识库 —— 温润现代的 AI 知识管理助手，让知识触手可及。"/>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Serif+SC:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="icon" type="image/svg+xml" href="./public/favicon.svg"/>
     <link rel="shortcut icon" type="image/png" href="./public/favicon.ico"/>
-    <link rel="apple-touch-icon" sizes="120x120" type="image/png" href="./public/favicon.ico"/>
+    <link rel="apple-touch-icon" sizes="120x120" type="image/svg+xml" href="./public/favicon.svg"/>
 </head>
 <body>
 <script>
@@ -20,8 +24,8 @@
   var t=localStorage.getItem('WeKnora_theme')||'light';
   if(t==='system')t=window.matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light';
   document.documentElement.setAttribute('theme-mode',t);
-  /* 与 theme.css 中 --td-bg-color-page 一致，避免样式加载后整页背景从 #fff 跳到 #eee 触发重绘闪动 */
-  var bg=t==='dark'?'#181818':'#eee';
+  /* 与 theme.css 中 --td-bg-color-page 一致（温润现代暖色调），避免样式加载后整页背景闪动 */
+  var bg=t==='dark'?'#1F1D1B':'#F7F5F0';
   document.documentElement.style.background=bg;
   document.documentElement.style.minHeight='100%';
   document.documentElement.style.colorScheme=t==='dark'?'dark':'light';
@@ -32,10 +36,10 @@
     if(w){
       if(t==='dark'){
         if(w.WindowSetDarkTheme)w.WindowSetDarkTheme();
-        if(w.WindowSetBackgroundColour)w.WindowSetBackgroundColour(24,24,24,255);
+        if(w.WindowSetBackgroundColour)w.WindowSetBackgroundColour(31,29,27,255);
       }else{
         if(w.WindowSetLightTheme)w.WindowSetLightTheme();
-        if(w.WindowSetBackgroundColour)w.WindowSetBackgroundColour(238,238,238,255);
+        if(w.WindowSetBackgroundColour)w.WindowSetBackgroundColour(247,245,240,255);
       }
     }
   }catch(_){}
@@ -68,7 +72,7 @@
 (function(){
   var t=localStorage.getItem('WeKnora_theme')||'light';
   if(t==='system')t=window.matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light';
-  var bg=t==='dark'?'#181818':'#eee';
+  var bg=t==='dark'?'#1F1D1B':'#F7F5F0';
   var el=document.getElementById('app');
   if(el){ el.style.background=bg; el.style.minHeight='100%'; }
 })();

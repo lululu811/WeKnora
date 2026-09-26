@@ -1,0 +1,131 @@
+# config/builtin_models.yaml — 声明式内置模型配置
+#
+# 此文件定义所有租户可见的内置模型。模型会被自动插入到 models 表中，
+# is_builtin=true 标记为内置模型。
+#
+# 工作原理
+# -------------------------
+# 1. 字符串字段可以使用 ${NAME} 引用环境变量。未设置的环境变量会保留为
+#    字面量 ${NAME}，这样错误配置会在 API 调用时暴露出来。
+# 2. 非字符串字段（type, source, is_default, dimension 等）必须使用字面值。
+# 3. 每次启动时重新应用 - 修改文件后重启即可生效。
+# 4. 从文件中移除的条目不会自动从数据库删除，需要手动清理。
+#
+# 模型类型说明
+# -------------------------
+# - KnowledgeQA: 对话/问答模型（用于 RAG 问答、摘要、重写等）
+# - Embedding:   向量嵌入模型（用于文档向量化）
+# - Rerank:      重排序模型（用于检索结果重排序，提升精度）
+# - VLM:         视觉语言模型（用于图片理解，可选）
+# - ASR:         语音识别模型（用于语音转文字，可选）
+#
+# 推荐配置
+# -------------------------
+# 对于生产环境，建议至少配置：
+# 1. 1-2 个 KnowledgeQA 模型（主力 + 备用）
+# 2. 1 个 Embedding 模型（多语言推荐 bge-m3）
+# 3. 1 个 Rerank 模型（推荐 gte-rerank 或 bge-reranker）
+
+builtin_models:
+  # ========== 对话模型（KnowledgeQA）==========
+
+  # 阿里云百炼 - 通义千问 Plus（主力模型，性价比高）
+  - id: builtin-qwen-plus
+    type: KnowledgeQA
+    source: remote
+    is_default: true
+    name: qwen-plus
+    parameters:
+      base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
+      api_key: ${DASHSCOPE_API_KEY}
+      provider: openai  # 百炼兼容 OpenAI 协议
+      context_window: 131072  # 128K 上下文
+
+  # 阿里云百炼 - 通义千问 Turbo（快速响应，成本更低）
+  - id: builtin-qwen-turbo
+    type: KnowledgeQA
+    source: remote
+    is_default: false
+    name: qwen-turbo
+    parameters:
+      base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
+      api_key: ${DASHSCOPE_API_KEY}
+      provider: openai
+      context_window: 131072
+
+  # DeepSeek - V3（强大的推理能力，可选）
+  # - id: builtin-deepseek-v3
+  #   type: KnowledgeQA
+  #   source: remote
+  #   is_default: false
+  #   name: deepseek-chat
+  #   parameters:
+  #     base_url: https://api.deepseek.com/v1
+  #     api_key: ${DEEPSEEK_API_KEY}
+  #     provider: openai
+  #     context_window: 65536
+
+  # ========== 向量嵌入模型（Embedding）==========
+
+  # 阿里云百炼 - 多模态向量模型（推荐，支持中英文）
+  - id: builtin-embedding-multilingual
+    type: Embedding
+    source: remote
+    is_default: true
+    name: text-embedding-v3
+    parameters:
+      base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
+      api_key: ${DASHSCOPE_API_KEY}
+      provider: openai
+      embedding_parameters:
+        dimension: 1024  # 向量维度，推荐 1024 或 1536
+        truncate_prompt_tokens: 0  # 0 表示不截断
+
+  # BGE-M3（开源模型，可自部署，可选）
+  # - id: builtin-bge-m3
+  #   type: Embedding
+  #   source: remote
+  #   is_default: false
+  #   name: bge-m3
+  #   parameters:
+  #     base_url: ${EMBEDDING_BASE_URL}  # 自部署地址
+  #     api_key: ${EMBEDDING_API_KEY}
+  #     provider: openai
+  #     embedding_parameters:
+  #       dimension: 1024
+
+  # ========== 重排序模型（Rerank）==========
+
+  # 阿里云百炼 - GTE Rerank（推荐，提升检索精度）
+  - id: builtin-rerank-gte
+    type: Rerank
+    source: remote
+    is_default: true
+    name: gte-rerank
+    parameters:
+      base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
+      api_key: ${DASHSCOPE_API_KEY}
+      provider: openai
+
+  # BGE Reranker（开源模型，可自部署，可选）
+  # - id: builtin-rerank-bge
+  #   type: Rerank
+  #   source: remote
+  #   is_default: false
+  #   name: bge-reranker-v2-m3
+  #   parameters:
+  #     base_url: ${RERANK_BASE_URL}
+  #     api_key: ${RERANK_API_KEY}
+  #     provider: openai
+
+  # ========== 视觉语言模型（VLM，可选）==========
+
+  # 阿里云百炼 - Qwen VL Plus（图片理解）
+  # - id: builtin-qwen-vl
+  #   type: VLM
+  #   source: remote
+  #   name: qwen-vl-plus
+  #   parameters:
+  #     base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
+  #     api_key: ${DASHSCOPE_API_KEY}
+  #     provider: openai

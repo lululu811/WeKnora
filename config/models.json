@@ -1,0 +1,24 @@
+{
+  "providers": {
+    "dashscope-anthropic": {
+      "name": "DashScope Anthropic Compatible",
+      "names": {"zh-CN": "阿里云百炼 Anthropic 兼容"},
+      "description": "阿里云百炼平台 Anthropic 协议兼容端点",
+      "api": "anthropic-messages",
+      "base_url": "https://coding.dashscope.aliyuncs.com/apps/anthropic",
+      "auth": "x-api-key",
+      "api_key": "${DASHSCOPE_API_KEY}",
+      "model_types": ["chat"],
+      "models": [
+        {
+          "id": "qwen3.7-plus",
+          "name": "Qwen 3.7 Plus",
+          "reasoning": true,
+          "input": ["text"],
+          "context_window": 131072,
+          "max_output_tokens": 16384
+        }
+      ]
+    }
+  }
+}

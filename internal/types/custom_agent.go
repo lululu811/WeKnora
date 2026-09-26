@@ -661,6 +661,7 @@ var builtinAgentIDsOrdered = []string{
 	BuiltinDataAnalystID,
 	BuiltinKnowledgeGraphExpertID,
 	BuiltinDocumentAssistantID,
+	"builtin-zettaranc",
 }
 
 // GetBuiltinAgentIDs returns all built-in agent IDs in fixed order

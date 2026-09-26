@@ -95,32 +95,13 @@
       </svg>
     </div>
 
-    <!-- Logo - Top Left -->
-    <a href="https://github.com/Tencent/WeKnora" target="_blank" class="header-logo" :title="$t('common.github')">
-      <img src="@/assets/img/weknora.png" alt="WeKnora" class="logo-image" />
-    </a>
+    <!-- Logo - Top Left (温润现代文字 Logo) -->
+    <div class="header-logo" title="小陈知识库">
+      <span class="logo-text">小陈知识库</span>
+    </div>
 
-    <!-- Header Links - Top Right -->
-    <div class="header-links">
-      <a href="https://weknora.weixin.qq.com" target="_blank" class="header-link" :title="$t('common.website')">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
-          stroke-linecap="round">
-          <circle cx="12" cy="12" r="10" />
-          <line x1="2" y1="12" x2="22" y2="12" />
-          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-        </svg>
-        <span class="link-text">{{ $t('common.website') }}</span>
-      </a>
-
-      <a href="https://github.com/Tencent/WeKnora" target="_blank" class="header-link" :title="$t('common.info')">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor">
-          <path
-            d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z" />
-        </svg>
-        <span class="link-text">GitHub</span>
-      </a>
-
-      <div class="language-switch">
+    <!-- Header Links - Top Right (only language switch, external links removed for personal KB) -->
+    <div class="header-links">      <div class="language-switch">
         <button @click="toggleLanguageMenu" class="header-link" :title="currentLangOption?.label">
           <span class="lang-flag-icon">{{ currentLangOption?.flag }}</span>
           <span class="link-text">{{ currentLangOption?.shortLabel }}</span>
@@ -842,7 +823,14 @@ onMounted(async () => {
   min-height: 100%;
   overflow: hidden;
   position: relative;
-  background: linear-gradient(225deg, #022c22 0%, #064e3b 15%, #065f46 25%, #047857 38%, #059669 50%, #07C05F 65%, #10B981 78%, #34D399 90%, #6EE7B7 100%);
+  /* 温润现代：深湖蓝绿 → 暖琥珀 → 米白的柔和渐变 */
+  background: linear-gradient(135deg,
+    #1F4A46 0%,
+    #2D6A64 20%,
+    #458F87 40%,
+    #B8855E 65%,
+    #D4A373 80%,
+    #F7F5F0 100%);
 
   &::before {
     content: '';
@@ -851,8 +839,11 @@ onMounted(async () => {
     left: 0;
     right: 0;
     bottom: 0;
-    background: radial-gradient(circle at 20% 50%, rgba(255, 255, 255, 0.06) 0%, transparent 50%),
-      radial-gradient(circle at 80% 50%, rgba(255, 255, 255, 0.04) 0%, transparent 50%);
+    /* 纸质纹理感：柔和的光晕模拟厚质素描纸 */
+    background:
+      radial-gradient(ellipse at 20% 30%, rgba(247, 245, 240, 0.15) 0%, transparent 50%),
+      radial-gradient(ellipse at 80% 70%, rgba(184, 133, 94, 0.12) 0%, transparent 50%),
+      radial-gradient(ellipse at 50% 50%, rgba(255, 255, 255, 0.03) 0%, transparent 70%);
     pointer-events: none;
   }
 }
@@ -874,23 +865,24 @@ onMounted(async () => {
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.15);
-  border: 2px solid rgba(255, 255, 255, 0.3);
+  /* 温润现代：暖色光晕，不再是科技绿 */
+  background: rgba(247, 245, 240, 0.12);
+  border: 1.5px solid rgba(247, 245, 240, 0.25);
   box-shadow:
-    0 0 15px rgba(255, 255, 255, 0.35),
-    0 0 30px rgba(16, 185, 129, 0.2),
-    inset 0 0 8px rgba(255, 255, 255, 0.1);
+    0 0 20px rgba(247, 245, 240, 0.18),
+    0 0 40px rgba(212, 163, 115, 0.12),
+    inset 0 0 8px rgba(247, 245, 240, 0.08);
   display: flex;
   align-items: center;
   justify-content: center;
-  animation: nodePulse 5s infinite ease-in-out;
+  animation: nodePulse 6s infinite ease-in-out;
   will-change: transform, opacity;
 }
 
 .node-icon {
   width: 20px;
   height: 20px;
-  color: rgba(255, 255, 255, 0.9);
+  color: rgba(247, 245, 240, 0.75);
 }
 
 .node-1 {
@@ -1066,14 +1058,9 @@ onMounted(async () => {
   }
 }
 
-/* Left Showcase Section */
+/* Left Showcase Section — 温润现代版隐藏 showcase，采用极简中央卡片布局 (Q11) */
 .showcase-section {
-  flex: 0 0 52%;
-  display: flex;
-  align-items: flex-end;
-  padding: 100px 30px 100px 50px;
-  box-sizing: border-box;
-  position: relative;
+  display: none;
 }
 
 .showcase-content {
@@ -1178,21 +1165,21 @@ onMounted(async () => {
   object-fit: contain;
 }
 
-/* Right Form Section */
+/* Right Form Section — 占据全宽并居中 (Q11 极简中央卡片) */
 .form-section {
-  flex: 0 0 48%;
+  flex: 1;
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: center;
-  padding: 112px 50px 100px 30px;
+  padding: var(--app-space-12) var(--app-space-6);
   box-sizing: border-box;
   position: relative;
+  min-height: 100vh;
 }
 
 .form-panel {
   width: 100%;
-  max-width: 480px;
-  margin-bottom: 60px;
+  max-width: 440px;
   position: relative;
   z-index: 2;
 }
@@ -1202,11 +1189,21 @@ onMounted(async () => {
   top: 32px;
   left: 50px;
   z-index: 100;
-  cursor: pointer;
+  display: flex;
+  align-items: center;
 
-  .logo-image {
-    width: 120px;
-    height: auto;
+  .logo-text {
+    font-family: var(--app-font-display, "Noto Serif SC", "Source Han Serif SC", "Songti SC", serif);
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    color: var(--td-text-color-primary);
+    /*温润现代的深湖蓝绿点缀 */
+    background: linear-gradient(135deg, var(--td-brand-color, #2D6A64) 0%, var(--td-brand-color-hover, #458F87) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    user-select: none;
   }
 }
 
@@ -1328,13 +1325,18 @@ onMounted(async () => {
 }
 
 .form-card {
-  background: rgba(255, 255, 255, 0.97);
-  border-radius: 16px;
-  padding: 40px;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+  background: rgba(255, 255, 255, 0.98);
+  border-radius: 20px;
+  padding: 44px 40px;
+  /* 温润现代：暖色阴影，不用纯黑 */
+  box-shadow:
+    0 10px 40px rgba(42, 39, 35, 0.12),
+    0 2px 8px rgba(42, 39, 35, 0.06);
   box-sizing: border-box;
-  border: none;
+  border: 1px solid rgba(232, 225, 213, 0.4);
   width: 100%;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
 /* Share-link invitation banner. Sits above the register form when the
@@ -1656,8 +1658,8 @@ onMounted(async () => {
     top: 26px;
     left: 40px;
 
-    .logo-image {
-      width: 100px;
+    .logo-text {
+      font-size: 19px;
     }
   }
 
@@ -1704,8 +1706,8 @@ onMounted(async () => {
     top: 22px;
     left: 30px;
 
-    .logo-image {
-      width: 80px;
+    .logo-text {
+      font-size: 17px;
     }
   }
 
@@ -1764,8 +1766,8 @@ onMounted(async () => {
     top: 18px;
     left: 20px;
 
-    .logo-image {
-      width: 70px;
+    .logo-text {
+      font-size: 15px;
     }
   }
 
@@ -1833,8 +1835,9 @@ html[theme-mode="dark"] {
     stroke: rgba(255, 255, 255, 0.25);
   }
 
-  .header-logo .logo-image {
-    filter: invert(1) hue-rotate(180deg) brightness(1.1);
+  /* 文字 Logo 使用品牌色渐变，已自适应深色模式，无需 invert filter */
+  .header-logo .logo-text {
+    opacity: 0.95;
   }
 
   .header-link {

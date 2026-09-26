@@ -48,17 +48,14 @@ services:
       - data-files:/data/files
       - docreader-tmp:/tmp/docreader:ro
       - ./config/config.yaml:/app/config/config.yaml
-      # Docker 沙箱默认关闭（见 WEKNORA_SANDBOX_DOCKER_ENABLED）。需要本机 daemon 时
-      # 同时设 true 并挂载实际 socket——这等同宿主机 root，仅私有化单机。
-      # 入口脚本会按 socket GID 把 appuser 加入对应组（compose group_add 在 gosu 后无效）。
-      # - /var/run/docker.sock:/var/run/docker.sock
-      # Optional: declarative built-in models. Copy config/builtin_models.yaml.example
-      # to config/builtin_models.yaml, edit it for your deployment, then
-      # uncomment the line below. See docs/BUILTIN_MODELS.md.
-      # - ./config/builtin_models.yaml:/app/config/builtin_models.yaml:ro
-      # Optional: model catalog overlay (extra vendors / model overrides).
-      # Copy config/models.json.example to config/models.json, then
-      # - ./config/models.json:/app/config/models.json:ro
+      - ./config/builtin_agents.yaml:/app/config/builtin_agents.yaml:ro
+      - ./config/builtin_models.yaml:/app/config/builtin_models.yaml:ro
+      - ./config/models.json:/app/config/models.json:ro
+      - ./config/prompt_templates/:/app/config/prompt_templates/:ro
+      # Hithink Finance DuckDB databases (read-write for lock files)
+      - /Users/chenlei/.hithink-finance:/Users/chenlei/.hithink-finance:rw
+      # Zettaranc-skill Python CLI
+      - /Users/chenlei/005_skill/skills/zettaranc-skill:/Users/chenlei/005_skill/skills/zettaranc-skill:ro
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 30s
@@ -146,6 +143,10 @@ services:
       - DB_NAME=${DB_NAME:-}
       # SQLite 驱动时使用（DB_DRIVER=sqlite）；postgres 驱动忽略
       # - DB_PATH=${DB_PATH:-}
+      # ========== Zettaranc Finance Tools ==========
+      - ZETTARANC_PYTHON_PATH=${ZETTARANC_PYTHON_PATH:-/usr/bin/python3}
+      - ZETTARANC_CLI_DIR=${ZETTARANC_CLI_DIR:-/Users/chenlei/005_skill/skills/zettaranc-skill}
+      - ZETTARANC_DATA_MODE=${ZETTARANC_DATA_MODE:-jnb}
       # ========== Langfuse (optional observability) ==========
       # Enabled automatically when LANGFUSE_PUBLIC_KEY + LANGFUSE_SECRET_KEY are set.
       # See docs/Langfuse集成.md for the full list of tuning knobs.
@@ -1024,6 +1025,30 @@ services:
     restart: unless-stopped
     profiles:
       - full
+
+  # ===========================================================================
+  # Python Service for DuckDB and zettaranc-skill
+  # ===========================================================================
+  python-service:
+    build:
+      context: ./python-service
+      dockerfile: Dockerfile
+    container_name: WeKnora-python-service
+    ports:
+      - "50052:50052"
+    volumes:
+      - /Users/chenlei/.hithink-finance:/Users/chenlei/.hithink-finance:ro
+    environment:
+      - DB_DIR=/Users/chenlei/.hithink-finance
+      - PORT=50052
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:50052/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - WeKnora-network
 
 networks:
   WeKnora-network:

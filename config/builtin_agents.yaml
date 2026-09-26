@@ -270,3 +270,55 @@ builtin_agents:
       reflection_enabled: false
       multi_turn_enabled: true
 
+
+  # ===========================================================================
+  # Finance Research Agents
+  # ===========================================================================
+
+  - id: "builtin-zettaranc"
+    avatar: "📈"
+    is_builtin: true
+    i18n:
+      default:
+        name: "Z哥"
+        description: "前阳光私募冠军基金经理的交易思维框架，60+ 指标，30+ 战法"
+      zh-CN:
+        name: "Z哥"
+        description: "前阳光私募冠军基金经理的交易思维框架，60+ 技术指标，30+ 战法识别，策略回测"
+      zh-TW:
+        name: "Z哥"
+        description: "前陽光私募冠軍基金經理的交易思維框架，60+ 技術指標，30+ 戰法識別，策略回測"
+    config:
+      agent_mode: "smart-reasoning"
+      agent_type: "custom"
+      system_prompt_id: "zettaranc"
+      temperature: 0.3
+      max_completion_tokens: 0
+      max_iterations: 50
+      kb_selection_mode: "selected"
+      retrieve_kb_only_when_mentioned: false
+      allowed_tools:
+        # Discovery tool
+        - "hithink.finance.discover"
+
+        # Public tools (hithink finance data)
+        - "hithink.finance.market.price.snapshot"
+        - "hithink.finance.market.price.historical"
+        - "hithink.finance.financial.valuation.snapshot"
+        - "hithink.finance.financial.statement.income"
+        - "hithink.finance.indicator.trend.ma"
+        - "hithink.finance.indicator.momentum.kdj"
+        - "hithink.finance.special.limit.limit_up_pool"
+        - "hithink.finance.special.dragon_tiger.list"
+        - "hithink.finance.special.hot_stock.skyrocket"
+        - "hithink.finance.query.sql"
+
+        # Zettaranc exclusive tools (Python CLI)
+        - "zettaranc.analyze"
+        - "zettaranc.backtest"
+        - "zettaranc.screener"
+
+      web_search_enabled: true
+      web_search_max_results: 10
+      reflection_enabled: false
+      multi_turn_enabled: true

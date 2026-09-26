@@ -90,6 +90,25 @@ func main() {
 			logger.Warnf(ctx, "[system_settings] subscribe failed: %v", err)
 		}
 
+		// 启动配置文件热加载监听（如果启用）
+		// 通过环境变量 WEKNORA_CONFIG_HOT_RELOAD=true 启用
+		if enableHotReload := os.Getenv("WEKNORA_CONFIG_HOT_RELOAD"); enableHotReload != "" {
+			if enableHotReload == "true" || enableHotReload == "1" {
+				configWatcher, err := config.WatchConfigChanges(cfg, func(newCfg *config.Config) {
+					logger.Infof(ctx, "[config-hot-reload] Configuration updated, notifying services...")
+					// 这里可以添加服务通知逻辑
+					// 例如：通知 systemSettingSvc、agentService 等重新加载配置
+				})
+				if err != nil {
+					logger.Warnf(ctx, "[config-hot-reload] Failed to start config watcher: %v", err)
+				} else {
+					logger.Infof(ctx, "[config-hot-reload] Configuration hot-reload enabled")
+					// 在关闭时停止监听
+					defer configWatcher.Stop()
+				}
+			}
+		}
+
 		signals := make(chan os.Signal, 1)
 		signal.Notify(signals, shutdownSignals...)
 		go func() {

@@ -111,6 +111,12 @@ const router = createRouter({
           meta: { requiresInit: true, requiresAuth: true }
         },
         {
+          path: "home",
+          name: "welcome",
+          component: () => import("../views/home/Welcome.vue"),
+          meta: { requiresInit: true, requiresAuth: true }
+        },
+        {
           path: "knowledge-bases",
           name: "knowledgeBaseList",
           component: () => import("../views/knowledge/KnowledgeBaseList.vue"),

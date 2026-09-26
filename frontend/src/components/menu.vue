@@ -3,7 +3,7 @@
         <!-- 展开时：Logo + 搜索/折叠按钮同行 -->
         <div class="logo_row" v-if="!uiStore.sidebarCollapsed">
             <div class="logo_box" @click="router.push('/platform/knowledge-bases')" style="cursor: pointer;">
-                <img class="logo" src="@/assets/img/weknora.png" alt="">
+                <span class="logo logo-text">小陈知识库</span>
                 <sup v-if="isLiteEdition" class="lite-badge">Lite</sup>
             </div>
             <div class="logo_actions">
@@ -1316,9 +1316,17 @@ const resizeSidebar = (delta: number, keyboard: boolean) => {
         min-width: 0;
         overflow: hidden;
 
-        .logo {
-            width: 128px;
-            height: auto;
+        .logo-text {
+            font-family: var(--app-font-display, "Noto Serif SC", "Source Han Serif SC", "Songti SC", serif);
+            font-size: 16px;
+            font-weight: 600;
+            letter-spacing: 0.05em;
+            white-space: nowrap;
+            background: linear-gradient(135deg, var(--td-brand-color, #2D6A64) 0%, var(--td-brand-color-hover, #458F87) 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            user-select: none;
         }
 
         .lite-badge {
@@ -1828,10 +1836,7 @@ const resizeSidebar = (delta: number, keyboard: boolean) => {
 }
 </style>
 <style lang="less">
-// Dark mode: invert dark logo to light
-html[theme-mode="dark"] .aside_box .logo_box .logo {
-    filter: invert(1) hue-rotate(180deg);
-}
+// Dark mode: 文字 Logo 使用品牌色渐变，已自适应深色模式，无需 invert filter
 
 // Dark mode: 滚动条在深色背景下需要更亮的颜色才看得见
 html[theme-mode="dark"] .aside_box .menu_top:hover {

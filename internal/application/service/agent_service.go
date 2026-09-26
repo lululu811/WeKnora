@@ -12,6 +12,13 @@ import (
 	"github.com/Tencent/WeKnora/internal/agent/approval"
 	"github.com/Tencent/WeKnora/internal/agent/skills"
 	"github.com/Tencent/WeKnora/internal/agent/tools"
+	"github.com/Tencent/WeKnora/internal/agent/tools/hithink_finance"
+	"github.com/Tencent/WeKnora/internal/agent/tools/hithink_finance/financial"
+	"github.com/Tencent/WeKnora/internal/agent/tools/hithink_finance/indicator"
+	"github.com/Tencent/WeKnora/internal/agent/tools/hithink_finance/market"
+	"github.com/Tencent/WeKnora/internal/agent/tools/hithink_finance/query"
+	"github.com/Tencent/WeKnora/internal/agent/tools/hithink_finance/special"
+	"github.com/Tencent/WeKnora/internal/agent/tools/zettaranc"
 	"github.com/Tencent/WeKnora/internal/application/repository"
 	"github.com/Tencent/WeKnora/internal/browserskill"
 	"github.com/Tencent/WeKnora/internal/config"
@@ -117,6 +124,10 @@ type agentService struct {
 	sandboxResolver      sandbox.TenantSandboxResolver
 	sandboxPinner        *SessionSandboxPinner
 	sandboxPolicy        WorkspaceSandboxPolicy
+	// Hithink Finance tools state
+	hithinkDBPool *hithink_finance.DBPool
+	// Zettaranc tools state
+	zettarancClient *zettaranc.CLIClient
 }
 
 // NewAgentService creates a new agent service
@@ -1135,6 +1146,64 @@ func (s *agentService) registerTools(
 			toolToRegister = tools.NewWikiRenamePageTool(s.wikiPageService, writableWikiKBIDs, wikiRoutes)
 		case tools.ToolWikiDeletePage:
 			toolToRegister = tools.NewWikiDeletePageTool(s.wikiPageService, writableWikiKBIDs, wikiRoutes)
+
+		// Hithink Finance tools — registered on demand when listed in allowed_tools
+		case "hithink.finance.discover",
+			"hithink.finance.market.price.snapshot",
+			"hithink.finance.market.price.historical",
+			"hithink.finance.financial.valuation.snapshot",
+			"hithink.finance.financial.statement.income",
+			"hithink.finance.indicator.trend.ma",
+			"hithink.finance.indicator.momentum.kdj",
+			"hithink.finance.special.limit.limit_up_pool",
+			"hithink.finance.special.dragon_tiger.list",
+			"hithink.finance.special.hot_stock.skyrocket",
+			"hithink.finance.query.sql":
+			// Lazy-initialize the DB pool on first use
+			if s.hithinkDBPool == nil {
+				s.hithinkDBPool = hithink_finance.NewDBPool(hithink_finance.DefaultConfig())
+			}
+			switch toolName {
+			case "hithink.finance.discover":
+				toolToRegister = hithink_finance.NewDiscoverTool(registry)
+			case "hithink.finance.market.price.snapshot":
+				toolToRegister = market.NewPriceSnapshotTool(s.hithinkDBPool)
+			case "hithink.finance.market.price.historical":
+				toolToRegister = market.NewPriceHistoricalTool(s.hithinkDBPool)
+			case "hithink.finance.financial.valuation.snapshot":
+				toolToRegister = financial.NewValuationSnapshotTool(s.hithinkDBPool)
+			case "hithink.finance.financial.statement.income":
+				toolToRegister = financial.NewIncomeStatementTool(s.hithinkDBPool)
+			case "hithink.finance.indicator.trend.ma":
+				toolToRegister = indicator.NewTrendMATool(s.hithinkDBPool)
+			case "hithink.finance.indicator.momentum.kdj":
+				toolToRegister = indicator.NewMomentumKDJTool(s.hithinkDBPool)
+			case "hithink.finance.special.limit.limit_up_pool":
+				toolToRegister = special.NewLimitUpPoolTool(s.hithinkDBPool)
+			case "hithink.finance.special.dragon_tiger.list":
+				toolToRegister = special.NewDragonTigerTool(s.hithinkDBPool)
+			case "hithink.finance.special.hot_stock.skyrocket":
+				toolToRegister = special.NewHotStockTool(s.hithinkDBPool)
+			case "hithink.finance.query.sql":
+				toolToRegister = query.NewSQLQueryTool(s.hithinkDBPool)
+			}
+			logger.Infof(ctx, "Registered hithink finance tool: %s", toolName)
+
+		// Zettaranc tools — registered on demand when listed in allowed_tools
+		case "zettaranc.analyze", "zettaranc.backtest", "zettaranc.screener":
+			// Lazy-initialize the CLI client on first use
+			if s.zettarancClient == nil {
+				s.zettarancClient = zettaranc.NewCLIClient(zettaranc.DefaultConfig())
+			}
+			switch toolName {
+			case "zettaranc.analyze":
+				toolToRegister = zettaranc.NewAnalyzeTool(s.zettarancClient)
+			case "zettaranc.backtest":
+				toolToRegister = zettaranc.NewBacktestTool(s.zettarancClient)
+			case "zettaranc.screener":
+				toolToRegister = zettaranc.NewScreenerTool(s.zettarancClient)
+			}
+			logger.Infof(ctx, "Registered zettaranc tool: %s", toolName)
 
 		case tools.ToolShellExec, tools.ToolReadFile, tools.LegacyToolReadSkill, tools.LegacyToolExecuteSkillScript,
 			tools.ToolListSandboxFiles, tools.LegacyToolReadSandboxFile, tools.ToolWriteSandboxFile,
