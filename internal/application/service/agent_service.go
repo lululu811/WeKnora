@@ -20,6 +20,7 @@ import (
 	"github.com/Tencent/WeKnora/internal/agent/tools/hithink_finance/special"
 	"github.com/Tencent/WeKnora/internal/agent/tools/hithink_finance/analysis"
 	"github.com/Tencent/WeKnora/internal/agent/tools/hithink_finance/pattern"
+	"github.com/Tencent/WeKnora/internal/agent/tools/kline_studio"
 	"github.com/Tencent/WeKnora/internal/agent/tools/zettaranc"
 	"github.com/Tencent/WeKnora/internal/application/repository"
 	"github.com/Tencent/WeKnora/internal/browserskill"
@@ -134,9 +135,10 @@ type agentService struct {
 	hostSkillVersionsRoot string
 	// Hithink Finance tools state
 	hithinkConfig *hithink_finance.Config
-	// Zettaranc tools state
-	zettarancClient       *zettaranc.CLIClient
+	// Zettaranc tools state (all tools now go through python-service HTTP API)
 	zettarancHTTPClient   *zettaranc.HTTPClient
+	// Kline-studio tools state (push picks to kline-studio backend, return view URL)
+	klineStudioConfig *kline_studio.Config
 }
 
 // NewAgentService creates a new agent service
@@ -1377,24 +1379,28 @@ func (s *agentService) registerTools(
 			}
 			logger.Infof(ctx, "Registered hithink finance tool: %s", toolName)
 
-		// Zettaranc tools — registered on demand when listed in allowed_tools
+		// Zettaranc tools — all delegate to python-service HTTP API
 		case "zettaranc.analyze", "zettaranc.backtest", "zettaranc.screener":
-			// Lazy-initialize the CLI client on first use
-			if s.zettarancClient == nil {
-				s.zettarancClient = zettaranc.NewCLIClient(zettaranc.DefaultConfig())
+			// Lazy-initialize the HTTP client on first use
+			if s.zettarancHTTPClient == nil {
+				s.zettarancHTTPClient = zettaranc.NewHTTPClient("")
 			}
 			switch toolName {
 			case "zettaranc.analyze":
-				if s.zettarancHTTPClient == nil {
-					s.zettarancHTTPClient = zettaranc.NewHTTPClient("")
-				}
 				toolToRegister = zettaranc.NewAnalyzeTool(s.zettarancHTTPClient)
 			case "zettaranc.backtest":
-				toolToRegister = zettaranc.NewBacktestTool(s.zettarancClient)
+				toolToRegister = zettaranc.NewBacktestTool(s.zettarancHTTPClient)
 			case "zettaranc.screener":
-				toolToRegister = zettaranc.NewScreenerTool(s.zettarancClient)
+				toolToRegister = zettaranc.NewScreenerTool(s.zettarancHTTPClient)
 			}
 			logger.Infof(ctx, "Registered zettaranc tool: %s", toolName)
+
+		case "kline_studio.show":
+			if s.klineStudioConfig == nil {
+				s.klineStudioConfig = kline_studio.DefaultConfig()
+			}
+			toolToRegister = kline_studio.NewShowTool(s.klineStudioConfig)
+			logger.Infof(ctx, "Registered kline_studio tool: %s", toolName)
 
 		case tools.ToolShellExec, tools.ToolReadFile, tools.LegacyToolReadSkill, tools.LegacyToolExecuteSkillScript,
 			tools.ToolListSandboxFiles, tools.LegacyToolReadSandboxFile, tools.ToolWriteSandboxFile,
