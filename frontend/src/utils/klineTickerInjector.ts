@@ -4,7 +4,9 @@
  * 让前端可以挂 hover/click 事件触发 kline-studio 抽屉。
  *
  * 设计原则：
- *  - 只处理 6 位数字 + `.SH`/`.SZ`/`.BJ`，避免误匹配电话号码、订单号、版本号等。
+ *  - 6 位数字 + `.SH`/`.SZ`/`.BJ` 是无歧义形式，一律识别。
+ *  - 6 位裸数字也识别（LLM 正文里写「600499 是科达制造」很常见），交易所由
+ *    板块前缀推断；前缀不属于任何已知板块就原样放行，宁可漏也不误伤。
  *  - code fence (```...```) 与 inline code (`...`) 内的文本保持原样，避免在
  *    代码示例里给无意义的 ticker 加交互。
  *  - 不做去重、不分首次/末次出现 —— 同一股票在答案里出现多少次就标记多少次，
@@ -12,12 +14,20 @@
  *
  * 真正的触发逻辑在 `useKLineTickerObserver` 里挂 DOM 事件。
  */
+import { inferAShareExchange } from './aShareTicker.ts'
 
-// 严格 ticker：6 位数字 + 交易所后缀 (.SH/.SZ/.BJ)。无歧义。
-const TICKER_RE = /\b(\d{6})\.(SH|SZ|BJ)\b/g
-// 中文括号或 ASCII 括号内的纯 6 位数字（如「平潭发展（000592）」
-// 「(000592)」）。允许数字紧邻括号但不允许其它字符在中间。
-const TICKER_BARE_PAREN_RE = /([（(])(\d{6})(?=[)）])/g
+// 一次扫描同时吃下「带后缀」和「裸 6 位码」。
+//
+// 合并成一条正则而不是先 replace 带后缀、再 replace 裸码，是为了避免第二轮把
+// 第一轮刚包好的 <span> 里的数字再包一层（`600499.SH` 会被二次处理成嵌套 span）。
+//
+// 捕获组而非 lookbehind：Safari 16.4 之前不支持 lookbehind，这个构建产物要跑在
+// 用户的浏览器里，不值得为了一行正则设新下限。
+//   (^|[^\d.])  前面不能是数字或小数点，否则 `1.600499` / `202609` 会被切错
+//   (\d{6})     6 位代码
+//   (?!\d)      后面不能紧跟数字，否则 8 位日期 20260927 会被取前 6 位
+//   (\.(SH|SZ|BJ)\b)?  可选交易所后缀，大小写不敏感
+const TICKER_RE = /(^|[^\d.])(\d{6})(?!\d)(?:\.(SH|SZ|BJ)\b)?/gi
 const CODE_SPLIT_RE = /(`{3}[\s\S]*?`{3}|`[^`\n]*`)/g
 
 export const KLINE_TICKER_CLASS = 'kline-ticker'
@@ -25,7 +35,9 @@ export const KLINE_TICKER_ATTR = 'data-thscode'
 
 /**
  * 注入 ticker 标签，返回可直接交给 marked 的 markdown 文本。
- * - 文本 ticker（如 `600519.SH`） → `<span class="kline-ticker" data-thscode="600519.SH">600519.SH</span>`
+ * - 带后缀的 ticker（`600519.SH`）→ `<span class="kline-ticker" data-thscode="600519.SH">600519.SH</span>`
+ * - 裸 6 位码（`600499`，含「（000592）」这类括号包裹）→ 按板块前缀补出交易所
+ * - 前缀不属于任何已知板块的 6 位数字（`123456`、订单号等）原样保留
  * - code block / inline code 里的 ticker 不动
  */
 export function injectKLineTickers(markdown: string): string {
@@ -33,19 +45,16 @@ export function injectKLineTickers(markdown: string): string {
   // 偶数下标是 markdown，奇数下标是 code 块（被正则 split 抽出的部分）。
   const parts = markdown.split(CODE_SPLIT_RE)
   for (let i = 0; i < parts.length; i += 2) {
-    // 严格 ticker：`600519.SH` / `000001.SZ` / `830799.BJ`
-    parts[i] = parts[i].replace(TICKER_RE, (_match, ticker: string, exchange: string) => {
-      const thscode = `${ticker}.${exchange}`
-      return wrapTicker(thscode)
-    })
-    // 中文/ASCII 括号包裹的纯 6 位数字：`（000592）` / `(000592)`。
-    // 没有交易所后缀时按 SH 处理（A 股主板大头在沪市）；用户 hover 抽屉打开
-    // 后仍可手动切换交易所（kline-studio frontend 会按 thscode 解析）。
-    parts[i] = parts[i].replace(TICKER_BARE_PAREN_RE, (_match, _open: string, ticker: string) => {
-      const thscode = `${ticker}.SH`
-      // 替换括号里的数字为 <x-kline>，保留外层括号。
-      return `${_open}${wrapTicker(thscode)}`
-    })
+    parts[i] = parts[i].replace(
+      TICKER_RE,
+      (match, lead: string, ticker: string, suffix?: string) => {
+        const exchange = suffix ? suffix.toUpperCase() : inferAShareExchange(ticker)
+        // 前缀判不出交易所就整段原样返回：宁可这个数字不可点，也不要把它
+        // 绑到一只不相干的票上——那会让 hover 卡片显示出错误的公司名。
+        if (!exchange) return match
+        return `${lead}${wrapTicker(`${ticker}.${exchange}`)}`
+      },
+    )
   }
   return parts.join('')
 }

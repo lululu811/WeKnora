@@ -1,4 +1,5 @@
 import type { KLineData } from 'klinecharts';
+import { inferAShareExchange } from '@/utils/aShareTicker';
 
 /**
  * 知行战法核心量化计算与股票评分体系
@@ -459,7 +460,7 @@ export function extractMentionedStocksFromText(text: string): MentionedStock[] {
   while ((match = nameParenRegex.exec(text)) !== null) {
     const name = match[1];
     const ticker = match[2];
-    const exchange = COMMON_NAME_MAP[ticker]?.exchange || (ticker.startsWith('6') ? 'SH' : 'SZ');
+    const exchange = COMMON_NAME_MAP[ticker]?.exchange || inferAShareExchange(ticker) || 'SH';
     const thscode = `${ticker}.${exchange}`;
     map.set(thscode, { ticker, exchange, name, thscode });
   }
