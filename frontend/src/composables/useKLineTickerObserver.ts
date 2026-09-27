@@ -1,16 +1,13 @@
 import { onBeforeUnmount, watch, type Ref } from 'vue'
-import { bindKLineTickerElements } from '@/utils/klineTickerInjector'
+import { bindKLineTickerElements, type KLineTickerHandler } from '@/utils/klineTickerInjector'
 
 /**
  * 监听 root 容器的 DOM 变化，把新增的 `.kline-ticker` 元素绑上 hover/click
  * 事件。每次 throttle 一下，避免流式渲染期间每字符都跑全树扫描。
- *
- * onActivate(ticker, exchange) — 用户激活（hover/click/focus）任一 ticker
- * 时被调用，由 caller 决定是否打开右侧栏抽屉。
  */
 export function useKLineTickerObserver(
   rootRef: Ref<HTMLElement | null | undefined>,
-  onActivate: (thscode: string) => void,
+  handler: KLineTickerHandler,
 ) {
   let observer: MutationObserver | null = null
   let rafScheduled = false
@@ -18,7 +15,7 @@ export function useKLineTickerObserver(
   const flush = () => {
     rafScheduled = false
     if (!rootRef.value) return
-    bindKLineTickerElements(rootRef.value, onActivate)
+    bindKLineTickerElements(rootRef.value, handler)
   }
 
   const schedule = () => {

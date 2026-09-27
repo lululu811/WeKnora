@@ -76,14 +76,38 @@ const url = computed(() => {
 
 const pickList = computed(() => {
   const value = record.value.tickers
-  if (!Array.isArray(value)) return []
-  return value
-    .filter((item): item is { ticker: string; exchange: string } => {
-      if (!item || typeof item !== 'object') return false
-      const o = item as Record<string, unknown>
-      return typeof o.ticker === 'string' && typeof o.exchange === 'string'
-    })
-    .map((item) => ({ ticker: item.ticker, exchange: item.exchange }))
+  if (Array.isArray(value) && value.length > 0) {
+    return value
+      .filter((item): item is { ticker: string; exchange: string } => {
+        if (!item || typeof item !== 'object') return false
+        const o = item as Record<string, unknown>
+        return typeof o.ticker === 'string' && typeof o.exchange === 'string'
+      })
+      .map((item) => ({ ticker: item.ticker, exchange: item.exchange, name: (item as any).name }))
+  }
+
+  // 兼容 zettaranc.screener 的选股返回结构
+  const rawData = (record.value.data as any) || record.value
+  const stocksVal = rawData.stocks || record.value.stocks
+  if (Array.isArray(stocksVal)) {
+    return stocksVal
+      .map((item: any) => {
+        const thscode = String(item.thscode || item.ticker || '')
+        const parts = thscode.split('.')
+        if (parts.length === 2) {
+          return {
+            ticker: parts[0],
+            exchange: parts[1],
+            name: item.name,
+            pattern: item.strategy || (item.signals && item.signals[0]) || undefined,
+          }
+        }
+        return null
+      })
+      .filter(Boolean) as Array<{ ticker: string; exchange: string; name?: string; pattern?: string }>
+  }
+
+  return []
 })
 
 const hasPick = computed(() => pickList.value.length > 0)

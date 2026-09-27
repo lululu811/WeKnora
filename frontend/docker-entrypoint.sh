@@ -33,7 +33,9 @@ export MAX_SKILL_BUNDLE_SIZE=${SKILL_MB}M
 export APP_HOST=${APP_HOST:-app}
 export APP_PORT=${APP_PORT:-8080}
 export APP_SCHEME=${APP_SCHEME:-http}
-envsubst '${MAX_FILE_SIZE} ${MAX_SKILL_BUNDLE_SIZE} ${APP_HOST} ${APP_PORT} ${APP_SCHEME}' \
+export PYTHON_SERVICE_HOST=${PYTHON_SERVICE_HOST:-python-service}
+export PYTHON_SERVICE_PORT=${PYTHON_SERVICE_PORT:-50052}
+envsubst '${MAX_FILE_SIZE} ${MAX_SKILL_BUNDLE_SIZE} ${APP_HOST} ${APP_PORT} ${APP_SCHEME} ${PYTHON_SERVICE_HOST} ${PYTHON_SERVICE_PORT}' \
   < /etc/nginx/templates/default.conf.template > /etc/nginx/conf.d/default.conf
 
 # 启动 nginx

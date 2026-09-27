@@ -100,7 +100,7 @@ const greetingText = computed(() => {
 
 // 用户名
 const userName = computed(() => {
-  return authStore.user?.name || authStore.user?.email || '小陈'
+  return (authStore.user as any)?.name || (authStore.user as any)?.username || authStore.user?.email || '小陈'
 })
 
 // 当前日期

@@ -4,10 +4,12 @@
         'has-references-panel': referencesDrawerVisible,
         'has-sandbox-panel': sandboxPanel.visible.value,
         'has-kline-panel': klinePanel.visible.value,
+        'has-agent-workspace': agentWorkspace.isOpen.value,
     }" :style="{
         '--sandbox-panel-width': `${sandboxPanel.width.value}px`,
         '--references-panel-width': `${referencesPanelWidth}px`,
         '--kline-panel-width': `${klinePanel.width.value}px`,
+        '--workspace-panel-width': `${agentWorkspace.width.value}px`,
     }">
         <div v-if="!embeddedMode" class="chat-topbar">
             <ChatHeader :session="currentSession" />
@@ -139,6 +141,10 @@
                                     @rewind="handleRewind"
                                     @render-complete-change="(ready) => handleAnswerRenderComplete(session, ready)">
                                 </botmsg>
+                                <MentionedStocksBar
+                                    :session="session"
+                                    @select-stock="handleOpenStockWorkspace"
+                                />
                                 <FollowUpSuggestions v-if="session.answerFullyRendered && !session.steerForked && !session.suggestionsDismissed"
                                     :suggestion-set="session.suggestionSet"
                                     :loading="session.suggestionLoading"
@@ -195,7 +201,17 @@
         :shift-width="referencesPanelWidth"
         :artifacts="sessionArtifacts" :artifacts-collecting="sessionArtifactsCollecting"
         @artifact-deleted="handleArtifactDeleted" />
-    <KLineSidePanel v-if="!embeddedMode" />
+    <AgentWorkspacePanel v-if="!embeddedMode" />
+    <StockCitationFloat
+        :visible="stockFloat.visible"
+        :top="stockFloat.top"
+        :left="stockFloat.left"
+        :thscode="stockFloat.thscode"
+        :name="stockFloat.name"
+        @enter="cancelStockFloatClose"
+        @leave="scheduleStockFloatClose(150)"
+        @open-workspace="handleOpenStockWorkspace"
+    />
 </template>
 <script setup>
 import { makeSteerClientId } from '@/utils/steerId';
@@ -247,8 +263,12 @@ import { provideChatAttachmentPreviewDrawer } from '@/composables/useChatAttachm
 import { useSessionActivityStore } from '@/stores/sessionActivity';
 import { provideChatSandboxPanel } from '@/composables/useChatSandboxPanel';
 import SandboxSidePanel from '@/components/chat/SandboxSidePanel.vue';
-import KLineSidePanel from '@/components/chat/KLineSidePanel.vue';
+import AgentWorkspacePanel from '@/components/workspace/AgentWorkspacePanel.vue';
+import MentionedStocksBar from '@/components/chat/MentionedStocksBar.vue';
+import StockCitationFloat from '@/components/workspace/kline/StockCitationFloat.vue';
+import { COMMON_NAME_MAP } from '@/components/workspace/kline/stock-score';
 import { provideChatKLinePanel } from '@/composables/useChatKLinePanel';
+import { provideAgentWorkspace } from '@/composables/useAgentWorkspace';
 import { useKLineTickerObserver } from '@/composables/useKLineTickerObserver';
 import BrowserTaskPreview from './components/BrowserTaskPreview.vue';
 import { collectSessionArtifacts, markSessionArtifactDeleted } from '@/utils/sessionArtifacts';
@@ -256,7 +276,8 @@ import { isCollectingSkillArtifacts } from '@/utils/skillArtifacts';
 const referencesDrawer = provideChatReferencesDrawer();
 provideChatAttachmentPreviewDrawer();
 const sandboxPanel = provideChatSandboxPanel();
-const klinePanel = provideChatKLinePanel();
+const agentWorkspace = provideAgentWorkspace();
+const klinePanel = provideChatKLinePanel(agentWorkspace);
 const { visible: referencesDrawerVisible, panelWidth: referencesPanelWidth } = referencesDrawer;
 
 const props = defineProps({
@@ -598,13 +619,78 @@ let fullContent = ref('')
 const scrollContainer = ref(null)
 const composerElement = ref(null)
 
-// 监听 chat 流式输出，把答案里出现的 A 股 ticker（6位.SH/SZ/BJ）变成可
-// hover/click 元素，触发右侧栏抽屉打开对应 ticker 的 K 线图。
-// 必须放在 scrollContainer 声明之后，避免 TDZ。
-useKLineTickerObserver(scrollContainer, (thscode) => {
-  const [ticker, exchange] = thscode.split('.')
-  if (!ticker || !exchange) return
-  klinePanel.open([{ ticker, exchange }], 0)
+const stockFloat = ref({
+  visible: false,
+  top: 0,
+  left: 0,
+  thscode: '',
+  name: '',
+});
+let stockFloatCloseTimer = null;
+
+const cancelStockFloatClose = () => {
+  if (stockFloatCloseTimer) {
+    clearTimeout(stockFloatCloseTimer);
+    stockFloatCloseTimer = null;
+  }
+};
+
+const scheduleStockFloatClose = (delay = 200) => {
+  cancelStockFloatClose();
+  stockFloatCloseTimer = setTimeout(() => {
+    stockFloat.value.visible = false;
+  }, delay);
+};
+
+const handleStockHover = (thscode, el) => {
+  cancelStockFloatClose();
+  const rect = el.getBoundingClientRect();
+  const ticker = thscode.split('.')[0];
+  const matchedName = COMMON_NAME_MAP[ticker]?.name || '';
+  stockFloat.value = {
+    visible: true,
+    top: rect.top,
+    left: rect.left + rect.width / 2,
+    thscode,
+    name: matchedName,
+  };
+};
+
+const handleOpenStockWorkspace = (stock, allStocks) => {
+  stockFloat.value.visible = false;
+  const picks = allStocks && allStocks.length > 0
+    ? allStocks.map((s) => ({ ticker: s.ticker, exchange: s.exchange, name: s.name }))
+    : [{ ticker: stock.ticker, exchange: stock.exchange, name: stock.name }];
+  const activeIdx = Math.max(0, picks.findIndex((p) => p.ticker === stock.ticker));
+  agentWorkspace.open('kline', picks, activeIdx);
+};
+
+// 监听 chat 文本中的股票代码：hover 唤出轻量 5 星持股评分卡片，点击打开完整右侧工作台
+useKLineTickerObserver(scrollContainer, {
+  onHover: (thscode, el) => {
+    handleStockHover(thscode, el);
+  },
+  onLeave: () => {
+    scheduleStockFloatClose(200);
+  },
+  onClick: (thscode) => {
+    cancelStockFloatClose();
+    const [ticker, exchange] = thscode.split('.');
+    if (!ticker) return;
+    const matchedName = COMMON_NAME_MAP[ticker]?.name || '';
+    handleOpenStockWorkspace({ ticker, exchange: exchange || 'SH', name: matchedName });
+  },
+});
+
+onMounted(() => {
+  window.__openKLineWorkspace = (ticker = '600519', exchange = 'SH', name = '贵州茅台') => {
+    agentWorkspace.open('kline', [{ ticker, exchange, name }], 0);
+  };
+  agentWorkspace.sendToChatCallback.value = (text) => {
+    if (inputFieldRef.value?.triggerSend) {
+      inputFieldRef.value.triggerSend(text);
+    }
+  };
 });
 const composerHeight = ref(0)
 const scrollbarGutter = ref(0)
@@ -1824,6 +1910,15 @@ onBeforeRouteUpdate((to, from, next) => {
         }
     }
 
+    // 智能体多态动态工作台（如专业 KLine 工作台）：宽度由 workspace.width 决定，
+    // 聊天区向左让位，形成标准的左右并列分屏主工作台。
+    &.has-agent-workspace:not(.is-embedded) {
+        @media (min-width: 960px) {
+            padding-right: var(--workspace-panel-width, 650px);
+            box-sizing: border-box;
+        }
+    }
+
     &.is-embedded :deep(.answers-input) {
         position: relative;
         transform: translateX(0);
@@ -1918,17 +2013,17 @@ onBeforeRouteUpdate((to, from, next) => {
     // Keep native message bounce without chaining scroll to the outer page.
     overscroll-behavior-y: contain;
     scroll-padding-bottom: var(--chat-composer-height, 0px);
-    scrollbar-gutter: stable;
+    scrollbar-gutter: auto;
     scrollbar-width: thin;
-    scrollbar-color: var(--td-component-stroke) transparent;
+    scrollbar-color: rgba(148, 163, 184, 0.35) transparent;
 
     &:hover,
     &:focus-within {
-        scrollbar-color: var(--td-scrollbar-color) transparent;
+        scrollbar-color: rgba(100, 116, 139, 0.65) transparent;
     }
 
     &::-webkit-scrollbar {
-        width: 6px;
+        width: 5px;
     }
 
     &::-webkit-scrollbar-track {
@@ -1936,13 +2031,14 @@ onBeforeRouteUpdate((to, from, next) => {
     }
 
     &::-webkit-scrollbar-thumb {
-        border-radius: 6px;
-        background: var(--td-component-stroke);
+        border-radius: 999px;
+        background: rgba(148, 163, 184, 0.35);
+        transition: background-color 0.2s ease;
     }
 
     &:hover::-webkit-scrollbar-thumb,
     &:focus-within::-webkit-scrollbar-thumb {
-        background: var(--td-scrollbar-color);
+        background: rgba(100, 116, 139, 0.65);
     }
 }
 

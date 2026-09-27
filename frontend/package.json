@@ -16,6 +16,7 @@
     "regenerate-i18n-locales": "tsx src/i18n/regeneratePrunedLocales.ts"
   },
   "dependencies": {
+    "@klinecharts/pro": "^0.1.1",
     "@microsoft/fetch-event-source": "^2.0.1",
     "@novnc/novnc": "^1.7.0",
     "@types/dompurify": "^3.2.0",
@@ -29,6 +30,7 @@
     "highlight.js": "^11.11.1",
     "jszip": "3.10.1",
     "katex": "^0.16.45",
+    "klinecharts": "^9.8.5",
     "marked": "^17.0.5",
     "marked-katex-extension": "^5.1.8",
     "mermaid": "^11.15.0",

@@ -140,6 +140,22 @@ export default defineConfig({
         timeout: 3_600_000,
         proxyTimeout: 3_600_000,
       },
+      '/api/kline': {
+        target: process.env.VITE_PY_SERVICE_TARGET || 'http://localhost:50052',
+        changeOrigin: true,
+      },
+      '/api/annotate': {
+        target: process.env.VITE_PY_SERVICE_TARGET || 'http://localhost:50052',
+        changeOrigin: true,
+      },
+      '/api/indicators': {
+        target: process.env.VITE_PY_SERVICE_TARGET || 'http://localhost:50052',
+        changeOrigin: true,
+      },
+      '/api/symbols': {
+        target: process.env.VITE_PY_SERVICE_TARGET || 'http://localhost:50052',
+        changeOrigin: true,
+      },
       '/api': {
         target: DEV_PROXY_TARGET,
         changeOrigin: true,

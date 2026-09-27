@@ -64,9 +64,17 @@ function wrapTicker(thscode: string): string {
  * onActivate(ticker, exchange) 在用户激活（hover/click）时被调用，由 caller
  * 决定是否打开抽屉。
  */
+export interface KLineTickerHandlerOptions {
+  onHover?: (thscode: string, el: HTMLElement) => void
+  onLeave?: () => void
+  onClick?: (thscode: string, el: HTMLElement) => void
+}
+
+export type KLineTickerHandler = ((thscode: string) => void) | KLineTickerHandlerOptions
+
 export function bindKLineTickerElements(
   root: ParentNode,
-  onActivate: (thscode: string) => void,
+  handler: KLineTickerHandler,
 ): number {
   let bound = 0
   const candidates = root.querySelectorAll<HTMLElement>(`.${KLINE_TICKER_CLASS}[${KLINE_TICKER_ATTR}]:not([data-kline-bound])`)
@@ -76,26 +84,53 @@ export function bindKLineTickerElements(
     el.setAttribute('role', 'button')
     el.setAttribute('tabindex', '0')
     const thscode = el.getAttribute(KLINE_TICKER_ATTR) || ''
-    let activated = false
-    const activate = () => {
-      if (activated) return
-      activated = true
-      onActivate(thscode)
-      // 重置 throttle，允许 drawer 切换 ticker 时再次激活。
-      setTimeout(() => { activated = false }, 120)
-    }
-    el.addEventListener('mouseenter', activate)
-    el.addEventListener('focus', activate)
-    el.addEventListener('click', (event) => {
-      event.preventDefault()
-      activate()
-    })
-    el.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter' || event.key === ' ') {
+
+    if (typeof handler === 'function') {
+      let activated = false
+      const activate = () => {
+        if (activated) return
+        activated = true
+        handler(thscode)
+        setTimeout(() => { activated = false }, 120)
+      }
+      el.addEventListener('mouseenter', activate)
+      el.addEventListener('focus', activate)
+      el.addEventListener('click', (event) => {
         event.preventDefault()
         activate()
-      }
-    })
+      })
+      el.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault()
+          activate()
+        }
+      })
+    } else {
+      // 区分 hover 与 click：hover 唤起轻量 RAW 卡片，click 打开完整右侧工作台
+      el.addEventListener('mouseenter', () => {
+        handler.onHover?.(thscode, el)
+      })
+      el.addEventListener('mouseleave', () => {
+        handler.onLeave?.()
+      })
+      el.addEventListener('focus', () => {
+        handler.onHover?.(thscode, el)
+      })
+      el.addEventListener('blur', () => {
+        handler.onLeave?.()
+      })
+      el.addEventListener('click', (event) => {
+        event.preventDefault()
+        handler.onClick?.(thscode, el)
+      })
+      el.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault()
+          handler.onClick?.(thscode, el)
+        }
+      })
+    }
+
     bound += 1
   })
   return bound
