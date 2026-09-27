@@ -73,10 +73,14 @@ type row struct {
 // rows are ordered newest-first (index 0 = latest day).
 func queryIndicatorRows(ctx context.Context, config *hithink_finance.Config, thscode string, days int) ([]row, error) {
 	// thscode and days are bound parameters, never formatted into the SQL.
+	//
+	// 这里刻意不再取 `close`：该列属于 market.v_daily_qfq，而
+	// indicators.v_indicators_daily 根本没有价格列；两个 DuckDB 是独立只读连接、
+	// 无法 ATTACH，混着写必然 Binder Error。收盘价改由下面的 closeSQL 从 market
+	// 侧单独取，再按 date 合并回 indicator 行。
 	sql := `
 		SELECT
 			CAST(date AS VARCHAR) AS date,
-			close,
 			COALESCE(momentum_macd_12_26_9_macd, 0) AS dif,
 			COALESCE(momentum_macd_12_26_9_signal, 0) AS dea,
 			COALESCE(momentum_macd_12_26_9_hist, 0) AS macd_hist,
@@ -138,9 +142,24 @@ func queryIndicatorRows(ctx context.Context, config *hithink_finance.Config, ths
 		return nil, err
 	}
 
+	// 收盘价单独从 market 库取（见上面关于 close 的注释），按 date 合并。
+	// Donchian 突破信号依赖 Close（signals.go），所以不能直接丢掉该字段。
+	closeSQL := `SELECT CAST(date AS VARCHAR) AS date, close FROM v_daily_qfq WHERE thscode = ? ORDER BY date DESC LIMIT ?`
+	closeRows, err := hithink_finance.QueryDuckDBParams(
+		ctx, config, "market", closeSQL, thscode, days)
+	if err != nil {
+		return nil, err
+	}
+	closeByDate := make(map[string]float64, len(closeRows))
+	for _, r := range closeRows {
+		closeByDate[fmt.Sprint(r["date"])] = f64(r, "close")
+	}
+
 	var rows []row
 	for _, r := range results {
-		rows = append(rows, mapToRow(r))
+		mapped := mapToRow(r)
+		mapped.Close = closeByDate[mapped.Date]
+		rows = append(rows, mapped)
 	}
 	return rows, nil
 }

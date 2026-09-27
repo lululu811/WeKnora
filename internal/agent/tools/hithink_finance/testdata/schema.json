@@ -1,0 +1,866 @@
+{
+ "financials": {
+  "v_balance_sheet": {
+   "columns": [
+    "thscode",
+    "period",
+    "period_end_ms",
+    "report_date_ms",
+    "fiscal_year",
+    "fiscal_period",
+    "currency",
+    "total_current_assets",
+    "non_current_nets_total",
+    "assets_total",
+    "total_debt",
+    "holder_equity_total",
+    "cash",
+    "accounts_receivable",
+    "raw_payload",
+    "captured_at"
+   ],
+   "type": "VIEW"
+  },
+  "v_cash_flow_statement": {
+   "columns": [
+    "thscode",
+    "period",
+    "period_end_ms",
+    "report_date_ms",
+    "fiscal_year",
+    "fiscal_period",
+    "currency",
+    "act_cash_flow_net",
+    "invest_cash_flow_net",
+    "financing_cash_flow_net",
+    "cash_equivalents_net_addition",
+    "pay_dividends_profits_interest_cash",
+    "pay_fixed_assets_etc_cash",
+    "raw_payload",
+    "captured_at"
+   ],
+   "type": "VIEW"
+  },
+  "v_financial_indicators": {
+   "columns": [
+    "thscode",
+    "report",
+    "abilities_json",
+    "captured_at"
+   ],
+   "type": "VIEW"
+  },
+  "v_financial_indicators_detail": {
+   "columns": [
+    "thscode",
+    "report",
+    "operating_income_yoy",
+    "operating_profit_yoy",
+    "total_assets_growth_ratio",
+    "fixed_asset_invest_expansion_ratio",
+    "parent_holder_net_profit_yoy",
+    "total_assets_net_ratio",
+    "deduct_weighted_avg_roe",
+    "sale_gross_margin",
+    "sale_net_interest_ratio",
+    "weighted_avg_roe",
+    "current_ratio",
+    "cash_ratio",
+    "quick_ratio",
+    "earned_interest_multiple",
+    "assets_debt_ratio",
+    "total_assets_turnover_ratio",
+    "inventory_turnover_ratio",
+    "long_term_debt_equity_ratio",
+    "current_assets_turnover_ratio",
+    "receive_account_turnover_ratio",
+    "net_profit_cash_content",
+    "cash_operating_index",
+    "operating_cash_flow_net_divide_income",
+    "cash_meet_invest_ratio",
+    "captured_at"
+   ],
+   "type": "VIEW"
+  },
+  "v_income_statement": {
+   "columns": [
+    "thscode",
+    "period",
+    "period_end_ms",
+    "report_date_ms",
+    "fiscal_year",
+    "fiscal_period",
+    "currency",
+    "basic_eps",
+    "operating_income",
+    "operating_costs",
+    "operating_expenses",
+    "operating_profit",
+    "profit_total",
+    "net_profit",
+    "parent_holder_net_profit",
+    "income_tax_expense",
+    "interest_expenses",
+    "manage_fee",
+    "sales_fee",
+    "research_and_development_expenses",
+    "raw_payload",
+    "captured_at"
+   ],
+   "type": "VIEW"
+  },
+  "v_trading_calendar": {
+   "columns": [
+    "trade_date",
+    "date_ms"
+   ],
+   "type": "VIEW"
+  },
+  "v_valuation_latest": {
+   "columns": [
+    "snapshot_date",
+    "thscode",
+    "ticker",
+    "name",
+    "pe_ttm",
+    "pe_mrq",
+    "pb_mrq",
+    "ps_ttm",
+    "pcf_ttm",
+    "raw_payload",
+    "captured_at"
+   ],
+   "type": "VIEW"
+  }
+ },
+ "fund": {
+  "v_etf_daily": {
+   "columns": [
+    "thscode",
+    "trade_date",
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume",
+    "turnover"
+   ],
+   "type": "VIEW"
+  },
+  "v_etf_latest": {
+   "columns": [
+    "thscode",
+    "ticker",
+    "name",
+    "exchange",
+    "asset_type",
+    "trade_date",
+    "last_price",
+    "change_pct",
+    "volume",
+    "turnover",
+    "turnover_ratio_pct"
+   ],
+   "type": "VIEW"
+  },
+  "v_etf_universe": {
+   "columns": [
+    "thscode",
+    "ticker",
+    "name",
+    "exchange",
+    "asset_type",
+    "list_date",
+    "estab_date_ms",
+    "estab_date",
+    "captured_at"
+   ],
+   "type": "VIEW"
+  },
+  "v_fund_company": {
+   "columns": [
+    "company_id",
+    "company_name",
+    "company_type",
+    "established_date_ms",
+    "fund_count",
+    "scale",
+    "raw_payload",
+    "captured_at"
+   ],
+   "type": "VIEW"
+  },
+  "v_fund_holders": {
+   "columns": [
+    "fund_thscode",
+    "merge_scope",
+    "report_date_ms",
+    "ins_position",
+    "holder_amount",
+    "avg_holder_share",
+    "psnl_rate",
+    "mgmt_staff_hold_rate",
+    "raw_payload",
+    "captured_at"
+   ],
+   "type": "VIEW"
+  },
+  "v_fund_holdings": {
+   "columns": [
+    "fund_thscode",
+    "stock_thscode",
+    "stock_name",
+    "hold_ratio",
+    "position_count",
+    "security_market_value_rate_pct",
+    "period_increase_rate_pct",
+    "investment_rank",
+    "start_date_ms",
+    "end_date_ms",
+    "publish_date_ms",
+    "raw_payload",
+    "captured_at"
+   ],
+   "type": "VIEW"
+  },
+  "v_fund_nav": {
+   "columns": [
+    "thscode",
+    "nav_date",
+    "unit_nav",
+    "adj_nav",
+    "unit_nav_usable"
+   ],
+   "type": "VIEW"
+  },
+  "v_fund_profile": {
+   "columns": [
+    "thscode",
+    "ticker",
+    "fund_name",
+    "estab_date",
+    "company_id",
+    "mgmt_name",
+    "manager_name",
+    "fund_scale",
+    "unit_nav",
+    "captured_at"
+   ],
+   "type": "VIEW"
+  },
+  "v_fund_returns": {
+   "columns": [
+    "fund_thscode",
+    "return_week",
+    "return_month",
+    "return_tmonth",
+    "return_hyear",
+    "return_year",
+    "return_twoyear",
+    "return_tyear",
+    "return_fyear",
+    "return_nowyear",
+    "return_now",
+    "raw_payload",
+    "captured_at"
+   ],
+   "type": "VIEW"
+  },
+  "v_fund_top_holders": {
+   "columns": [
+    "fund_thscode",
+    "holder_name",
+    "holder_type",
+    "holder_code",
+    "rank",
+    "hold_share",
+    "hold_rate_pct",
+    "report_date_ms",
+    "publish_date_ms",
+    "raw_payload",
+    "captured_at"
+   ],
+   "type": "VIEW"
+  }
+ },
+ "futures": {
+  "v_futures_contracts": {
+   "columns": [
+    "thscode",
+    "ticker",
+    "name",
+    "variety_code",
+    "variety_name",
+    "exchange_code",
+    "list_date",
+    "end_date",
+    "last_trade_date",
+    "last_delivery_date"
+   ],
+   "type": "VIEW"
+  },
+  "v_futures_daily": {
+   "columns": [
+    "thscode",
+    "trade_date",
+    "open_price",
+    "high_price",
+    "low_price",
+    "close_price",
+    "volume",
+    "turnover"
+   ],
+   "type": "VIEW"
+  },
+  "v_futures_intraday": {
+   "columns": [
+    "thscode",
+    "trade_date",
+    "session",
+    "bar_ts",
+    "price",
+    "volume",
+    "turnover"
+   ],
+   "type": "VIEW"
+  },
+  "v_futures_latest": {
+   "columns": [
+    "thscode",
+    "variety_code",
+    "exchange_code",
+    "name",
+    "trade_date",
+    "close_price",
+    "volume",
+    "turnover"
+   ],
+   "type": "VIEW"
+  },
+  "v_futures_varieties": {
+   "columns": [
+    "variety_code",
+    "exchange_code",
+    "name",
+    "has_night_session",
+    "margin_rate",
+    "main_contract_thscode",
+    "trade_unit",
+    "tick_size",
+    "contract_multiplier"
+   ],
+   "type": "VIEW"
+  }
+ },
+ "index": {
+  "v_index_constituents": {
+   "columns": [
+    "index_thscode",
+    "thscode",
+    "ticker",
+    "name"
+   ],
+   "type": "VIEW"
+  },
+  "v_index_daily": {
+   "columns": [
+    "thscode",
+    "trade_date",
+    "date_ms",
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume",
+    "turnover",
+    "raw_payload",
+    "captured_at"
+   ],
+   "type": "VIEW"
+  },
+  "v_index_latest": {
+   "columns": [
+    "snapshot_date",
+    "thscode",
+    "last_price",
+    "price_change",
+    "price_change_ratio",
+    "open",
+    "high",
+    "low",
+    "volume",
+    "turnover",
+    "raw_payload",
+    "captured_at",
+    "name",
+    "tag"
+   ],
+   "type": "VIEW"
+  },
+  "v_index_universe": {
+   "columns": [
+    "thscode",
+    "name",
+    "tag"
+   ],
+   "type": "VIEW"
+  }
+ },
+ "indicators": {
+  "v_indicators_daily": {
+   "columns": [
+    "thscode",
+    "date",
+    "backend",
+    "computed_at",
+    "overlap_sma_5",
+    "overlap_sma_10",
+    "overlap_sma_20",
+    "overlap_sma_60",
+    "overlap_sma_120",
+    "overlap_sma_250",
+    "overlap_ema_5",
+    "overlap_ema_10",
+    "overlap_ema_20",
+    "overlap_ema_60",
+    "overlap_wma_20",
+    "overlap_dema_20",
+    "overlap_tema_20",
+    "overlap_trima_20",
+    "overlap_kama_14",
+    "overlap_t3_5",
+    "overlap_mama_mama",
+    "overlap_mama_fama",
+    "overlap_ht_trendline",
+    "overlap_hma_20",
+    "overlap_alma_14",
+    "overlap_vidya_14",
+    "overlap_rma_14",
+    "overlap_zlma_14",
+    "overlap_mcgd_10",
+    "overlap_fwma_20",
+    "overlap_hwma_10",
+    "overlap_jma_14",
+    "overlap_pwma_14",
+    "overlap_swma_10",
+    "overlap_ssf_10",
+    "overlap_sinwma_14",
+    "momentum_rsi_6",
+    "momentum_rsi_12",
+    "momentum_rsi_14",
+    "momentum_rsi_24",
+    "momentum_macd_12_26_9_macd",
+    "momentum_macd_12_26_9_signal",
+    "momentum_macd_12_26_9_hist",
+    "momentum_macd_5_35_5_macd",
+    "momentum_macd_5_35_5_signal",
+    "momentum_macd_5_35_5_hist",
+    "momentum_stoch_14_3_3_slowk",
+    "momentum_stoch_14_3_3_slowd",
+    "momentum_stochrsi_14_fastk",
+    "momentum_stochrsi_14_fastd",
+    "momentum_willr_14",
+    "momentum_cci_20",
+    "momentum_adx_14",
+    "momentum_aroon_25_aroonup",
+    "momentum_aroon_25_aroondown",
+    "momentum_kdj_9_3_k",
+    "momentum_kdj_9_3_d",
+    "momentum_kdj_9_3_j",
+    "momentum_mom_10",
+    "momentum_roc_10",
+    "momentum_rocp_10",
+    "momentum_rocr_10",
+    "momentum_trix_15",
+    "momentum_tsi_13_25",
+    "momentum_cmo_14",
+    "momentum_apo_12_26",
+    "momentum_ppo_12_26",
+    "momentum_stochf_5_3_fastk",
+    "momentum_stochf_5_3_fastd",
+    "momentum_er_10",
+    "momentum_eri_13_bullp",
+    "momentum_eri_13_bearp",
+    "momentum_fisher_9_1_fisher",
+    "momentum_fisher_9_1_signal",
+    "momentum_qqe_14_5_qqe",
+    "momentum_qqe_14_5_rsima",
+    "momentum_qqe_14_5_long",
+    "momentum_qqe_14_5_short",
+    "momentum_qqe_14_5_band_long",
+    "momentum_qqe_14_5_band_short",
+    "momentum_qqe_14_5_diff",
+    "momentum_rsx_14",
+    "momentum_smi_5_20_5_smi",
+    "momentum_smi_5_20_5_signal",
+    "momentum_smi_5_20_5_oscillator",
+    "momentum_dm_14_plus",
+    "momentum_dm_14_minus",
+    "trend_psar",
+    "trend_adx_14",
+    "trend_aroon_25_aroonup",
+    "trend_aroon_25_aroondown",
+    "trend_dpo_14",
+    "trend_vortex_14_plus",
+    "trend_vortex_14_minus",
+    "trend_supertrend_10_3_0_trend",
+    "trend_supertrend_10_3_0_direction",
+    "trend_supertrend_10_3_0_long",
+    "trend_supertrend_10_3_0_short",
+    "trend_chop_14",
+    "trend_inertia_20",
+    "trend_decay_10",
+    "trend_qstick_14",
+    "volatility_bbands_20_2_0_upper",
+    "volatility_bbands_20_2_0_middle",
+    "volatility_bbands_20_2_0_lower",
+    "volatility_bbands_10_1_5_upper",
+    "volatility_bbands_10_1_5_middle",
+    "volatility_bbands_10_1_5_lower",
+    "volatility_atr_14",
+    "volatility_natr_14",
+    "volatility_donchian_20_upper",
+    "volatility_donchian_20_middle",
+    "volatility_donchian_20_lower",
+    "volatility_kc_20_2_upper",
+    "volatility_kc_20_2_middle",
+    "volatility_kc_20_2_lower",
+    "volatility_trange",
+    "volume_obv",
+    "volume_ad",
+    "volume_adosc_3_10",
+    "volume_mfi_14",
+    "volume_cmf_20",
+    "volume_vwap",
+    "volume_pvt",
+    "volume_nvi",
+    "volume_pvi",
+    "volume_emv",
+    "volume_eom_14",
+    "volume_kvo_34_55_kvo",
+    "volume_kvo_34_55_signal",
+    "volume_aobv_5_12_obv",
+    "volume_aobv_5_12_min",
+    "volume_aobv_5_12_max",
+    "volume_aobv_5_12_ema5",
+    "volume_aobv_5_12_ema12",
+    "volume_aobv_5_12_lr",
+    "volume_aobv_5_12_sr",
+    "volume_vfi_13_0_5",
+    "volume_wad",
+    "volume_pvr",
+    "cycles_ht_dcperiod",
+    "cycles_ht_dcphase",
+    "cycles_ht_phasor_inphase",
+    "cycles_ht_phasor_quadrature",
+    "cycles_ht_sine_sine",
+    "cycles_ht_sine_leadsine",
+    "cycles_ht_trendmode",
+    "statistics_beta_20",
+    "statistics_correl_20",
+    "statistics_linearreg_14",
+    "statistics_linearreg_angle_14",
+    "statistics_linearreg_intercept_14",
+    "statistics_linearreg_slope_14",
+    "statistics_tsf_14",
+    "statistics_stddev_20",
+    "statistics_var_20",
+    "statistics_entropy_10",
+    "statistics_skew_30",
+    "statistics_kurtosis_30",
+    "statistics_zscore_20",
+    "statistics_mad_20",
+    "statistics_quantile_20_0_5",
+    "performance_log_return_1",
+    "performance_percent_return_1",
+    "candles_cdl_2crows_0",
+    "candles_cdl_3blackcrows_0",
+    "candles_cdl_3inside_0",
+    "candles_cdl_3linestrike_0",
+    "candles_cdl_3outside_0",
+    "candles_cdl_3starsinsouth_0",
+    "candles_cdl_3whitesoldiers_0",
+    "candles_cdl_abandonedbaby_0",
+    "candles_cdl_advanceblock_0",
+    "candles_cdl_belthold_0",
+    "candles_cdl_breakaway_0",
+    "candles_cdl_closingmarubozu_0",
+    "candles_cdl_concealbabyswall_0",
+    "candles_cdl_counterattack_0",
+    "candles_cdl_darkcloudcover_0",
+    "candles_cdl_doji_0",
+    "candles_cdl_dojistar_0",
+    "candles_cdl_dragonflydoji_0",
+    "candles_cdl_engulfing_0",
+    "candles_cdl_eveningdojistar_0",
+    "candles_cdl_eveningstar_0",
+    "candles_cdl_gapsidesidewhite_0",
+    "candles_cdl_gravestonedoji_0",
+    "candles_cdl_hammer_0",
+    "candles_cdl_hangingman_0",
+    "candles_cdl_harami_0",
+    "candles_cdl_haramicross_0",
+    "candles_cdl_highwave_0",
+    "candles_cdl_hikkake_0",
+    "candles_cdl_hikkakemod_0",
+    "candles_cdl_homingpigeon_0",
+    "candles_cdl_identical3crows_0",
+    "candles_cdl_inneck_0",
+    "candles_cdl_invertedhammer_0",
+    "candles_cdl_kicking_0",
+    "candles_cdl_kickingbylength_0",
+    "candles_cdl_ladderbottom_0",
+    "candles_cdl_longleggeddoji_0",
+    "candles_cdl_longline_0",
+    "candles_cdl_marubozu_0",
+    "candles_cdl_matchinglow_0",
+    "candles_cdl_mathold_0",
+    "candles_cdl_morningdojistar_0",
+    "candles_cdl_morningstar_0",
+    "candles_cdl_onneck_0",
+    "candles_cdl_piercing_0",
+    "candles_cdl_rickshawman_0",
+    "candles_cdl_risefall3methods_0",
+    "candles_cdl_separatinglines_0",
+    "candles_cdl_shootingstar_0",
+    "candles_cdl_shortline_0",
+    "candles_cdl_spinningtop_0",
+    "candles_cdl_stalledpattern_0",
+    "candles_cdl_sticksandwich_0",
+    "candles_cdl_takuri_0",
+    "candles_cdl_tasukigap_0",
+    "candles_cdl_thrusting_0",
+    "candles_cdl_tristar_0",
+    "candles_cdl_unique3river_0",
+    "candles_cdl_upsidegap2crows_0",
+    "candles_cdl_xsidegap3methods_0",
+    "zettaranc_zg_white_10",
+    "zettaranc_dg_yellow_14",
+    "zettaranc_bbi",
+    "zettaranc_brick_value",
+    "zettaranc_rsl_short_3",
+    "zettaranc_rsl_long_21"
+   ],
+   "type": "BASE TABLE"
+  }
+ },
+ "market": {
+  "v_daily": {
+   "columns": [
+    "thscode",
+    "date",
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume",
+    "turnover",
+    "currency",
+    "interval"
+   ],
+   "type": "VIEW"
+  },
+  "v_daily_hfq": {
+   "columns": [
+    "thscode",
+    "date",
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume",
+    "turnover",
+    "backward_factor",
+    "currency",
+    "interval"
+   ],
+   "type": "VIEW"
+  },
+  "v_daily_qfq": {
+   "columns": [
+    "thscode",
+    "date",
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume",
+    "turnover",
+    "forward_factor",
+    "currency",
+    "interval"
+   ],
+   "type": "VIEW"
+  },
+  "v_symbol": {
+   "columns": [
+    "thscode",
+    "ticker",
+    "name",
+    "exchange",
+    "asset_type",
+    "currency"
+   ],
+   "type": "VIEW"
+  }
+ },
+ "special": {
+  "v_anomaly_list": {
+   "columns": [
+    "capture_date",
+    "thscode",
+    "stock_name",
+    "tag_name",
+    "analysis_content",
+    "keyword_list",
+    "raw_payload",
+    "captured_at"
+   ],
+   "type": "VIEW"
+  },
+  "v_auction_benchmark": {
+   "columns": [
+    "benchmark_date",
+    "thscode",
+    "ticker",
+    "name",
+    "auction_pct",
+    "tags",
+    "raw_payload",
+    "captured_at"
+   ],
+   "type": "VIEW"
+  },
+  "v_auction_snapshot": {
+   "columns": [
+    "snapshot_date",
+    "thscode",
+    "ticker",
+    "name",
+    "auction_price",
+    "auction_pct",
+    "auction_volume",
+    "auction_amount",
+    "auction_unmatched",
+    "auction_turnover_pct",
+    "auction_yesterday_ratio_pct",
+    "auction_volume_ratio",
+    "pre_close_price",
+    "open_price",
+    "last_price",
+    "float_market_cap",
+    "stage",
+    "raw_payload",
+    "captured_at"
+   ],
+   "type": "VIEW"
+  },
+  "v_dragon_tiger": {
+   "columns": [
+    "trade_date",
+    "board_type",
+    "thscode",
+    "name",
+    "net_value",
+    "net_rate",
+    "buy_value",
+    "sell_value",
+    "org_net_value",
+    "change",
+    "hot_rank",
+    "range_days"
+   ],
+   "type": "VIEW"
+  },
+  "v_hot_stock": {
+   "columns": [
+    "capture_date",
+    "period",
+    "rank",
+    "thscode",
+    "ticker",
+    "name",
+    "heat",
+    "rank_change",
+    "rank_trend",
+    "raw_payload",
+    "captured_at"
+   ],
+   "type": "VIEW"
+  },
+  "v_hot_stock_history": {
+   "columns": [
+    "history_date",
+    "rank",
+    "thscode",
+    "ticker",
+    "name",
+    "raw_payload",
+    "captured_at"
+   ],
+   "type": "VIEW"
+  },
+  "v_hot_stock_rank_trend": {
+   "columns": [
+    "thscode",
+    "trend_date",
+    "date_ms",
+    "rank",
+    "raw_payload",
+    "captured_at"
+   ],
+   "type": "VIEW"
+  },
+  "v_limit_break_pool": {
+   "columns": [
+    "trade_date",
+    "thscode",
+    "name",
+    "last_price",
+    "open_times",
+    "price_change_ratio"
+   ],
+   "type": "VIEW"
+  },
+  "v_limit_down_pool": {
+   "columns": [
+    "trade_date",
+    "thscode",
+    "name",
+    "last_price",
+    "price_change_ratio",
+    "first_limit_time",
+    "last_limit_time"
+   ],
+   "type": "VIEW"
+  },
+  "v_limit_up_pool": {
+   "columns": [
+    "trade_date",
+    "thscode",
+    "name",
+    "last_price",
+    "continue_day_cnt",
+    "limit_up_time",
+    "seal_money"
+   ],
+   "type": "VIEW"
+  },
+  "v_skyrocket": {
+   "columns": [
+    "capture_date",
+    "period",
+    "rank",
+    "thscode",
+    "ticker",
+    "name",
+    "heat",
+    "rank_change",
+    "rank_trend",
+    "raw_payload",
+    "captured_at"
+   ],
+   "type": "VIEW"
+  }
+ }
+}

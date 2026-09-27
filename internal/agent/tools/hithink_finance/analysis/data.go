@@ -58,22 +58,21 @@ func FetchMarketData(ctx context.Context, config *hithink_finance.Config, thscod
 		days = 250
 	}
 
-	// Fetch from market DB: OHLCV + moving averages.
+	// Fetch from market DB: OHLCV only.
 	//
 	// thscode is bound as a parameter, never formatted into the SQL. The old
 	// `fmt.Sprintf(..., thscode, ...)` made this an injection point that
 	// python-service happily executed.
+	//
+	// 均线（overlap_sma_*）原本也在这条查询里，但那些列只存在于
+	// indicators.v_indicators_daily，market.v_daily_qfq 里没有——两个 DuckDB
+	// 是独立的只读连接、无法 ATTACH，所以这条查询必然 Binder Error。均线已
+	// 移到下面的 indicatorSQL，由合并阶段从 indicator 行读取。
 	marketSQL := `
 		SELECT
 			CAST(date AS VARCHAR) AS date,
 			open, high, low, close,
-			volume AS vol,
-			overlap_sma_5 AS ma5,
-			overlap_sma_10 AS ma10,
-			overlap_sma_20 AS ma20,
-			overlap_sma_60 AS ma60,
-			overlap_sma_120 AS ma120,
-			overlap_sma_250 AS ma250
+			volume AS vol
 		FROM v_daily_qfq
 		WHERE thscode = ?
 		ORDER BY date DESC
@@ -90,6 +89,12 @@ func FetchMarketData(ctx context.Context, config *hithink_finance.Config, thscod
 	indicatorSQL := `
 		SELECT
 			CAST(date AS VARCHAR) AS date,
+			overlap_sma_5 AS ma5,
+			overlap_sma_10 AS ma10,
+			overlap_sma_20 AS ma20,
+			overlap_sma_60 AS ma60,
+			overlap_sma_120 AS ma120,
+			overlap_sma_250 AS ma250,
 			momentum_macd_12_26_9_macd AS dif,
 			momentum_macd_12_26_9_signal AS dea,
 			momentum_macd_12_26_9_hist AS macd_hist,
@@ -165,14 +170,17 @@ func FetchMarketData(ctx context.Context, config *hithink_finance.Config, thscod
 			Low:   toF64(m["low"]),
 			Close: toF64(m["close"]),
 			Vol:   toF64(m["vol"]),
-			MA5:   toF64(m["ma5"]),
-			MA10:  toF64(m["ma10"]),
-			MA20:  toF64(m["ma20"]),
-			MA60:  toF64(m["ma60"]),
-			MA120: toF64(m["ma120"]),
-			MA250: toF64(m["ma250"]),
 		}
 		if ind != nil {
+			// 均线来自 indicators 侧（见 indicatorSQL 里 moved 过来的注释）。
+			// 放在 ind != nil 分支内：缺指标行的交易日均线为 0，与其他指标字段
+			// 保持同一套缺失语义，而不是从 market 行取一个永远不存在的键。
+			row.MA5 = toF64(ind["ma5"])
+			row.MA10 = toF64(ind["ma10"])
+			row.MA20 = toF64(ind["ma20"])
+			row.MA60 = toF64(ind["ma60"])
+			row.MA120 = toF64(ind["ma120"])
+			row.MA250 = toF64(ind["ma250"])
 			row.DIF = toF64(ind["dif"])
 			row.DEA = toF64(ind["dea"])
 			row.MACDHist = toF64(ind["macd_hist"])

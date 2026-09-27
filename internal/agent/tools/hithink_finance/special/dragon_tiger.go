@@ -22,7 +22,9 @@ func (t *DragonTigerTool) Name() string {
 }
 
 func (t *DragonTigerTool) Description() string {
-	return `获取指定日期的龙虎榜数据。返回 thscode, name, trade_date, net_buy 等。
+	return `获取龙虎榜数据。返回 thscode, name, trade_date, board_type, net_value(净买额), net_rate(净买占比), buy_value, sell_value, org_net_value(机构净买), change, hot_rank, range_days 等。
+
+注意：净买额字段是 net_value，不是 net_buy；上榜原因(reason)不在本地数据里。
 
 使用示例：trade_date="latest"`
 }
@@ -68,17 +70,27 @@ func (t *DragonTigerTool) Execute(ctx context.Context, args json.RawMessage) (*t
 		params.Limit = 50
 	}
 
-	query := `SELECT thscode, name, trade_date, close_price, change_rate, turnover, net_buy, reason FROM v_dragon_tiger`
+	// 字段名对齐 special.v_dragon_tiger 的真实 schema（见 schema_contract_test.go
+	// 与 testdata/schema.json）。旧写法 close_price / change_rate / turnover /
+	// net_buy / reason 在该视图里一个都不存在，查询必然 Binder Error。
+	//
+	// trade_date 和 limit 都改用绑定参数，不再 Sprintf 拼接——旧代码把用户传入的
+	// trade_date 直接塞进引号里，是条漏网的注入路径（analysis/data.go 早已改掉，
+	// 这里和 hot_stock.go 当时漏了）。
+	query := `SELECT trade_date, board_type, thscode, name, net_value, net_rate, buy_value, sell_value, org_net_value, change, hot_rank, range_days FROM v_dragon_tiger`
+	var bindArgs []interface{}
 	if params.TradeDate == "" {
 		query += ` WHERE trade_date = (SELECT MAX(trade_date) FROM v_dragon_tiger)`
 	} else {
-		query += fmt.Sprintf(` WHERE trade_date = '%s'`, params.TradeDate)
+		query += ` WHERE trade_date = ?`
+		bindArgs = append(bindArgs, params.TradeDate)
 	}
-	query += fmt.Sprintf(` ORDER BY net_buy DESC LIMIT %d`, params.Limit)
+	query += ` ORDER BY net_value DESC LIMIT ?`
+	bindArgs = append(bindArgs, params.Limit)
 
-	results, err := hithink_finance.QueryDuckDB(ctx, t.config, "special", query)
+	results, err := hithink_finance.QueryDuckDBParams(ctx, t.config, "special", query, bindArgs...)
 	if err != nil {
-		return &types.ToolResult{Success: false, Error: err.Error()}, nil
+		return &types.ToolResult{Success: false, Error: hithink_finance.FriendlyQueryError(err, "hithink.finance.special.dragon_tiger.list")}, nil
 	}
 
 	if len(results) == 0 {

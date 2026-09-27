@@ -22,7 +22,10 @@ func (t *HotStockTool) Name() string {
 }
 
 func (t *HotStockTool) Description() string {
-	return `获取飙升榜（热股榜）数据。返回 thscode, name, trade_date, hot_rank, hot_value 等。
+	return `获取飙升榜（热股榜）数据。返回 thscode, name, capture_date, rank, heat(热度), rank_change, rank_trend 等。
+
+注意：日期列是 capture_date 不是 trade_date，热度列是 heat 不是 hot_value，本地
+数据不含价格字段。
 
 使用示例：trade_date="latest"`
 }
@@ -68,17 +71,24 @@ func (t *HotStockTool) Execute(ctx context.Context, args json.RawMessage) (*type
 		params.Limit = 50
 	}
 
-	query := `SELECT thscode, name, trade_date, hot_rank, hot_value, change_rate, price FROM v_skyrocket`
+	// 字段名对齐 special.v_skyrocket 的真实 schema（见 schema_contract_test.go 与
+	// testdata/schema.json）。注意该视图的日期列叫 capture_date 而不是 trade_date，
+	// 热度列叫 heat、排名列叫 rank，且根本没有 price 列——旧写法整条都取不到。
+	// 同样把 trade_date / limit 改成绑定参数，去掉 Sprintf 拼接。
+	query := `SELECT capture_date, period, rank, thscode, ticker, name, heat, rank_change, rank_trend FROM v_skyrocket`
+	var bindArgs []interface{}
 	if params.TradeDate == "" {
-		query += ` WHERE trade_date = (SELECT MAX(trade_date) FROM v_skyrocket)`
+		query += ` WHERE capture_date = (SELECT MAX(capture_date) FROM v_skyrocket)`
 	} else {
-		query += fmt.Sprintf(` WHERE trade_date = '%s'`, params.TradeDate)
+		query += ` WHERE capture_date = ?`
+		bindArgs = append(bindArgs, params.TradeDate)
 	}
-	query += fmt.Sprintf(` ORDER BY hot_rank ASC LIMIT %d`, params.Limit)
+	query += ` ORDER BY rank ASC LIMIT ?`
+	bindArgs = append(bindArgs, params.Limit)
 
-	results, err := hithink_finance.QueryDuckDB(ctx, t.config, "special", query)
+	results, err := hithink_finance.QueryDuckDBParams(ctx, t.config, "special", query, bindArgs...)
 	if err != nil {
-		return &types.ToolResult{Success: false, Error: err.Error()}, nil
+		return &types.ToolResult{Success: false, Error: hithink_finance.FriendlyQueryError(err, "hithink.finance.special.hot_stock.skyrocket")}, nil
 	}
 
 	if len(results) == 0 {
@@ -86,7 +96,7 @@ func (t *HotStockTool) Execute(ctx context.Context, args json.RawMessage) (*type
 	}
 
 	output := map[string]interface{}{
-		"trade_date": results[0]["trade_date"],
+		"trade_date": results[0]["capture_date"],
 		"count":      len(results),
 		"data":       results,
 	}

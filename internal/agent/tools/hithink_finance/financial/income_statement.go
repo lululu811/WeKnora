@@ -22,7 +22,10 @@ func (t *IncomeStatementTool) Name() string {
 }
 
 func (t *IncomeStatementTool) Description() string {
-	return `获取股票的利润表数据。返回 revenue, net_profit, eps 等。
+	return `获取股票的利润表数据。返回 period, operating_income, operating_profit, profit_total, net_profit, parent_holder_net_profit, basic_eps 等。
+
+注意：字段名与旧版不同——报告期是 period（形如 2026Q2）而非 report_date，营收是
+operating_income（不是 revenue），每股收益是 basic_eps（不是 eps）。
 
 使用示例：thscode="600519.SH", periods=4`
 }
@@ -49,7 +52,7 @@ func (t *IncomeStatementTool) Parameters() json.RawMessage {
 
 func (t *IncomeStatementTool) Execute(ctx context.Context, args json.RawMessage) (*types.ToolResult, error) {
 	if err := hithink_finance.CheckSyncWindow(); err != nil {
-		return &types.ToolResult{Success: false, Error: err.Error()}, nil
+		return &types.ToolResult{Success: false, Error: hithink_finance.FriendlyQueryError(err, "hithink.finance.financial.statement.income")}, nil
 	}
 
 	var params struct {
@@ -70,11 +73,14 @@ func (t *IncomeStatementTool) Execute(ctx context.Context, args json.RawMessage)
 		params.Periods = 20
 	}
 
-	query := `SELECT report_date, revenue, operating_cost, net_profit, eps FROM v_income_statement WHERE thscode = ? ORDER BY report_date DESC LIMIT ?`
+	// 字段名对齐 financials.v_income_statement 的真实 schema（见 schema_contract_test.go
+	// 与 testdata/schema.json）。旧写法 report_date / revenue / operating_cost / eps
+	// 在该视图里一个都不存在，查询必然 Binder Error。
+	query := `SELECT period, fiscal_year, fiscal_period, operating_income, operating_costs, operating_profit, profit_total, net_profit, parent_holder_net_profit, basic_eps FROM v_income_statement WHERE thscode = ? ORDER BY period DESC LIMIT ?`
 
 	results, err := hithink_finance.QueryDuckDBParams(ctx, t.config, "financials", query, params.Thscode, params.Periods)
 	if err != nil {
-		return &types.ToolResult{Success: false, Error: err.Error()}, nil
+		return &types.ToolResult{Success: false, Error: hithink_finance.FriendlyQueryError(err, "hithink.finance.financial.statement.income")}, nil
 	}
 
 	if len(results) == 0 {
