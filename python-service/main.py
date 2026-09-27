@@ -13,13 +13,14 @@ HTTP 契约
 """
 
 import asyncio
+import datetime
 import logging
 import os
 import re
 from contextlib import asynccontextmanager
 from typing import Any, Dict, List, Optional
 
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -641,6 +642,288 @@ async def zettaranc_health():
             "error": str(exc),
         })
     return {"success": True, "status": "healthy", "module": "zettaranc"}
+
+
+# ===== KLine 与形态图表 API (前端 KLineChart Pro 直连) =====
+
+_ADJUST_VIEWS = {
+    "none": "v_daily",
+    "forward": "v_daily_qfq",
+    "backward": "v_daily_hfq",
+}
+
+
+def _date_to_epoch_sec(d: Any) -> int:
+    """DuckDB 日期对象或 ISO 字符串转换为 UTC 秒级时间戳"""
+    if isinstance(d, datetime.date):
+        return int(datetime.datetime(d.year, d.month, d.day, tzinfo=datetime.timezone.utc).timestamp())
+    elif isinstance(d, str):
+        parts = d[:10].split("-")
+        if len(parts) == 3:
+            dt = datetime.date(int(parts[0]), int(parts[1]), int(parts[2]))
+            return int(datetime.datetime(dt.year, dt.month, dt.day, tzinfo=datetime.timezone.utc).timestamp())
+    return int(d)
+
+
+@app.get("/api/kline")
+@app.get("/kline")
+async def get_kline(
+    symbol: str = Query(..., description="股票代码，如 600519.SH"),
+    period: str = Query("day", description="K线周期: day | week | month"),
+    adjust: str = Query("forward", description="复权类型: none | forward | backward"),
+    from_date: Optional[str] = Query(None, alias="from", description="起始日期 YYYY-MM-DD"),
+    to_date: Optional[str] = Query(None, alias="to", description="结束日期 YYYY-MM-DD"),
+    limit: int = Query(5000, ge=1, le=20000, description="最大K线根数"),
+):
+    """
+    K 线数据查询接口 — 输出与 KLineChart Pro 兼容的 OHLCV 数组
+    """
+    from datasources import registry
+
+    thscode = _require_thscode(symbol)
+    if adjust not in _ADJUST_VIEWS:
+        raise fail(400, f"无效的复权类型: {adjust}，可用: none, forward, backward")
+    if period not in ("day", "week", "month"):
+        raise fail(400, f"无效的周期: {period}，可用: day, week, month")
+
+    market_src = registry.get("market")
+    if market_src is None:
+        raise fail(503, "market 数据源未就绪")
+
+    view = _ADJUST_VIEWS[adjust]
+    conditions = ["thscode = ?"]
+    params: List[Any] = [thscode]
+
+    if from_date:
+        conditions.append("date >= ?")
+        params.append(from_date)
+    if to_date:
+        conditions.append("date <= ?")
+        params.append(to_date)
+
+    where_clause = " AND ".join(conditions)
+
+    if period in ("week", "month"):
+        trunc = "date_trunc('week', date)" if period == "week" else "date_trunc('month', date)"
+        if from_date:
+            sql = f"""
+                SELECT
+                    {trunc} as date,
+                    arg_min(open, date) as open,
+                    max(high) as high,
+                    min(low) as low,
+                    arg_max(close, date) as close,
+                    sum(volume) as volume,
+                    sum(turnover) as turnover
+                FROM {view}
+                WHERE {where_clause}
+                GROUP BY {trunc}
+                ORDER BY date ASC
+                LIMIT {limit}
+            """
+        else:
+            sql = f"""
+                SELECT date, open, high, low, close, volume, turnover
+                FROM (
+                    SELECT
+                        {trunc} as date,
+                        arg_min(open, date) as open,
+                        max(high) as high,
+                        min(low) as low,
+                        arg_max(close, date) as close,
+                        sum(volume) as volume,
+                        sum(turnover) as turnover
+                    FROM {view}
+                    WHERE {where_clause}
+                    GROUP BY {trunc}
+                    ORDER BY date DESC
+                    LIMIT {limit}
+                ) sub
+                ORDER BY date ASC
+            """
+    else:
+        if from_date:
+            sql = f"""
+                SELECT date, open, high, low, close, volume, turnover
+                FROM {view}
+                WHERE {where_clause}
+                ORDER BY date ASC
+                LIMIT {limit}
+            """
+        else:
+            sql = f"""
+                SELECT date, open, high, low, close, volume, turnover
+                FROM (
+                    SELECT date, open, high, low, close, volume, turnover
+                    FROM {view}
+                    WHERE {where_clause}
+                    ORDER BY date DESC
+                    LIMIT {limit}
+                ) sub
+                ORDER BY date ASC
+            """
+
+    try:
+        rows = await market_src.execute(sql, params)
+    except Exception as exc:
+        logger.warning("K线查询失败: %s", exc)
+        raise fail(503, f"查询 K 线数据失败: {exc}") from exc
+
+    return {
+        "code": 0,
+        "data": [
+            {
+                "ts": _date_to_epoch_sec(r["date"]),
+                "open": r["open"],
+                "high": r["high"],
+                "low": r["low"],
+                "close": r["close"],
+                "volume": r["volume"],
+                "turnover": r.get("turnover", 0.0),
+            }
+            for r in rows
+        ],
+    }
+
+
+@app.get("/api/annotate")
+@app.get("/annotate")
+async def get_annotations(
+    symbol: str = Query(..., description="股票代码，如 600519.SH"),
+    days: int = Query(120, ge=10, le=1000, description="回溯天数"),
+    patterns: str = Query("b1,key_k,s1,violent_k", description="形态类型，逗号分隔"),
+    adjust: str = Query("forward", description="复权类型: none | forward | backward"),
+):
+    """
+    形态标注计算接口 — 识别指定股票的买卖形态 (B1, S1, 关键K, 暴力K)
+    """
+    from datasources import registry
+    from zettaranc.annotator import annotator
+
+    thscode = _require_thscode(symbol)
+    if adjust not in _ADJUST_VIEWS:
+        raise fail(400, f"无效的复权类型: {adjust}")
+
+    market_src = registry.get("market")
+    if market_src is None:
+        raise fail(503, "market 数据源未就绪")
+
+    view = _ADJUST_VIEWS[adjust]
+    fetch_limit = days + 60
+    sql = f"""
+        SELECT date, open, high, low, close, volume, turnover
+        FROM {view}
+        WHERE thscode = ?
+        ORDER BY date DESC
+        LIMIT {fetch_limit}
+    """
+
+    try:
+        rows = await market_src.execute(sql, [thscode])
+    except Exception as exc:
+        raise fail(503, f"查询 K 线数据失败: {exc}") from exc
+
+    if not rows:
+        raise fail(404, f"未找到股票 {thscode} 的行情数据")
+
+    rows.reverse()
+    pattern_list = [p.strip() for p in patterns.split(",") if p.strip()]
+    annotations = annotator.annotate_all(rows, pattern_list)
+
+    cutoff_date = str(rows[-min(days, len(rows))]["date"])
+    filtered_ann = [a for a in annotations if str(a["date"]) >= cutoff_date]
+
+    return {
+        "code": 0,
+        "symbol": thscode,
+        "days": len(rows),
+        "data_source": "duckdb",
+        "pattern_types": pattern_list,
+        "annotation_count": len(filtered_ann),
+        "annotations": filtered_ann,
+    }
+
+
+@app.get("/api/symbols/search")
+@app.get("/symbols/search")
+async def search_symbols(
+    q: str = Query("", description="搜索关键词 (股票代码/简称)"),
+    limit: int = Query(30, ge=1, le=100),
+):
+    """
+    股票代码/名称模糊搜索
+    """
+    from datasources import registry
+
+    query_str = q.strip().replace("'", "").replace("%", "")
+    if not query_str:
+        return {"code": 0, "data": []}
+
+    market_src = registry.get("market")
+    if market_src is None:
+        raise fail(503, "market 数据源未就绪")
+
+    like_pat = f"%{query_str}%"
+    sql = """
+        SELECT thscode, ticker, name, exchange, asset_type
+        FROM v_symbol
+        WHERE ticker LIKE ? OR name LIKE ? OR thscode LIKE ?
+        ORDER BY (ticker = ?) DESC, ticker ASC
+        LIMIT ?
+    """
+    rows = await market_src.execute(sql, [like_pat, like_pat, like_pat, query_str.upper(), limit])
+    return {
+        "code": 0,
+        "data": [
+            {
+                "thscode": r["thscode"],
+                "ticker": r["ticker"],
+                "name": r["name"],
+                "exchange": r["exchange"],
+                "asset_type": r.get("asset_type", "a-share"),
+            }
+            for r in rows
+        ],
+    }
+
+
+@app.get("/api/indicators")
+@app.get("/indicators")
+async def get_indicators(
+    symbol: str = Query(..., description="股票代码，如 600519.SH"),
+    days: int = Query(500, ge=1, le=5000),
+    categories: str = Query("zettaranc", description="指标类别"),
+):
+    """
+    个股指标时序数据接口
+    """
+    from datasources import registry
+
+    thscode = _require_thscode(symbol)
+    indicators_src = registry.get("indicators")
+    if indicators_src is None:
+        raise fail(503, "indicators 数据源未就绪")
+
+    sql = """
+        SELECT date, zettaranc_zg_white_10, zettaranc_dg_yellow_14, zettaranc_bbi,
+               zettaranc_brick_value, zettaranc_rsl_short_3, zettaranc_rsl_long_21
+        FROM (
+            SELECT date, zettaranc_zg_white_10, zettaranc_dg_yellow_14, zettaranc_bbi,
+                   zettaranc_brick_value, zettaranc_rsl_short_3, zettaranc_rsl_long_21
+            FROM v_indicators_daily
+            WHERE thscode = ?
+            ORDER BY date DESC
+            LIMIT ?
+        ) sub
+        ORDER BY date ASC
+    """
+    rows = await indicators_src.execute(sql, [thscode, days])
+    return {
+        "code": 0,
+        "symbol": thscode,
+        "count": len(rows),
+        "data": rows,
+    }
 
 
 if __name__ == "__main__":

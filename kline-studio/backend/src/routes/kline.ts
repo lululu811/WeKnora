@@ -90,29 +90,65 @@ export async function klineRoutes(app: FastifyInstance): Promise<void> {
     let sql: string;
     if (period === 'week' || period === 'month') {
       const trunc = period === 'week' ? "date_trunc('week', date)" : "date_trunc('month', date)";
-      sql = `
-        SELECT 
-          ${trunc} as date,
-          arg_min(open, date) as open,
-          max(high) as high,
-          min(low) as low,
-          arg_max(close, date) as close,
-          sum(volume) as volume,
-          sum(turnover) as turnover
-        FROM ${view}
-        WHERE ${conditions.join(' AND ')}
-        GROUP BY ${trunc}
-        ORDER BY date ASC
-        LIMIT ${limit}
-      `;
+      if (from) {
+        sql = `
+          SELECT
+            ${trunc} as date,
+            arg_min(open, date) as open,
+            max(high) as high,
+            min(low) as low,
+            arg_max(close, date) as close,
+            sum(volume) as volume,
+            sum(turnover) as turnover
+          FROM ${view}
+          WHERE ${conditions.join(' AND ')}
+          GROUP BY ${trunc}
+          ORDER BY date ASC
+          LIMIT ${limit}
+        `;
+      } else {
+        sql = `
+          SELECT date, open, high, low, close, volume, turnover
+          FROM (
+            SELECT
+              ${trunc} as date,
+              arg_min(open, date) as open,
+              max(high) as high,
+              min(low) as low,
+              arg_max(close, date) as close,
+              sum(volume) as volume,
+              sum(turnover) as turnover
+            FROM ${view}
+            WHERE ${conditions.join(' AND ')}
+            GROUP BY ${trunc}
+            ORDER BY date DESC
+            LIMIT ${limit}
+          ) sub
+          ORDER BY date ASC
+        `;
+      }
     } else {
-      sql = `
-        SELECT date, open, high, low, close, volume, turnover
-        FROM ${view}
-        WHERE ${conditions.join(' AND ')}
-        ORDER BY date ASC
-        LIMIT ${limit}
-      `;
+      if (from) {
+        sql = `
+          SELECT date, open, high, low, close, volume, turnover
+          FROM ${view}
+          WHERE ${conditions.join(' AND ')}
+          ORDER BY date ASC
+          LIMIT ${limit}
+        `;
+      } else {
+        sql = `
+          SELECT date, open, high, low, close, volume, turnover
+          FROM (
+            SELECT date, open, high, low, close, volume, turnover
+            FROM ${view}
+            WHERE ${conditions.join(' AND ')}
+            ORDER BY date DESC
+            LIMIT ${limit}
+          ) sub
+          ORDER BY date ASC
+        `;
+      }
     }
     const rows = await query<{
       date: unknown;
