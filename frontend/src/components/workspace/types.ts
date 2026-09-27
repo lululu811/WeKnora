@@ -2,7 +2,7 @@
  * 智能体多态工作台（Workspace-per-Agent）类型定义
  */
 
-export type WorkspaceType = 'kline' | 'sandbox' | 'doc_reader' | 'none';
+export type WorkspaceType = 'kline' | 'none';
 
 export interface PickItem {
   ticker: string;
@@ -11,12 +11,4 @@ export interface PickItem {
   pattern?: string;
   price?: number;
   reason?: string;
-}
-
-export interface WorkspaceContext {
-  type: WorkspaceType;
-  activeThscode?: string;
-  picks?: PickItem[];
-  activeIndex?: number;
-  extra?: Record<string, any>;
 }

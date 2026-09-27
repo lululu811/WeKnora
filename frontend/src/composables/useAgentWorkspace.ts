@@ -3,6 +3,7 @@ import type { WorkspaceType, PickItem } from '@/components/workspace/types';
 
 export const WORKSPACE_MIN_WIDTH = 450;
 export const WORKSPACE_MAX_WIDTH = 1400;
+export const WORKSPACE_DEFAULT_WIDTH = 560;
 const STORAGE_KEY_WIDTH = 'weknora:chat:workspace-width';
 
 export interface AgentWorkspaceContext {
@@ -28,8 +29,6 @@ export interface AgentWorkspaceContext {
 
 const WorkspaceKey: InjectionKey<AgentWorkspaceContext> = Symbol('AgentWorkspace');
 
-let defaultWorkspaceContext: AgentWorkspaceContext | null = null;
-
 export function createAgentWorkspaceContext(): AgentWorkspaceContext {
   const isOpen = ref(false);
   const activeType = ref<WorkspaceType>('none');
@@ -44,7 +43,7 @@ export function createAgentWorkspaceContext(): AgentWorkspaceContext {
         return saved;
       }
     } catch {}
-    return 650;
+    return WORKSPACE_DEFAULT_WIDTH;
   })();
   const width = ref(initialWidth);
 
@@ -161,19 +160,27 @@ export function createAgentWorkspaceContext(): AgentWorkspaceContext {
 
 export function provideAgentWorkspace(): AgentWorkspaceContext {
   const ctx = createAgentWorkspaceContext();
-  defaultWorkspaceContext = ctx;
   provide(WorkspaceKey, ctx);
   return ctx;
 }
 
+/**
+ * 必须在 `provideAgentWorkspace()` 的子树内调用。
+ *
+ * 这里刻意**不做模块级单例兜底**：多工作台场景下，一个模块级默认值会被每个
+ * chat 实例的 provide 覆写，导致 provider 子树外的消费者静默拿到"最近创建的那个
+ * chat"的工作台状态——跨会话/跨工作台串味且无任何报错。
+ *
+ * 缺失 provider 时显式抛错，由调用方决定兜底策略
+ * （见 `useChatKLinePanel()` 的 catch 分支）。
+ */
 export function useAgentWorkspace(): AgentWorkspaceContext {
   const ctx = inject(WorkspaceKey, null);
-  if (ctx) {
-    return ctx;
+  if (!ctx) {
+    throw new Error(
+      'useAgentWorkspace() 必须在 provideAgentWorkspace() 的子树内调用：' +
+        '工作台状态是每会话独立的，不存在跨会话共享的默认值。',
+    );
   }
-  if (defaultWorkspaceContext) {
-    return defaultWorkspaceContext;
-  }
-  defaultWorkspaceContext = createAgentWorkspaceContext();
-  return defaultWorkspaceContext;
+  return ctx;
 }

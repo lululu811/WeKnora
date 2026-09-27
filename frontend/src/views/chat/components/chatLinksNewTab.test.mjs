@@ -86,5 +86,12 @@ test('references drawer smoothly shifts the chat area while opening', () => {
   assert.match(chatView, /'has-references-panel': referencesDrawerVisible/)
   assert.match(chatView, /transition: padding-right (?:0\.3s|var\(--app-motion-slow\)) cubic-bezier\(0\.22, 0\.61, 0\.36, 1\)/)
   // The panel widens while showing an original document; 420px is the list width.
-  assert.match(chatView, /&\.has-references-panel:not\(\.is-embedded\)[\s\S]*?padding-right:\s*var\(--references-panel-width, 420px\)/)
+  // Since the multi-panel rework the width is no longer declared on this rule alone:
+  // every visible right panel is summed in JS (rightPanelsWidth) and consumed by a
+  // single padding rule, so panels can no longer overwrite each other's offset.
+  assert.match(chatView, /if \(referencesDrawerVisible\.value\) total \+= referencesPanelWidth\.value/)
+  assert.match(chatView, /&\.has-right-panels:not\(\.is-embedded\)[\s\S]*?padding-right:\s*min\(var\(--right-panels-width, 0px\), 60vw\)/)
+  // Regression guard: the old cascade that silently dropped the references width
+  // when the agent workspace was also open must not come back.
+  assert.doesNotMatch(chatView, /&\.has-agent-workspace[^{]*\{[^}]*padding-right/)
 })

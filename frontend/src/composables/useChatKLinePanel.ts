@@ -1,9 +1,9 @@
 import { inject, provide, type InjectionKey, type Ref } from 'vue';
-import { provideAgentWorkspace, useAgentWorkspace, WORKSPACE_MIN_WIDTH, WORKSPACE_MAX_WIDTH, type AgentWorkspaceContext } from './useAgentWorkspace';
+import { provideAgentWorkspace, useAgentWorkspace, WORKSPACE_MIN_WIDTH, WORKSPACE_MAX_WIDTH, WORKSPACE_DEFAULT_WIDTH, type AgentWorkspaceContext } from './useAgentWorkspace';
 
 export const KLINE_PANEL_MIN_WIDTH = WORKSPACE_MIN_WIDTH;
 export const KLINE_PANEL_MAX_WIDTH = WORKSPACE_MAX_WIDTH;
-export const KLINE_PANEL_DEFAULT_WIDTH = 650;
+export const KLINE_PANEL_DEFAULT_WIDTH = WORKSPACE_DEFAULT_WIDTH;
 
 export interface KLinePick {
   ticker: string;

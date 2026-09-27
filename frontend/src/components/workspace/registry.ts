@@ -10,7 +10,3 @@ import type { WorkspaceType } from './types';
 export const WORKSPACE_COMPONENTS: Partial<Record<WorkspaceType, Component>> = {
   kline: defineAsyncComponent(() => import('./kline/KLineWorkspace.vue')),
 };
-
-export function hasWorkspace(type: WorkspaceType): boolean {
-  return type !== 'none' && Boolean(WORKSPACE_COMPONENTS[type]);
-}

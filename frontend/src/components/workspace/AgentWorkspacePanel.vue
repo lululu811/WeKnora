@@ -4,7 +4,7 @@
       <aside
         class="agent-workspace-panel"
         :class="{ 'is-resizing': resizing }"
-        :style="{ width: `${workspace.width.value}px` }"
+        :style="{ '--agent-workspace-w': `${workspace.width.value}px` }"
         role="complementary"
         aria-label="Agent Workspace"
       >
@@ -74,9 +74,18 @@ const handleResize = (delta: number) => {
   border-left: 1px solid var(--td-component-stroke, #e7e7e7);
   box-shadow: -4px 0 16px rgba(0, 0, 0, 0.06);
 
+  // 宽度走 CSS 变量而非行内 width，这样下面的断点能覆盖它
+  width: var(--agent-workspace-w, 560px);
+
   &.is-resizing {
     transition: none;
     user-select: none;
+  }
+
+  // 窄屏：不再与聊天区并排（.chat 在此断点不做 padding 让位），
+  // 改为整屏覆盖，否则 560px 面板会直接盖住聊天内容。
+  @media (max-width: 959.98px) {
+    width: 100vw;
   }
 }
 

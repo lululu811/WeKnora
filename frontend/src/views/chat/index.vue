@@ -1,15 +1,10 @@
 <template>
     <div class="chat" :class="{
         'is-embedded': embeddedMode,
+        'has-right-panels': rightPanelsWidth > 0,
         'has-references-panel': referencesDrawerVisible,
-        'has-sandbox-panel': sandboxPanel.visible.value,
-        'has-kline-panel': klinePanel.visible.value,
-        'has-agent-workspace': agentWorkspace.isOpen.value,
     }" :style="{
-        '--sandbox-panel-width': `${sandboxPanel.width.value}px`,
-        '--references-panel-width': `${referencesPanelWidth}px`,
-        '--kline-panel-width': `${klinePanel.width.value}px`,
-        '--workspace-panel-width': `${agentWorkspace.width.value}px`,
+        '--right-panels-width': `${rightPanelsWidth}px`,
     }">
         <div v-if="!embeddedMode" class="chat-topbar">
             <ChatHeader :session="currentSession" />
@@ -279,6 +274,25 @@ const sandboxPanel = provideChatSandboxPanel();
 const agentWorkspace = provideAgentWorkspace();
 const klinePanel = provideChatKLinePanel(agentWorkspace);
 const { visible: referencesDrawerVisible, panelWidth: referencesPanelWidth } = referencesDrawer;
+
+/**
+ * 所有右侧面板占位宽度之和，**由 JS 单点计算**。
+ *
+ * 历史问题：这些宽度原先散落在 4 条 `.chat.has-*-panel` 的 `padding-right` 规则里
+ * 互相竞争，只有 sandbox+references 一条组合规则存在，导致
+ * 「引用面板 + 工作台」同时打开时后声明的 650px 静默胜出、420px 被吞掉，
+ * 抽屉直接压在聊天内容上。这里改为求和后由**唯一一条** padding 规则消费，
+ * 互撞在结构上不再可能发生。
+ */
+const rightPanelsWidth = computed(() => {
+  if (props.embeddedMode) return 0;
+  let total = 0;
+  if (referencesDrawerVisible.value) total += referencesPanelWidth.value;
+  if (sandboxPanel.visible.value) total += sandboxPanel.width.value;
+  // klinePanel 是 agentWorkspace 的兼容 shim，共用同一份 isOpen/width，不能重复累加。
+  if (agentWorkspace.isOpen.value) total += agentWorkspace.width.value;
+  return total;
+});
 
 const props = defineProps({
     session_id: { type: String, default: '' },
@@ -1880,42 +1894,25 @@ onBeforeRouteUpdate((to, from, next) => {
         }
     }
 
+    // 右侧面板让位：宽度由 JS 求和后单点下发（--right-panels-width），
+    // 这里只有唯一一条 padding 规则，不再依赖多条 padding-right 互相竞争。
+    // <960px 时不做任何让位——工作台面板在该断点改为整屏覆盖（见
+    // AgentWorkspacePanel.vue），让位反而会造成聊天区被压成一条缝。
+    &.has-right-panels:not(.is-embedded) {
+        @media (min-width: 960px) {
+            box-sizing: border-box;
+            // 上限 60vw：多个面板叠加时不至于把聊天区挤到不可用
+            padding-right: min(var(--right-panels-width, 0px), 60vw);
+        }
+    }
+
+    // 引用抽屉打开时收起滚动区顶部留白（该留白是为抽屉头部预留的，
+    // 与工作台/沙箱无关，故单独一条，不参与上面的宽度计算）。
     &.has-references-panel:not(.is-embedded) {
         @media (min-width: 960px) {
-            padding-right: var(--references-panel-width, 420px);
-            box-sizing: border-box;
-
             .chat_scroll_box {
                 padding-top: 0;
             }
-        }
-    }
-
-    // 沙箱可视化右侧面板：宽度可拖拽调整（--sandbox-panel-width 由
-    // composable 持久化），聊天区 padding 跟随面板宽度让位。
-    &.has-sandbox-panel:not(.is-embedded) {
-        @media (min-width: 960px) {
-            padding-right: var(--sandbox-panel-width, 420px);
-            box-sizing: border-box;
-        }
-    }
-
-    &.has-sandbox-panel.has-references-panel:not(.is-embedded) {
-        @media (min-width: 1400px) {
-            padding-right: calc(var(--references-panel-width, 420px) + var(--sandbox-panel-width, 420px));
-        }
-
-        @media (max-width: 1399.98px) and (min-width: 960px) {
-            padding-right: var(--sandbox-panel-width, 420px);
-        }
-    }
-
-    // 智能体多态动态工作台（如专业 KLine 工作台）：宽度由 workspace.width 决定，
-    // 聊天区向左让位，形成标准的左右并列分屏主工作台。
-    &.has-agent-workspace:not(.is-embedded) {
-        @media (min-width: 960px) {
-            padding-right: var(--workspace-panel-width, 650px);
-            box-sizing: border-box;
         }
     }
 
