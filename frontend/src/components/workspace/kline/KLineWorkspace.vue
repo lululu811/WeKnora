@@ -62,13 +62,13 @@
           🧱 ZX砖型: {{ latestQuote.brickText }}
         </span>
 
-        <!-- 白黄线多空 -->
+        <!-- 双线多空（DEMA10 vs LongBBI） -->
         <span
           class="status-pill"
           :class="latestQuote.aboveYellow && latestQuote.whiteAboveYellow ? 'is-bull' : !latestQuote.aboveYellow ? 'is-bear' : 'is-neutral'"
-          :title="`白线(${latestQuote.whiteVal.toFixed(2)}) 与 黄线大哥线(${latestQuote.yellowVal.toFixed(2)})`"
+          :title="`快线 DEMA10(${latestQuote.whiteVal.toFixed(2)}) 与 大哥线 LongBBI(${latestQuote.yellowVal.toFixed(2)}) 的相对位置`"
         >
-          ⚪🟡 {{ !latestQuote.aboveYellow ? '破黄线(严守止损)' : latestQuote.whiteAboveYellow ? '白在黄上(顺大势)' : '碗内回踩(蓄势)' }}
+          {{ !latestQuote.aboveYellow ? '跌破大哥线(严守止损)' : latestQuote.whiteAboveYellow ? '快线在大哥线上(顺大势)' : '碗内回踩(蓄势)' }}
         </span>
 
         <!-- BBI牵牛绳 -->
@@ -166,16 +166,16 @@
           class="toolbar__btn"
           :class="{ 'is-active': mainMode === 'zettaranc' }"
           @click="setMainMode('zettaranc')"
-          title="EMA10白线 + EMA14黄线 + BBI牵牛绳"
+          title="战法核心主图：快线 DEMA10 + 大哥线 LongBBI(14/28/57/114) + BBI牵牛绳(3/6/12/24)。双线判断多空节奏，牵牛绳是多空分界"
         >
-          ⚪🟡 白黄+BBI
+          ⬛🟧 双线+BBI
         </button>
         <button
           type="button"
           class="toolbar__btn"
           :class="{ 'is-active': mainMode === 'all' }"
           @click="setMainMode('all')"
-          title="战法核心线 + MA5/10/20"
+          title="战法核心线 + 传统 MA5/10/20。给短期均线做参考，适合看价格与短期成本的相对位置"
         >
           战法+MA
         </button>
@@ -184,7 +184,7 @@
           class="toolbar__btn"
           :class="{ 'is-active': mainMode === 'ma' }"
           @click="setMainMode('ma')"
-          title="传统均线"
+          title="纯传统均线 MA5/10/20/60/120/250，不叠加战法线。最基础的看图方式"
         >
           传统MA
         </button>
@@ -193,7 +193,7 @@
           class="toolbar__btn"
           :class="{ 'is-active': mainMode === 'boll' }"
           @click="setMainMode('boll')"
-          title="布林带 BOLL"
+          title="布林带 BOLL(20,2) + 战法信号层。价格触上轨偏强、触下轨偏弱，带宽收窄常预示变盘"
         >
           BOLL
         </button>
@@ -210,6 +210,7 @@
           type="button"
           class="toolbar__btn"
           :class="{ 'is-active': subMode === sub.id }"
+          :title="sub.hint"
           @click="switchSubMode(sub.id)"
         >
           {{ sub.label }}
@@ -224,7 +225,7 @@
           type="button"
           class="toolbar__btn feature-btn"
           :class="{ 'is-active': isTD9Enabled }"
-          title="开启/关闭神奇九转变盘倒数序列 (1~9)"
+          title="神奇九转：连续 9 根 K 线的变盘倒数。红色数字在上方代表上涨序列、绿色在下方代表下跌序列，走到 9 时变盘概率最高"
           @click="toggleTD9"
         >
           9️⃣ 九转序列
@@ -233,7 +234,7 @@
           type="button"
           class="toolbar__btn feature-btn"
           :class="{ 'is-active': isPatternsEnabled }"
-          title="开启/关闭 K线形态气泡胶囊 (阳包阴、乌云压顶、十字星、B1/S1等)"
+          title="形态气泡：在 K 线上标出服务端识别出的形态（阳包阴、乌云压顶、十字星、B1建仓波、S1预警、关键K、暴力K），括号内是本图命中的数量"
           @click="togglePatterns"
         >
           🏷️ 形态气泡<span v-if="filteredAnnotations.length > 0" class="feature-count">({{ filteredAnnotations.length }})</span>
@@ -247,7 +248,7 @@
         type="button"
         class="toolbar__btn"
         :class="{ 'is-active': isDrawingBarVisible }"
-        title="显示/隐藏左侧画线工具栏"
+        title="显示/隐藏左侧画线工具栏（斐波那契、波浪、ABCD 等约 35 个画线工具）"
         @click="toggleDrawingBar"
       >
         ✏️ 画线
@@ -319,8 +320,10 @@ import { useI18n } from 'vue-i18n';
 import { KLineChartPro } from '@klinecharts/pro';
 import '@klinecharts/pro/dist/klinecharts-pro.css';
 import { useAgentWorkspace } from '@/composables/useAgentWorkspace';
+import { useTheme } from '@/composables/useTheme';
 import { ZettarancDatafeed, type Adjust } from './datafeed';
-import { getKlineTheme } from './theme';
+import { setZettarancPalette } from './palette';
+import { getKlineChartTheme } from './theme';
 import { registerZettarancIndicators } from './indicators';
 import { fetchAnnotations, type Annotation, PATTERN_CONFIG } from './annotate-api';
 import { setGlobalOverlayConfig } from './overlay-drawer';
@@ -342,7 +345,13 @@ const noDataSymbol = ref('');
 const chartInstance = ref<KLineChartPro | null>(null);
 let resizeObserver: ResizeObserver | null = null;
 
-const isDark = ref(true); // 专业深色交易终端风
+// 跟随平台主题。此前这里写死 true（"专业深色交易终端风"），结果是 K线面板与
+// 浅色聊天区并排时主题割裂——这是"左右样式不统一"里最难改的那一半。
+//
+// 跟随而不是加独立开关：平台本身已有 light/dark/system 三态，K线再自带一套
+// 开关只会制造"两边不同步"的第二真相源。
+const { effectiveTheme } = useTheme();
+const isDark = computed(() => effectiveTheme.value === 'dark');
 // 左侧画线栏。默认关闭。
 //
 // 库的实例只暴露 setTheme/setStyles/setPeriod 等 setter，没有运行时的
@@ -366,7 +375,7 @@ const periodIdx = ref(0);
 const isTD9Enabled = ref(true);
 const isPatternsEnabled = ref(true);
 
-// 主图模式：战法白黄+BBI、战法+MA、传统均线、布林带
+// 主图模式：双线+BBI、战法+MA、传统均线、布林带
 type MainIndicatorMode = 'zettaranc' | 'all' | 'ma' | 'boll';
 const mainMode = ref<MainIndicatorMode>('zettaranc');
 
@@ -374,14 +383,44 @@ const mainMode = ref<MainIndicatorMode>('zettaranc');
 type SubIndicatorMode = 'VOL_AND_BRICK' | 'VOL_AND_MACD' | 'ZX_BRICK' | 'Z_VOL' | 'Z_MACD' | 'Z_KDJ' | 'Z_RSL';
 const subMode = ref<SubIndicatorMode>('VOL_AND_BRICK');
 
+// 副图选项。hint 是悬停说明——之前 7 个副图按钮一个 tooltip 都没有，
+// 新指标加进来时没人能靠界面搞清楚它算什么，只能一个个试。
 const SUB_INDICATOR_LIST = [
-  { id: 'VOL_AND_BRICK' as const, label: '📊🧱 量+ZX砖型 (推荐)' },
-  { id: 'ZX_BRICK' as const, label: '🧱 ZX砖型图' },
-  { id: 'VOL_AND_MACD' as const, label: '📊📈 量+MACD' },
-  { id: 'Z_VOL' as const, label: '📊 成交量' },
-  { id: 'Z_MACD' as const, label: '📈 MACD' },
-  { id: 'Z_KDJ' as const, label: '⚡ KDJ' },
-  { id: 'Z_RSL' as const, label: '🎯 RSL强弱' },
+  {
+    id: 'VOL_AND_BRICK' as const,
+    label: '📊🧱 量+ZX砖型 (推荐)',
+    hint: '成交量 + 同花顺知行砖型图。砖型把连续同向的 K 线合并成一块，块数代表趋势强度：4 块以上为强势。推荐作为默认副图。',
+  },
+  {
+    id: 'ZX_BRICK' as const,
+    label: '🧱 ZX砖型图',
+    hint: '仅砖型图，不带成交量。适合专注看多空节奏；减号标记回调、止字标记止跌。',
+  },
+  {
+    id: 'VOL_AND_MACD' as const,
+    label: '📊📈 量+MACD',
+    hint: '成交量 + MACD。DIF/DEA 金叉死叉会打标记，红柱绿柱表示动能强弱，适合判断趋势转折。',
+  },
+  {
+    id: 'Z_VOL' as const,
+    label: '📊 成交量',
+    hint: '成交量柱 + MA5/MA10 均量线。放量上涨代表资金进场，缩量回调代表抛压不重。',
+  },
+  {
+    id: 'Z_MACD' as const,
+    label: '📈 MACD',
+    hint: 'MACD (12,26,9)。DIF 上穿 DEA 为金叉、下穿为死叉，柱状体表示动能变化速度。',
+  },
+  {
+    id: 'Z_KDJ' as const,
+    label: '⚡ KDJ',
+    hint: 'KDJ 随机指标 (9,3,3)。K/D 在 20 以下为超卖区、80 以上为超买区，金叉死叉会打标记。',
+  },
+  {
+    id: 'Z_RSL' as const,
+    label: '🎯 RSL强弱',
+    hint: '相对强弱线，3 日与 21 日两个周期。RSL 向上表示这只票强于大盘，适合在同板块内比强弱。',
+  },
 ];
 
 interface LatestQuoteInfo {
@@ -556,7 +595,7 @@ const handleDataLoaded = (dataList: KLineData[]) => {
   const prevClose = prev.close;
   const pctChange = prevClose > 0 ? ((close - prevClose) / prevClose) * 100 : 0;
 
-  // 1. 严格依据知识库计算白黄线与BBI
+  // 1. 严格依据知识库计算双线（DEMA10 / LongBBI）与 BBI
   const dema10 = calcDEMA(dataList, 10);
   const longBbi = calcLongBBI(dataList, [14, 28, 57, 114]);
   const bbiList = calcBBI(dataList);
@@ -633,12 +672,26 @@ const initChart = () => {
     },
   });
 
+  setZettarancPalette(isDark.value);
+
   chartInstance.value = new KLineChartPro({
     container: chartContainer.value,
     symbol,
     period: PERIODS[periodIdx.value],
     datafeed,
-    styles: getKlineTheme(isDark.value),
+    // 画布**固定深色**，不跟随平台主题。这是"浅色外壳 + 深色画布"的关键。
+    //
+    // 为什么不让画布跟着变浅：Z_MAIN 的第一条线是 `#FFFFFF` 的"白线"(DEMA 10)，
+    // 模式名就叫「白黄+BBI」。浅底上白线直接隐形，而改成深色又会让"白黄"这个
+    // 叫法名不副实——那套白线/黄线/牵牛绳是策略词汇的一部分，不该因为换了个
+    // 配色就改口径。深色画布还有个实际好处：红绿 K 线、形态气泡在深底上的
+    // 对比度本来就比浅底高，改浅反而更难读。
+    //
+    // 外壳（工具栏、候选池条、行情条、底部快捷条）由 .is-dark 这个 CSS class
+    // 画布跟随平台主题。切调色板必须发生在建实例之前：自定义指标是在
+    // chartInstance 构建期间注册的，它们把 PAL.* 抄进 styles 配置，事后改
+    // PAL 不会回溯已注册的指标。
+    styles: getKlineChartTheme(isDark.value),
     mainIndicators: getMainIndicators(),
     subIndicators: getSubIndicators(),
     periods: PERIODS,
@@ -669,17 +722,54 @@ const handleKeyDown = (e: KeyboardEvent) => {
 };
 
 // 快捷动作：把指令反哺给 Chat
+//
+// 关键在于**别让用户替 agent 做上下文整理**。原版提示词只给了代码和名字，
+// 把界面上已经算好的东西（ZX砖型状态、双线多空、BBI 位置、形态标注）全都丢掉
+// 了，agent 只能从零重新查一遍。现在把这些结论直接写进提示词，并点名该用哪个
+// 工具——这 20 个金融工具在 UI 上没有勾选框，agent 只能靠工具描述知道它们存在。
 const handleActionAsk = (type: 'valuation' | 'strategy' | 'report') => {
   const code = `${currentTicker.value}.${currentExchange.value}`;
   const name = workspace.activePick.value?.name ? `(${workspace.activePick.value.name})` : '';
+  // 数据还没加载出来时 latestQuote 是 null，此时只给代码，不编造形态结论。
+  const q = latestQuote.value;
+
+  // 界面上已有的形态结论，原样带给 agent，省掉它重复推导。
+  const screenContext = q
+    ? [
+        q.brickText ? `ZX砖型图显示：${q.brickText}` : '',
+        q.aboveBbi ? '收盘价站上 BBI 多空平衡线' : '收盘价跌破 BBI 多空平衡线',
+        q.aboveYellow
+          ? (q.whiteAboveYellow ? '快线 DEMA10 在大哥线 LongBBI 之上（顺大势）' : '价格在大哥线之上但快线在下方（碗内回踩）')
+          : '价格已跌破大哥线 LongBBI',
+      ].filter(Boolean).join('；')
+    : '（K线数据尚未加载完成，请先自行拉取行情）';
 
   let prompt = '';
   if (type === 'valuation') {
-    prompt = `请结合最新研报与财报数据，深入分析个股 ${code} ${name} 目前的估值水位、主要盈利指标与财务健康度。`;
+    prompt = `分析个股 ${code} ${name} 的基本面与估值水位。图表当前状态：${screenContext}。\n\n` +
+      `请依次完成：\n` +
+      `1. 用 hithink.finance.financial.indicator.detail 取最近 4 期财务指标（ROE、毛利率、净利率、资产负债率、流动比率、净利润现金含量），判断盈利能力与偿债能力的趋势方向；\n` +
+      `2. 用 hithink.finance.financial.statement.cashflow 看经营活动现金流净额与净利润是否匹配——长期背离说明利润质量存疑；\n` +
+      `3. 用 hithink.finance.financial.valuation.snapshot 取 pe_ttm / pe_mrq / pb_mrq / ps_ttm / pcf_ttm，结合行业平均水平判断估值水位是偏高还是偏低；\n` +
+      `4. 用 hithink.finance.index.sector.membership 查它所属的行业与概念板块，说明该拿哪个板块做估值对标。\n\n` +
+      `最后给出结论：这家公司当前的基本面质地如何，估值是贵还是便宜，值不值得买，以及最关键的风险点。`;
   } else if (type === 'strategy') {
-    prompt = `按照 Z 哥交易体系与当前技术形态，请帮我分析 ${code} ${name} 当前位置的试仓性价比、加仓条件与防守止损位。`;
+    prompt = `按 Z 哥交易体系评估 ${code} ${name} 当前的操作策略。图表当前状态：${screenContext}。\n\n` +
+      `请完成：\n` +
+      `1. 用 hithink.finance.analysis.levels 找出关键支撑位与压力位，给出防守止损位（跌破哪个价位必须走）；\n` +
+      `2. 用 hithink.finance.analysis.trend 确认当前趋势方向，用 hithink.finance.analysis.volume 判断放量还是缩量；\n` +
+      `3. 用 hithink.finance.special.limit_up_pool 查最近是否上过涨停板、是否有连板，判断资金关注度；\n` +
+      `4. 结合上面的双线与 BBI 位置，判断当前处于「可试仓」「等回踩」还是「该观望」；\n` +
+      `5. 给出具体的试仓比例、加仓触发条件、止损位和目标位。\n\n` +
+      `要求给出明确的操作建议，不要模棱两可。`;
   } else if (type === 'report') {
-    prompt = `请在研报知识库中检索关于 ${code} ${name} 的最新券商研报，梳理机构核心投资逻辑与风险提示。`;
+    prompt = `综合 ${code} ${name} 的多源信息做一次完整研判。图表当前状态：${screenContext}。\n\n` +
+      `请覆盖四个方面：\n` +
+      `1. 行业与题材：用 hithink.finance.index.sector.membership 查所属板块，再用 sector.constituents 列出同板块可比公司，指出这只票在板块内的相对位置；\n` +
+      `2. 资金面：用 hithink.finance.special.dragon_tiger.list 查龙虎榜记录与机构净买入，用 limit_up_pool 查涨停与封板情况；\n` +
+      `3. 基本面速览：用 hithink.finance.financial.indicator.detail 取 ROE、毛利率、净利润现金含量三项核心指标；\n` +
+      `4. 研报观点：在研报知识库中检索该票的最新券商研报，梳理机构核心逻辑与风险提示。\n\n` +
+      `最后给出一句话结论：这只票当前的核心矛盾是什么。`;
   }
 
   workspace.sendToChat(prompt);
@@ -692,6 +782,18 @@ watch([currentTicker, currentExchange, adjust, periodIdx], () => {
     loadAnnotations();
   });
 });
+
+watch(isDark, () => {
+  nextTick(() => {
+    initChart();
+  });
+});
+
+// 平台主题切换 → 重建图表。
+//
+// 画布跟随平台主题后，CSS 不够用了：KLineChart 的 styles（画布底、网格、坐标轴、
+// tooltip）和自定义指标线色都得重新算。库的实例只暴露 setTheme/setStyles，没有
+// "重算已注册指标配色" 的接口，所以整体重建最不容易漏。
 
 onMounted(() => {
   setGlobalOverlayConfig({
@@ -1260,16 +1362,24 @@ onUnmounted(() => {
 /* KLineChart Canvas 容器 */
 /* chart-wrap 只负责建立相对定位上下文，让空状态能精确盖在图表区域上；
    真正的 flex 伸缩与尺寸约束仍由内层 .kline-workspace__chart 承担，
-   这样 klinecharts 量到的容器高度与改动前完全一致。 */
+   这样 klinecharts 量到的容器高度与改动前完全一致。
+
+   flex: 1 不能省。根容器是 flex-direction: column，包一层之后 chart-wrap
+   成了直接 flex 子元素；少了它就按内容高度塌陷成 0，内层 canvas 量到 0 高
+   只画得出坐标轴、画不出 K 线（2026-09-27 实测：日期轴在、蜡烛全无）。
+
+   底色必须跟着画布主题走：写死深色时白底画布四周会露出一圈黑边。 */
 .kline-workspace__chart-wrap {
   position: relative;
   display: flex;
-  /* flex: 1 不能省。根容器是 flex-direction: column，包一层之后 chart-wrap
-     成了直接 flex 子元素；少了它就按内容高度塌陷成 0，内层 canvas 量到 0 高
-     只画得出坐标轴、画不出 K 线（2026-09-27 实测：日期轴在、蜡烛全无）。 */
   flex: 1;
   min-height: 0;
   width: 100%;
+  background: #FAF7F0;
+}
+
+.is-dark &.kline-workspace__chart-wrap {
+  background: #11141a;
 }
 
 .kline-workspace__chart {
@@ -1293,8 +1403,8 @@ onUnmounted(() => {
   text-align: center;
   pointer-events: none;
   /* 半透明遮罩而非实心色块：下面的 canvas 仍在，能看出"图表区域在这"，
-     只是没有数据。 */
-  background: rgba(17, 20, 26, 0.82);
+     只是没有数据。底色跟着画布主题走，否则白底下会糊成一片深灰。 */
+  background: rgba(250, 247, 240, 0.88);
 
   .empty__icon {
     font-size: 32px;
@@ -1306,7 +1416,7 @@ onUnmounted(() => {
     margin: 0;
     font-size: 14px;
     font-weight: 600;
-    color: #e5e7eb;
+    color: #2A2520;
   }
 
   .empty__hint {
@@ -1314,11 +1424,28 @@ onUnmounted(() => {
     max-width: 420px;
     font-size: 12px;
     line-height: 1.7;
+    color: #6B6259;
+
+    b {
+      color: #4A4239;
+      font-weight: 600;
+    }
+  }
+}
+
+/* 空状态的深色覆盖。基础规则按浅色画布写（平台默认浅色），深色下整体翻转。 */
+.is-dark &.kline-workspace__empty {
+  background: rgba(17, 20, 26, 0.86);
+
+  .empty__title {
+    color: #e5e7eb;
+  }
+
+  .empty__hint {
     color: #8b93a3;
 
     b {
       color: #d1d5db;
-      font-weight: 600;
     }
   }
 }
