@@ -294,7 +294,7 @@ builtin_agents:
       system_prompt_id: "zettaranc"
       temperature: 0.3
       max_completion_tokens: 0
-      max_iterations: 50
+      max_iterations: 100
       kb_selection_mode: "selected"
       retrieve_kb_only_when_mentioned: false
       allowed_tools:

@@ -716,7 +716,7 @@
                 <t-radio-button value="unlimited">{{ $t('agent.editor.maxIterationsUnlimited') }}</t-radio-button>
               </t-radio-group>
               <t-input-number v-if="maxIterationsMode === 'limit'" v-model="formData.config.max_iterations"
-                :min="2" :max="50" theme="column" />
+                :min="2" :max="100" theme="column" />
             </div>
           </div>
 
