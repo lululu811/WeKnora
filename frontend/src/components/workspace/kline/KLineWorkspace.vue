@@ -86,6 +86,38 @@
         <span class="metric-item">量: <strong>{{ formatVolume(latestQuote.volume) }}</strong></span>
         <span class="metric-item">额: <strong>{{ formatTurnover(latestQuote.turnover) }}</strong></span>
       </div>
+
+      <!-- 周期与复权。这两组是低频操作（切股票时基本不用动），原先和主图/副图
+           指标挤在同一条工具栏里，把 15 个按钮顶成两行还看不全。挪到行情条
+           右端后，工具栏只剩真正高频的主图/副图切换。 -->
+      <div class="quote-strip__right">
+        <div class="strip-ctl">
+          <span class="strip-ctl__label">周期</span>
+          <button
+            v-for="(p, idx) in PERIODS"
+            :key="p.timespan"
+            type="button"
+            class="strip-ctl__btn"
+            :class="{ 'is-active': periodIdx === idx }"
+            @click="periodIdx = idx"
+          >
+            {{ p.text }}
+          </button>
+        </div>
+        <div class="strip-ctl">
+          <span class="strip-ctl__label">复权</span>
+          <button
+            v-for="opt in ADJUST_OPTIONS"
+            :key="opt.value"
+            type="button"
+            class="strip-ctl__btn"
+            :class="{ 'is-active': adjust === opt.value }"
+            @click="adjust = opt.value"
+          >
+            {{ opt.label }}
+          </button>
+        </div>
+      </div>
     </div>
 
     <!-- 3. 股票搜索浮层 (Search Popover) -->
@@ -122,42 +154,9 @@
       </div>
     </div>
 
-    <!-- 4. 同花顺风格一体化控制栏 (周期/复权/主图/副图/九转/形态/画线/关闭) -->
+    <!-- 4. 主图/副图指标控制栏。周期与复权已移进行情条（见上方 quote-strip__right）——
+         这两组很少改，却占了工具栏 6 个按钮，把主图/副图挤成两行还看不全。 -->
     <div class="kline-workspace__toolbar">
-      <!-- 周期 -->
-      <div class="toolbar__group">
-        <span class="group__label">周期:</span>
-        <button
-          v-for="(p, idx) in PERIODS"
-          :key="p.timespan"
-          type="button"
-          class="toolbar__btn"
-          :class="{ 'is-active': periodIdx === idx }"
-          @click="periodIdx = idx"
-        >
-          {{ p.text }}
-        </button>
-      </div>
-
-      <div class="toolbar__divider" />
-
-      <!-- 复权 -->
-      <div class="toolbar__group">
-        <span class="group__label">复权:</span>
-        <button
-          v-for="opt in ADJUST_OPTIONS"
-          :key="opt.value"
-          type="button"
-          class="toolbar__btn"
-          :class="{ 'is-active': adjust === opt.value }"
-          @click="adjust = opt.value"
-        >
-          {{ opt.label }}
-        </button>
-      </div>
-
-      <div class="toolbar__divider" />
-
       <!-- 主图指标 -->
       <div class="toolbar__group">
         <span class="group__label">主图:</span>
@@ -168,7 +167,7 @@
           @click="setMainMode('zettaranc')"
           title="战法核心主图：快线 DEMA10 + 大哥线 LongBBI(14/28/57/114) + BBI牵牛绳(3/6/12/24)。双线判断多空节奏，牵牛绳是多空分界"
         >
-          ⬛🟧 双线+BBI
+          双线+BBI
         </button>
         <button
           type="button"
@@ -228,7 +227,7 @@
           title="神奇九转：连续 9 根 K 线的变盘倒数。红色数字在上方代表上涨序列、绿色在下方代表下跌序列，走到 9 时变盘概率最高"
           @click="toggleTD9"
         >
-          9️⃣ 九转序列
+          九转序列
         </button>
         <button
           type="button"
@@ -237,7 +236,7 @@
           title="形态气泡：在 K 线上标出服务端识别出的形态（阳包阴、乌云压顶、十字星、B1建仓波、S1预警、关键K、暴力K），括号内是本图命中的数量"
           @click="togglePatterns"
         >
-          🏷️ 形态气泡<span v-if="filteredAnnotations.length > 0" class="feature-count">({{ filteredAnnotations.length }})</span>
+          形态气泡<span v-if="filteredAnnotations.length > 0" class="feature-count">({{ filteredAnnotations.length }})</span>
         </button>
       </div>
 
@@ -251,7 +250,7 @@
         title="显示/隐藏左侧画线工具栏（斐波那契、波浪、ABCD 等约 35 个画线工具）"
         @click="toggleDrawingBar"
       >
-        ✏️ 画线
+        画线
       </button>
 
       <!-- 关闭工作台 -->
@@ -293,21 +292,21 @@
           class="action-chip"
           @click="handleActionAsk('valuation')"
         >
-          📊 分析基本面与估值
+          分析基本面与估值
         </button>
         <button
           type="button"
           class="action-chip"
           @click="handleActionAsk('strategy')"
         >
-          🛡️ 测算防守位与试仓策略
+          测算防守位与试仓策略
         </button>
         <button
           type="button"
           class="action-chip"
           @click="handleActionAsk('report')"
         >
-          📑 查阅最新研报与核心逻辑
+          查阅最新研报与核心逻辑
         </button>
       </div>
     </div>
@@ -388,37 +387,37 @@ const subMode = ref<SubIndicatorMode>('VOL_AND_BRICK');
 const SUB_INDICATOR_LIST = [
   {
     id: 'VOL_AND_BRICK' as const,
-    label: '📊🧱 量+ZX砖型 (推荐)',
+    label: '量+ZX砖型 (推荐)',
     hint: '成交量 + 同花顺知行砖型图。砖型把连续同向的 K 线合并成一块，块数代表趋势强度：4 块以上为强势。推荐作为默认副图。',
   },
   {
     id: 'ZX_BRICK' as const,
-    label: '🧱 ZX砖型图',
+    label: 'ZX砖型图',
     hint: '仅砖型图，不带成交量。适合专注看多空节奏；减号标记回调、止字标记止跌。',
   },
   {
     id: 'VOL_AND_MACD' as const,
-    label: '📊📈 量+MACD',
+    label: '量+MACD',
     hint: '成交量 + MACD。DIF/DEA 金叉死叉会打标记，红柱绿柱表示动能强弱，适合判断趋势转折。',
   },
   {
     id: 'Z_VOL' as const,
-    label: '📊 成交量',
+    label: '成交量',
     hint: '成交量柱 + MA5/MA10 均量线。放量上涨代表资金进场，缩量回调代表抛压不重。',
   },
   {
     id: 'Z_MACD' as const,
-    label: '📈 MACD',
+    label: 'MACD',
     hint: 'MACD (12,26,9)。DIF 上穿 DEA 为金叉、下穿为死叉，柱状体表示动能变化速度。',
   },
   {
     id: 'Z_KDJ' as const,
-    label: '⚡ KDJ',
+    label: 'KDJ',
     hint: 'KDJ 随机指标 (9,3,3)。K/D 在 20 以下为超卖区、80 以上为超买区，金叉死叉会打标记。',
   },
   {
     id: 'Z_RSL' as const,
-    label: '🎯 RSL强弱',
+    label: 'RSL强弱',
     hint: '相对强弱线，3 日与 21 日两个周期。RSL 向上表示这只票强于大盘，适合在同板块内比强弱。',
   },
 ];
@@ -857,6 +856,19 @@ onUnmounted(() => {
     height: 100% !important;
   }
 
+  /* 画布底色由 @klinecharts/pro 的 CSS 变量控制，不在它的 Styles 类型里——
+     getKlineChartTheme() 配的 grid / candle / crosshair 全都管不到它，canvas 又是
+     clearRect 透明绘制的，所以真正露出来的是这里这个变量的值。浅色下不覆盖就是
+     纯白 #ffffff，画布再怎么调也是白的（2026-09-27 实测：像素值 #FFFFFF）。
+     这里连同文字/边框色一起换成暖米体系，浅色下才不会和暖底打架。 */
+  :deep(.klinecharts-pro) {
+    --klinecharts-pro-background-color: #FAF7F0;
+    --klinecharts-pro-popover-background-color: #FFFDF8;
+    --klinecharts-pro-text-color: #2A2520;
+    --klinecharts-pro-text-second-color: #6B6259;
+    --klinecharts-pro-border-color: #DDD5C6;
+  }
+
   :deep(.klinecharts-pro-content) {
     height: 100% !important;
   }
@@ -1013,6 +1025,53 @@ onUnmounted(() => {
   .is-dark & {
     background: #141820;
     border-bottom-color: #232a36;
+  }
+
+  /* 周期/复权控件：跟着行情条走的小号分段按钮。沿用 toolbar__btn 的 6px 圆角
+     与 12px 字号，让它看起来和工具栏是同一套控件，只是尺寸小一号。 */
+  .quote-strip__right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+  }
+
+  .strip-ctl {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+  }
+
+  .strip-ctl__label {
+    font-size: 11px;
+    color: var(--td-text-color-placeholder, #9ca3af);
+    margin-right: 2px;
+  }
+
+  .strip-ctl__btn {
+    padding: 2px 7px;
+    font-size: 12px;
+    border-radius: 6px;
+    border: 1px solid var(--td-component-stroke, #d1d5db);
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+
+    .is-dark & {
+      border-color: #333d4d;
+    }
+
+    &:hover {
+      border-color: var(--td-brand-color, #0052d9);
+    }
+
+    &.is-active {
+      background: var(--td-brand-color, #0052d9);
+      border-color: var(--td-brand-color, #0052d9);
+      color: #ffffff;
+    }
   }
 
   .quote-strip__left {
