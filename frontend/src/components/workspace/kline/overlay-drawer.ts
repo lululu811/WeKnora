@@ -9,6 +9,7 @@
  */
 
 import type { KLineData } from './types';
+import { zettarancPalette as PAL } from './palette';
 import type { Annotation } from './annotate-api';
 
 export interface OverlayConfig {
@@ -127,23 +128,23 @@ export function detectKLinePatterns(
       const localDate = `${y}-${m}-${day}`;
       const ann = annMap.get(isoDate) || annMap.get(localDate);
       if (ann) {
-        let color = '#3b82f6';
+        let color = PAL().keyBlue;
         let bgColor = 'rgba(59, 130, 246, 0.4)';
         let pos: 'top' | 'bottom' = 'bottom';
         if (ann.type === 's1') {
-          color = '#ef4444';
+          color = PAL().up;
           bgColor = 'rgba(239, 68, 68, 0.45)';
           pos = 'top';
         } else if (ann.type === 'b1') {
-          color = '#10b981';
+          color = PAL().down;
           bgColor = 'rgba(16, 185, 129, 0.45)';
           pos = 'bottom';
         } else if (ann.type === 'violent_k') {
-          color = '#f59e0b';
+          color = PAL().auxAmber;
           bgColor = 'rgba(245, 158, 11, 0.45)';
           pos = 'top';
         } else if (ann.type === 'key_k') {
-          color = '#a855f7';
+          color = PAL().purple;
           bgColor = 'rgba(168, 85, 247, 0.45)';
           pos = 'bottom';
         }
@@ -177,7 +178,7 @@ export function detectKLinePatterns(
       result[i] = {
         type: 'yang_bao_yin',
         text: '阳包阴',
-        color: '#ef4444',
+        color: PAL().up,
         bgColor: 'rgba(239, 68, 68, 0.4)',
         position: 'bottom',
       };
@@ -189,7 +190,7 @@ export function detectKLinePatterns(
       result[i] = {
         type: 'yin_bao_yang',
         text: '阴包阳',
-        color: '#10b981',
+        color: PAL().down,
         bgColor: 'rgba(16, 185, 129, 0.4)',
         position: 'top',
       };
@@ -201,7 +202,7 @@ export function detectKLinePatterns(
       result[i] = {
         type: 'dark_cloud',
         text: '乌云压顶',
-        color: '#06b6d4',
+        color: PAL().patternCloud,
         bgColor: 'rgba(6, 182, 212, 0.4)',
         position: 'top',
       };
@@ -213,7 +214,7 @@ export function detectKLinePatterns(
       result[i] = {
         type: 'piercing_line',
         text: '曙光初现',
-        color: '#f43f5e',
+        color: PAL().patternDawn,
         bgColor: 'rgba(244, 63, 94, 0.4)',
         position: 'bottom',
       };
@@ -225,7 +226,7 @@ export function detectKLinePatterns(
       result[i] = {
         type: 'doji',
         text: '十字星',
-        color: '#38bdf8',
+        color: PAL().patternDoji,
         bgColor: 'rgba(56, 189, 248, 0.4)',
         position: isRed ? 'bottom' : 'top',
       };
@@ -237,7 +238,7 @@ export function detectKLinePatterns(
       result[i] = {
         type: 'morning_star',
         text: '早晨之星',
-        color: '#e11d48',
+        color: PAL().patternMorningStar,
         bgColor: 'rgba(225, 29, 72, 0.4)',
         position: 'bottom',
       };
@@ -249,7 +250,7 @@ export function detectKLinePatterns(
       result[i] = {
         type: 'evening_star',
         text: '黄昏之星',
-        color: '#10b981',
+        color: PAL().down,
         bgColor: 'rgba(16, 185, 129, 0.4)',
         position: 'top',
       };
@@ -357,7 +358,7 @@ export function drawTD9Badge(
   ctx.save();
   const isUp = item.type === 'up';
   // 上涨序列在 K 线上方（红系变盘），下跌序列在下方（绿系反弹）
-  const color = isUp ? '#ef4444' : '#10b981';
+  const color = isUp ? PAL().up : PAL().down;
   const y = isUp ? candleY - 13 : candleY + 13;
 
   if (item.count === 9) {
@@ -429,7 +430,7 @@ export function drawHighLowPriceMarks(
     const endX = hx + dir * 32;
     const markY = Math.max(16, hy - 14);
 
-    ctx.strokeStyle = '#ef4444';
+    ctx.strokeStyle = PAL().up;
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(hx, hy);
@@ -437,7 +438,7 @@ export function drawHighLowPriceMarks(
     ctx.lineTo(endX, markY);
     ctx.stroke();
 
-    ctx.fillStyle = '#ef4444';
+    ctx.fillStyle = PAL().up;
     ctx.textAlign = isRightSide ? 'right' : 'left';
     ctx.textBaseline = 'middle';
     ctx.fillText(text, endX + dir * 4, markY);
@@ -454,7 +455,7 @@ export function drawHighLowPriceMarks(
     const endX = lx + dir * 32;
     const markY = ly + 14;
 
-    ctx.strokeStyle = '#10b981';
+    ctx.strokeStyle = PAL().down;
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(lx, ly);
@@ -462,7 +463,7 @@ export function drawHighLowPriceMarks(
     ctx.lineTo(endX, markY);
     ctx.stroke();
 
-    ctx.fillStyle = '#10b981';
+    ctx.fillStyle = PAL().down;
     ctx.textAlign = isRightSide ? 'right' : 'left';
     ctx.textBaseline = 'middle';
     ctx.fillText(text, endX + dir * 4, markY);
@@ -537,7 +538,7 @@ export function drawCrossBadge(
   y: number,
 ) {
   const text = isGolden ? '金叉' : '死叉';
-  const color = isGolden ? '#ef4444' : '#10b981';
+  const color = isGolden ? PAL().up : PAL().down;
   const bgColor = isGolden ? 'rgba(239, 68, 68, 0.45)' : 'rgba(16, 185, 129, 0.45)';
   const badgeY = isGolden ? y - 10 : y + 10;
   drawCapsuleBadge(ctx, text, x, badgeY, color, bgColor, undefined, undefined, 9);

@@ -14,6 +14,7 @@
  */
 
 import { registerIndicator, LineType, PolygonType, IndicatorSeries, type KLineData } from 'klinecharts';
+import { zettarancPalette as PAL } from './palette';
 import { drawMainCanvasTongHuaShun, drawCrossBadge, globalOverlayConfig } from './overlay-drawer';
 import { calcDEMA, calcLongBBI, calcZXBrick, type ZXBrickItem } from './stock-score';
 
@@ -259,9 +260,9 @@ export function registerZettarancIndicators() {
       ],
       styles: {
         lines: [
-          { color: '#FFFFFF', size: 1.8, style: LineType.Solid, smooth: false, dashedValue: [2, 2] },
-          { color: '#FFD700', size: 1.8, style: LineType.Solid, smooth: false, dashedValue: [2, 2] },
-          { color: '#FF8C00', size: 1.8, style: LineType.Solid, smooth: false, dashedValue: [2, 2] },
+          { color: PAL().white, size: 1.8, style: LineType.Solid, smooth: false, dashedValue: [2, 2] },
+          { color: PAL().yellow, size: 1.8, style: LineType.Solid, smooth: false, dashedValue: [2, 2] },
+          { color: PAL().orange, size: 1.8, style: LineType.Solid, smooth: false, dashedValue: [2, 2] },
         ],
       },
       calc: (dataList: any) => {
@@ -322,7 +323,7 @@ export function registerZettarancIndicators() {
         },
       ],
       styles: {
-        lines: [{ color: '#FFFFFF', size: 1.8, style: LineType.Solid, smooth: false, dashedValue: [2, 2] }],
+        lines: [{ color: PAL().white, size: 1.8, style: LineType.Solid, smooth: false, dashedValue: [2, 2] }],
       },
       calc: (dataList: any) => {
         const dema = calcDEMA(dataList, 10);
@@ -348,7 +349,7 @@ export function registerZettarancIndicators() {
         },
       ],
       styles: {
-        lines: [{ color: '#FFD700', size: 1.8, style: LineType.Solid, smooth: false, dashedValue: [2, 2] }],
+        lines: [{ color: PAL().yellow, size: 1.8, style: LineType.Solid, smooth: false, dashedValue: [2, 2] }],
       },
       calc: (dataList: any) => {
         const yellow = calcLongBBI(dataList, [14, 28, 57, 114]);
@@ -370,7 +371,7 @@ export function registerZettarancIndicators() {
         },
       ],
       styles: {
-        lines: [{ color: '#FF8C00', size: 1.8, style: LineType.Solid, smooth: false, dashedValue: [2, 2] }],
+        lines: [{ color: PAL().orange, size: 1.8, style: LineType.Solid, smooth: false, dashedValue: [2, 2] }],
       },
       calc: (dataList: any) => {
         const bbi = calcBBI(dataList);
@@ -394,7 +395,7 @@ export function registerZettarancIndicators() {
           styles: (data: any) => {
             const kLine = data?.current?.kLineData;
             const isUp = kLine ? kLine.close >= kLine.open : true;
-            const color = isUp ? '#ef4444' : '#10b981';
+            const color = isUp ? PAL().up : PAL().down;
             return {
               style: PolygonType.Fill,
               color,
@@ -415,8 +416,8 @@ export function registerZettarancIndicators() {
       ],
       styles: {
         lines: [
-          { color: '#eab308', size: 1.2, style: LineType.Solid, smooth: false, dashedValue: [2, 2] },
-          { color: '#0ea5e9', size: 1.2, style: LineType.Solid, smooth: false, dashedValue: [2, 2] },
+          { color: PAL().auxAmber, size: 1.2, style: LineType.Solid, smooth: false, dashedValue: [2, 2] },
+          { color: PAL().sky, size: 1.2, style: LineType.Solid, smooth: false, dashedValue: [2, 2] },
         ],
       },
       calc: (dataList: any) => {
@@ -448,7 +449,7 @@ export function registerZettarancIndicators() {
           baseValue: 0,
           styles: (data: any) => {
             const val = data?.current?.indicatorData?.macd ?? 0;
-            const color = val > 0 ? '#ef4444' : val < 0 ? '#10b981' : '#6b7280';
+            const color = val > 0 ? PAL().up : val < 0 ? PAL().down : '#6b7280';
             return {
               style: PolygonType.Fill,
               color,
@@ -459,8 +460,8 @@ export function registerZettarancIndicators() {
       ],
       styles: {
         lines: [
-          { color: '#f59e0b', size: 1.3, style: LineType.Solid, smooth: false, dashedValue: [2, 2] },
-          { color: '#38bdf8', size: 1.3, style: LineType.Solid, smooth: false, dashedValue: [2, 2] },
+          { color: PAL().auxAmber, size: 1.3, style: LineType.Solid, smooth: false, dashedValue: [2, 2] },
+          { color: PAL().auxSky, size: 1.3, style: LineType.Solid, smooth: false, dashedValue: [2, 2] },
         ],
       },
       calc: (dataList: any, indicator: any) => {
@@ -518,8 +519,8 @@ export function registerZettarancIndicators() {
       ],
       styles: {
         lines: [
-          { color: '#fb923c', size: 1.3, style: LineType.Solid, smooth: false, dashedValue: [2, 2] },
-          { color: '#38bdf8', size: 1.3, style: LineType.Solid, smooth: false, dashedValue: [2, 2] },
+          { color: PAL().auxOrange, size: 1.3, style: LineType.Solid, smooth: false, dashedValue: [2, 2] },
+          { color: PAL().auxSky, size: 1.3, style: LineType.Solid, smooth: false, dashedValue: [2, 2] },
           { color: '#f472b6', size: 1.3, style: LineType.Solid, smooth: false, dashedValue: [2, 2] },
         ],
       },
@@ -582,13 +583,13 @@ export function registerZettarancIndicators() {
         const activeIdx = crosshair && crosshair.dataIndex >= 0 ? crosshair.dataIndex : kLineDataList.length - 1;
         const data = (indicator.result?.[activeIdx] || {}) as any;
         const val = typeof data.brick === 'number' ? data.brick.toFixed(2) : '0.00';
-        const color = data.direction === 'up' ? '#ef4444' : data.direction === 'down' ? '#10b981' : '#9ca3af';
+        const color = data.direction === 'up' ? PAL().up : data.direction === 'down' ? PAL().down : PAL().neutral;
         return {
           name: 'ZX砖型图',
           calcParamsText: '',
           values: [
             {
-              title: { text: '砖型图: ', color: '#9ca3af' },
+              title: { text: '砖型图: ', color: PAL().neutral },
               value: { text: `${val}  [${data.countText || '震荡'}]`, color },
             },
           ],
@@ -633,7 +634,7 @@ export function registerZettarancIndicators() {
 
           if (item.direction === 'up') {
             // 红色上升砖块
-            ctx.fillStyle = '#ef4444';
+            ctx.fillStyle = PAL().up;
             ctx.strokeStyle = '#dc2626';
             ctx.lineWidth = 1;
             ctx.beginPath();
@@ -650,19 +651,19 @@ export function registerZettarancIndicators() {
               ctx.font = 'bold 9px -apple-system, sans-serif';
               ctx.textAlign = 'center';
               ctx.textBaseline = 'bottom';
-              ctx.fillStyle = item.stepCount >= 4 ? '#f59e0b' : '#ef4444';
+              ctx.fillStyle = item.stepCount >= 4 ? PAL().auxAmber : PAL().up;
               ctx.fillText(String(item.stepCount), cx, topY - 1);
 
               // 红四清仓/减仓预警
               if (item.stepCount >= 4) {
                 ctx.font = 'bold 8px -apple-system, sans-serif';
-                ctx.fillStyle = '#f59e0b';
+                ctx.fillStyle = PAL().auxAmber;
                 ctx.fillText('减', cx, topY - 10);
               }
             }
           } else if (item.direction === 'down') {
             // 绿色下降砖块
-            ctx.fillStyle = '#10b981';
+            ctx.fillStyle = PAL().down;
             ctx.strokeStyle = '#059669';
             ctx.lineWidth = 1;
             ctx.beginPath();
@@ -679,20 +680,20 @@ export function registerZettarancIndicators() {
               ctx.font = 'bold 9px -apple-system, sans-serif';
               ctx.textAlign = 'center';
               ctx.textBaseline = 'top';
-              ctx.fillStyle = '#10b981';
+              ctx.fillStyle = PAL().down;
               ctx.fillText(String(item.stepCount), cx, bottomY + 2);
 
               // 翻绿第一根: 止损提醒
               if (item.stepCount === 1) {
                 ctx.font = 'bold 8px -apple-system, sans-serif';
-                ctx.fillStyle = '#ef4444';
+                ctx.fillStyle = PAL().up;
                 ctx.fillText('止', cx, bottomY + 11);
               }
             }
           } else {
             // 平局砖块
             if (item.brick > 0) {
-              ctx.fillStyle = '#9ca3af';
+              ctx.fillStyle = PAL().neutral;
               ctx.fillRect(x, Math.round(y2 - 1), brickW, 2);
             }
           }
@@ -726,8 +727,8 @@ export function registerZettarancIndicators() {
       ],
       styles: {
         lines: [
-          { color: '#00BFFF', size: 1.5, style: LineType.Solid, smooth: false, dashedValue: [2, 2] },
-          { color: '#C084FC', size: 1.5, style: LineType.Solid, smooth: false, dashedValue: [2, 2] },
+          { color: PAL().sky, size: 1.5, style: LineType.Solid, smooth: false, dashedValue: [2, 2] },
+          { color: PAL().purple, size: 1.5, style: LineType.Solid, smooth: false, dashedValue: [2, 2] },
         ],
       },
       calc: (dataList: any, indicator: any) => {

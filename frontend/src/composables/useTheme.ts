@@ -20,6 +20,14 @@ const currentTheme = ref<ThemeMode>(loadTheme())
 
 let lastEffective: 'light' | 'dark' | null = null
 
+/**
+ * 实际生效的主题（'system' 已被解析成 light/dark）。
+ *
+ * currentTheme 是用户选的**模式**，在 'system' 下它既不是 light 也不是 dark，
+ * 直接拿它上色会得到错误结果。K线工作台要跟随平台配色，用的是这个。
+ */
+const effectiveTheme = ref<'light' | 'dark'>(loadTheme() === 'dark' ? 'dark' : 'light')
+
 function getSystemTheme(): 'light' | 'dark' {
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
 }
@@ -62,6 +70,9 @@ function syncWailsNativeChrome(effective: 'light' | 'dark') {
 
 function applyTheme(mode: ThemeMode) {
   const effective = mode === 'system' ? getSystemTheme() : mode
+  // effectiveTheme 必须在 lastEffective 短路**之前**赋值：短路只说明"DOM 不用
+  // 再改"，不代表没人需要知道当前生效值（K线订阅它来重绘）。
+  effectiveTheme.value = effective
   if (lastEffective === effective) return
   lastEffective = effective
   document.documentElement.setAttribute('theme-mode', effective)
@@ -77,7 +88,7 @@ export function useTheme() {
     return true
   }
 
-  return { currentTheme, setTheme }
+  return { currentTheme, effectiveTheme, setTheme }
 }
 
 /** Call once in main.ts to initialise theme and listen for OS changes. */
