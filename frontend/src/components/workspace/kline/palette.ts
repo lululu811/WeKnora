@@ -37,6 +37,21 @@ export interface ZettarancPalette {
   patternDawn: string;
   patternDoji: string;
   patternMorningStar: string;
+  /**
+   * 5 星持股评分色，从 5 分到 1 分。
+   * 用在**悬停卡片**（StockCitationFloat）上而不是画布，但同样要跟主题走：
+   * 白底上原来的 4 分橙 / 3 分黄 / 2 分青 / 1 分绿只有 1.9~2.8:1，基本看不清。
+   */
+  scoreStars: [string, string, string, string, string];
+  /**
+   * 神奇九转的 1~8 倒数文字色。这两个数字是**裸文字直接画在画布上**（只有「9」有
+   * 方框徽章），所以浅色底下必须自己够深：原来的 #fca5a5 / #86efac 在米底上只有
+   * 1.77:1 / 1.31:1，等于看不见。
+   */
+  td9Up: string;
+  td9Down: string;
+  /** KDJ 的 J 线。浅色底下 #f472b6 只有 2.48:1。 */
+  kdjJ: string;
   /** 涨。浅色底下必须加深，否则米底上只有 3.5:1。 */
   up: string;
   /** 跌。浅色底下更严重——亮绿在米底上只有 2.4:1，基本看不见。 */
@@ -55,10 +70,16 @@ const dark: ZettarancPalette = {
   auxSky: '#38bdf8',
   auxOrange: '#fb923c',
   keyBlue: '#3b82f6',
+  // 深色底上这两个本来就极清楚（9.7:1 / 13.1:1），维持原样。
+  td9Up: '#fca5a5',
+  td9Down: '#86efac',
+  kdjJ: '#f472b6',
   patternCloud: '#06b6d4',
   patternDawn: '#f43f5e',
   patternDoji: '#38bdf8',
   patternMorningStar: '#e11d48',
+  // 深色底 #181d26 上这 5 色实测 4.5~8.8:1，全部够用，维持原样。
+  scoreStars: ['#ef4444', '#f97316', '#eab308', '#14b8a6', '#10b981'],
   // 深色底上亮红/亮绿本来就够清楚（4.9:1 / 7.3:1），维持原样。
   up: '#ef4444',
   down: '#10b981',
@@ -85,10 +106,15 @@ const light: ZettarancPalette = {
   // 暖米底 #FAF7F0 上：亮绿只有 2.4:1（看不清），亮红 3.5:1（偏低）。
   // 色相完全不变——仍是「红涨绿跌」——只是各加深一档到 5:1 / 4.5:1。
   keyBlue: '#2563A8',
+  td9Up: '#c81e1e',
+  td9Down: '#15803d',
+  kdjJ: '#be185d',
   patternCloud: '#0E6E7E',
   patternDawn: '#A32C4B',
   patternDoji: '#256B85',
   patternMorningStar: '#9F1239',
+  // 白底上全部拉到 4.9:1 以上（原来最低只有 1.9:1）。
+  scoreStars: ['#b91c1c', '#c2410c', '#a16207', '#0f766e', '#047857'],
   up: '#dc2626',
   down: '#047857',
 };

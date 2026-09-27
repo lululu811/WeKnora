@@ -377,7 +377,7 @@ export function drawTD9Badge(
     ctx.fillText('9', x, y);
   } else {
     ctx.font = 'bold 10px monospace';
-    ctx.fillStyle = isUp ? '#fca5a5' : '#86efac';
+    ctx.fillStyle = isUp ? PAL().td9Up : PAL().td9Down;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(String(item.count), x, y);

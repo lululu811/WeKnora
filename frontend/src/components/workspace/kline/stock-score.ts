@@ -1,5 +1,6 @@
 import type { KLineData } from 'klinecharts';
 import { inferAShareExchange } from '@/utils/aShareTicker';
+import { zettarancPalette } from './palette';
 
 /**
  * 知行战法核心量化计算与股票评分体系
@@ -282,7 +283,7 @@ export interface StockScoreResult {
   score: number;             // 1 到 5 分
   ratingText: string;        // 评级名称: 如 "强力看多 (5分)", "良好持股 (4分)"
   ratingTag: string;         // 短标签: "5星", "4星", etc.
-  themeColor: string;        // 对应的主题色 (#ef4444, #f59e0b, #10b981)
+  themeColor: string;        // 来自 palette.scoreStars，随主题深浅切换
   bulletPoints: string[];    // 3条核心战法要点
   whiteAboveYellow: boolean; // 白在黄上
   aboveBbi: boolean;         // 站上BBI
@@ -348,28 +349,26 @@ export function calcStockHoldingScore(dataList: KLineData[]): StockScoreResult |
 
   let ratingText = '观望防守';
   let ratingTag = `${finalScore}分 · 弱势防守`;
-  let themeColor = '#10b981';
+  // 评分色取自共享调色板：这张卡片会跟随平台深浅色，色值必须跟着换。
+  // 写死时白底上 3 分黄只有 1.9:1、4 分橙 2.8:1，星星几乎看不见。
+  const stars = zettarancPalette().scoreStars;
+  const themeColor = stars[finalScore - 1] ?? stars[stars.length - 1];
 
   if (finalScore === 5) {
     ratingText = '多头共振 · 极度强势';
     ratingTag = '5星 · 强势进攻';
-    themeColor = '#ef4444';
   } else if (finalScore === 4) {
     ratingText = '顺势多头 · 稳健持股';
     ratingTag = '4星 · 良好持股';
-    themeColor = '#f97316';
   } else if (finalScore === 3) {
     ratingText = '多空博弈 · 控制仓位';
     ratingTag = '3星 · 震荡博弈';
-    themeColor = '#eab308';
   } else if (finalScore === 2) {
     ratingText = '空头承压 · 谨慎防守';
     ratingTag = '2星 · 谨慎减仓';
-    themeColor = '#14b8a6';
   } else {
     ratingText = '破位下行 · 严守止损';
     ratingTag = '1星 · 立即离场';
-    themeColor = '#10b981';
   }
 
   // 生成 3 条简明核心战法要点

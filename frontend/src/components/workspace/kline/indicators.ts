@@ -521,7 +521,7 @@ export function registerZettarancIndicators() {
         lines: [
           { color: PAL().auxOrange, size: 1.3, style: LineType.Solid, smooth: false, dashedValue: [2, 2] },
           { color: PAL().auxSky, size: 1.3, style: LineType.Solid, smooth: false, dashedValue: [2, 2] },
-          { color: '#f472b6', size: 1.3, style: LineType.Solid, smooth: false, dashedValue: [2, 2] },
+          { color: PAL().kdjJ, size: 1.3, style: LineType.Solid, smooth: false, dashedValue: [2, 2] },
         ],
       },
       calc: (dataList: any, indicator: any) => {
