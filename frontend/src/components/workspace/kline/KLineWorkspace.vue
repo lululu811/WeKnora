@@ -1264,6 +1264,10 @@ onUnmounted(() => {
 .kline-workspace__chart-wrap {
   position: relative;
   display: flex;
+  /* flex: 1 不能省。根容器是 flex-direction: column，包一层之后 chart-wrap
+     成了直接 flex 子元素；少了它就按内容高度塌陷成 0，内层 canvas 量到 0 高
+     只画得出坐标轴、画不出 K 线（2026-09-27 实测：日期轴在、蜡烛全无）。 */
+  flex: 1;
   min-height: 0;
   width: 100%;
 }
