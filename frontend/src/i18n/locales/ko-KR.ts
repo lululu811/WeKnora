@@ -124,6 +124,13 @@ export default {
     "historyModels": "모델 {count}개 변경",
     "historyNoOverrides": "관리자 변경 없음",
   },
+  // 워크벤치 표시명. 키는 internal/types/workbench.go 의 display_name 과 일치시켜야 합니다.
+  workbench: {
+    finance: {
+      name: '금융',
+      description: '시세, 캔들, 투자 분석 워크벤치.',
+    },
+  },
   toolbox: {
     "title": "도구함",
     "description": "에이전트의 스킬, 외부 도구 및 브라우저 연결을 관리합니다.",
@@ -1347,6 +1354,12 @@ export default {
       authWaitTimeoutDesc: '대화 중 OAuth 인증이 필요할 때 인증 완료를 기다리는 최대 시간(초)이며, 초과하면 인증 요청을 건너뜁니다(OAuth를 사용하는 MCP 서비스에만 적용).',
       authWaitTimeoutPlaceholder: '기본 600초',
       unavailableService: '사용할 수 없는 서비스'
+    },
+    workbench: {
+      label: '워크벤치',
+      desc: '이 에이전트 채팅에 표시할 패널을 결정합니다. 비워 두면 워크벤치가 표시되지 않습니다.',
+      none: '워크벤치 없음',
+      shared: '공통(모든 워크벤치에서 사용 가능)',
     },
     agentType: {
       label: '에이전트 유형',

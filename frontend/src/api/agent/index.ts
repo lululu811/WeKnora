@@ -36,6 +36,10 @@ export interface CustomAgentConfig {
   // 智能推理模式下的类型预设，用于一键应用"系统提示词 + 工具 + KB 兼容性"组合
   // 仅在 agent_mode === 'smart-reasoning' 时生效；quick-answer 模式忽略
   agent_type?: AgentType;
+  // 工作台（业务域）ID。决定该 agent 的会话渲染哪些面板组件。
+  // 取值为后端 GET /api/v1/system/workspaces 返回的 id，'shared' 表示在所有工作台可见。
+  // 空值与未注册值都会降级为「无工作台」（不渲染面板），见 composables/useWorkbench.ts。
+  workbench?: string;
   system_prompt?: string;           // 统一系统提示词（使用 {{web_search_status}} 占位符动态控制行为）
   system_prompt_id?: string;        // 引用的 prompt template ID（预设会填入此字段）
   context_template_id?: string;     // Inherit the referenced context template when text is empty

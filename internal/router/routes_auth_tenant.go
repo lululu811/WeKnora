@@ -253,6 +253,9 @@ func RegisterSystemRoutes(
 	{
 		systemRoutes.With(apiKeyAny()).GET("/capabilities", g.Viewer(), handler.GetDeploymentCapabilities)
 		systemRoutes.GET("/info", g.Viewer(), handler.GetSystemInfo)
+		// Workbench vocabulary is deployment-static, not tenant data, so it is
+		// readable by any authenticated viewer (same tier as /capabilities).
+		systemRoutes.With(apiKeyAny()).GET("/workspaces", g.Viewer(), handler.ListWorkbenches)
 		systemRoutes.GET("/parser-engines", g.Viewer(), handler.ListParserEngines)
 		systemRoutes.POST("/parser-engines/check", g.Admin(), handler.CheckParserEngines)
 		systemRoutes.POST("/docreader/reconnect", g.Admin(), handler.ReconnectDocReader)

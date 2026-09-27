@@ -124,6 +124,14 @@ export default {
     "historyModels": "修改了 {count} 个模型",
     "historyNoOverrides": "无管理员修改",
   },
+  // 工作台名称/描述。key 与后端 internal/types/workbench.go 的 display_name 一致，
+  // 新增工作台时两侧必须同步，否则下拉框会退化成裸 id。
+  workbench: {
+    finance: {
+      name: '金融',
+      description: '行情、K 线与投资分析工作台。',
+    },
+  },
   toolbox: {
     "title": "工具箱",
     "description": "管理智能体可用的技能、外部工具和浏览器连接。",
@@ -1349,6 +1357,12 @@ export default {
       authWaitTimeoutDesc: '对话中触发 OAuth 授权时，等待你完成授权的最长秒数，超时后自动跳过授权提示（仅对使用 OAuth 的 MCP 服务生效）。',
       authWaitTimeoutPlaceholder: '默认 600 秒',
       unavailableService: '不可用服务'
+    },
+    workbench: {
+      label: '工作台',
+      desc: '决定该智能体的对话页面渲染哪些面板。留空表示不渲染工作台。',
+      none: '无工作台',
+      shared: '通用（在所有工作台可见）',
     },
     agentType: {
       label: '智能体类型',

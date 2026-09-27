@@ -162,6 +162,17 @@ type CustomAgentConfig struct {
 	CitationEnabled *bool `yaml:"citation_enabled" json:"citation_enabled"`
 
 	// ===== Agent Mode Settings =====
+	// Workbench binds this agent to a business domain ("工作台"), which decides
+	// the set of UI components its chats render. This is the single source of
+	// truth: a session's workbench is derived from its agent, never stored as an
+	// independent fact (see sessions.agent_id, which is a materialised copy used
+	// only for list filtering).
+	//
+	// Valid values: an ID from WorkbenchRegistry (types/workbench.go), or
+	// "shared" for agents available in every workbench. Empty and unknown values
+	// both normalise to NoWorkbench via ResolveWorkbench — a mistyped tag degrades
+	// to "no workbench" instead of rendering a blank dock forever.
+	Workbench string `yaml:"workbench" json:"workbench,omitempty"`
 	// Maximum iterations for the ReAct loop. Zero is unset (filled with a
 	// default). A negative value is unlimited: the loop runs until the model
 	// stops, the user cancels, or another guard fires.

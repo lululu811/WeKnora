@@ -124,6 +124,14 @@ export default {
     "historyModels": "{count} models changed",
     "historyNoOverrides": "No administrator changes",
   },
+  // Workbench labels. Keys mirror display_name in internal/types/workbench.go;
+  // keep both sides in sync or the dropdown falls back to a raw id.
+  workbench: {
+    finance: {
+      name: 'Finance',
+      description: 'Quotes, K-line and investment analysis workbench.',
+    },
+  },
   toolbox: {
     "title": "Toolbox",
     "description": "Manage skills, external tools, and browser connections for your agents.",
@@ -6683,6 +6691,12 @@ export default {
       sectionCallback: 'Callback URL',
       sectionKnowledge: 'File storage',
       sectionStatus: 'Status'
+    },
+    workbench: {
+      label: 'Workbench',
+      desc: 'Decides which panels this agent’s chat renders. Leave empty for no workbench.',
+      none: 'No workbench',
+      shared: 'Shared (available in every workbench)',
     },
     agentType: {
       label: 'Agent Type',

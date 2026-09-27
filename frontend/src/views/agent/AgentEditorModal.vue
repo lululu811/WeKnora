@@ -102,6 +102,19 @@
             </div>
           </div>
 
+          <!-- 工作台（业务域）：决定该智能体的会话渲染哪些面板 -->
+          <div class="setting-row" data-guide="agent-create-workbench">
+            <div class="setting-info">
+              <label>{{ $t('agentEditor.workbench.label') }}</label>
+              <p class="desc">{{ $t('agentEditor.workbench.desc') }}</p>
+            </div>
+            <div class="setting-control">
+              <t-select v-model="formData.config.workbench" :disabled="isBuiltinAgent"
+                :placeholder="$t('agentEditor.workbench.none')" :options="workbenchSelectOptions"
+                class="workbench-select" />
+            </div>
+          </div>
+
           <!-- 名称 -->
           <div class="setting-row" data-guide="agent-create-name">
             <div class="setting-info">
@@ -1839,6 +1852,8 @@ import { hydrateAgentPromptRefs, serializeAgentPrompts } from '@/utils/agentProm
 import { copyWithToast } from '@/utils/clipboard';
 import { MessagePlugin } from 'tdesign-vue-next';
 import { useModalShell } from '@/composables/useModalShell'
+import { useWorkbenches, ensureWorkbenchesLoaded } from '@/composables/useWorkbench'
+import { WORKBENCH_SHARED } from '@/api/workspace'
 import SettingsModalShell from '@/components/SettingsModalShell.vue'
 import {
   createAgent,
@@ -2051,6 +2066,9 @@ const kbOptions = ref<{ label: string; value: string; type?: 'document' | 'faq';
 
 // 智能体类型预设（仅 smart-reasoning 模式下展示）
 const agentTypePresets = ref<AgentTypePreset[]>([]);
+// 工作台词表由后端下发（后端是唯一真相源），挂载时拉一次即可
+const { workbenches } = useWorkbenches();
+ensureWorkbenchesLoaded();
 // Agent 系统提示词模板缓存（用于切换智能体类型时根据 system_prompt_id 解析出实际文本填入）
 const agentSystemPromptTemplates = ref<PromptTemplate[]>([]);
 const promptTemplates = ref<PromptTemplatesConfig | null>(null);
@@ -2799,6 +2817,8 @@ const defaultFormData = {
   config: {
     // 基础设置
     agent_mode: 'smart-reasoning' as 'quick-answer' | 'smart-reasoning',
+    // 工作台（业务域）。空 = 无工作台（不渲染面板）；'shared' = 所有工作台可见。
+    workbench: '',
     system_prompt: '',
     context_template: '',
     // 模型设置
@@ -3219,6 +3239,22 @@ const agentTypeSelectOptions = computed(() => {
     label: agentTypePresetLabel(p),
     desc: agentTypePresetDescription(p),
   }));
+});
+
+// 工作台选项：后端词表 + 'shared' 特殊值。
+// 'shared' 的 agent 只能作为「切换使用」的来源，不能作为新会话的起点——
+// 会话绑定其首条消息的 agent，工作台再由该 agent 推导；shared agent 没有
+// 工作台，由它开局的会话也就没有面板。
+const workbenchSelectOptions = computed(() => {
+  const options = [
+    { value: '', label: t('agentEditor.workbench.none') },
+    { value: WORKBENCH_SHARED, label: t('agentEditor.workbench.shared') },
+  ];
+  for (const w of workbenches.value) {
+    // display_name 本身就是 i18n key（后端 types/workbench.go 如此声明）
+    options.push({ value: w.id, label: t(w.display_name || w.id) });
+  }
+  return options;
 });
 
 // 为每个预设生成"我的 <label>"的默认名称，让用户可以一键保存

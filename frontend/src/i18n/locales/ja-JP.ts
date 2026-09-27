@@ -124,6 +124,13 @@ export default {
     "historyModels": "{count} 件のモデルを変更",
     "historyNoOverrides": "管理者の変更なし",
   },
+  // ワークベンチの表示名。キーは internal/types/workbench.go の display_name と一致させること。
+  workbench: {
+    finance: {
+      name: '金融',
+      description: '株価・ローソク足・投資分析のワークベンチ。',
+    },
+  },
   toolbox: {
     "title": "ツールボックス",
     "description": "エージェントのスキル、外部ツール、ブラウザー接続を管理します。",
@@ -6669,6 +6676,12 @@ export default {
       sectionCallback: 'コールバックURL',
       sectionKnowledge: 'ファイル保存',
       sectionStatus: 'ステータス'
+    },
+    workbench: {
+      label: 'ワークベンチ',
+      desc: 'このエージェントのチャットに表示するパネルを決めます。空欄の場合はワークベンチを表示しません。',
+      none: 'ワークベンチなし',
+      shared: '共通（すべてのワークベンチで利用可能）',
     },
     agentType: {
       label: 'エージェントタイプ',

@@ -32,6 +32,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import { useAgentWorkspace, WORKSPACE_MIN_WIDTH, WORKSPACE_MAX_WIDTH } from '@/composables/useAgentWorkspace';
+import { useCurrentWorkbenchComponents } from '@/composables/useWorkbench';
 import { WORKSPACE_COMPONENTS } from './registry';
 import PanelResizeHandle from '@/components/PanelResizeHandle.vue';
 
@@ -39,8 +40,17 @@ const workspace = useAgentWorkspace();
 const resizing = ref(false);
 let startWidth = 0;
 
+const { allowedComponents } = useCurrentWorkbenchComponents();
+
+// 面板只渲染「当前 agent 所属工作台允许」的组件。
+// 工作台由 agent 推导（session → agent → workbench），因此换 agent 即换工作台；
+// 允许哪些组件由后端词表决定——前端不硬编码 workbench→component 映射，
+// 避免与 Go 侧词表漂移。未注册 / 拼错 / 无工作台一律不渲染。
 const activeComponent = computed(() => {
-  return WORKSPACE_COMPONENTS[workspace.activeType.value] || null;
+  const type = workspace.activeType.value;
+  if (type === 'none') return null;
+  if (!allowedComponents.value.includes(type)) return null;
+  return WORKSPACE_COMPONENTS[type] || null;
 });
 
 const startResize = () => {
