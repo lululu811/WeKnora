@@ -1,9 +1,9 @@
 // Pure logic for sidebar session grouping (replaces the old source filter).
 
-export type SessionGroupMode = 'none' | 'date'
+export type SessionGroupMode = 'none' | 'date' | 'agent'
 
 export const SESSION_GROUP_MODE_STORAGE_KEY = 'weknora:session-group-mode'
-export const DEFAULT_SESSION_GROUP_MODE: SessionGroupMode = 'none'
+export const DEFAULT_SESSION_GROUP_MODE: SessionGroupMode = 'agent'
 
 /** Mirrors backend types.EmbedSessionMarkerPrefix */
 export const EMBED_SESSION_MARKER_PREFIX = 'embed_channel:'
@@ -24,6 +24,8 @@ export interface SessionForGrouping {
   description?: string
   user_id?: string
   parent_session_id?: string
+  /** 会话绑定的 agent。分组按它归类，见 groupSessionsByAgent。 */
+  agent_id?: string
   originalIndex?: number
 }
 
@@ -67,17 +69,19 @@ export function configuredPlatforms(channels: Array<{ platform: string }>): stri
 export function buildGroupModeOptions(labels: {
   none: string
   date: string
+  agent: string
 }): GroupModeOption[] {
   return [
     { value: 'none', label: labels.none },
     { value: 'date', label: labels.date },
+    { value: 'agent', label: labels.agent },
   ]
 }
 
 export function readStoredGroupMode(): SessionGroupMode {
   if (typeof localStorage === 'undefined') return DEFAULT_SESSION_GROUP_MODE
   const raw = localStorage.getItem(SESSION_GROUP_MODE_STORAGE_KEY)
-  if (raw === 'none' || raw === 'date') return raw
+  if (raw === 'none' || raw === 'date' || raw === 'agent') return raw
   // Legacy "source" mode — channels are now separate folders like OpenAI projects.
   if (raw === 'source') return 'none'
   return DEFAULT_SESSION_GROUP_MODE
@@ -270,6 +274,62 @@ export function groupSessionsFlat<T extends SessionForGrouping>(
   return groups
 }
 
+/**
+ * 按会话绑定的 agent 分组。
+ *
+ * 侧栏的默认视图：金融工作站里一个 agent 对应一套分析角色（选股 / 深度分析 /
+ * 快问快答），把同一 agent 的历次会话归到一起，比按日期切更有检索价值——
+ * 用户找的是「上次问这只票的那轮对话」，不是「上周二下午那批对话」。
+ *
+ * labels 把 agent_id 映射成展示名（内置 agent 在服务端有本地化名称，
+ * 前端用 listAgents() 取）。取不到的会话统一落到 noAgentLabel 分组而不是被
+ * 丢弃：agent_id 缺失是数据问题，静默隐藏会话比多一个分组糟糕得多。
+ *
+ * 组内按 updated_at 倒序，组间按会话数倒序（会话多的角色排前面），
+ * 数量相同时按 key 排序保证渲染稳定。
+ */
+export function groupSessionsByAgent<T extends SessionForGrouping>(
+  sessions: T[],
+  labels: Record<string, string>,
+  noAgentLabel: string,
+  pinnedLabel: string,
+): SessionGroup<T>[] {
+  const NO_AGENT = '__no_agent__'
+  const pinned: T[] = []
+  const byKey = new Map<string, T[]>()
+
+  for (const session of sessions) {
+    if (session.is_pinned) {
+      pinned.push(session)
+      continue
+    }
+    const key = (session.agent_id || '').trim() || NO_AGENT
+    if (!byKey.has(key)) byKey.set(key, [])
+    byKey.get(key)!.push(session)
+  }
+
+  const groups: SessionGroup<T>[] = []
+  if (pinned.length > 0) {
+    groups.push({ key: 'pinned', label: pinnedLabel, items: pinned })
+  }
+
+  const entries = Array.from(byKey.entries()).map(([key, items]) => {
+    const sorted = [...items].sort((a, b) => {
+      const ta = Date.parse(a.updated_at || a.created_at || '') || 0
+      const tb = Date.parse(b.updated_at || b.created_at || '') || 0
+      return tb - ta
+    })
+    return { key, label: key === NO_AGENT ? noAgentLabel : labels[key] || key, items: sorted }
+  })
+
+  entries.sort((a, b) => {
+    if (b.items.length !== a.items.length) return b.items.length - a.items.length
+    return a.key.localeCompare(b.key)
+  })
+
+  return groups.concat(entries)
+}
+
 export function groupSessions<T extends SessionForGrouping>(
   mode: SessionGroupMode,
   sessions: T[],
@@ -280,12 +340,21 @@ export function groupSessions<T extends SessionForGrouping>(
     sourceLabels: SourceGroupLabels
     embedChannelNames: Record<string, string>
     configuredImPlatforms: string[]
+    agentLabels?: Record<string, string>
+    noAgentLabel?: string
   },
 ): SessionGroup<T>[] {
   if (!sessions.length) return []
   switch (mode) {
     case 'none':
       return groupSessionsFlat(sessions, opts.pinnedLabel)
+    case 'agent':
+      return groupSessionsByAgent(
+        sessions,
+        opts.agentLabels ?? {},
+        opts.noAgentLabel ?? '',
+        opts.pinnedLabel,
+      )
     case 'date':
     default:
       return groupSessionsByDate(sessions, opts.bucketLabels, opts.categorizeDate)

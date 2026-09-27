@@ -2853,7 +2853,8 @@ export default {
     last30Days: '近30天',
     lastYear: '近1年',
     earlier: '更早',
-    pinned: '已置顶'
+    pinned: '已置顶',
+    noAgent: '未指定智能体'
   },
   platform: {
     subtitle: '大模型驱动的企业级知识框架',

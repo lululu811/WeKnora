@@ -251,11 +251,15 @@ import { listAllEmbedChannels } from '@/api/embed/index';
 import {
     classifyDateBucket,
     configuredPlatforms,
+    groupSessionsByAgent,
     groupSessionsByDate,
+    groupSessionsFlat,
     originGroupKey,
+    readStoredGroupMode,
     resolveSessionOrigin,
     type DateBucketKey,
 } from './sessionGrouping';
+import { listAgents } from '@/api/agent';
 import {
     DEFAULT_SESSION_BUCKET_KEY,
     buildSessionSourceOptions,
@@ -506,15 +510,54 @@ const dateBucketLabels = computed<Record<DateBucketKey, string>>(() => ({
     earlier: t('time.earlier'),
 }));
 
+// 「聊天」区内按智能体分组。
+//
+// 分组标签用 agent 的展示名而不是 agent_id（`builtin-zettaranc` 这种裸 id 对
+// 用户没有意义）。内置 agent 的名称由服务端按当前语言下发，所以要拉一次
+// listAgents()——它同时覆盖自定义 agent。拉不到时 groupSessionsByAgent 会
+// 回退到展示 id，不会让分组消失。
+const agentLabelMap = ref<Record<string, string>>({});
+let agentLabelsRequested = false;
+async function loadAgentLabels() {
+    if (agentLabelsRequested) return;
+    agentLabelsRequested = true;
+    try {
+        const res = await listAgents();
+        const map: Record<string, string> = {};
+        for (const agent of res?.data ?? []) {
+            if (agent?.id) map[agent.id] = agent.name || agent.id;
+        }
+        agentLabelMap.value = map;
+    } catch (err) {
+        // 分组降级成展示 agent_id：可用性优先于标签美观。
+        console.warn('[menu] failed to load agent labels, falling back to agent ids', err);
+    }
+}
+void loadAgentLabels();
+
 const filteredGroupedSessions = computed(() => {
     const bucket = activeBucket.value;
     if (!bucket?.items.length) return [];
+    const items = bucket.items.map((item) => ({
+        ...item,
+        path: `chat/${item.id}`,
+        title: item.title || '',
+    }));
+    // 分组模式存 localStorage，缺省按智能体（金融工作站的默认检索维度）。
+    const mode = readStoredGroupMode();
+    if (mode === 'agent') {
+        return groupSessionsByAgent(
+            items,
+            agentLabelMap.value,
+            t('time.noAgent'),
+            t('time.pinned'),
+        );
+    }
+    if (mode === 'none') {
+        return groupSessionsFlat(items, t('time.pinned'));
+    }
     return groupSessionsByDate(
-        bucket.items.map((item) => ({
-            ...item,
-            path: `chat/${item.id}`,
-            title: item.title || '',
-        })),
+        items,
         dateBucketLabels.value,
         (session) => classifyDateBucket(session.updated_at || session.created_at),
     );
@@ -774,6 +817,9 @@ const mapSessionRow = (item: any) => ({
     description: item.description || '',
     user_id: item.user_id || '',
     parent_session_id: item.parent_session_id || '',
+    // 白名单式映射：漏掉这个字段会让 agent_id 在到达 groupSessionsByAgent
+    // 之前被丢弃，所有会话都会落进「未指定智能体」兜底组。
+    agent_id: item.agent_id || '',
 });
 
 const syncMenuStoreFromBuckets = () => {

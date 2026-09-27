@@ -5206,7 +5206,8 @@ export default {
     last30Days: '過去30日間',
     lastYear: '過去1年',
     earlier: 'それ以前',
-    pinned: 'ピン留め'
+    pinned: 'ピン留め',
+    noAgent: 'エージェント未指定'
   },
   upload: {
     uploadDocument: 'ドキュメントをアップロード',

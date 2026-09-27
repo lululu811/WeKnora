@@ -362,13 +362,27 @@ func (r *sessionRepository) UpdateLastRequestState(
 		}
 		stateValue = v
 	}
+	updates := map[string]interface{}{
+		"agent_config": stateValue,
+		"updated_at":   now,
+	}
+	// Bind the session to the agent its first message used.
+	//
+	// COALESCE(NULLIF(agent_id, ''), ?) writes only into an empty column, so:
+	//   - a session that predates the column still gets backfilled the first
+	//     time it is used, with no data migration;
+	//   - a later message that switches agents cannot rewrite the session's
+	//     identity, which is what makes the sidebar's agent grouping stable.
+	//
+	// The expression is skipped entirely when the request carried no agent —
+	// COALESCE(agent_id, '') would otherwise blank an already-bound session.
+	if state != nil && state.AgentID != "" {
+		updates["agent_id"] = gorm.Expr("COALESCE(NULLIF(agent_id, ''), ?)", state.AgentID)
+	}
 	res := applySessionUserScope(r.db.WithContext(ctx).
 		Model(&types.Session{}).
 		Where("tenant_id = ? AND id = ?", tenantID, sessionID), userID).
-		Updates(map[string]interface{}{
-			"agent_config": stateValue,
-			"updated_at":   now,
-		})
+		Updates(updates)
 	return res.RowsAffected, res.Error
 }
 

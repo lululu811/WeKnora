@@ -92,6 +92,18 @@ type Session struct {
 	// PinnedAt records when the session was pinned; nil when not pinned.
 	PinnedAt *time.Time `json:"pinned_at,omitempty"`
 
+	// AgentID is the agent this session is bound to — the one its FIRST
+	// message used. It is written once (see
+	// repository.sessionRepository.UpdateLastRequestState, which uses
+	// COALESCE(NULLIF(agent_id, ''), ?) so a later message switching agents
+	// cannot rewrite the session's identity) and read back by the sidebar to
+	// group conversations by agent.
+	//
+	// Empty means unbound: either the session predates the column, or it has
+	// not been used with an agent yet. The sidebar renders those under an
+	// explicit "no agent" group rather than dropping them.
+	AgentID string `json:"agent_id,omitempty" gorm:"type:varchar(36);index"`
+
 	// LastRequestState records the input-bar state used the last time this
 	// session sent a question (agent, model, KB scope, web search, MCPs).
 	// Persisted on every successful POST to /knowledge-chat or /agent-chat so
