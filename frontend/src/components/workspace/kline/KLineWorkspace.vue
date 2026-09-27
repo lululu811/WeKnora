@@ -248,7 +248,7 @@
         class="toolbar__btn"
         :class="{ 'is-active': isDrawingBarVisible }"
         title="显示/隐藏左侧画线工具栏"
-        @click="isDrawingBarVisible = !isDrawingBarVisible"
+        @click="toggleDrawingBar"
       >
         ✏️ 画线
       </button>
@@ -259,8 +259,26 @@
       </button>
     </div>
 
-    <!-- 5. KLineChart Canvas 容器 (占用主要高度，无任何挤压) -->
-    <div ref="chartContainer" class="kline-workspace__chart" />
+    <!-- 5. KLineChart Canvas 容器 (占用主要高度，无任何挤压)
+         外包一层 chart-wrap 作为相对定位上下文：空状态必须只盖住图表区域，
+         不能用兄弟节点的 inset:0——那会把工具栏和候选池条一起遮掉。 -->
+    <div class="kline-workspace__chart-wrap">
+      <div ref="chartContainer" class="kline-workspace__chart" />
+
+      <!-- 5b. 无行情空状态
+           以前这里什么都不显示，图表就是一块纯黑，用户分不清是"还在加载"、
+           "这只票没数据"还是"页面坏了"。实测最常见的原因是代码不存在——模型
+           幻觉出的代码段（如把 600487 写成 688487）在本地从未发行。 -->
+      <div v-if="noDataSymbol" class="kline-workspace__empty">
+        <div class="empty__icon">📉</div>
+        <p class="empty__title">本地无 {{ noDataSymbol }} 的行情数据</p>
+        <p class="empty__hint">
+          该代码不在本地代码表中（v_symbol），或本地行情尚未同步到它。<br />
+          如果这是模型提到的代码，它很可能是<b>幻觉出的不存在的代码</b>；<br />
+          代码格式为 6 位数字 + 交易所后缀（.SH / .SZ / .BJ）。
+        </p>
+      </div>
+    </div>
 
     <!-- 7. 底部向 Agent 决策追问快捷条 -->
     <div class="kline-workspace__actions">
@@ -316,11 +334,31 @@ const workspace = useAgentWorkspace();
 registerZettarancIndicators();
 
 const chartContainer = ref<HTMLDivElement | null>(null);
+
+// 当前标的在本地取不到行情时的提示文案（形如 688487.SH），空串表示有数据。
+// 由 datafeed 的 onNoData 置位，由 handleDataLoaded 清空——后者必须清，否则
+// 换到有数据的票时空状态会残留。
+const noDataSymbol = ref('');
 const chartInstance = ref<KLineChartPro | null>(null);
 let resizeObserver: ResizeObserver | null = null;
 
 const isDark = ref(true); // 专业深色交易终端风
-const isDrawingBarVisible = ref(true); // 左侧画线栏
+// 左侧画线栏。默认关闭。
+//
+// 库的实例只暴露 setTheme/setStyles/setPeriod 等 setter，没有运行时的
+// drawingBarVisible 开关，也没有 resize 方法——要么重建整个图表（会丢缩放
+// 位置并重新取数），要么用 CSS 隐藏后让内部 ResizeObserver 重排。这里选后者：
+// 切换后派发一次 window resize，库内部的 observer 会重新量算画布尺寸，
+// 否则容器变宽了但 canvas 仍按旧宽度绘制，右侧会留白。
+const isDrawingBarVisible = ref(false);
+
+const toggleDrawingBar = () => {
+  isDrawingBarVisible.value = !isDrawingBarVisible.value;
+  // 等 DOM class 应用后再触发，避免量到切换前的尺寸。
+  nextTick(() => {
+    window.dispatchEvent(new Event('resize'));
+  });
+};
 const adjust = ref<Adjust>('forward');
 const periodIdx = ref(0);
 
@@ -508,6 +546,8 @@ const selectSymbol = (item: { ticker: string; name: string; exchange: string }) 
 // 抽取并计算最新行情快照指标
 const handleDataLoaded = (dataList: KLineData[]) => {
   if (!dataList || dataList.length === 0) return;
+  // 有数据了，清掉上一只票可能残留的空状态。
+  noDataSymbol.value = '';
   const lastIdx = dataList.length - 1;
   const last = dataList[lastIdx];
   const prev = dataList.length > 1 ? dataList[dataList.length - 2] : last;
@@ -588,6 +628,9 @@ const initChart = () => {
   const datafeed = new ZettarancDatafeed({
     adjust: adjust.value,
     onDataLoaded: handleDataLoaded,
+    onNoData: (symbol) => {
+      noDataSymbol.value = `${symbol.ticker}.${symbol.exchange}`;
+    },
   });
 
   chartInstance.value = new KLineChartPro({
@@ -726,17 +769,22 @@ onUnmounted(() => {
     }
   }
 
-  /* 全局强制隐藏所有滚动条，呈现高端原生交易软件质感 */
-  scrollbar-width: none !important;
-  -ms-overflow-style: none !important;
+  /* 隐藏滚动条，呈现原生交易软件质感。
+     注意：下面这条 `*` 规则原本带 `!important`，会把 .kline-workspace__toolbar
+     和 .picks-bar__list 自己的细滚动条一并吃掉——那两处是 `overflow-x: auto`
+     的横向滚动容器，滚动条一没，溢出的按钮就再也点不到了（只能靠触控板横向
+     滑动，属于静默失效）。这里把 !important 摘掉，让局部样式各管各的：
+     全局普通滚动条仍然隐藏，工具栏/候选池保留可见的细滚动条。 */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 
   * {
-    scrollbar-width: none !important;
-    -ms-overflow-style: none !important;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
     &::-webkit-scrollbar {
-      display: none !important;
-      width: 0 !important;
-      height: 0 !important;
+      display: none;
+      width: 0;
+      height: 0;
     }
   }
 
@@ -752,15 +800,18 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 5px 12px;
+  padding: 6px 12px;
   background: rgba(0, 0, 0, 0.03);
   border-bottom: 1px solid var(--td-component-stroke, #e7e7e7);
   overflow-x: auto;
   flex-shrink: 0;
   scrollbar-width: none;
 
+  /* 候选池条与工具栏、容器根共用同一个深色面。之前这里是 #161b24，夹在
+     #11141a 的工具栏和 #11141a 的容器之间，横条之间会露出一道色差接缝——
+     两条紧挨着的横栏用不同底色，比任何"元素太多"都更显乱。 */
   .is-dark & {
-    background: #161b24;
+    background: #11141a;
     border-bottom-color: #232a36;
   }
 
@@ -801,12 +852,13 @@ onUnmounted(() => {
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    padding: 2px 8px;
-    border-radius: 4px;
+    /* 与 .toolbar__btn 同一套 token，两者并排时不该有尺寸差。 */
+    padding: 4px 10px;
+    border-radius: 6px;
     border: 1px solid var(--td-component-stroke, #d1d5db);
     background: transparent;
     color: inherit;
-    font-size: 11px;
+    font-size: 12px;
     cursor: pointer;
     white-space: nowrap;
     transition: all 0.15s ease;
@@ -833,7 +885,7 @@ onUnmounted(() => {
     .tab__tag {
       font-size: 10px;
       padding: 0 4px;
-      border-radius: 2px;
+      border-radius: 4px;
       background: rgba(255, 255, 255, 0.2);
     }
   }
@@ -1082,11 +1134,13 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 5px 12px;
+  padding: 6px 12px;
   border-bottom: 1px solid var(--td-component-stroke, #e7e7e7);
   background: var(--td-bg-color-container, #ffffff);
   flex-shrink: 0;
   overflow-x: auto;
+  /* 这条必须留着：21 个按钮在窄宽度下会溢出，滚动条是唯一的可发现提示。
+     去掉后溢出部分只能靠触控板盲滑，等于静默失效。 */
   scrollbar-width: thin;
   scrollbar-color: rgba(148, 163, 184, 0.25) transparent;
 
@@ -1136,9 +1190,12 @@ onUnmounted(() => {
   }
 
   .toolbar__btn {
-    padding: 2px 7px;
-    font-size: 11px;
-    border-radius: 3px;
+    /* 体量对齐平台 chip（components/chat/MentionedStocksBar.vue）：
+       6px 圆角 / 4px 10px 内边距 / 12px 字号。之前这里是 3px / 2px 7px / 11px，
+       比平台小一圈，K线面板和左侧聊天区并排时会显得"缩了一号"。 */
+    padding: 4px 10px;
+    font-size: 12px;
+    border-radius: 6px;
     border: 1px solid var(--td-component-stroke, #d1d5db);
     background: transparent;
     color: inherit;
@@ -1201,11 +1258,65 @@ onUnmounted(() => {
 }
 
 /* KLineChart Canvas 容器 */
+/* chart-wrap 只负责建立相对定位上下文，让空状态能精确盖在图表区域上；
+   真正的 flex 伸缩与尺寸约束仍由内层 .kline-workspace__chart 承担，
+   这样 klinecharts 量到的容器高度与改动前完全一致。 */
+.kline-workspace__chart-wrap {
+  position: relative;
+  display: flex;
+  min-height: 0;
+  width: 100%;
+}
+
 .kline-workspace__chart {
   flex: 1;
   min-height: 0;
   width: 100%;
   position: relative;
+}
+
+/* 无行情空状态：绝对定位盖在图表之上，不参与 flex 布局，
+   所以出现/消失都不会改变 canvas 的尺寸，不会触发重排。 */
+.kline-workspace__empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 24px;
+  text-align: center;
+  pointer-events: none;
+  /* 半透明遮罩而非实心色块：下面的 canvas 仍在，能看出"图表区域在这"，
+     只是没有数据。 */
+  background: rgba(17, 20, 26, 0.82);
+
+  .empty__icon {
+    font-size: 32px;
+    opacity: 0.6;
+    line-height: 1;
+  }
+
+  .empty__title {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: #e5e7eb;
+  }
+
+  .empty__hint {
+    margin: 0;
+    max-width: 420px;
+    font-size: 12px;
+    line-height: 1.7;
+    color: #8b93a3;
+
+    b {
+      color: #d1d5db;
+      font-weight: 600;
+    }
+  }
 }
 
 /* 底部决策追问快捷卡片 */

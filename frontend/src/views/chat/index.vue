@@ -670,13 +670,64 @@ const handleStockHover = (thscode, el) => {
   };
 };
 
-const handleOpenStockWorkspace = (stock, allStocks) => {
+/**
+ * 打开 K 线工作台前，先让服务端把候选池过一遍。
+ *
+ * 候选池来自模型回答里的自由文本抽取，未经任何校验，两类坏东西会混进来：
+ *   - 幻觉代码：模型把 600487（亨通光电）写成 688487。后者本地从未发行，
+ *     进了池子点下去就是一片黑——图表取不到任何行情。
+ *   - name 是代码：抽取正则会把 `600105（600101.SH）` 里的纯数字当股票名，
+ *     于是池子出现 "600105 600101.SH" 这种 name 与 code 相同的条目。
+ *
+ * /api/symbols/resolve 一次查询同时解决两件事：剔掉本地不存在的代码，并用
+ * v_symbol 的权威名称覆盖抽取阶段猜出来的名字。
+ *
+ * 这一步是**增强**不是依赖：接口挂了或超时都退回原始候选池，不阻断用户点开图表。
+ */
+const resolveStocks = async (stocks) => {
+  const symbols = stocks.map((s) => `${s.ticker}.${s.exchange}`);
+  try {
+    const res = await fetch('/api/symbols/resolve', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ symbols }),
+    });
+    if (!res.ok) return null;
+    const body = await res.json();
+    const rows = body?.data;
+    if (!Array.isArray(rows) || rows.length !== stocks.length) return null;
+
+    const kept = [];
+    stocks.forEach((s, i) => {
+      const hit = rows[i];
+      if (!hit?.valid) return;
+      kept.push({ ticker: hit.ticker || s.ticker, exchange: hit.exchange || s.exchange, name: hit.name || s.ticker });
+    });
+    // 全部无效时保留原列表：与其什么都不显示，不如让用户点开看到空状态提示。
+    return kept.length > 0 ? kept : null;
+  } catch {
+    return null;
+  }
+};
+
+const handleOpenStockWorkspace = async (stock, allStocks) => {
   stockFloat.value.visible = false;
   const picks = allStocks && allStocks.length > 0
     ? allStocks.map((s) => ({ ticker: s.ticker, exchange: s.exchange, name: s.name }))
     : [{ ticker: stock.ticker, exchange: stock.exchange, name: stock.name }];
   const activeIdx = Math.max(0, picks.findIndex((p) => p.ticker === stock.ticker));
+
+  // 先按过滤后的列表开面板（不阻塞交互），解析回来后再用权威名称刷新一次。
   agentWorkspace.open('kline', picks, activeIdx);
+
+  const resolved = await resolveStocks(picks);
+  if (!resolved) return;
+  const stillThere = resolved.findIndex((p) => p.ticker === stock.ticker);
+  agentWorkspace.open(
+    'kline',
+    resolved,
+    stillThere >= 0 ? stillThere : Math.min(activeIdx, resolved.length - 1),
+  );
 };
 
 // 监听 chat 文本中的股票代码：hover 唤出轻量 5 星持股评分卡片，点击打开完整右侧工作台

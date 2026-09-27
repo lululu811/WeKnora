@@ -20,7 +20,7 @@ import re
 from contextlib import asynccontextmanager
 from typing import Any, Dict, List, Optional
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -883,6 +883,79 @@ async def search_symbols(
                 "asset_type": r.get("asset_type", "a-share"),
             }
             for r in rows
+        ],
+    }
+
+
+# 股票代码格式：6 位数字 + 交易所后缀。用于 /symbols/resolve 的入参白名单，
+# 只有通过这个正则的值才会拼进 SQL 查询，天然免疫注入。
+THSCODE_RE = re.compile(r"^[0-9]{6}\.(SH|SZ|BJ)$")
+
+
+@app.post("/api/symbols/resolve")
+@app.post("/symbols/resolve")
+async def resolve_symbols(request: Request):
+    """
+    批量校验股票代码 + 回填权威名称
+
+    存在的理由：从模型回答里抽出来的股票代码是**未经校验的自由文本**，实测两类
+    坏东西会同时混进候选池：
+      1. 幻觉代码——模型把 600487（亨通光电）写成 688487。688 号段本地有 617 只
+         且分布稠密，688485/486/488/489 都在，唯独 688487 是从未发行的空洞。
+         这样的代码进了候选池，点下去就是一片黑，因为本地没有它的行情。
+      2. name 是代码——抽取正则 `([\\u4e00-\\u9fa5A-Za-z0-9]{2,8})[（(](\\d{6})[)）]`
+         会把 `600105（600101.SH）` 里的纯数字当股票名，于是池子出现
+         "600105 600101.SH" 这种 name 与 code 相同的条目。
+
+    这个接口一次查询解决两件事：剔掉本地不存在的代码，并用 v_symbol 的权威名称
+    覆盖抽取阶段猜出来的 name。valid=false 的项前端应从候选池剔除。
+    """
+    from datasources import registry
+
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    raw = payload.get("symbols") if isinstance(payload, dict) else None
+    if not isinstance(raw, list):
+        return {"code": 0, "data": []}
+
+    # 严格校验格式后再入参：只放行 6 位数字 + .SH/.SZ/.BJ，天然免疫注入。
+    symbols: list[str] = []
+    for item in raw[:200]:  # 限长防滥用
+        if not isinstance(item, str):
+            continue
+        code = item.strip().upper()
+        if THSCODE_RE.match(code):
+            symbols.append(code)
+    unique = list(dict.fromkeys(symbols))
+    if not unique:
+        return {"code": 0, "data": []}
+
+    market_src = registry.get("market")
+    if market_src is None:
+        raise fail(503, "market 数据源未就绪")
+
+    placeholders = ",".join("?" for _ in unique)
+    rows = await market_src.execute(
+        f"SELECT thscode, ticker, name, exchange FROM v_symbol WHERE thscode IN ({placeholders})",
+        unique,
+    )
+    by_code = {r["thscode"]: r for r in rows}
+
+    return {
+        "code": 0,
+        "data": [
+            {
+                "thscode": code,
+                "valid": code in by_code,
+                # 回退到代码本身而不是留空，是为了让前端能显示 "688487.SH"
+                # 这个可诊断的标签，而不是一个空白 chip。
+                "name": (by_code.get(code) or {}).get("name") or code,
+                "ticker": (by_code.get(code) or {}).get("ticker") or code.split(".")[0],
+                "exchange": (by_code.get(code) or {}).get("exchange") or code.split(".")[1],
+            }
+            for code in unique
         ],
     }
 
