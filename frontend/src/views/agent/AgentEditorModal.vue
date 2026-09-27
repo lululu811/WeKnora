@@ -103,13 +103,17 @@
           </div>
 
           <!-- 工作台（业务域）：决定该智能体的会话渲染哪些面板 -->
+          <!-- 内置 agent 的其余字段（名称 / 模式 / 类型 / 提示词）都是只读的，因为它们
+               定义了 agent 本身；workbench 不在此列——它是部署侧的 UI 关注点，决定这个
+               agent 的会话渲染哪块面板，与 agent 的身份无关。内置 agent 恰恰最需要它
+               （否则右侧面板永远不渲染），故此处刻意不加 :disabled。 -->
           <div class="setting-row" data-guide="agent-create-workbench">
             <div class="setting-info">
               <label>{{ $t('agentEditor.workbench.label') }}</label>
               <p class="desc">{{ $t('agentEditor.workbench.desc') }}</p>
             </div>
             <div class="setting-control">
-              <t-select v-model="formData.config.workbench" :disabled="isBuiltinAgent"
+              <t-select v-model="formData.config.workbench"
                 :placeholder="$t('agentEditor.workbench.none')" :options="workbenchSelectOptions"
                 class="workbench-select" />
             </div>
