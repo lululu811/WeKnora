@@ -14,6 +14,7 @@ import (
 	"github.com/Tencent/WeKnora/internal/agent/tools"
 	"github.com/Tencent/WeKnora/internal/agent/tools/hithink_finance"
 	"github.com/Tencent/WeKnora/internal/agent/tools/hithink_finance/financial"
+	indexfinance "github.com/Tencent/WeKnora/internal/agent/tools/hithink_finance/index"
 	"github.com/Tencent/WeKnora/internal/agent/tools/hithink_finance/indicator"
 	"github.com/Tencent/WeKnora/internal/agent/tools/hithink_finance/market"
 	"github.com/Tencent/WeKnora/internal/agent/tools/hithink_finance/query"
@@ -1328,6 +1329,12 @@ func (s *agentService) registerTools(
 			"hithink.finance.market.price.historical",
 			"hithink.finance.financial.valuation.snapshot",
 			"hithink.finance.financial.statement.income",
+			"hithink.finance.financial.statement.balance",
+			"hithink.finance.financial.statement.cashflow",
+			"hithink.finance.financial.indicator.detail",
+			"hithink.finance.index.sector.membership",
+			"hithink.finance.index.sector.constituents",
+			"hithink.finance.index.sector.daily",
 			"hithink.finance.indicator.trend.ma",
 			"hithink.finance.indicator.momentum.kdj",
 			"hithink.finance.special.limit.limit_up_pool",
@@ -1354,6 +1361,18 @@ func (s *agentService) registerTools(
 				toolToRegister = financial.NewValuationSnapshotTool(s.hithinkConfig)
 			case "hithink.finance.financial.statement.income":
 				toolToRegister = financial.NewIncomeStatementTool(s.hithinkConfig)
+			case "hithink.finance.financial.statement.balance":
+				toolToRegister = financial.NewBalanceSheetTool(s.hithinkConfig)
+			case "hithink.finance.financial.statement.cashflow":
+				toolToRegister = financial.NewCashFlowStatementTool(s.hithinkConfig)
+			case "hithink.finance.financial.indicator.detail":
+				toolToRegister = financial.NewFinancialIndicatorDetailTool(s.hithinkConfig)
+			case "hithink.finance.index.sector.membership":
+				toolToRegister = indexfinance.NewSectorMembershipTool(s.hithinkConfig)
+			case "hithink.finance.index.sector.constituents":
+				toolToRegister = indexfinance.NewSectorConstituentsTool(s.hithinkConfig)
+			case "hithink.finance.index.sector.daily":
+				toolToRegister = indexfinance.NewSectorDailyTool(s.hithinkConfig)
 			case "hithink.finance.indicator.trend.ma":
 				toolToRegister = indicator.NewTrendMATool(s.hithinkConfig)
 			case "hithink.finance.indicator.momentum.kdj":

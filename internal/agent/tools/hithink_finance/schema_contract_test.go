@@ -49,14 +49,21 @@ var loadSchema = func(t *testing.T) map[string]map[string]schemaObject {
 }
 
 var (
-	// 反引号包裹、且看起来像 SQL 的字符串。
-	sqlLiteralRe = regexp.MustCompile("`([^`]*(?i:SELECT)[^`]*)`")
+	// 反引号包裹、且包含独立 SELECT 关键字的字符串。
+	//
+	// 必须用 \bSELECT\b 而不是 (?i:SELECT)：Go 的 struct tag（`json:"thscode"`）
+	// 同样用反引号，会与后面原始字符串的开头反引号**错位配对**，把一段 Go 代码
+	// 当成 SQL 抓出来（实测把 `if err := json.Unmarshal(...)` 连同
+	// ToolResult{Success:...} 一起匹配上了）。独立词 + looksLikeSQL 双重保险。
+	sqlLiteralRe = regexp.MustCompile("`([^`]*\\bSELECT\\b[^`]*)`")
 	// FROM / JOIN 后面的对象名。
 	fromRe = regexp.MustCompile(`(?i)\b(?:FROM|JOIN)\s+([a-zA-Z_][a-zA-Z0-9_]*)`)
 	// SELECT 与 FROM 之间的显式列清单。
 	selectListRe = regexp.MustCompile(`(?is)^\s*SELECT\s+(.*?)\s+FROM\b`)
 	// 标识符。
 	identRe = regexp.MustCompile(`[a-zA-Z_][a-zA-Z0-9_]*`)
+	// 表别名前缀 `alias.` —— 捕获组形式，RE2 不支持 (?=) 前瞻。
+	aliasPrefixRe = regexp.MustCompile(`\b([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z_][a-zA-Z0-9_]*)`)
 	// 不能当成列名校验的 SQL 关键字 / 函数 / 类型。
 	nonColumn = map[string]bool{
 		"select": true, "from": true, "where": true, "and": true, "or": true,
@@ -81,6 +88,17 @@ func indexOwner(snap map[string]map[string]schemaObject) map[string]string {
 		}
 	}
 	return owner
+}
+
+// looksLikeSQL 兜底排除错位配对抓到的 Go 代码片段。真正的 SQL 不会同时出现
+// struct 字面量、赋值语句或 json tag。
+func looksLikeSQL(s string) bool {
+	for _, marker := range []string{":=", "struct {", `json:"`, "func ", "return "} {
+		if strings.Contains(s, marker) {
+			return false
+		}
+	}
+	return true
 }
 
 func TestSchemaSnapshotIsUsable(t *testing.T) {
@@ -151,6 +169,9 @@ func TestToolSQLMatchesSchema(t *testing.T) {
 			}
 			for i, m := range sqlLiteralRe.FindAllStringSubmatch(string(src), -1) {
 				sql := m[1]
+				if !looksLikeSQL(sql) {
+					continue
+				}
 				loc := fmt.Sprintf("%s 第 %d 条 SQL", path, i+1)
 				checkedSQL++
 
@@ -160,7 +181,11 @@ func TestToolSQLMatchesSchema(t *testing.T) {
 					t.Errorf("%s 未解析出 FROM/JOIN 对象，跳过：%.60s", loc, sql)
 					continue
 				}
-				var colsUnion map[string]bool
+				// JOIN 会引用多张表，列必须取**并集**。曾经这里写成"只取第一张表
+				// 的列"，结果 JOIN 里的第二张表独有的列（如 v_index_universe.tag）
+				// 全被误报成不存在——测试自己成了噪音，闸门就形同虚设。
+				colsUnion := map[string]bool{}
+				matched := false
 				for _, tb := range tables {
 					tbl := tb[1]
 					if !strings.HasPrefix(tbl, "v_") {
@@ -171,14 +196,12 @@ func TestToolSQLMatchesSchema(t *testing.T) {
 						t.Errorf("%s 引用了快照里不存在的对象 %q（可能改名/删除了，或该查的是 raw_ 表）", loc, tbl)
 						continue
 					}
-					if colsUnion == nil {
-						colsUnion = map[string]bool{}
-						for _, c := range snap[db][tbl].Columns {
-							colsUnion[c] = true
-						}
+					matched = true
+					for _, c := range snap[db][tbl].Columns {
+						colsUnion[c] = true
 					}
 				}
-				if colsUnion == nil {
+				if !matched {
 					continue
 				}
 
@@ -189,6 +212,10 @@ func TestToolSQLMatchesSchema(t *testing.T) {
 				}
 				// 去掉别名：`x AS y` 只校验 x；`CAST(x AS VARCHAR) AS y` 同理。
 				cleaned := regexp.MustCompile(`(?is)\bAS\s+[a-zA-Z_][a-zA-Z0-9_]*`).ReplaceAllString(sel[1], " ")
+				// 去掉表别名前缀：`c.thscode` 只校验 thscode。c/u 是表别名而不是列，
+				// 不剥掉就会凭空报「不存在的列 c」。
+				// 用捕获组而不是 `(?=)` 前瞻——Go 的 regexp 是 RE2，不支持前瞻。
+				cleaned = aliasPrefixRe.ReplaceAllString(cleaned, "$2")
 				// 去掉函数调用参数里的内容，只留顶层标识符——本测试的粒度是
 				// "这条 SELECT 点名的列"，聚合函数内部不展开。
 				cleaned = regexp.MustCompile(`\([^()]*\)`).ReplaceAllString(cleaned, " ")
