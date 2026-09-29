@@ -573,3 +573,82 @@ class TestNoDeadSignalConfig:
             assert screener.unsupported_signals(rule) == ["这个信号不存在"]
         finally:
             del with_patch["这个信号不存在"]
+
+
+class TestSignalUtilisation:
+    """每种能发出来的信号，都该至少被一个策略用上。
+
+    背景：审计发现 detect_signals 能发 28 种信号，策略只引用了 18 种。
+    缺的 10 种全是 bearish 方向或单根形态 —— 选股器**只能选出想买的票，
+    选不出"该躲开"的票**。而规避持仓通常比选新票更急。
+    """
+
+    def test_no_signal_is_computed_but_unreachable(self):
+        from main import STRATEGY_RULES
+
+        emitted = _emitted_names() | _emitted_names(bearish=True)
+        used = {s for r in STRATEGY_RULES.values() for s in r["match_signals"]}
+        unused = sorted(emitted - used)
+        assert not unused, (
+            f"这些信号 detect_signals 算得出来，却没有任何策略引用：{unused}。"
+            f"要么加策略暴露它，要么从 detect_signals 里删掉 —— "
+            f"留着不让用等于白算。"
+        )
+
+    def test_every_bearish_signal_is_reachable(self):
+        """bearish 信号必须至少被一条 direction=bearish 的策略覆盖。
+
+        这是"能不能筛出该躲开的票"的能力检查。之前所有 bearish 信号
+        都没有策略引用，规避持仓这个用例整个是空的。
+
+        neutral 信号（ATR扩张、布林带收口）**不算**在内：它们方向未���，
+        波动加剧不等于看跌，走 `volatility_spike` + allow_neutral 是对的。
+        """
+        from main import STRATEGY_RULES
+
+        NEUTRAL = {"ATR扩张", "布林带收口", "Doji十字星", "Harami孕线"}
+        bearish_emitted = _emitted_names(bearish=True) - NEUTRAL
+        reachable = {
+            s for r in STRATEGY_RULES.values() if r.get("direction") == "bearish"
+            for s in r["match_signals"]
+        }
+        missing = sorted(bearish_emitted - reachable)
+        assert not missing, (
+            f"这些 bearish 信号没有被任何 direction=bearish 的策略覆盖：{missing}"
+        )
+
+    def test_neutral_signals_are_not_forced_into_a_directional_strategy(self):
+        """neutral 信号必须走 allow_neutral，不能塞进 direction=bearish。
+
+        把"波动加剧"当成"看跌"是错的方向判断 —— 它同样出现在上涨途中。
+        """
+        from main import STRATEGY_RULES
+
+        NEUTRAL = {"ATR扩张", "布林带收口", "Doji十字星", "Harami孕线"}
+        for name, rule in STRATEGY_RULES.items():
+            neutral_used = NEUTRAL & set(rule["match_signals"])
+            if not neutral_used:
+                continue
+            assert not rule.get("direction"), (
+                f"{name} 引用了 neutral 信号 {sorted(neutral_used)} 却设了 "
+                f"direction={rule['direction']} —— 方向未定的信号不该被定性"
+            )
+            assert rule.get("allow_neutral"), (
+                f"{name} 引用了 neutral 信号却没开 allow_neutral，永远选不出票"
+            )
+
+    def test_single_bar_patterns_get_their_own_strategies(self):
+        """锤头线与流星线必须能各自单独成策略。
+
+        它们方向相反（bullish / bearish），混在一条规则里会被 direction
+        过滤掉其中一个 —— min_count=1 的单形态策略才用得上。
+        """
+        from main import STRATEGY_RULES
+
+        for name, sig in (("hammer_reversal", "Hammer锤子线"),
+                          ("shooting_star_reversal", "Shooting Star流星")):
+            assert name in STRATEGY_RULES, f"缺少 {name} 策略"
+            assert STRATEGY_RULES[name]["min_count"] == 1, (
+                f"{name} 是单根形态，min_count 必须为 1"
+            )
+            assert sig in STRATEGY_RULES[name]["match_signals"]

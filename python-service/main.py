@@ -377,6 +377,40 @@ STRATEGY_RULES: Dict[str, Dict[str, Any]] = {
         "match_signals": ["Donchian上轨突破"],
         "min_count": 1,
     },
+
+    # ---- 以下三组覆盖此前"能算但没有任何策略用"的信号 ----
+    #
+    # 审计发现 detect_signals 能发 28 种，策略只引用了 18 种。缺的 10 种
+    # 全部是 bearish 方向或单根形态，也就是说选股器**只能选出想买的票，
+    # 选不出"该躲开"的票** —— 而规避持仓通常比选新票更急。
+
+    # 超买/见顶：与 B1 严格镜像。B1 找超卖金叉，这组找超买。
+    "b1_overbought": {
+        "match_signals": ["RSI6超买", "CCI超买", "Williams%R超买",
+                          "Z-Score超买", "MFI超买"],
+        "min_count": 2,
+        "direction": "bearish",
+    },
+    # 趋势转空：死叉 + 空头排列，与 anomaly（风险异动）互补 ——
+    # anomaly 看资金流与波动，这组看趋势结构本身。
+    "trend_down": {
+        "match_signals": ["MACD死叉", "Vortex金叉", "Aroon空头排列"],
+        "min_count": 2,
+        "direction": "bearish",
+    },
+    # 单根 K 线形态：锤头线（底部反转）与流星线（顶部反转）成对给出。
+    # min_count=1 —— 单根形态本身就是一次信号，要求两个反而选不出票。
+    # Hammer 是 bullish、Shooting Star 是 bearish，混在一个策略里会因为
+    # direction 过滤而互相抵消，所以拆成两条单信号策略。
+    "hammer_reversal": {
+        "match_signals": ["Hammer锤子线"],
+        "min_count": 1,
+    },
+    "shooting_star_reversal": {
+        "match_signals": ["Shooting Star流星"],
+        "min_count": 1,
+        "direction": "bearish",
+    },
 }
 
 

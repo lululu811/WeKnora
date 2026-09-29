@@ -21,5 +21,10 @@ func ScreenerStrategies() []string {
 		"volatility_spike", // 波动率异动（ATR扩张 / 布林带收口）
 		"vol_breakout",     // 放量突破（涨幅>3% 且量比>1.5）
 		"donchian_break",   // Donchian 上轨突破
+		// 以下四组覆盖此前"能算但无策略用"的 bearish 信号与单根形态
+		"b1_overbought",          // 超买/见顶（B1 的镜像，direction=bearish）
+		"trend_down",             // 趋势转空（死叉 + 空头排列）
+		"hammer_reversal",        // 锤头线（底部反转）
+		"shooting_star_reversal", // 流星线（顶部反转，direction=bearish）
 	}
 }
