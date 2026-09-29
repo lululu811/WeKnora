@@ -36,10 +36,10 @@ test('PE/PB/PS 为 null 时保持 null，绝不退化成 0', () => {
   assert.equal(p.valuation?.psTtm, null)
 })
 
+// 亏损股的 pe_ttm 是负数，-15.3 精确相等已经排除了"被抹成 0"。
 test('PE 为负（亏损）时保留负号，不改写成 0', () => {
   const p = normalizeProfile({ valuation: { pe_ttm: -15.3 } }, '000001.SZ')
   assert.equal(p.valuation?.peTtm, -15.3)
-  assert.ok(p.valuation!.peTtm !== 0, '亏损股的 PE 不能变成 0')
 })
 
 test('valuation 整块缺失时为 null，而不是空对象', () => {
