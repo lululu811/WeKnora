@@ -284,15 +284,146 @@ export interface StockScoreResult {
   ratingText: string;        // 评级名称: 如 "强力看多 (5分)", "良好持股 (4分)"
   ratingTag: string;         // 短标签: "5星", "4星", etc.
   themeColor: string;        // 来自 palette.scoreStars，随主题深浅切换
-  bulletPoints: string[];    // 3条核心战法要点
-  whiteAboveYellow: boolean; // 白在黄上
+  bulletPoints: string[];    // 核心战法要点
+  whiteAboveYellow: boolean; // 快线在大哥线上
   aboveBbi: boolean;         // 站上BBI
   aboveYellow: boolean;      // 站上大哥线
   zxBrickItem: ZXBrickItem;  // 最新砖型图状态
+  quality: DataQuality;      // 数据可信度（见下）
+  range: RangePerformance;   // 区间表现（见下）
+  /** 每个可展示数值的来源说明，用于「不捏造」的溯源展示 */
+  sources: Record<string, string>;
+}
+
+/** 计算「大哥线」四均线（14/28/57/114）所需的最少 K 线根数。 */
+export const LONG_BBI_MIN_BARS = 114;
+/** 计算「牵牛绳」四均线（3/6/12/24）所需的最少 K 线根数。 */
+export const BBI_MIN_BARS = 24;
+
+/**
+ * 数据可信度。
+ *
+ * 存在的理由：评分公式依赖 114 根 K 线才能算出完整的「大哥线」，但旧实现只要求
+ * 5 根就出评级，并用 `?? close` 把算不出的均线**用收盘价顶替**后当成真实线值
+ * 打印进文案——新股因此能拿到一份看似笃定的结论。这个结构体的作用是把
+ * 「算得出多少」如实告诉 UI，由 UI 决定要不要降级展示，而不是悄悄糊过去。
+ */
+export interface DataQuality {
+  bars: number;
+  /** 最新交易日 YYYY-MM-DD */
+  asOf: string;
+  firstAvailable: string;
+  /** 不足 114 根时大哥线退化为「还剩哪几条 MA 平均哪几条」，口径已变 */
+  yellowDegraded: boolean;
+  /** 不足 24 根时牵牛绳同样退化 */
+  bbiDegraded: boolean;
+  /** 是否够算出完整评分（要求大哥线不退化） */
+  sufficient: boolean;
+  /** 人类可读的提示，逐条对应上面的标记 */
+  notes: string[];
+}
+
+/** 区间表现：全部由已持有的 OHLCV 算出，不产生任何新增网络请求。 */
+export interface RangePerformance {
+  ret5: number | null;
+  ret20: number | null;
+  ret60: number | null;
+  /** 当日振幅 % =(high-low)/prevClose */
+  amplitude: number | null;
+  /** 量比 = 当日量 / 前 5 日均量 */
+  volRatio: number | null;
+  /** 当日成交额 */
+  turnover: number | null;
+}
+
+function fmtDate(ts: number): string {
+  const d = new Date(ts);
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+/** 由 dataList 直接计算区间表现；任一项数据不足时返回 null，绝不用 0 顶替。 */
+export function calcRangePerformance(dataList: KLineData[]): RangePerformance {
+  const n = dataList.length;
+  const last = n > 0 ? dataList[n - 1] : null;
+  const ret = (bars: number): number | null => {
+    if (n < bars + 1) return null;
+    const base = dataList[n - 1 - bars];
+    if (!base || base.close <= 0) return null;
+    return Number((((last as KLineData).close - base.close) / base.close * 100).toFixed(2));
+  };
+
+  let amplitude: number | null = null;
+  let volRatio: number | null = null;
+  if (last) {
+    const prev = n > 1 ? dataList[n - 2] : null;
+    if (prev && prev.close > 0) {
+      amplitude = Number((((last.high - last.low) / prev.close) * 100).toFixed(2));
+    }
+    if (n >= 6) {
+      let sum = 0;
+      let ok = true;
+      for (let i = n - 6; i < n - 1; i += 1) {
+        const v = dataList[i]?.volume;
+        if (typeof v !== 'number' || v <= 0) { ok = false; break; }
+        sum += v;
+      }
+      const lastVol = (last as KLineData).volume;
+      if (ok && sum > 0 && typeof lastVol === 'number' && lastVol > 0) {
+        volRatio = Number((lastVol / (sum / 5)).toFixed(2));
+      }
+    }
+  }
+
+  return {
+    ret5: ret(5),
+    ret20: ret(20),
+    ret60: ret(60),
+    amplitude,
+    volRatio,
+    turnover: typeof last?.turnover === 'number' ? last.turnover : null,
+  };
+}
+
+/** 由 dataList 直接计算数据可信度。 */
+export function calcDataQuality(dataList: KLineData[]): DataQuality {
+  const n = dataList.length;
+  const yellowDegraded = n < LONG_BBI_MIN_BARS;
+  const bbiDegraded = n < BBI_MIN_BARS;
+  const notes: string[] = [];
+
+  if (n === 0) {
+    notes.push('无行情数据');
+  } else {
+    if (yellowDegraded) {
+      notes.push(`大哥线按不足 ${LONG_BBI_MIN_BARS} 根的可用均线折算（当前 ${n} 根），口径与标准四均线不同`);
+    }
+    if (bbiDegraded) {
+      notes.push(`牵牛绳按不足 ${BBI_MIN_BARS} 根的可用均线折算（当前 ${n} 根），口径与标准四均线不同`);
+    }
+    if (n < 5) {
+      notes.push(`仅 ${n} 根 K 线，样本不足以评估砖型形态`);
+    }
+  }
+
+  return {
+    bars: n,
+    asOf: n > 0 ? fmtDate(dataList[n - 1].timestamp) : '',
+    firstAvailable: n > 0 ? fmtDate(dataList[0].timestamp) : '',
+    yellowDegraded,
+    bbiDegraded,
+    // 大哥线是评分的核心基准，它退化时结论就不可信 —— 宁可不出分也不给个
+    // 基于不同口径硬算出来的分数。
+    sufficient: n >= LONG_BBI_MIN_BARS,
+    notes,
+  };
 }
 
 export function calcStockHoldingScore(dataList: KLineData[]): StockScoreResult | null {
   if (!dataList || dataList.length < 5) return null;
+
+  const quality = calcDataQuality(dataList);
+  const range = calcRangePerformance(dataList);
 
   const lastIdx = dataList.length - 1;
   const last = dataList[lastIdx];
@@ -304,9 +435,12 @@ export function calcStockHoldingScore(dataList: KLineData[]): StockScoreResult |
   const bbi = calcBBI(dataList);
   const zxBricks = calcZXBrick(dataList);
 
-  const white = dema10[lastIdx] ?? close;
-  const yellow = longBbi[lastIdx] ?? close;
-  const bbiVal = bbi[lastIdx] ?? close;
+  // 均线算不出来就是算不出来。此前这里写 `?? close`，等于拿收盘价冒充均线值，
+  // 再把这个数当真实线值打印进「知行双线: 白线(XX)金叉黄线(XX)」—— 三根线
+  // 全部退化成收盘价时会凭空造出「金叉」结论。数据不足时宁可不给结论。
+  const white = dema10[lastIdx] ?? null;
+  const yellow = longBbi[lastIdx] ?? null;
+  const bbiVal = bbi[lastIdx] ?? null;
   const brickItem = zxBricks[lastIdx] || {
     brick: 0,
     prevBrick: 0,
@@ -317,9 +451,12 @@ export function calcStockHoldingScore(dataList: KLineData[]): StockScoreResult |
     isRiskPoint: false,
   };
 
-  const whiteAboveYellow = white >= yellow;
-  const aboveYellow = close >= yellow;
-  const aboveBbi = close >= bbiVal;
+  // 大哥线与牵牛绳任一算不出，就无法判断多空位置，也不给分。
+  const linesUsable = white !== null && yellow !== null && bbiVal !== null;
+
+  const whiteAboveYellow = linesUsable ? white >= yellow : false;
+  const aboveYellow = linesUsable ? close >= yellow : false;
+  const aboveBbi = linesUsable ? close >= bbiVal : false;
   const isRedBrick = brickItem.direction === 'up';
 
   // 评分细则 (基于战法底线原则):
@@ -330,22 +467,31 @@ export function calcStockHoldingScore(dataList: KLineData[]): StockScoreResult |
   // 规则4: 站上短周期BBI牵牛绳。
   let score = 1;
 
-  if (aboveYellow) {
-    score += 1; // 站上多空大哥线 (+1)
-    if (whiteAboveYellow) score += 1; // 顺大势金叉 (+1)
+  if (linesUsable) {
+    if (aboveYellow) {
+      score += 1; // 站上多空大哥线 (+1)
+      if (whiteAboveYellow) score += 1; // 顺大势金叉 (+1)
+    }
+  } else {
+    // 没有均线基准就没有多空判断，此时把基准分也标成不可信，
+    // 由 UI 决定怎么显示，而不是硬凑一个 1 分出来。
+    return null;
   }
 
   if (isRedBrick) {
     if (brickItem.stepCount <= 3) score += 1; // 红1~红3健康上行 (+1)
-    else score += 0.5; // 红4已有滞涨高抛风险
+    // 红4 原本给 +0.5，但最终会 round(3.5)=4，+0.5 与不加完全等价 ——
+    // 是条无效分支，保留只会让人误以为红4有额外加成。直接不加。
   }
 
   if (aboveBbi) {
     score += 1; // 站上牵牛绳 (+1)
   }
 
-  // 最终得分限制在 1..5
-  const finalScore = Math.max(1, Math.min(5, Math.round(score)));
+  // 上限 5。**不再有 Math.max(1, ...)**：老实现无论数据多差都保底给 1 分，
+  // 于是「查不到」和「真的很差」在界面上长得一模一样。1 分本来就由基准分覆盖，
+  // 去掉下限不会让任何正常场景少给分。
+  const finalScore = Math.min(5, Math.round(score));
 
   let ratingText = '观望防守';
   let ratingTag = `${finalScore}分 · 弱势防守`;
@@ -371,16 +517,20 @@ export function calcStockHoldingScore(dataList: KLineData[]): StockScoreResult |
     ratingTag = '1星 · 立即离场';
   }
 
-  // 生成 3 条简明核心战法要点
+  // 生成核心战法要点。措辞跟着数据可信度走：数据不足时只陈述事实，
+  // 不断言「金叉/站上/跌破」这类需要完整基准才能下的结论。
   const bulletPoints: string[] = [];
+  const degradedNote = quality.yellowDegraded
+    ? `（按 ${quality.bars} 根可用均线折算，非标准四均线）`
+    : '';
 
-  // 要点1: 白黄线大势
+  // 要点1: 双线大势
   if (!aboveYellow) {
-    bulletPoints.push('知行大哥线: 股价位于黄线下方，空头区间不可盲目抄底，触及止损纪律。');
+    bulletPoints.push(`知行大哥线: 股价位于大哥线(${yellow.toFixed(2)})下方，空头区间不可盲目抄底，触及止损纪律。${degradedNote}`);
   } else if (whiteAboveYellow) {
-    bulletPoints.push(`知行双线: 白线(${white.toFixed(2)})金叉黄线(${yellow.toFixed(2)})，处于右侧顺大势通道。`);
+    bulletPoints.push(`知行双线: 快线(${white.toFixed(2)})在大哥线(${yellow.toFixed(2)})之上，处于右侧顺大势通道。${degradedNote}`);
   } else {
-    bulletPoints.push(`知行双线: 股价回踩白黄线之间(碗内)，关注企稳支撑与缩量B1机会。`);
+    bulletPoints.push(`知行双线: 股价回踩快线(${white.toFixed(2)})与大哥线(${yellow.toFixed(2)})之间(碗内)，关注企稳支撑与缩量B1机会。${degradedNote}`);
   }
 
   // 要点2: 砖型图数砖
@@ -393,14 +543,31 @@ export function calcStockHoldingScore(dataList: KLineData[]): StockScoreResult |
   }
 
   // 要点3: BBI与多空位置
+  const bbiNote = quality.bbiDegraded
+    ? `（按 ${quality.bars} 根可用均线折算，非标准四均线）`
+    : '';
   if (aboveBbi) {
-    bulletPoints.push(`多空牵牛绳: 站上BBI(${bbiVal.toFixed(2)})，短期多头占据主动。`);
+    bulletPoints.push(`多空牵牛绳: 站上BBI(${bbiVal.toFixed(2)})，短期多头占据主动。${bbiNote}`);
   } else {
-    bulletPoints.push(`多空牵牛绳: 运行于BBI(${bbiVal.toFixed(2)})下方，短期受制于成本均线压制。`);
+    bulletPoints.push(`多空牵牛绳: 运行于BBI(${bbiVal.toFixed(2)})下方，短期受制于成本均线压制。${bbiNote}`);
   }
+
+  // 每个展示数值的来源。前端算出来的指标与库内直接取的字段要分清楚——
+  // 「来源」在这里指的是数据链条的上游，UI 上会显示给用户。
+  const sources: Record<string, string> = {
+    '收盘价': 'market.v_daily_qfq（后复权→前复权行情，由 /api/kline 返回）',
+    '快线 DEMA10': '前端基于收盘价计算 EMA(EMA(·,10),10)',
+    '大哥线 LongBBI': '前端计算 MA14/28/57/114 的均值',
+    '牵牛绳 BBI': '前端计算 MA3/6/12/24 的均值',
+    'ZX砖型图': '前端按通达信 SMA(·,4,1)/SMA(·,6,1) 折算',
+    'K线根数': `GET /api/kline?limit=300（截至 ${quality.asOf}）`,
+  };
 
   return {
     score: finalScore,
+    quality,
+    range,
+    sources,
     ratingText,
     ratingTag,
     themeColor,

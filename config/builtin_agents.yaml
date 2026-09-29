@@ -317,6 +317,18 @@ builtin_agents:
         - "hithink.finance.special.limit.limit_up_pool"
         - "hithink.finance.special.dragon_tiger.list"
         - "hithink.finance.special.hot_stock.skyrocket"
+
+        # 形态识别与技术分析。这五个在 agent_service.go 早已注册，但此前漏在
+        # 白名单之外 —— 注册了不等于 agent 能用：白名单决定注册遍历范围，
+        # 不在名单里的工具既不会进模型的 tool schema，调用时也只会得到
+        # "tool not found"。缺它们意味着趋势、量价背离、图表形态、支撑阻力
+        # 这四类分析 Z哥 一直在用别的方式绕。
+        - "hithink.finance.pattern.scan"
+        - "hithink.finance.analysis.trend"
+        - "hithink.finance.analysis.volume"
+        - "hithink.finance.analysis.pattern"
+        - "hithink.finance.analysis.levels"
+
         - "hithink.finance.query.sql"
 
         # Zettaranc exclusive tools (Python CLI)
