@@ -46,6 +46,26 @@ type marketRow struct {
 	CdlEngulfing, CdlHarami, CdlMorningStar    float64
 	CdlEveningStar, CdlPiercing, CdlDarkCloud  float64
 	Cdl3WhiteSold, Cdl3BlackCrows              float64
+
+	// OHLCValid 记录这行的价格四元组是不是真的查到了。
+	//
+	// 为什么需要它：指标列缺失时下面所有 float64 字段都停在 0，而 0 是一个
+	// **合法取值** —— RSI6=0 会被读成"极度超卖"、ADX=0 会被读成"无趋势"，
+	// 均线全 0 会被读成"空头排列"。这不是"数据没查到"，这是把缺失伪装成
+	// 一个具体的金融判断。调用方必须先看这个标志再决定敢不敢用这些字段。
+	OHLCValid bool
+	// IndicatorValid 记录这行有没有匹配到 indicators 库里的指标行。
+	// 缺失时上面所有指标字段都是 0，含义同上。
+	IndicatorValid bool
+}
+
+// AnyIndicatorValue 判断这一行是否至少有一个非零指标值。
+// 用于把"指标全 0"和"指标真的全是 0"区分开 —— 后者在实践中不存在，
+// 所以全 0 一律按缺失处理。
+func (r marketRow) AnyIndicatorValue() bool {
+	return r.MA5 != 0 || r.MA10 != 0 || r.MA20 != 0 || r.MA60 != 0 ||
+		r.DIF != 0 || r.DEA != 0 || r.RSI6 != 0 || r.RSI14 != 0 ||
+		r.ADX != 0 || r.DIPlus != 0 || r.DIMinus != 0
 }
 
 // FetchMarketData loads OHLCV + indicators from both DuckDB databases.
@@ -171,7 +191,12 @@ func FetchMarketData(ctx context.Context, config *hithink_finance.Config, thscod
 			Close: toF64(m["close"]),
 			Vol:   toF64(m["vol"]),
 		}
+		// 价格四元组必须同时非空才算有效：只有 open 没有 close 的行算不出
+		// 涨跌幅，硬算出来的分母是 0。
+		row.OHLCValid = m["open"] != nil && m["high"] != nil &&
+			m["low"] != nil && m["close"] != nil
 		if ind != nil {
+			row.IndicatorValid = true
 			// 均线来自 indicators 侧（见 indicatorSQL 里 moved 过来的注释）。
 			// 放在 ind != nil 分支内：缺指标行的交易日均线为 0，与其他指标字段
 			// 保持同一套缺失语义，而不是从 market 行取一个永远不存在的键。

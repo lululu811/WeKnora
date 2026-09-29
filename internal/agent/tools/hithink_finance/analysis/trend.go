@@ -146,6 +146,11 @@ func (t *TrendAnalysisTool) Execute(ctx context.Context, args json.RawMessage) (
 			"confidence":  confidence,
 			"key_signals": keySignals,
 		},
+		"data_quality": buildDataQuality(rows, latest),
+		"_source": map[string]interface{}{
+			"db":     []string{"market", "indicators"},
+			"tables": []string{"v_daily_qfq", "v_indicators_daily"},
+		},
 	}
 
 	data, _ := json.MarshalIndent(result, "", "  ")
@@ -155,6 +160,55 @@ func (t *TrendAnalysisTool) Execute(ctx context.Context, args json.RawMessage) (
 			"result": string(data),
 		},
 	}, nil
+}
+
+// buildDataQuality 把"这次分析建立在多少真实数据上"如实摊开。
+//
+// 不加这个块，模型会对着 60 根 K 线和 0 根指标行给出同样笃定的趋势判断
+// ——因为缺失的那些字段全是 0，而 0 在 ADX/RSI/均线里都是合法读数。
+// 附上完整度与降级说明，模型才有材料说"指标只覆盖了 3/60 天，
+// 这个趋势判断仅供参考"，而不是编一个确定的结论。
+func buildDataQuality(rows []marketRow, latest marketRow) map[string]interface{} {
+	total := len(rows)
+	indicatorRows := 0
+	for _, r := range rows {
+		if r.IndicatorValid && r.AnyIndicatorValue() {
+			indicatorRows++
+		}
+	}
+
+	notes := make([]string, 0, 3)
+	if indicatorRows == 0 {
+		notes = append(notes,
+			"本次取数没有任何一行的指标数据，ADX/RSI/均线/Supertrend 全部为占位 0，"+
+				"下面这些结论不可采信")
+	} else if indicatorRows < total {
+		notes = append(notes, fmt.Sprintf("指标数据只覆盖 %d/%d 个交易日，其余 %d 天的指标字段为占位 0，"+
+				"涉及缺失日的信号判断不可采信", indicatorRows, total, total-indicatorRows))
+	}
+	if !latest.OHLCValid {
+		notes = append(notes, "最新一根 K 线的价格字段不完整，涨跌幅类判断不可用")
+	}
+	if total < 60 {
+		notes = append(notes, fmt.Sprintf("K 线仅 %d 根，短于 MA60 所需的 60 根，中长期均线结论不成立", total))
+	}
+
+	return map[string]interface{}{
+		"bars":                 total,
+		"indicator_bars":       indicatorRows,
+		"indicator_coverage":   ratio(indicatorRows, total),
+		"latest_ohlc_complete": latest.OHLCValid,
+		"degraded":             len(notes) > 0,
+		"notes":                notes,
+	}
+}
+
+// ratio 返回 0~1 的覆盖率；分母为 0 时返回 0（没有数据，覆盖率就是 0 而不是 NaN）。
+func ratio(num, den int) float64 {
+	if den <= 0 {
+		return 0
+	}
+	return float64(num) / float64(den)
 }
 
 // analyzeDowStructure uses swing points to classify Dow Theory trend.
