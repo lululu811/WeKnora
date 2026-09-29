@@ -64,6 +64,60 @@ SCREEN_UNSUPPORTED = {
 CORE_FIELDS = ("rsi6", "macd_hist", "mfi", "adx", "bb_upper", "atr", "obv")
 
 
+# 涨停选股的候选集：真实涨停记录。
+#
+# 窗口取最近 6 个交易日而不是"最新一天"：只取一天的话，池子被截断到 50 行，
+# 指标筛完常常剩不到几只可选；6 天累计能让"曾经涨停过"的票都进候选，
+# 再用指标做二次排序。选出来的每一只都会带上 limit_up 明细（含出处表名）。
+LIMIT_UP_LOOKBACK_DAYS = 6
+
+
+def collapse_limit_up_pool(rows: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+    """把涨停池按代码归并，每只票保留**连板数最大**的那条记录。
+
+    一只连板股在窗口内每天都会留一行，连板数逐日递增（601811.SH 在近 6 个
+    交易日里留了 5 行，连板数 1→2→3→4→5）。用 `dict.setdefault` 或直接
+    `by_code[code] = row` 归并时，最后写进去的那行会覆盖前面的：SQL 按
+    trade_date DESC 排序，于是最新的 5 连板会被最早那天的 1 连板顶掉 ——
+    实测 601811.SH 就这样把 5 板显示成了 1 板，排名字段也跟着错。
+    """
+    best: Dict[str, Dict[str, Any]] = {}
+    for row in rows or []:
+        code = row.get("thscode")
+        if not code:
+            continue
+        prev = best.get(code)
+        if prev is None or (row.get("continue_day_cnt") or 0) > (
+            prev.get("continue_day_cnt") or 0
+        ):
+            best[code] = row
+    return best
+
+
+def build_limit_up_pool_sql() -> str:
+    """从 special 库取最近 N 个交易日出现过的涨停票。
+
+    连板数、封板时间、封单金额都是这张表的原生列，不是算出来的。
+    `limit_up` 策略过去只匹配 CMF/ADX/Aroon 三个代理指标，从没读过这张表，
+    拿"资金流入且趋势向上"冒充"涨停"；现在候选集直接来自真实记录。
+
+    窗口天数是**字面量**而不是 `?`：DuckDB 不接受 `INTERVAL ? DAY`，会在
+    `?` 处抛 Parser Error。本地直连 duckdb 时如果用绑定参数同样过不了这一关，
+    而单元测试只做语法断言、发现不了 —— 只有真正打一次 HTTP 才暴露。
+    窗口是模块常量而非用户输入，没有注入面。
+    """
+    return f"""
+        SELECT thscode, name, trade_date, limit_up_time,
+               continue_day_cnt, seal_money, last_price
+        FROM v_limit_up_pool
+        WHERE trade_date >= (
+            SELECT MAX(trade_date) - INTERVAL {LIMIT_UP_LOOKBACK_DAYS} DAY
+            FROM v_limit_up_pool
+        )
+        ORDER BY trade_date DESC, continue_day_cnt DESC
+    """
+
+
 def build_universe_sql() -> str:
     """全市场 a 股清单（来自 market 库）。"""
     return """

@@ -13,6 +13,8 @@ silently producing inverted trading signals.
 
 import pytest
 
+from zettaranc import screener
+
 LIQUID_CODE = "600519.SH"        # 贵州茅台, long history
 THIN_CODE = "603448.SH"          # short history -> exercises the short-data path
 NO_INDICATOR_CODE = "601059.SH"  # indicator rows exist but the values are NULL
@@ -372,3 +374,74 @@ class TestErrorContractRegression:
             )
             assert body["success"] is False
             assert body["error"], body
+
+
+class TestLimitUpUsesRealData:
+    """`limit_up` 过去只匹配 CMF/ADX/Aroon 三个代理指标，从没读过
+    special.v_limit_up_pool —— 名字叫「涨停选股」，筛的却是"资金流入且趋势向上"。
+    库里 29,657 行真实涨停记录一直躺着没用。"""
+
+    def test_pool_restriction_is_disclosed(self, client):
+        status, body = client.post("/zettaranc/screen",
+                                    {"strategy": "limit_up", "limit": 10})
+        assert status == 200, body
+        assert body["pool_restricted"] is True
+        assert body["pool_size"], "必须报出真实涨停池的规模"
+        # 池子只有几十只，选出来的数不该超过池子
+        assert body["universe"] <= body["pool_size"], (
+            f"候选集 {body['universe']} 超过了涨停池 {body['pool_size']}"
+        )
+        assert any("涨停" in w for w in body["warnings"]), (
+            f"候选集被涨停池限制这件事必须写在 warnings 里：{body['warnings']}"
+        )
+
+    def test_every_result_carries_real_limit_up_provenance(self, client):
+        status, body = client.post("/zettaranc/screen",
+                                    {"strategy": "limit_up", "limit": 50})
+        assert status == 200, body
+        stocks = body.get("stocks") or []
+        if not stocks:
+            pytest.skip("当前无涨停命中")
+        for s in stocks:
+            lu = s.get("limit_up")
+            assert lu, f"{s['thscode']} 选出来了却没有涨停记录"
+            assert lu.get("source") == "special.v_limit_up_pool"
+            assert lu.get("trade_date"), "涨停日不能为空"
+
+    def test_longest_streak_is_reported_not_the_earliest_day(self, client):
+        """回归：归并时按代码覆盖会让 5 连板显示成 1 连板。
+
+        基准口径必须与 SQL 的窗口一致：SQL 取的是最近
+        `LIMIT_UP_LOOKBACK_DAYS` 个**自然日**内的涨停记录，不是全历史最大值。
+        拿全历史 max 当基准会误报 —— 一只票 6 周前有过 6 板，本周只有 4 板，
+        返回 4 板才是对的。
+        """
+        status, body = client.post("/zettaranc/screen",
+                                    {"strategy": "limit_up", "limit": 200})
+        assert status == 200, body
+
+        # DuckDB 不接受 `INTERVAL ? DAY`（会在 `?` 处 Parser Error），
+        # 所以基准 SQL 与生产代码一样用字面量窗口。
+        cutoff = client.query_rows(
+            "special",
+            "SELECT CAST(MAX(trade_date) - INTERVAL "
+            f"{screener.LIMIT_UP_LOOKBACK_DAYS} DAY AS VARCHAR) AS c "
+            "FROM v_limit_up_pool",
+        )[0]["c"]
+        pool = client.query_rows(
+            "special",
+            "SELECT thscode, MAX(continue_day_cnt) AS c FROM v_limit_up_pool "
+            f"WHERE trade_date >= CAST('{cutoff}' AS DATE) "
+            "GROUP BY thscode HAVING c >= 3",
+        )
+        if not pool:
+            pytest.skip(f"最近 {screener.LIMIT_UP_LOOKBACK_DAYS} 天没有 3 板以上个股")
+        expect = {r["thscode"]: r["c"] for r in pool}
+        for s in (body.get("stocks") or []):
+            if s["thscode"] not in expect:
+                continue
+            got = (s.get("limit_up") or {}).get("continue_day_cnt")
+            assert got == expect[s["thscode"]], (
+                f"{s['thscode']} 近 {screener.LIMIT_UP_LOOKBACK_DAYS} 天内最高 "
+                f"{expect[s['thscode']]} 板，返回却是 {got} 板"
+            )

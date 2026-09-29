@@ -272,3 +272,66 @@ def _emitted_names(bearish: bool = False):
         rows[1].update(dif=-0.1, dea=-0.3, k=82.0, d=85.0,
                        stoch_k=82.0, stoch_d=85.0, atr=0.5)
     return {s["name"] for s in detect_signals(rows)}
+
+
+class TestLimitUpPoolCollapse:
+    """涨停池按代码归并时必须保留**连板数最大**的那条。
+
+    实测缺陷：601811.SH（新华文轩）在近 6 个交易日留了 5 行，连板数 1→2→3→4→5。
+    归并时用 `by_code[code] = row`，而 SQL 按 trade_date DESC 排序，于是最后
+    写进去的是最早那天的 1 连板，5 连板被顶掉，排名字段跟着错。
+    """
+
+    def test_highest_streak_wins_over_earlier_rows(self):
+        rows = [
+            {"thscode": "601811.SH", "trade_date": "2026-09-24", "continue_day_cnt": 5},
+            {"thscode": "601811.SH", "trade_date": "2026-09-23", "continue_day_cnt": 4},
+            {"thscode": "601811.SH", "trade_date": "2026-09-22", "continue_day_cnt": 3},
+            {"thscode": "601811.SH", "trade_date": "2026-09-21", "continue_day_cnt": 2},
+            {"thscode": "601811.SH", "trade_date": "2026-09-18", "continue_day_cnt": 1},
+        ]
+        best = screener.collapse_limit_up_pool(rows)
+        assert set(best) == {"601811.SH"}
+        assert best["601811.SH"]["continue_day_cnt"] == 5
+        assert best["601811.SH"]["trade_date"] == "2026-09-24", \
+            "取 5 连板那一行，日期也必须跟着那一行，不能张冠李戴"
+
+    def test_order_does_not_matter(self):
+        ascending = [{"thscode": "X.SH", "continue_day_cnt": n} for n in (1, 2, 3, 4, 5)]
+        assert screener.collapse_limit_up_pool(ascending)["X.SH"]["continue_day_cnt"] == 5
+        assert screener.collapse_limit_up_pool(list(reversed(ascending)))["X.SH"]["continue_day_cnt"] == 5
+
+    def test_null_streak_does_not_win(self):
+        rows = [
+            {"thscode": "Y.SH", "continue_day_cnt": None},
+            {"thscode": "Y.SH", "continue_day_cnt": 2},
+        ]
+        assert screener.collapse_limit_up_pool(rows)["Y.SH"]["continue_day_cnt"] == 2
+
+    def test_empty_and_missing_code(self):
+        assert screener.collapse_limit_up_pool([]) == {}
+        assert screener.collapse_limit_up_pool([{"continue_day_cnt": 3}]) == {}
+        assert screener.collapse_limit_up_pool(None) == {}
+
+
+class TestLimitUpPoolSql:
+    def test_reads_the_real_limit_up_table(self):
+        sql = screener.build_limit_up_pool_sql()
+        assert "v_limit_up_pool" in sql, "必须读真实涨停表，不能靠代理指标"
+        # 连板/封板时间/封单金额都是原生列
+        for col in ("continue_day_cnt", "limit_up_time", "seal_money"):
+            assert col in sql, f"{col} 是该表的原生列，应当取出来"
+
+    def test_window_is_a_literal_because_duckdb_rejects_placeholders(self):
+        """窗口用字面量是被迫的，不是疏忽。
+
+        DuckDB 不接受 `INTERVAL ? DAY` 或 `?::DATE` 这类写法，会在 `?` 处
+        抛 Parser Error。这条断言记录的是这个约束 —— 如果哪天 DuckDB 支持了
+        绑定，这里会提醒把窗口改回参数形式。
+        """
+        sql = screener.build_limit_up_pool_sql()
+        assert "?" not in sql, (
+            "DuckDB 的 INTERVAL 不支持占位符，用 ? 会 Parser Error"
+        )
+        assert f"INTERVAL {screener.LIMIT_UP_LOOKBACK_DAYS} DAY" in sql, \
+            "窗口天数应作为字面量出现在 SQL 里"

@@ -515,6 +515,47 @@ async def zettaranc_screen(request: ScreenRequest) -> Dict[str, Any]:
         raise fail(503, "股票清单为空")
 
     names = {u.get("thscode"): u.get("name", "") for u in universe}
+
+    # `limit_up` 走真实涨停池做候选集。
+    #
+    # 这条策略过去只匹配 CMF资金流入 / ADX多头趋势 / Aroon多头排列 三个**代理
+    # 指标**，从头到尾没读过 special.v_limit_up_pool —— 名字叫「涨停选股」，
+    # 实际筛的是"资金流入且趋势向上"，涨停与否毫无关系。库里躺着 29,657 行
+    # 真实涨停记录却没用，是拿代理指标冒充目标概念。
+    limit_up_pool: Optional[List[Dict[str, Any]]] = None
+    pool_restricted = False
+    if request.strategy == "limit_up":
+        special_src = registry.get("special")
+        if special_src is None:
+            raise fail(503, "special 数据源未就绪，limit_up 策略需要真实涨停数据")
+        try:
+            limit_up_pool = await special_src.execute(
+                screener.build_limit_up_pool_sql()
+            )
+        except Exception as exc:
+            logger.warning("取涨停池失败: %s", exc)
+            raise fail(
+                503,
+                f"取涨停池失败：{exc}。limit_up 策略只接受真实涨停数据，"
+                f"不会退回代理指标",
+            ) from exc
+
+        if not limit_up_pool:
+            raise fail(
+                503,
+                "涨停池为空（special.v_limit_up_pool 无数据）。"
+                "limit_up 策略只接受真实涨停数据，不会退回代理指标",
+            )
+
+        pool_codes = {r.get("thscode") for r in limit_up_pool if r.get("thscode")}
+        # 涨停池是一张**每日截断的榜**（实测每个交易日恰好 50 行），不是全市场。
+        # 用它当候选集意味着本次只在这几十只里选，返回里必须写明池子规模，
+        # 否则「涨停选股选出 20 只」会被误读成「全市场只有 20 只涨停」。
+        pool_restricted = True
+        names = {c: names.get(c, "") for c in pool_codes}
+        if not names:
+            raise fail(503, "涨停池里的代码都不在 A 股清单内，无法选股")
+
     codes = ",".join(c for c in names if c)
 
     try:
@@ -548,6 +589,15 @@ async def zettaranc_screen(request: ScreenRequest) -> Dict[str, Any]:
     )
 
     warnings: List[str] = []
+    if pool_restricted and limit_up_pool:
+        pool_dates = sorted({r.get("trade_date") for r in limit_up_pool if r.get("trade_date")})
+        span = f"{pool_dates[0]} ~ {pool_dates[-1]}" if pool_dates else "未知区间"
+        warnings.append(
+            f"候选集来自 special.v_limit_up_pool 的真实涨停记录"
+            f"（{len(limit_up_pool)} 条，{span}）。"
+            f"该池是每日截断榜（每个交易日固定条数），不是全市场 —— "
+            f"本次只在这 {len(names)} 只里筛选。"
+        )
     if universe_truncated:
         warnings.append(
             f"指标快照被单次查询行数上限（{MAX_QUERY_ROWS} 行）截断，"
@@ -558,6 +608,35 @@ async def zettaranc_screen(request: ScreenRequest) -> Dict[str, Any]:
         preview = "、".join(dropped[:10]) + ("…" if len(dropped) > 10 else "")
         warnings.append(
             f"{len(dropped)} 只票没有返回任何指标行，已排除在筛选之外：{preview}"
+        )
+
+    stocks = result["stocks"]
+    if limit_up_pool:
+        # 一只票在窗口内有多条涨停记录（连板股每天一行，连板数递增）。
+        # 归并逻辑放在 screener 里，和它的单元测试同处，避免两处实现走样。
+        by_code = screener.collapse_limit_up_pool(limit_up_pool)
+
+        for s in stocks:
+            hit = by_code.get(s.get("thscode"))
+            if not hit:
+                continue
+            # 涨停事实来自 special 库，附上出处，模型才能区分
+            # 「指标推断的强势」和「确实涨停过」
+            s["limit_up"] = {
+                "trade_date": hit.get("trade_date"),
+                "continue_day_cnt": hit.get("continue_day_cnt"),
+                "limit_up_time": hit.get("limit_up_time"),
+                "seal_money": hit.get("seal_money"),
+                "source": "special.v_limit_up_pool",
+            }
+        # 排序键必须用 `or 0` 兜住 None：continue_day_cnt 缺失时
+        # `-(None)` 会 TypeError，把整个选股请求打挂。
+        stocks.sort(
+            key=lambda s: (
+                -((s.get("limit_up") or {}).get("continue_day_cnt") or 0),
+                -(s.get("score") or 0),
+                s.get("thscode", ""),
+            )
         )
 
     return {
@@ -572,8 +651,10 @@ async def zettaranc_screen(request: ScreenRequest) -> Dict[str, Any]:
         "unsupported_signals": screener.unsupported_signals(rule),
         "truncated": universe_truncated,
         "no_indicator_count": max(0, no_indicator),
+        "pool_size": len(limit_up_pool) if limit_up_pool else None,
+        "pool_restricted": pool_restricted,
         "warnings": warnings,
-        "stocks": result["stocks"],
+        "stocks": stocks,
     }
 
 
