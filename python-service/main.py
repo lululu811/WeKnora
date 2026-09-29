@@ -270,9 +270,48 @@ class ScanRequest(BaseModel):
 
 
 class ScreenRequest(BaseModel):
-    """选股请求"""
+    """选股请求
+
+    形态信号只回答"图形像不像"，不回答"会不会暴雷"。可选的筛选参数
+    构成第二道关：板块限定 + 财务风险代理 + ST 排除。
+
+    全部可选且默认为空 —— 不传就是纯形态选股，与之前行为一致。
+    """
     strategy: str
     limit: int = Field(default=20, ge=1, le=200)
+
+    # ---- 板块 ----
+    # 板块名（支持片段匹配，如 "半导体" 命中「半导体」「半导体设备」）。
+    # 按名字反查成分股而不是展开全量成员关系：后者有 122,368 行，
+    # 超过单查询 100k 上限，展开必被静默截断。
+    sector: Optional[str] = Field(
+        default=None, description="板块名片段，如「半导体」「白酒」；按成分股反查"
+    )
+
+    # ---- 财务风险代理（financials.v_balance_sheet，覆盖全部 A 股）----
+    # 商誉/质押/减持/审计意见/监管处罚本地库**没有**，所以这里只提供
+    # 真正算得出的三个比率。它们的出处是 balance sheet，不是包装。
+    max_debt_ratio: Optional[float] = Field(
+        default=None, ge=0, le=5,
+        description="资产负债率上限（total_debt/assets_total）。本地分布 p50=0.40 p90=0.71",
+    )
+    min_current_ratio: Optional[float] = Field(
+        default=None, ge=0,
+        description="流动比率下限（total_current_assets/total_debt）。本地分布 p50=1.50 p10=0.60",
+    )
+    max_receivable_ratio: Optional[float] = Field(
+        default=None, ge=0, le=1,
+        description="应收账款占总资产上限。本地分布 p50 约 0.03",
+    )
+
+    # ---- 开关 ----
+    require_profit: bool = Field(
+        default=False, description="要求最新期归母净利润为正（financials.v_income_statement）"
+    )
+    exclude_st: bool = Field(
+        default=False,
+        description="排除 ST/*ST。库里没有 ST 标记列，只能按 v_symbol.name 匹配，全 A 204 只",
+    )
 
 
 # 策略 → 信号筛选规则映射
@@ -569,6 +608,46 @@ async def zettaranc_screen(request: ScreenRequest) -> Dict[str, Any]:
             raise fail(503, "涨停池里的代码都不在 A 股清单内，无法选股")
 
     all_codes = [c for c in names if c]
+
+    # 板块限定放在取数**之前**：先缩小候选集，后面的指标/价量查询都只跑
+    # 板块内的票。「半导体 + B1」从 5,571 只缩到 188 只，取数量和耗时
+    # 同比下降，而不是先全市场选完再在内存里过滤。
+    sector_filter: Optional[Dict[str, Any]] = None
+    if request.sector:
+        index_src = registry.get("index")
+        if index_src is None:
+            raise fail(503, "index 数据源未就绪，无法按板块筛选")
+        from zettaranc import filters as screen_filters
+
+        try:
+            sector_rows = await index_src.execute(
+                screen_filters.build_sector_filter_sql(),
+                [screen_filters.escape_like_pattern(request.sector)],
+            )
+        except Exception as exc:
+            logger.warning("按板块筛选失败: %s", exc)
+            raise fail(503, f"按板块筛选失败：{exc}") from exc
+
+        sector_codes = {r.get("thscode") for r in sector_rows if r.get("thscode")}
+        if not sector_codes:
+            raise fail(
+                404,
+                f"板块「{request.sector}」没有匹配到任何成分股。"
+                f"可试试更短的片段，如「半导体」。",
+            )
+        sector_filter = {
+            "name": request.sector,
+            "constituents": len(sector_codes),
+            "source": screen_filters.SECTOR_SOURCE,
+        }
+        all_codes = [c for c in all_codes if c in sector_codes]
+        if not all_codes:
+            raise fail(
+                404,
+                f"板块「{request.sector}」的 {len(sector_codes)} 只成分股"
+                f"都不在当前候选集内",
+            )
+
     shards = screener.shard_codes(all_codes)
     if len(shards) > 1:
         logger.info(
@@ -639,16 +718,186 @@ async def zettaranc_screen(request: ScreenRequest) -> Dict[str, Any]:
     # 丢掉，而返回里的 `scanned` 仍然写着完整的 5,571 —— 调用方无从判断
     # 这次结果是不是全市场口径。
     scanned_codes = {r.get("thscode") for r in rows if r.get("thscode")}
+    # 「没有指标行」的基准必须是**实际送去查的候选集**，不是全市场清单。
+    # 板块筛选把候选集缩到 320 只之后，若仍拿 5,571 只的 names 去算差集，
+    # 会报出"5,251 只没有指标行"——而它们只是**不在这个板块里**，
+    # 这条警告会把一个正常的板块限定说成大规模数据缺失。
+    candidate_set = set(all_codes)
     # 清单里有、但一行指标都没回来的票：不是被截断，就是该票确实没有指标数据。
     # 两种情况对调用方的含义不同，都不该藏进 `scanned` 里。
-    no_indicator = len(names) - len(scanned_codes)
-    dropped = sorted(set(names) - scanned_codes)
+    no_indicator = len(candidate_set) - len(candidate_set & scanned_codes)
+    dropped = sorted(candidate_set - scanned_codes)
 
+    # 风险筛选要跑在 `limit` **之后**才合理吗？不 —— 那会让用户要 8 只却只拿到 2 只：
+    # 形态命中 866，取前 8 送筛，淘汰 6 剩 2。淘汰率最高的三项阈值
+    # （负债 >50% 且流动比 <1）本地分布下能筛掉四分之三。
+    #
+    # 所以先按「用户要的数量 ÷ 预估通过率」多取一批，筛完再截到 limit。
+    # 预估通过率没有先验，就用 1/3 做保守估计：三项风险阈值全开时
+    # 本地 p50 负债 0.40、流动比 1.50，p10 负债约 0.70、流动比 0.60，
+    # 三分之一通过是贴近实际的乐观估计；多取的量由 OVERSAMPLE_CAP 封顶，
+    # 免得"要 200 只"变成扫全市场。
+    OVERSAMPLE_CAP = 4
+    risk_requested = any((
+        request.max_debt_ratio is not None,
+        request.min_current_ratio is not None,
+        request.max_receivable_ratio is not None,
+        request.require_profit,
+        request.exclude_st,
+    ))
+    fetch_limit = request.limit * OVERSAMPLE_CAP if risk_requested else request.limit
     result = await asyncio.to_thread(
-        screener.screen, rows, rule, request.limit, names
+        screener.screen, rows, rule, fetch_limit, names
     )
 
+    # ---- 财务风险代理筛选 ----
+    # 只在用户明确要筛时才去查 financials。默认不查：多一次跨库查询，
+    # 而绝大多数调用方只想看形态。
+    risk_filter_applied: Optional[Dict[str, Any]] = None
+    risk_rejects: Dict[str, str] = {}
+    if (
+        request.max_debt_ratio is not None
+        or request.min_current_ratio is not None
+        or request.max_receivable_ratio is not None
+        or request.require_profit
+        or request.exclude_st
+    ):
+        from zettaranc import filters as screen_filters
+
+        financials_src = registry.get("financials")
+        if financials_src is None:
+            raise fail(503, "financials 数据源未就绪，无法做风险筛选")
+
+        stocks = result["stocks"]
+        codes = [s["thscode"] for s in stocks if s.get("thscode")]
+
+        risk_map: Dict[str, Dict[str, Any]] = {}
+        profit_map: Dict[str, Dict[str, Any]] = {}
+        st_set: set = set()
+
+        if (
+            request.max_debt_ratio is not None
+            or request.min_current_ratio is not None
+            or request.max_receivable_ratio is not None
+        ):
+            try:
+                for r in await financials_src.execute(
+                    screen_filters.build_risk_filter_sql()
+                ):
+                    if r.get("thscode") in set(codes):
+                        risk_map[r["thscode"]] = r
+            except Exception as exc:
+                logger.warning("取风险指标失败: %s", exc)
+                raise fail(503, f"取财务风险指标失败：{exc}") from exc
+
+        if request.require_profit:
+            try:
+                for r in await financials_src.execute(
+                    screen_filters.build_profit_filter_sql()
+                ):
+                    if r.get("thscode") in set(codes):
+                        profit_map[r["thscode"]] = r
+            except Exception as exc:
+                logger.warning("取利润数据失败: %s", exc)
+                raise fail(503, f"取利润数据失败：{exc}") from exc
+
+        if request.exclude_st:
+            market_for_st = registry.get("market")
+            if market_for_st is not None:
+                try:
+                    for r in await market_for_st.execute(
+                        screen_filters.build_st_names_sql()
+                    ):
+                        if r.get("thscode") in set(codes):
+                            st_set.add(r["thscode"])
+                except Exception as exc:
+                    logger.warning("取 ST 名单失败: %s", exc)
+                    raise fail(503, f"取 ST 名单失败：{exc}") from exc
+
+        kept: List[Dict[str, Any]] = []
+        for s in stocks:
+            code = s.get("thscode")
+            entry = {
+                "name": s.get("name", ""),
+                "risk": risk_map.get(code),
+                "profit": profit_map.get(code),
+                "is_st": code in st_set,
+            }
+            reason = screen_filters.evaluate_risk_filters(
+                entry,
+                max_debt_ratio=request.max_debt_ratio,
+                min_current_ratio=request.min_current_ratio,
+                max_receivable_ratio=request.max_receivable_ratio,
+                require_profit=request.require_profit,
+                exclude_st=request.exclude_st,
+            )
+            if reason is not None:
+                risk_rejects[code] = reason
+                continue
+            # 把实际数值与出处挂回结果，用户才能复核"为什么它过了"
+            s["risk"] = {
+                k: risk_map[code].get(k)
+                for k in ("period", "debt_ratio", "current_ratio", "receivable_ratio")
+            } if code in risk_map else None
+            s["is_st"] = code in st_set
+            s["risk_sources"] = [
+                screen_filters.BALANCE_SOURCE,
+                screen_filters.INCOME_SOURCE,
+                screen_filters.ST_SOURCE,
+            ]
+            if entry.get("risk_missing"):
+                s["risk_missing"] = entry["risk_missing"]
+            kept.append(s)
+
+        result["stocks"] = kept[: request.limit]
+        risk_filter_applied = {
+            "max_debt_ratio": request.max_debt_ratio,
+            "min_current_ratio": request.min_current_ratio,
+            "max_receivable_ratio": request.max_receivable_ratio,
+            "require_profit": request.require_profit,
+            "exclude_st": request.exclude_st,
+            "evaluated": len(stocks),
+            "rejected": len(risk_rejects),
+            "passed": len(kept),
+            "returned": len(result["stocks"]),
+            # 请求 8 只但只给回 2 只时，这里要说清是"候选池不够"而不是
+            # "只有 2 只合格"。两者对用户的行动含义完全不同。
+            "short_of_request": max(0, request.limit - len(result["stocks"])),
+            "oversample_factor": OVERSAMPLE_CAP,
+            "sources": {
+                "balance": screen_filters.BALANCE_SOURCE,
+                "income": screen_filters.INCOME_SOURCE,
+                "st": screen_filters.ST_SOURCE,
+            },
+        }
+
     warnings: List[str] = []
+    if sector_filter:
+        warnings.append(
+            f"候选集已限定在板块「{sector_filter['name']}」的 "
+            f"{sector_filter['constituents']} 只成分股内"
+            f"（出处：{sector_filter['source']}）"
+        )
+    if risk_filter_applied:
+        if risk_filter_applied["short_of_request"]:
+            warnings.append(
+                f"请求 {request.limit} 只，按 {OVERSAMPLE_CAP}× 超取 "
+                f"{risk_filter_applied['evaluated']} 只送筛后只剩 "
+                f"{risk_filter_applied['returned']} 只通过 —— "
+                f"**候选池不够**，不是市场里只有这么多合格的。"
+                f"可放宽阈值或换策略。"
+            )
+        warnings.append(
+            f"风险筛选淘汰 {risk_filter_applied['rejected']}/"
+            f"{risk_filter_applied['evaluated']} 只："
+            + "；".join(list(risk_rejects.values())[:3])
+            + ("…" if len(risk_rejects) > 3 else "")
+        )
+        warnings.append(
+            "风险维度只覆盖本地库能算出的三项（资产负债率/流动比率/应收占比）"
+            "与 ST 名称匹配。商誉、股权质押、大股东减持、审计意见、监管处罚"
+            "本地无数据源，**这些暴雷信号本次未被检查**。"
+        )
     if pool_restricted and limit_up_pool:
         pool_dates = sorted({r.get("trade_date") for r in limit_up_pool if r.get("trade_date")})
         span = f"{pool_dates[0]} ~ {pool_dates[-1]}" if pool_dates else "未知区间"
@@ -702,7 +951,10 @@ async def zettaranc_screen(request: ScreenRequest) -> Dict[str, Any]:
     return {
         "success": True,
         "strategy": request.strategy,
-        "universe": len(names),
+        # 实际送去查的候选集大小。板块/涨停池限定后它会小于全市场 5,571，
+        # 这正是"universe"该表达的意思：本次筛选覆盖了多少只。
+        "universe": len(all_codes),
+        "market_size": len(names),
         # 实际参与筛选的标的数，不是清单长度
         "scanned": len(scanned_codes),
         "scanned_from_universe": len(names),
@@ -715,6 +967,9 @@ async def zettaranc_screen(request: ScreenRequest) -> Dict[str, Any]:
         "price_merged_rows": price_merged,
         "price_available": price_source is not None,
         "shards": len(shards),
+        "sector_filter": sector_filter,
+        "risk_filter": risk_filter_applied,
+        "risk_rejects": risk_rejects,
         "no_indicator_count": max(0, no_indicator),
         "pool_size": len(limit_up_pool) if limit_up_pool else None,
         "pool_restricted": pool_restricted,

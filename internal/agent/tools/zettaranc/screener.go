@@ -23,24 +23,29 @@ func (t *ScreenerTool) Name() string {
 }
 
 func (t *ScreenerTool) Description() string {
-	return `使用 Z哥交易体系进行智能选股。
+	return `全市场集合式选股。一条 SQL 取回全市场指标 + 价量后在本地判定，
+不走逐只扫描（逐只是 5,571 次往返、36~51 秒）。
 
-支持策略：
-- B1: B1 买点（J 值超卖 + 缩量回调）
-- B2: B2 买点（趋势确认）
-- SB1: 加强版 B1
-- shaofu: 少妇战法共振
-- limit_up: 涨停板选股
-- anomaly: 异动选股
+形态信号（KDJ超卖金叉、MACD金叉、放量突破、Donchian上轨突破…）只回答
+"图形像不像"，不回答"会不会暴雷"。可选筛选构成第二道关：
 
-返回内容：
-- 按评分排序的候选股票列表
-- 每只股票的匹配理由
-- 技术指标快照
+板块：sector="半导体" —— 限定在该板块成分股内
+风险代理（出处 financials.v_balance_sheet，覆盖全部 A 股）：
+  max_debt_ratio        资产负债率上限，本地 p50=0.40 p90=0.71
+  min_current_ratio     流动比率下限，本地 p50=1.50 p10=0.60
+  max_receivable_ratio  应收账款占总资产上限
+开关：
+  require_profit  最新期归母净利润为正（financials.v_income_statement）
+  exclude_st      排除 ST/*ST
 
-使用示例：
-- B1 买点选股：strategy="B1", limit=20
-- 少妇战法选股：strategy="shaofu", limit=20`
+【重要】风险维度**只覆盖上面这些**。商誉、股权质押、大股东减持、审计意见、
+监管处罚、业绩预告本地数据源里没有，所以**没有**对应参数。回答用户"有没有
+暴雷风险"时必须说清这一点，不能因为资产负债率低就说它安全。
+
+ST 是按 v_symbol.name 匹配识别的（库里没有 ST 标记列），全 A 204 只。
+
+返回里的 scanned / scanned_from_universe / truncated / risk_filter /
+warnings 都是可信度信息，汇报结论时应一并说明。`
 }
 
 func (t *ScreenerTool) Parameters() json.RawMessage {
@@ -57,6 +62,30 @@ func (t *ScreenerTool) Parameters() json.RawMessage {
 				"description": "返回数量（默认 20，最大 100）",
 				"default":     20,
 			},
+			"sector": map[string]interface{}{
+				"type":        "string",
+				"description": "板块名片段，如「半导体」「白酒」。限定候选集在该板块成分股内。",
+			},
+			"max_debt_ratio": map[string]interface{}{
+				"type":        "number",
+				"description": "资产负债率上限，如 0.5 表示剔除负债超过 50% 的票。本地分布 p50=0.40 p90=0.71。出处 financials.v_balance_sheet",
+			},
+			"min_current_ratio": map[string]interface{}{
+				"type":        "number",
+				"description": "流动比率下限，如 1.0。本地分布 p50=1.50 p10=0.60。出处 financials.v_balance_sheet",
+			},
+			"max_receivable_ratio": map[string]interface{}{
+				"type":        "number",
+				"description": "应收账款占总资产上限。出处 financials.v_balance_sheet",
+			},
+			"require_profit": map[string]interface{}{
+				"type":        "boolean",
+				"description": "要求最新期归母净利润为正。出处 financials.v_income_statement",
+			},
+			"exclude_st": map[string]interface{}{
+				"type":        "boolean",
+				"description": "排除 ST/*ST。库里没有 ST 标记列，只能按 market.v_symbol.name 匹配，全 A 204 只",
+			},
 		},
 		"required": []string{"strategy"},
 	}
@@ -66,8 +95,14 @@ func (t *ScreenerTool) Parameters() json.RawMessage {
 
 func (t *ScreenerTool) Execute(ctx context.Context, args json.RawMessage) (*types.ToolResult, error) {
 	var params struct {
-		Strategy string `json:"strategy"`
-		Limit    int    `json:"limit"`
+		Strategy           string   `json:"strategy"`
+		Limit              int      `json:"limit"`
+		Sector             string   `json:"sector"`
+		MaxDebtRatio       *float64 `json:"max_debt_ratio"`
+		MinCurrentRatio    *float64 `json:"min_current_ratio"`
+		MaxReceivableRatio *float64 `json:"max_receivable_ratio"`
+		RequireProfit      bool     `json:"require_profit"`
+		ExcludeST          bool     `json:"exclude_st"`
 	}
 	if err := json.Unmarshal(args, &params); err != nil {
 		return &types.ToolResult{
@@ -90,8 +125,30 @@ func (t *ScreenerTool) Execute(ctx context.Context, args json.RawMessage) (*type
 		params.Limit = 100
 	}
 
+	// 只把**用户真的给了**的筛选条件传下去。指针为 nil 就不设，
+	// 服务端也就不会去查 financials —— 默认调用不多付一次跨库查询。
+	var opts []ScreenOption
+	if params.Sector != "" {
+		opts = append(opts, WithSector(params.Sector))
+	}
+	if params.MaxDebtRatio != nil {
+		opts = append(opts, WithMaxDebtRatio(*params.MaxDebtRatio))
+	}
+	if params.MinCurrentRatio != nil {
+		opts = append(opts, WithMinCurrentRatio(*params.MinCurrentRatio))
+	}
+	if params.MaxReceivableRatio != nil {
+		opts = append(opts, WithMaxReceivableRatio(*params.MaxReceivableRatio))
+	}
+	if params.RequireProfit {
+		opts = append(opts, WithRequireProfit())
+	}
+	if params.ExcludeST {
+		opts = append(opts, WithExcludeST())
+	}
+
 	// Call python-service HTTP API
-	resp, err := t.client.Screen(ctx, params.Strategy, params.Limit)
+	resp, err := t.client.Screen(ctx, params.Strategy, params.Limit, opts...)
 	if err != nil {
 		return &types.ToolResult{
 			Success: false,
