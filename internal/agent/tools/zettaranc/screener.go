@@ -26,8 +26,20 @@ func (t *ScreenerTool) Description() string {
 	return `全市场集合式选股。一条 SQL 取回全市场指标 + 价量后在本地判定，
 不走逐只扫描（逐只是 5,571 次往返、36~51 秒）。
 
-形态信号（KDJ超卖金叉、MACD金叉、放量突破、Donchian上轨突破…）只回答
-"图形像不像"，不回答"会不会暴雷"。可选筛选构成第二道关：
+13 个策略，按方向分三类。**先看用户想干什么再选策略**：
+
+看涨（B1 买点、超卖金叉类）
+  B1 / B2 / SB1 / shaofu / limit_up / vol_breakout / donchian_break
+  / hammer_reversal
+
+看跌（超买、死叉、空头排列）—— 用于**规避持仓**，比选新票更常用
+  b1_overbought（B1 的镜像） / trend_down / anomaly
+  / shooting_star_reversal
+
+方向未���（波动本身无方向，涨途中也会出现）
+  volatility_spike
+
+形态信号只回答"图形像不像"，不回答"会不会暴雷"。可选筛选构成第二道关：
 
 板块：sector="半导体" —— 限定在该板块成分股内
 风险代理（出处 financials.v_balance_sheet，覆盖全部 A 股）：
