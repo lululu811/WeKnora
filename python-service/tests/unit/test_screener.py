@@ -512,3 +512,64 @@ class TestPriceAwareSignals:
     def test_price_signals_are_no_longer_unsupported(self):
         assert "放量突破" not in screener.SCREEN_UNSUPPORTED
         assert "Donchian上轨突破" not in screener.SCREEN_UNSUPPORTED
+
+
+class TestNoDeadSignalConfig:
+    """防"只声明不使用"的配置表复活。
+
+    曾经有一份 SCREEN_SIGNAL_FIELDS（信号名 -> 指标别名），注释写着
+    "列出映射是为了让 STRATEGY_RULES 里写错名字时能在启动/测试期暴露出来"。
+    实际上**没有任何代码读它**，而且它早已和真实信号集脱节 —— 缺
+    KDJ超卖金叉、Aroon多头排列、放量突破与全部蜡烛形态。真按它做闸门
+    会把大半合法信号判成"写错了"。
+
+    真正在起作用的闸门是
+    test_every_rule_signal_is_reachable_from_real_indicator_values。
+    """
+
+    def test_the_dead_mapping_table_is_gone(self):
+        assert not hasattr(screener, "SCREEN_SIGNAL_FIELDS"), (
+            "SCREEN_SIGNAL_FIELDS 是死配置：没有代码读它，且已与真实信号集脱节。"
+            "写错信号名由 test_every_rule_signal_is_reachable_from_real_"
+            "indicator_values 拦，不需要这张表。"
+        )
+
+    def test_every_mapped_field_would_have_been_a_real_indicator_column(self):
+        """记录那张表本该做的事：把信号名映射到真实存在的指标列。
+
+        死配置里的 13 个映射值全是合法列名 —— 所以它"看起来对"，
+        这正是危险之处：没人会因为它列出的列名有错而发现它根本没被调用。
+        真正缺的是那些**信号名**（KDJ超卖金叉、Aroon多头排列、放量突破
+        与全部蜡烛形态），而这份测试无法在表被删掉后再复现那个缺口。
+        所以这里只守住"列名合法"这一半，另一半由
+        test_every_rule_signal_is_reachable_from_real_indicator_values 守。
+        """
+        from zettaranc.data_loader import INDICATOR_COLUMNS
+
+        historical_fields = {
+            "dif", "rsi6", "cci", "willr", "mfi", "zscore",
+            "dc_upper", "atr", "bb_width", "cmf", "vi_plus", "adx",
+        }
+        unknown = {
+            f for f in historical_fields
+            if f not in INDICATOR_COLUMNS
+        }
+        assert not unknown, (
+            f"这些映射目标不是真实的指标列名：{sorted(unknown)}"
+        )
+
+    def test_unsupported_signals_is_an_empty_but_live_gate(self):
+        """取不到数据的信号才进这个集合；现在价量已接入，所以是空的。"""
+        assert screener.SCREEN_UNSUPPORTED == {}
+        rule = {"match_signals": ["放量突破", "Donchian上轨突破"], "min_count": 1}
+        assert screener.unsupported_signals(rule) == []
+
+    def test_adding_an_unfetchable_signal_would_surface_it(self):
+        """闸门本身要有效：塞一个不存在的信号名进去必须被报出来。"""
+        rule = {"match_signals": ["这个信号不存在"], "min_count": 1}
+        with_patch = screener.SCREEN_UNSUPPORTED
+        with_patch["这个信号不存在"] = "假装它需要取不到的数据"
+        try:
+            assert screener.unsupported_signals(rule) == ["这个信号不存在"]
+        finally:
+            del with_patch["这个信号不存在"]

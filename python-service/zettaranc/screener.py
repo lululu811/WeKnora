@@ -130,24 +130,23 @@ def merge_price_rows(
         merged += 1
     return merged
 
-# 策略命中所需的信号名 -> 指标别名。
-# 列出映射是为了让 STRATEGY_RULES 里写错名字时能在启动/测试期暴露出来，
-# 而不是像以前那样静默地永远匹配不到。
-SCREEN_SIGNAL_FIELDS: Dict[str, str] = {
-    "MACD金叉": "dif",
-    "RSI6超卖": "rsi6",
-    "CCI超卖": "cci",
-    "Williams%R超卖": "willr",
-    "MFI超卖": "mfi",
-    "Z-Score超卖": "zscore",
-    "Donchian上轨突破": "dc_upper",
-    "ATR扩张": "atr",
-    "布林带收口": "bb_width",
-    "CMF资金流入": "cmf",
-    "CMF资金流出": "cmf",
-    "Vortex死叉": "vi_plus",
-    "ADX空头趋势": "adx",
-}
+
+# 没有"信号名 -> 指标别名"的映射表。
+#
+# 曾经有一份 SCREEN_SIGNAL_FIELDS，注释写着"列出映射是为了让 STRATEGY_RULES
+# 里写错名字时能在启动/测试期暴露出来"。实际上**没有任何代码读它** ——
+# 一份只声明不使用的配置。而且它早已和真实信号集脱节：缺 KDJ超卖金叉、
+# Stochastic超卖金叉、Aroon多头排列、放量突破与全部蜡烛形态。
+# 一旦真按它做闸门，会把大半合法信号判成"写错了"。
+#
+# 真正在起作用的闸门是测试
+# tests/unit/test_screener.py::test_every_rule_signal_is_reachable_from_real_indicator_values：
+# 它用真实夹具跑一遍 detect_signals，拿到实际能发出的信号名全集，
+# 断言每条策略引用的信号都在其中。本轮加"放量突破""Donchian上轨突破"
+# 两个策略时，都是这条测试先报的名字不认识。
+#
+# 注释承诺了不存在的机制，比没有这个机制更糟 —— 维护者会以为
+# "已经查过映射表了"，于是跳过真正的检查。
 
 # 这些信号依赖**价格/成交量**（close、volume），而 `v_indicators_daily` 里
 # 没有任何价格列 —— 它只有指标。`market.v_daily_qfq` 才有点位，两个库是独立
@@ -376,5 +375,14 @@ def screen(
 
 
 def unsupported_signals(rule: Dict[str, Any]) -> List[str]:
-    """规则里引用了全市场扫描不支持的形态信号（会静默匹配不到）。"""
+    """规则里引用了全市场扫描**取不到数据**的形态信号。
+
+    目前恒返回空：价量维度接进来后 SCREEN_UNSUPPORTED 已清空，所有信号
+    都能算。保留这个闸门是为了将来：新增一个依赖尚未并入的字段的信号时，
+    先登记进来，接口就会在 `unsupported_signals` 里如实回报，而不是让那条
+    策略静默地永远选不出票 —— `anomaly` 当初就是这么"死"掉的。
+
+    注意它管的是**数据取不到**，不是**信号名写错**。写错由单元测试
+    test_every_rule_signal_is_reachable_from_real_indicator_values 拦。
+    """
     return [s for s in rule["match_signals"] if s in SCREEN_UNSUPPORTED]
