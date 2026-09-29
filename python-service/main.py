@@ -303,11 +303,26 @@ STRATEGY_RULES: Dict[str, Dict[str, Any]] = {
         "match_signals": ["CMF资金流入", "ADX多头趋势", "Aroon多头排列"],
         "min_count": 1,
     },
-    # ATR扩张 / 布林带收口 是 neutral 信号，所以这条规则开了 allow_neutral。
-    # （旧版这三条规则里两条是 neutral、一条判据恒不成立，整条策略恒返回 0。）
+    # 异常/风险筛选：命中越多项风险信号，排名越靠前。
+    #
+    # 这条规则过去写着 `allow_neutral: True`，而筛选侧的判据是
+    # `s["signal"] == "bullish" or allow_neutral` —— 开了 allow_neutral
+    # 之后整个条件对所有方向短路成真，bearish 信号照收不误；score 又累加
+    # 被夹到 [0,1] 的无符号 strength，于是命中 3 个看跌信号的票稳定排在
+    # 命中 1 个中性信号的票前面。策略顶着"异常检测"的名字选出一批看跌票。
+    #
+    # 现在用显式 direction 表达意图。ATR扩张 / 布林带收口 是 neutral
+    # （波动放大本身没有方向），所以从 bullish 名单里去掉；只留真带方向的
+    # 三项风险信号，并用 direction="bearish" 把方向写进契约。
     "anomaly": {
-        "match_signals": ["ATR扩张", "布林带收口", "CMF资金流出",
-                          "Vortex死叉", "ADX空头趋势"],
+        "match_signals": ["CMF资金流出", "Vortex死叉", "ADX空头趋势"],
+        "min_count": 1,
+        "direction": "bearish",
+    },
+    # 波动率异动：ATR 扩张与布林带收口都是 neutral，把 volatility 放到
+    # 独立策略里，否则只能靠 allow_neutral 绕开方向判据。
+    "volatility_spike": {
+        "match_signals": ["ATR扩张", "布林带收口"],
         "min_count": 1,
         "allow_neutral": True,
     },

@@ -139,8 +139,22 @@ def evaluate_group(
     match_signals: List[str],
     min_count: int,
     allow_neutral: bool = False,
+    direction: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
-    """对一只标的跑信号判定并按规则过滤。指标不全直接淘汰。"""
+    """对一只标的跑信号判定并按规则过滤。指标不全直接淘汰。
+
+    `direction` 取代旧版 `allow_neutral` 的开关语义。旧实现写的是
+    `s["signal"] == "bullish" or allow_neutral`：一旦某条规则开了
+    allow_neutral（`anomaly` 就开了），整个条件对**所有**方向短路成真，
+    bearish 信号照样入选；而 score 累加的是被夹到 [0,1] 的无符号
+    strength，于是命中 3 个看跌信号的票排在命中 1 个中性信号的票之前
+    —— 策略稳定地选出一批看跌票，却顶着"异常检测"的名字。
+
+    现在把方向变成显式契约：
+      direction="bullish"  只要 bullish（超卖金叉、MACD金叉…）
+      direction="bearish"  只要 bearish
+      direction=None       保持旧语义：bullish，外加 allow_neutral 时的 neutral
+    """
     if not entry.get("data_complete"):
         return None
     try:
@@ -149,10 +163,19 @@ def evaluate_group(
         return None
 
     wanted = set(match_signals)
+    if direction == "bullish":
+        allowed = {"bullish"}
+    elif direction == "bearish":
+        allowed = {"bearish"}
+    elif allow_neutral:
+        allowed = {"bullish", "neutral"}
+    else:
+        allowed = {"bullish"}
+
     matched = [
         s for s in signals
         if s["name"] in wanted
-        and (s["signal"] == "bullish" or allow_neutral)
+        and s["signal"] in allowed
     ]
     if len(matched) < min_count:
         return None
@@ -161,6 +184,7 @@ def evaluate_group(
         "name": entry.get("name", ""),
         "score": round(sum(s["strength"] for s in matched), 2),
         "matched_signals": [s["name"] for s in matched],
+        "matched_directions": sorted({s["signal"] for s in matched}),
         "summary": summarize_signals(signals),
     }
 
@@ -181,6 +205,7 @@ def screen(
         hit = evaluate_group(
             entry, rule["match_signals"], rule["min_count"],
             allow_neutral=bool(rule.get("allow_neutral")),
+            direction=rule.get("direction"),
         )
         if hit is not None:
             hit["thscode"] = code

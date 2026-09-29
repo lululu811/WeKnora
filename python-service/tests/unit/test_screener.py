@@ -118,6 +118,39 @@ class TestScreen:
         lax = {"match_signals": ["ATR扩张"], "min_count": 1, "allow_neutral": True}
         assert screener.screen(rows, lax, 10)["matched"] == 1
 
+    def test_allow_neutral_no_longer_lets_bearish_signals_through(self):
+        """旧实现是 `s["signal"] == "bullish" or allow_neutral`：
+        一旦某条规则开了 allow_neutral，条件对**所有**方向短路成真，
+        bearish 信号照样入选 —— `anomaly` 因此稳定地选出看跌票。
+        """
+        # di_minus >> di_plus 是 bearish（ADX空头趋势）
+        rows = _two_days("600519.SH", adx=35.0, di_plus=1.0, di_minus=30.0)
+        rule = {"match_signals": ["ADX空头趋势"], "min_count": 1,
+                "allow_neutral": True}
+        assert screener.screen(rows, rule, 10)["matched"] == 0, \
+            "allow_neutral 只该放行 neutral，不该放行 bearish"
+
+    def test_direction_bearish_selects_only_bearish_signals(self):
+        rows = _two_days("600519.SH", adx=35.0, di_plus=1.0, di_minus=30.0)
+        rule = {"match_signals": ["ADX空头趋势"], "min_count": 1,
+                "direction": "bearish"}
+        result = screener.screen(rows, rule, 10)
+        assert result["matched"] == 1
+        assert result["stocks"][0]["matched_directions"] == ["bearish"]
+
+    def test_direction_bearish_rejects_bullish_signals(self):
+        rows = _two_days("600519.SH", rsi6=12.0)
+        rule = {"match_signals": ["RSI6超卖"], "min_count": 1,
+                "direction": "bearish"}
+        assert screener.screen(rows, rule, 10)["matched"] == 0
+
+    def test_direction_overrides_allow_neutral(self):
+        """显式 direction 优先于 allow_neutral：声明了方向就不再看宽松开关。"""
+        rows = _two_days("600519.SH", atr=5.0)  # ATR扩张 = neutral
+        rule = {"match_signals": ["ATR扩张"], "min_count": 1,
+                "allow_neutral": True, "direction": "bullish"}
+        assert screener.screen(rows, rule, 10)["matched"] == 0
+
     def test_min_count_is_enforced(self):
         rows = _two_days("600519.SH", rsi6=12.0)
         rule = {"match_signals": ["RSI6超卖", "CCI超卖"], "min_count": 2}

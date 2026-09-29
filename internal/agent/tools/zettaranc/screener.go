@@ -50,7 +50,7 @@ func (t *ScreenerTool) Parameters() json.RawMessage {
 			"strategy": map[string]interface{}{
 				"type":        "string",
 				"description": "选股策略",
-				"enum":        []string{"B1", "B2", "SB1", "shaofu", "limit_up", "anomaly"},
+				"enum":        ScreenerStrategies(),
 			},
 			"limit": map[string]interface{}{
 				"type":        "integer",
