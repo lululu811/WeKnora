@@ -243,14 +243,33 @@ class TestScreenCoverageRegression:
     """the screener used to look at 100 arbitrary A-shares (BUG-14)."""
 
     def test_screen_covers_the_whole_market(self, client):
+        """scanned 必须是**实际参与筛选的标的数**，不是清单长度。
+
+        旧实现把 `scanned` 报成 `len(names)`（清单长度），于是哪怕指标
+        快照被 max_rows 截掉一半，返回里的 scanned 仍写着完整的全市场数，
+        调用方无从判断这次结果是不是全市场口径。现在两��数分开报。
+        """
         universe = client.query_rows(
             "market",
             "SELECT count(*) AS c FROM dim_symbol WHERE asset_type = 'a-share'",
         )[0]["c"]
         status, body = client.post("/zettaranc/screen", {"strategy": "B1", "limit": 5})
         assert status == 200
-        assert body["scanned"] == universe, (
-            f"claimed 全市场选股 but scanned {body['scanned']} of {universe}"
+        assert body["scanned_from_universe"] == universe, (
+            f"清单应有 {universe} 只，实报 {body['scanned_from_universe']}"
+        )
+        assert body["scanned"] <= body["scanned_from_universe"], (
+            f"scanned({body['scanned']}) 不该超过清单({body['scanned_from_universe']})"
+        )
+        # 差值必须被显式解释，不能凭空消失
+        gap = body["scanned_from_universe"] - body["scanned"]
+        assert gap == body["no_indicator_count"], (
+            f"少了 {gap} 只，但 no_indicator_count 只报了 {body['no_indicator_count']}"
+        )
+        if gap:
+            assert body["warnings"], "有票没参与筛选却没有任何说明"
+        assert body["truncated"] is False, (
+            "全市场 × 10 天不该撞上 100k 行上限；撞上了就必须报 truncated"
         )
 
     def test_screen_spans_more_than_one_exchange(self, client):
@@ -265,11 +284,42 @@ class TestScreenCoverageRegression:
     def test_every_strategy_is_recognised(self, client):
         """`anomaly` used to be structurally dead: two of its rules emitted
         `neutral` signals and the third compared two floats for equality."""
-        for strategy in ("B1", "B2", "SB1", "shaofu", "limit_up", "anomaly"):
+        for strategy in ("B1", "B2", "SB1", "shaofu", "limit_up",
+                         "anomaly", "volatility_spike"):
             status, body = client.post("/zettaranc/screen",
                                         {"strategy": strategy, "limit": 5})
             assert status == 200, body
             assert "matched" in body
+
+    def test_anomaly_only_returns_bearish_signals(self, client):
+        """`anomaly` 过去开了 allow_neutral，而筛选侧判据是
+        `signal == "bullish" or allow_neutral` —— 整个条件对所有方向短路成真，
+        bearish 信号照收；score 又累加被夹到 [0,1] 的无符号 strength，
+        于是命中 3 个看跌信号的票稳定排在命中 1 个中性信号的票之前。
+        策略顶着"异常检测"的名字选出一批看跌票，而方向本该是它的重点。
+        """
+        status, body = client.post("/zettaranc/screen",
+                                    {"strategy": "anomaly", "limit": 50})
+        assert status == 200, body
+        stocks = body.get("stocks") or []
+        if not stocks:
+            pytest.skip("当前无命中，无法判断方向")
+        for s in stocks:
+            dirs = set(s.get("matched_directions") or [])
+            assert dirs == {"bearish"}, (
+                f"{s['thscode']} 命中方向 {dirs}，anomaly 只该返回 bearish："
+                f"{s.get('matched_signals')}"
+            )
+
+    def test_b1_only_returns_bullish_signals(self, client):
+        status, body = client.post("/zettaranc/screen",
+                                    {"strategy": "B1", "limit": 50})
+        assert status == 200, body
+        for s in (body.get("stocks") or []):
+            dirs = set(s.get("matched_directions") or [])
+            assert dirs == {"bullish"}, (
+                f"{s['thscode']} 命中方向 {dirs}，B1 只该返回 bullish"
+            )
 
 
 class TestMissingIndicatorDataRegression:

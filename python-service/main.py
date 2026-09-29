@@ -529,18 +529,50 @@ async def zettaranc_screen(request: ScreenRequest) -> Dict[str, Any]:
     if not rows:
         raise fail(503, "指标快照为空")
 
+    # 截断必须在这里说清楚。
+    #
+    # 旧实现把 `scanned` 报成 `len(names)` —— 那是**清单长度**，不是实际
+    # 参与筛选的标的数。指标快照查询被 `max_rows` 截断时（indicators.duckdb
+    # 有 12GB，全市场 × LOOKBACK_DAYS 天很容易撞上限），多出来的票被静默
+    # 丢掉，而返回里的 `scanned` 仍然写着完整的 5,571 —— 调用方无从判断
+    # 这次结果是不是全市场口径。
+    universe_truncated = bool(getattr(indicators_src, "last_result_truncated", False))
+    scanned_codes = {r.get("thscode") for r in rows if r.get("thscode")}
+    # 清单里有、但一行指标都没回来的票：不是被截断，就是该票确实没有指标数据。
+    # 两种情况对调用方的含义不同，都不该藏进 `scanned` 里。
+    no_indicator = len(names) - len(scanned_codes)
+    dropped = sorted(set(names) - scanned_codes)
+
     result = await asyncio.to_thread(
         screener.screen, rows, rule, request.limit, names
     )
+
+    warnings: List[str] = []
+    if universe_truncated:
+        warnings.append(
+            f"指标快照被单次查询行数上限（{MAX_QUERY_ROWS} 行）截断，"
+            f"只有 {len(scanned_codes)} 只票参与了本次筛选，"
+            f"结果不代表全市场。请调小 strategy 的取数范围或改用 /zettaranc/scan 逐只扫。"
+        )
+    if dropped:
+        preview = "、".join(dropped[:10]) + ("…" if len(dropped) > 10 else "")
+        warnings.append(
+            f"{len(dropped)} 只票没有返回任何指标行，已排除在筛选之外：{preview}"
+        )
 
     return {
         "success": True,
         "strategy": request.strategy,
         "universe": len(names),
-        "scanned": len(names),
+        # 实际参与筛选的标的数，不是清单长度
+        "scanned": len(scanned_codes),
+        "scanned_from_universe": len(names),
         "incomplete": result["incomplete"],
         "matched": result["matched"],
         "unsupported_signals": screener.unsupported_signals(rule),
+        "truncated": universe_truncated,
+        "no_indicator_count": max(0, no_indicator),
+        "warnings": warnings,
         "stocks": result["stocks"],
     }
 
