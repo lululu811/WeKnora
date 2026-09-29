@@ -11,6 +11,8 @@ against, so a future change that reintroduces it fails loudly instead of
 silently producing inverted trading signals.
 """
 
+import datetime
+
 import pytest
 
 from zettaranc import screener
@@ -444,4 +446,56 @@ class TestLimitUpUsesRealData:
             assert got == expect[s["thscode"]], (
                 f"{s['thscode']} 近 {screener.LIMIT_UP_LOOKBACK_DAYS} 天内最高 "
                 f"{expect[s['thscode']]} 板，返回却是 {got} 板"
+            )
+
+
+class TestScreenProvenance:
+    """选股结果必须能追回到源表与截止日。
+
+    工具层（internal/agent/tools/hithink_finance）每一行结果都带 `_source`，
+    这里是对齐：一次选股返回几十只票，模型据此回答"凭什么说它超卖"时
+    要有可引用的表名和日期，否则和凭空断言无异。
+    """
+
+    def test_reports_every_source_table(self, client):
+        status, body = client.post("/zettaranc/screen",
+                                    {"strategy": "B1", "limit": 3})
+        assert status == 200, body
+        src = body.get("sources")
+        assert src, "返回里必须有 sources"
+        assert "indicators.v_indicators_daily" in src["signals"]
+        assert "market.dim_symbol" in src["universe"]
+
+    def test_price_source_is_listed_only_when_it_was_merged(self, client):
+        """价量是可选维度。取不到时不能列进去 —— 列出没用的源表
+        会让人以为形态信号用到了价量（而放量突破正是靠它）。"""
+        status, body = client.post("/zettaranc/screen",
+                                    {"strategy": "vol_breakout", "limit": 3})
+        assert status == 200, body
+        src = body["sources"]
+        if body["price_merged_rows"] > 0:
+            assert "market.v_daily_qfq" in src["signals"]
+        else:
+            assert "market.v_daily_qfq" not in src["signals"]
+
+    def test_reports_the_as_of_dates(self, client):
+        """截止日必须报。指标是 3 个交易日前的快照时，
+        「当前超卖」和「快照当天的超卖」不是一回事。"""
+        status, body = client.post("/zettaranc/screen",
+                                    {"strategy": "B1", "limit": 3})
+        assert status == 200, body
+        src = body["sources"]
+        assert src["indicator_as_of"], "必须报指标截止日"
+        assert src["lookback_days"] == screener.LOOKBACK_DAYS
+
+    def test_stale_data_is_called_out(self, client):
+        status, body = client.post("/zettaranc/screen",
+                                    {"strategy": "B1", "limit": 3})
+        assert status == 200, body
+        as_of = datetime.date.fromisoformat(
+            body["sources"]["indicator_as_of"][:10])
+        lag = (datetime.date.today() - as_of).days
+        if lag > 7:
+            assert any("截止" in w for w in body["warnings"]), (
+                f"数据已陈旧 {lag} 天却没有任何提示：{body['warnings']}"
             )

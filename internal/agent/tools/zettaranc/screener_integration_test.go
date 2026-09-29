@@ -131,6 +131,37 @@ func TestScreenWithoutFiltersLeavesThemNull(t *testing.T) {
 	}
 }
 
+// 选股结果必须能追回到源表与截止日。工具层每一行结果都带 `_source`，
+// 选股器是对齐的那个：模型据此回答"凭什么说它超卖"时要有可引用的表名。
+func TestScreenProvenanceReachesTheCaller(t *testing.T) {
+	c := requireLive(t)
+
+	res, err := c.Screen(context.Background(), "B1", 3)
+	if err != nil {
+		t.Fatalf("Screen 失败：%v", err)
+	}
+	src, ok := res["sources"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("返回里没有 sources，模型无从引用出处：%v", res)
+	}
+	signals, _ := src["signals"].([]interface{})
+	if len(signals) == 0 {
+		t.Fatal("sources.signals 为空")
+	}
+	found := false
+	for _, s := range signals {
+		if s == "indicators.v_indicators_daily" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("sources.signals 里没有指标源表：%v", signals)
+	}
+	if src["indicator_as_of"] == nil || src["indicator_as_of"] == "" {
+		t.Errorf("没报指标截止日：%v", src)
+	}
+}
+
 func TestScreenRequestOmitsUnsetPointers(t *testing.T) {
 	// 不打网络，只验序列化：未设置的阈值必须整个字段消失，
 	// 而不是序列化成 null 或 0 —— 0 会被服务端当成"负债率上限 0"，

@@ -735,6 +735,16 @@ async def zettaranc_screen(request: ScreenRequest) -> Dict[str, Any]:
     # 丢掉，而返回里的 `scanned` 仍然写着完整的 5,571 —— 调用方无从判断
     # 这次结果是不是全市场口径。
     scanned_codes = {r.get("thscode") for r in rows if r.get("thscode")}
+
+    # 数据截止日。形态信号全部由最近 LOOKBACK_DAYS 天的指标算出，
+    # 不说截止日的话，「今天这只票超卖」和「三天前的快照」长得一样。
+    # 两个库各自可能有各自的最新日期（同步进度不同），所以分开报。
+    indicator_as_of = max(
+        (str(r.get("date")) for r in rows if r.get("date")), default=None
+    )
+    price_as_of = max(
+        (str(r.get("date")) for r in price_rows if r.get("date")), default=None
+    )
     # 「没有指标行」的基准必须是**实际送去查的候选集**，不是全市场清单。
     # 板块筛选把候选集缩到 320 只之后，若仍拿 5,571 只的 names 去算差集，
     # 会报出"5,251 只没有指标行"——而它们只是**不在这个板块里**，
@@ -889,6 +899,18 @@ async def zettaranc_screen(request: ScreenRequest) -> Dict[str, Any]:
         }
 
     warnings: List[str] = []
+    if indicator_as_of:
+        try:
+            lag = (
+                datetime.date.today() - datetime.date.fromisoformat(indicator_as_of[:10])
+            ).days
+        except ValueError:
+            lag = -1
+        if lag > 7:
+            warnings.append(
+                f"指标数据截止 {indicator_as_of}，距今 {lag} 天。"
+                f"「当前超卖/金叉」是那一天的状态，不是今天的。"
+            )
     if sector_filter:
         detail = ""
         if sector_filter["match_mode"] == "fuzzy" and sector_filter["matched_sectors"]:
@@ -992,6 +1014,24 @@ async def zettaranc_screen(request: ScreenRequest) -> Dict[str, Any]:
         # 必须让调用方知道，否则"没选出票"会被读成"市场里没有"。
         "price_merged_rows": price_merged,
         "price_available": price_source is not None,
+        # 形态信号的出处。工具层（internal/agent/tools/hithink_finance）每一行
+        # 结果都带 `_source`，这里是对齐：一次选股返回几十只票，模型据此
+        # 回答"凭什么说它超卖"时要有可引用的表名，否则和凭空断言无异。
+        # 价量是可选维度，取不到时据实去掉而不是写个空壳。
+        "sources": {
+            "signals": [
+                "indicators.v_indicators_daily",
+                *(
+                    ["market.v_daily_qfq"]
+                    if price_source is not None and price_merged > 0
+                    else []
+                ),
+            ],
+            "universe": "market.dim_symbol",
+            "indicator_as_of": indicator_as_of,
+            "price_as_of": price_as_of,
+            "lookback_days": screener.LOOKBACK_DAYS,
+        },
         "shards": len(shards),
         "sector_filter": sector_filter,
         "risk_filter": risk_filter_applied,
