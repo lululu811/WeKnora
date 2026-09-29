@@ -3,7 +3,6 @@ package zettaranc
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 
 	"github.com/Tencent/WeKnora/internal/types"
 )
@@ -23,109 +22,59 @@ func (t *BacktestTool) Name() string {
 }
 
 func (t *BacktestTool) Description() string {
-	return `使用 Z哥交易体系进行策略回测。
+	return `【未实现，调用会直接失败】Z哥战法的策略回测。
 
-支持策略：
-- shaofu: 少妇战法
-- multi: 多策略融合
-- b1, b2, sb1: 单战法策略
+真实回测（逐日重放信号、持仓与撮合、绩效统计）尚未实现。本工具过去会返回
+**选股结果**冒充回测结果，现已停止该行为。
 
-返回内容：
-- 收益率、夏普比率、最大回撤
-- 胜率、盈亏比
-- 交易记录
-- 资金曲线
-
-使用示例：
-- 少妇战法回测茅台：strategy="shaofu", thscode="600519.SH", days=250
-- 多策略回测宁德时代：strategy="multi", thscode="300750.SZ", days=250`
+替代方案：
+- 要"从全市场挑出符合某战法的票" → zettaranc.screener
+- 要"看某只票的趋势/量价/形态/支撑阻力" → zettaranc.analyze
+- 要"取历史 OHLCV 自行核算收益" → hithink.finance.market.price.historical`
 }
 
 func (t *BacktestTool) Parameters() json.RawMessage {
+	// 参数 schema 保留是为了让工具仍可被发现并给出明确报错。
+	// 描述里已写明"调用会直接失败"，模型不该再构造参数调它。
 	schema := map[string]interface{}{
 		"type": "object",
 		"properties": map[string]interface{}{
 			"strategy": map[string]interface{}{
 				"type":        "string",
-				"description": "策略名称：shaofu（少妇战法）、multi（多策略）、b1、b2、sb1",
-				"enum":        []string{"shaofu", "multi", "b1", "b2", "sb1"},
+				"description": "策略名称。当前不支持，调用一律失败。",
 			},
 			"thscode": map[string]interface{}{
 				"type":        "string",
-				"description": "同花顺股票代码，如 600519.SH",
+				"description": "同花顺股票代码。当前不支持，调用一律失败。",
 			},
 			"days": map[string]interface{}{
 				"type":        "integer",
-				"description": "回测天数（默认 250，即一年）",
-				"default":     250,
+				"description": "回测天数。当前不支持，调用一律失败。",
 			},
 		},
-		"required": []string{"strategy", "thscode"},
 	}
 	data, _ := json.Marshal(schema)
 	return data
 }
 
 func (t *BacktestTool) Execute(ctx context.Context, args json.RawMessage) (*types.ToolResult, error) {
-	var params struct {
-		Strategy string `json:"strategy"`
-		Thscode  string `json:"thscode"`
-		Days     int    `json:"days"`
-	}
-	if err := json.Unmarshal(args, &params); err != nil {
-		return &types.ToolResult{
-			Success: false,
-			Error:   fmt.Sprintf("参数解析失败：%v", err),
-		}, nil
-	}
-
-	if params.Strategy == "" {
-		return &types.ToolResult{
-			Success: false,
-			Error:   "参数错误：strategy 不能为空",
-		}, nil
-	}
-
-	if params.Thscode == "" {
-		return &types.ToolResult{
-			Success: false,
-			Error:   "参数错误：thscode 不能为空",
-		}, nil
-	}
-
-	if params.Days <= 0 {
-		params.Days = 250
-	}
-
-	// Call python-service HTTP API
-	resp, err := t.client.Screen(ctx, params.Strategy, 50)
-	if err != nil {
-		return &types.ToolResult{
-			Success: false,
-			Error:   fmt.Sprintf("回测失败：%v。该工具正在迁移到 python-service，请先用 zettaranc.screener 选择候选股票。", err),
-		}, nil
-	}
-
-	// Format output
-	output := map[string]interface{}{
-		"strategy": params.Strategy,
-		"thscode":  params.Thscode,
-		"days":     params.Days,
-		"note":     "完整回测功能迁移中；当前返回策略候选股票列表，请使用 zettaranc.screener 替代",
-		"data":     resp,
-	}
-
-	outputJSON, err := json.MarshalIndent(output, "", "  ")
-	if err != nil {
-		return &types.ToolResult{
-			Success: false,
-			Error:   fmt.Sprintf("结果序列化失败：%v", err),
-		}, nil
-	}
-
+	// 这个工具过去会**假装回测**：收了 thscode 和 days 两个参数却完全不读，
+	// 实际调的是 t.client.Screen() —— 选股接口，然后把它返回的一堆无关股票
+	// 当成"回测结果"吐给模型。用户问「回测 600519 近 250 天」，模型拿到的是
+	// 一张全市场候选票的列表，只有 JSON 深处一句 note 写着"迁移中"。
+	//
+	// 这比没有这个工具更糟：没有的话模型会去用 screener，有了的话模型会
+	// 拿一个与问题无关的结果去回答，而且看上去像是算出来的。
+	//
+	// 现在明确拒绝。实现真正的回测需要逐日重放信号 + 持仓与撮合规则，
+	// 那是独立的一件事，不该由一个"返回选股结果"的函数假装。
 	return &types.ToolResult{
-		Success: true,
-		Output:  string(outputJSON),
+		Success: false,
+		Error: "zettaranc.backtest 尚未实现真实回测，已停止返回替代数据。\n" +
+			"当前可用替代：\n" +
+			"  · zettaranc.screener —— 全市场按策略选候选股（真实指标 + 价量）\n" +
+			"  · zettaranc.analyze —— 单只标的的趋势/量价/形态/支撑阻力分析\n" +
+			"  · hithink.finance.market.price.historical —— 取历史 OHLCV 自行核算收益",
 	}, nil
 }
 
