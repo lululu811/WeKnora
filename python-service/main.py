@@ -619,11 +619,26 @@ async def zettaranc_screen(request: ScreenRequest) -> Dict[str, Any]:
             raise fail(503, "index 数据源未就绪，无法按板块筛选")
         from zettaranc import filters as screen_filters
 
+        sector_rows: List[Dict[str, Any]] = []
         try:
+            # 先精确匹配。用户说"银行"要的是行业「银行」42 只，不是
+            # 概念「参股银行」194 只 + 股份制 + 国有的并集。
             sector_rows = await index_src.execute(
-                screen_filters.build_sector_filter_sql(),
-                [screen_filters.escape_like_pattern(request.sector)],
+                screen_filters.build_sector_filter_sql(), [request.sector]
             )
+            matched_mode = "exact"
+            matched_names: List[Dict[str, Any]] = []
+            if not sector_rows:
+                # 精确没命中才回退片段匹配，并**列出到底命中了哪几个板块**。
+                # 不说的话，用户拿到一个并集数字却无从复核。
+                pattern = screen_filters.escape_like_pattern(request.sector)
+                sector_rows = await index_src.execute(
+                    screen_filters.build_sector_filter_sql_fuzzy(), [pattern]
+                )
+                matched_names = await index_src.execute(
+                    screen_filters.build_sector_names_sql(), [pattern]
+                )
+                matched_mode = "fuzzy"
         except Exception as exc:
             logger.warning("按板块筛选失败: %s", exc)
             raise fail(503, f"按板块筛选失败：{exc}") from exc
@@ -633,11 +648,13 @@ async def zettaranc_screen(request: ScreenRequest) -> Dict[str, Any]:
             raise fail(
                 404,
                 f"板块「{request.sector}」没有匹配到任何成分股。"
-                f"可试试更短的片段，如「半导体」。",
+                f"可以试更短的片段，或先调用 index.sector.membership 查准确名称。",
             )
         sector_filter = {
             "name": request.sector,
             "constituents": len(sector_codes),
+            "match_mode": matched_mode,
+            "matched_sectors": matched_names,
             "source": screen_filters.SECTOR_SOURCE,
         }
         all_codes = [c for c in all_codes if c in sector_codes]
@@ -873,9 +890,18 @@ async def zettaranc_screen(request: ScreenRequest) -> Dict[str, Any]:
 
     warnings: List[str] = []
     if sector_filter:
+        detail = ""
+        if sector_filter["match_mode"] == "fuzzy" and sector_filter["matched_sectors"]:
+            names = "、".join(
+                f"{m.get('name')}({m.get('constituents')}只)" for m in sector_filter["matched_sectors"][:5]
+            )
+            detail = f"，按**片段**匹配命中：{names}"
+            if len(sector_filter["matched_sectors"]) > 5:
+                detail += " 等"
+            detail += "。这些板块的并集，含概念板块（概念板块会把只是参股/沾边的公司也算进来）"
         warnings.append(
             f"候选集已限定在板块「{sector_filter['name']}」的 "
-            f"{sector_filter['constituents']} 只成分股内"
+            f"{sector_filter['constituents']} 只成分股内{detail}"
             f"（出处：{sector_filter['source']}）"
         )
     if risk_filter_applied:

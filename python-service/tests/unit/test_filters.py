@@ -82,18 +82,31 @@ class TestRiskFilters:
 
 
 class TestFilterSql:
-    def test_sector_sql_joins_constituents_to_universe(self):
+    def test_sector_sql_defaults_to_exact_match(self):
+        """默认必须精确匹配。
+
+        实测 `LIKE '%银行%'` 会同时命中行业「银行」42 只、「股份制银行」9 只、
+        「国有大型银行」6 只，以及概念「参股银行」194 只 —— 后者把
+        塔牌集团（水泥）、广东明珠（家电）这类只是参股了银行的公司拉进来。
+        用户说"银行"要的是前者。
+        """
         sql = filters.build_sector_filter_sql()
-        assert "v_index_constituents" in sql
-        assert "v_index_universe" in sql
+        assert "=" in sql and "LIKE" not in sql.upper()
         assert "?" in sql, "板块名必须参数绑定"
 
-    def test_sector_sql_does_not_expand_all_memberships(self):
-        """全量成员关系 122,368 行 > 100k 上限，展开必被静默截断。
-        反查单个板块只有几百行。"""
-        sql = filters.build_sector_filter_sql()
-        assert "LIMIT" not in sql.upper()
+    def test_fuzzy_variant_exists_and_is_opt_in(self):
+        sql = filters.build_sector_filter_sql_fuzzy()
+        assert "LIKE" in sql.upper()
         assert "DISTINCT" in sql.upper()
+        assert "LIMIT" not in sql.upper(), \
+            "全量成员关系 122,368 行 > 100k 上限，展开必被静默截断"
+
+    def test_sector_names_sql_reports_what_matched(self):
+        """模糊匹配必须能说出命中了哪几个板块，否则并集数字无法复核。"""
+        sql = filters.build_sector_names_sql()
+        assert "u.tag" in sql
+        assert "COUNT" in sql.upper()
+        assert "GROUP BY" in sql.upper()
 
     def test_risk_sql_returns_null_not_zero_for_missing(self):
         """CASE WHEN 缺 else 分支 → NULL。写 COALESCE(x, 0) 会把

@@ -50,14 +50,51 @@ def build_sector_filter_sql() -> str:
     按板块名反查只有几百行，且这正是筛选需要的形态 —— 用户要的是
     "半导体里符合 B1 的票"，不是"每只票的全部 20 个标签"。
 
-    参数是板块名。LIKE 由调用方加通配符传入，不在这里拼 —— 见
-    escape_like_pattern。
+    默认**精确匹配**（`name = ?`），不默认 LIKE。实测 `LIKE '%银行%'` 会
+    同时命中四个板块：行业「银行」42 只、「股份制银行」9 只、
+    「国有大型银行」6 只，以及概念「参股银行」194 只 —— 后者是把
+    塔牌集团、广东明珠这类建材/家电公司拉进来的原因（它们只是参股了
+    银行）。用户说"银行"时想要的是前者，拿到 235 只"含银行字样的票"
+    是明确的误导。
+
+    需要模糊时用 `build_sector_filter_sql_fuzzy()`，并在返回值里说明
+    命中了哪些板块。
+    """
+    return """
+        SELECT DISTINCT c.thscode
+        FROM v_index_constituents c
+        JOIN v_index_universe u ON u.thscode = c.index_thscode
+        WHERE u.name = ?
+    """
+
+
+def build_sector_filter_sql_fuzzy() -> str:
+    """板块名的**片段**匹配。
+
+    明确更宽：会把概念板块一起卷进来。调用方必须在返回里列出命中的
+    板块名，否则用户无从知道自己拿到的是哪几个板块的并集。
     """
     return """
         SELECT DISTINCT c.thscode
         FROM v_index_constituents c
         JOIN v_index_universe u ON u.thscode = c.index_thscode
         WHERE u.name LIKE ?
+    """
+
+
+def build_sector_names_sql() -> str:
+    """列出与给定名字匹配到的板块及其类型、规模。
+
+    供返回体说明"到底命中了哪几个板块"。没有这一步，模糊匹配的结果
+    就是一个无法复核的数字。
+    """
+    return """
+        SELECT u.name, u.tag, COUNT(DISTINCT c.thscode) AS constituents
+        FROM v_index_universe u
+        LEFT JOIN v_index_constituents c ON c.index_thscode = u.thscode
+        WHERE u.name LIKE ?
+        GROUP BY u.name, u.tag
+        ORDER BY constituents DESC
     """
 
 
