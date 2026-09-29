@@ -22,6 +22,26 @@ def _v(row: Optional[Dict], key: str) -> Optional[float]:
     return None if row is None else num(row.get(key))
 
 
+# 量比均量窗口，与 volume.py 的 `_calc_vol_avg` 默认一致。
+VOL_AVG_WINDOW = 10
+
+
+def _avg_volume(rows: List[Dict]) -> Optional[float]:
+    """最近 VOL_AVG_WINDOW 天的均量。
+
+    窗口不足或窗口内有任一天缺数据，一律返回 None。**不拿残缺窗口凑数**：
+    用 3 天的均量算出来的量比是另一个指标，会让「放量突破」在数据稀疏的票上
+    触发、在数据完整的票上不触发，而两边看起来完全一样。
+    """
+    if len(rows) < VOL_AVG_WINDOW:
+        return None
+    values = [num(r.get("volume")) for r in rows[:VOL_AVG_WINDOW]]
+    if any(v is None for v in values):
+        return None
+    total = sum(values)  # type: ignore[arg-type]
+    return total / VOL_AVG_WINDOW if total > 0 else None
+
+
 def detect_signals(rows: List[Dict]) -> List[Dict]:
     """从预计算指标中检测所有形态信号。rows[0] 最新，rows[1] 前一天。"""
     signals: List[Dict] = []
@@ -174,15 +194,22 @@ def detect_signals(rows: List[Dict]) -> List[Dict]:
                 add("volatility", "布林带收口", "neutral", 0.6,
                     f"BB宽度={latest_width:.2f} 低于5日均值{avg_w:.2f}的50%，变盘前兆")
 
-    # Donchian 上轨突破：价格真的站上 Donchian 上轨。
-    # 旧判据是 `bb_upper == dc_upper`（两个独立计算量的浮点精确相等），
-    # 近一个月 19 万行里命中 0 次，策略 anomaly 因此永远选不出票。
-    dc_upper = _v(latest, "dc_upper")
+    # Donchian 上轨突破：收盘价站上**前一日**的 Donchian 上轨。
+    #
+    # 两处修正，都不是"数据没来"：
+    #
+    # 1. 旧判据是 `bb_upper == dc_upper`（两个独立计算量的浮点精确相等），
+    #    近一个月 19 万行里命中 0 次，策略 anomaly 因此永远选不出票。
+    # 2. 改成 `close > dc_upper` 之后仍然恒不成立：指标库的 dc_upper 是
+    #    **含当日**的 20 日最高价，而收盘价不可能高于当日最高价，数学上
+    #    就到不了。实测 60 只票 × 逐日回放 1,200 行命中 0 次。
+    #    正确的比法是拿**前一日**的上轨：上轨在当日之前就已经确定，
+    #    收盘价越过它才是真正的突破（创出区间新高）。
+    dc_upper_prev = _v(prev, "dc_upper")
     close = _v(latest, "close")
-    prev_close = _v(prev, "close")
-    if None not in (dc_upper, close, prev_close) and close > dc_upper >= prev_close:
+    if None not in (dc_upper_prev, close) and close > dc_upper_prev:
         add("volatility", "Donchian上轨突破", "bullish", 0.65,
-            f"收盘价 {close:.2f} 站上 Donchian 上轨 {dc_upper:.2f}")
+            f"收盘价 {close:.2f} 站上前一日 Donchian 上轨 {dc_upper_prev:.2f}")
 
     latest_atr = _v(latest, "atr")
     if latest_atr is not None:
@@ -204,6 +231,28 @@ def detect_signals(rows: List[Dict]) -> List[Dict]:
         elif cmf < -0.1:
             add("volume", "CMF资金流出", "bearish", min(0.8, 0.5 + abs(cmf)),
                 f"CMF={cmf:.2f} (<-0.1 资金净流出)")
+
+    # 「放量突破」：涨幅 > 3% 且 量比 > 1.5。
+    #
+    # 这条信号依赖 close 与 volume，而 `v_indicators_daily` 一个价格列都没有，
+    # 所以它以前只在 volume.py 的单只扫描路径里存在，选股池用不了。价量维度
+    # 接进来后（screener.merge_price_rows）这里才第一次能在集合式选股里跑。
+    #
+    # 判定口径与 volume.py:analyze_volume_price 保持一致 —— 两边算出来的
+    # "放量突破"必须是同一件事，否则用户会看到同一只票在单扫和选股池里
+    # 一个命中一个不命中。
+    close_now = _v(latest, "close")
+    vol_now = _v(latest, "volume")
+    if close_now is not None and vol_now is not None:
+        prev_close = _v(prev, "close")
+        avg_vol = _avg_volume(rows[1:])
+        if prev_close and prev_close > 0 and avg_vol and avg_vol > 0:
+            price_change = (close_now - prev_close) / prev_close
+            vol_ratio = vol_now / avg_vol
+            if price_change > 0.03 and vol_ratio > 1.5:
+                add("volume", "放量突破", "bullish", min(0.9, 0.5 + vol_ratio / 10),
+                    f"涨幅 {price_change * 100:.2f}%，成交量为 {VOL_AVG_WINDOW} 日均量的 "
+                    f"{vol_ratio:.2f} 倍")
 
     # ── 统计信号 ──
 

@@ -25,10 +25,110 @@ from .signals import detect_signals, summarize_signals
 
 MAX_UNIVERSE = 20_000
 
-# 取最近 10 天，与 /zettaranc/scan 的 fetch_indicators_only 下限一致。
-# 少于 5 天时"布林带收口"和"ATR扩张"用的是残缺窗口，判定会和单票扫描
-# 不一致 —— 选股池和单票扫描必须是同一套口径。
-LOOKBACK_DAYS = 10
+# 量比均量窗口。「放量突破」要用"当日量 / 前 N 日均量"判定，N 太少会让
+# 均量被单日极值带偏。这里与 volume.py 的 `_calc_vol_avg` 默认窗口保持一致。
+VOL_AVG_WINDOW = 10
+
+# 取最近 20 天。
+#
+# 原来是 10 天，为了与 /zettaranc/scan 的下限一致。现在要加价量维度，
+# 10 天不够：算「放量突破」需要「当日 + 前 10 日均量」共 11 根，10 天窗口下
+# 均量实际只覆盖 9 根，判定口径与单票 analyze 路径不一致 —— 而"选股池和
+# 单票扫描必须同口径"正是这个模块存在的理由。
+LOOKBACK_DAYS = 20
+
+# 单次查询的行数预算。
+#
+# python-service 给每条查询封顶 MAX_QUERY_ROWS=100_000，超了会**静默截断**
+# （只保留前 100k 行）。全市场 5,571 只 × 20 天：
+#   indicators ≈ 111,206 行、market 价量 ≈ 83,269 行
+# 单条查询无论取哪张表都已经贴着上限，**两张表相加更是必然超标**，
+# 所以价量维度只能靠"按代码分片"接进来，不能靠把两条查询拼成一条。
+#
+# 留 20% 余量而不是正好卡 100_000：实际行数会随停牌、新股、数据同步进度
+# 波动，正好卡满的阈值迟早会在某天悄悄截断，而截断的表现是"少了些票"，
+# 不报错，很难被发现。
+QUERY_ROW_BUDGET = 80_000
+
+
+def shard_codes(codes: List[str]) -> List[List[str]]:
+    """把代码列表切成若干片，保证**单条**查询的行数不超过预算。
+
+    之所以要分片：全市场一次查 = 11 万行起，超过单查询 10 万行上限，
+    多出来的会被静默丢掉。分片后每片独立成一次查询，没有任何一行会被截断。
+
+    切片大小按"每只票最多 LOOKBACK_DAYS 行"估算，这是最坏情况（上界）；
+    实际因停牌、新股通常更少，所以这是安全侧。
+    """
+    if not codes:
+        return []
+    per_shard = max(1, QUERY_ROW_BUDGET // max(1, LOOKBACK_DAYS))
+    return [codes[i:i + per_shard] for i in range(0, len(codes), per_shard)]
+
+
+def build_price_snapshot_sql() -> str:
+    """按给定代码列表取回最近 N 天的 OHLCV（market 库）。
+
+    `v_indicators_daily` 只有指标、**没有任何价格列**（没有 close、没有
+    volume），所以「放量突破」「Donchian上轨突破」这类依赖价量的形态信号
+    在选股池里一直是不可用的 —— 它们以前只能走 /zettaranc/analyze 单只扫。
+    现在把 `market.v_daily_qfq` 的价量按 (thscode, date) 并进指标行，
+    两个形态信号才进得了集合式选股。
+
+    只取 close/high/low/volume 四列：Donchian 上轨要用 high 滚动窗口，
+    放量突破要 close + volume，turnover/open 在这两个判定里用不上。
+    """
+    select_list = ", ".join(PRICE_SNAPSHOT_COLUMNS)
+    return f"""
+        SELECT thscode,
+               CAST(date AS VARCHAR) AS date,
+               {select_list}
+        FROM v_daily_qfq
+        WHERE thscode IN (SELECT unnest(string_split(?, ',')))
+        QUALIFY row_number() OVER (PARTITION BY thscode ORDER BY date DESC) <= ?
+        ORDER BY thscode, date DESC
+    """
+
+
+# 价量快照的列名。信号判定读的就是这几个 key。
+PRICE_SNAPSHOT_COLUMNS = ("close", "high", "low", "volume")
+
+
+def merge_price_rows(
+    indicator_rows: List[Dict[str, Any]],
+    price_rows: List[Dict[str, Any]],
+) -> int:
+    """把价量按 (thscode, date) 并进行指标行，返回实际并上的行数。
+
+    键必须是 (thscode, **date**) 而不是只按 thscode：同一只票有多天的数据，
+    只按代码关联会让所有日期都挂上"最新一天"的价量，于是「放量突破」拿
+    最新价配昨天的量，量比彻底失真。
+
+    只写 indicator_rows 里**已经存在**的那个 date，不会给指标行补新日期 ——
+    新增日期会让 `group_by_symbol` 的"最新行"判定漂移，也可能让只有价量
+    没有指标的日期混进来。
+    """
+    price_by_key: Dict[Tuple[str, str], Dict[str, Any]] = {}
+    for p in price_rows or []:
+        code = p.get("thscode")
+        day = p.get("date")
+        if not code or not day:
+            continue
+        price_by_key[(code, str(day))] = p
+
+    merged = 0
+    for row in indicator_rows or []:
+        code = row.get("thscode")
+        day = row.get("date")
+        if not code or not day:
+            continue
+        p = price_by_key.get((code, str(day)))
+        if p is None:
+            continue
+        for col in PRICE_SNAPSHOT_COLUMNS:
+            row[col] = p.get(col)
+        merged += 1
+    return merged
 
 # 策略命中所需的信号名 -> 指标别名。
 # 列出映射是为了让 STRATEGY_RULES 里写错名字时能在启动/测试期暴露出来，
@@ -49,17 +149,19 @@ SCREEN_SIGNAL_FIELDS: Dict[str, str] = {
     "ADX空头趋势": "adx",
 }
 
-# 这些信号依赖**价格/成交量**（close、vol），而 `v_indicators_daily` 里没有
-# 任何价格列 —— 它只有指标。market 的 `v_daily_qfq` 才有点位，两个库是独立
-# 的 DuckDB 文件且都是 read_only（不能 ATTACH），所以全市场快照拿不到它们。
+# 这些信号依赖**价格/成交量**（close、volume），而 `v_indicators_daily` 里
+# 没有任何价格列 —— 它只有指标。`market.v_daily_qfq` 才有点位，两个库是独立
+# 的 DuckDB 文件且都是 read_only（不能 ATTACH），所以需要单独查一张表再按
+# (thscode, date) 合并，见 build_price_snapshot_sql / merge_price_rows。
 #
 # 登记在这里而不是留个空集，是为了让 STRATEGY_RULES 引用它们时：测试直接红，
 # 接口在 `unsupported_signals` 里如实回报，而不是静默地永远匹配不到 ——
 # `anomaly` 策略当初就是这么"死"掉的。
-SCREEN_UNSUPPORTED = {
-    "放量突破",        # analyze_volume_price，需要 close + vol
-    "Donchian上轨突破",  # 需要 close
-}
+#
+# 原本登记了「放量突破」「Donchian上轨突破」两项；价量维度接进来后已清空。
+# 保留这个集合作为闸门：新加形态信号时，如果它依赖的字段还没并进行，
+# 就该先登记进来让接口如实回报，而不是写进策略后静默匹配不到。
+SCREEN_UNSUPPORTED: Dict[str, str] = {}
 
 CORE_FIELDS = ("rsi6", "macd_hist", "mfi", "adx", "bb_upper", "atr", "obv")
 

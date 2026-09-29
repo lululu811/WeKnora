@@ -16,6 +16,7 @@ import pytest
 from conftest import newest_first
 
 from zettaranc import screener
+from zettaranc.signals import detect_signals
 
 
 def _row(code, date, **overrides):
@@ -243,7 +244,9 @@ def _emitted_names(bearish: bool = False):
     """
     from zettaranc.signals import detect_signals
 
-    rows = [dict(_row("600519.SH", f"2026-09-{24 - i:02d}")) for i in range(10)]
+    # 12 行而不是 10：「放量突破」要「最新一根 + 前 10 日均量」共 11 行，
+    # 窗口不足时按设计不触发（拿残缺均量凑数会让稀疏数据的票误报）。
+    rows = [dict(_row("600519.SH", f"2026-09-{24 - i:02d}")) for i in range(12)]
     if not bearish:
         # bullish: every oscillator oversold, one bar crossing up through them
         for r in rows:
@@ -252,11 +255,19 @@ def _emitted_names(bearish: bool = False):
                      aroon_up=80.0, aroon_down=10.0,
                      st_dir=1.0, st_val=1.05, k=19.0, d=18.0,
                      stoch_k=19.0, stoch_d=18.0, cdl_hammer=120.0)
+        # 放量突破要 close + volume。最新一根放量且相对前一日明显高开
+        # （10.4 vs 10.0 = +4%），配合 rows[1] 起的 10 日 1e8 恒定量
+        # 构成「涨幅 >3% 且 量比 3.0」的命中。
+        for r in rows:
+            r.setdefault("volume", 1e8)
         rows[0].update(dif=0.5, dea=0.2, vi_plus=1.2, vi_minus=1.0,
                        bb_width=0.5, bb_upper=11.0, bb_mid=10.0, bb_lower=9.0,
-                       dc_upper=10.5, close=10.4, atr=0.5)
+                       # Donchian 比的是**前一日**上轨：rows[1].dc_upper=10.0，
+                       # rows[0].close=10.4 越过它，构成突破
+                       dc_upper=10.6, close=10.4, atr=0.5, volume=3.0e8)
         rows[1].update(dif=0.1, dea=0.3, k=15.0, d=20.0,
-                       stoch_k=15.0, stoch_d=20.0, close=10.3, atr=0.5)
+                       stoch_k=15.0, stoch_d=20.0, close=10.0, atr=0.5,
+                       dc_upper=10.0)
     else:
         # bearish: every oscillator overbought, crossovers pointing down
         for r in rows:
@@ -266,6 +277,8 @@ def _emitted_names(bearish: bool = False):
                      st_dir=-1.0, st_val=9.0, k=85.0, d=82.0,
                      stoch_k=85.0, stoch_d=82.0, cdl_shooting_star=120.0,
                      bb_width=5.0)
+        for r in rows:
+            r.setdefault("volume", 1e8)
         rows[0].update(dif=-0.5, dea=-0.2, vi_plus=1.0, vi_minus=1.2,
                        bb_width=0.5, bb_upper=11.0, bb_mid=10.0, bb_lower=9.0,
                        atr=5.0)
@@ -335,3 +348,167 @@ class TestLimitUpPoolSql:
         )
         assert f"INTERVAL {screener.LIMIT_UP_LOOKBACK_DAYS} DAY" in sql, \
             "窗口天数应作为字面量出现在 SQL 里"
+
+
+class TestSharding:
+    """分片保证单条查询不撞 100k 行上限。
+
+    实测：全市场 5,571 只 × 20 天，indicators 约 111,206 行、market 价量约
+    83,269 行。单张表就已经贴着上限，**两张表相加必然超**，超了会被
+    python-service 静默截断（只留前 100k 行），表现为"少了些票"且不报错。
+    """
+
+    def test_whole_market_fits_in_shards(self):
+        codes = [f"{i:06d}.SZ" for i in range(5571)]
+        shards = screener.shard_codes(codes)
+        assert len(shards) > 1, "全市场一次查必然超限，必须分片"
+        for sh in shards:
+            worst = len(sh) * screener.LOOKBACK_DAYS
+            assert worst <= screener.QUERY_ROW_BUDGET, (
+                f"一片 {len(sh)} 只最坏会产生 {worst} 行，"
+                f"超过预算 {screener.QUERY_ROW_BUDGET}"
+            )
+
+    def test_no_code_is_lost_or_duplicated(self):
+        codes = [f"{i:06d}.SZ" for i in range(5571)]
+        flat = [c for sh in screener.shard_codes(codes) for c in sh]
+        assert len(flat) == len(codes)
+        assert sorted(flat) == sorted(codes), "分片不能丢票也不能重复"
+
+    def test_small_input_is_a_single_shard(self):
+        assert len(screener.shard_codes(["600519.SH"])) == 1
+
+    def test_empty_input(self):
+        assert screener.shard_codes([]) == []
+
+
+class TestMergePriceRows:
+    def test_joins_on_code_and_date_not_code_alone(self):
+        """只按 thscode 关联会让每一天都挂上"最新一天"的价量，
+        「放量突破」于是拿最新价配昨天的量，量比彻底失真。"""
+        ind = [
+            {"thscode": "A.SH", "date": "2026-09-24"},
+            {"thscode": "A.SH", "date": "2026-09-23"},
+        ]
+        price = [
+            {"thscode": "A.SH", "date": "2026-09-24", "close": 12.0, "volume": 9e8},
+            {"thscode": "A.SH", "date": "2026-09-23", "close": 11.0, "volume": 3e8},
+        ]
+        n = screener.merge_price_rows(ind, price)
+        assert n == 2
+        assert ind[0]["close"] == 12.0
+        assert ind[1]["close"] == 11.0, "第二天不能挂上第一天的价量"
+
+    def test_does_not_invent_dates(self):
+        """价量多出来的日期不能被加进行里，否则 group_by_symbol 的
+        "最新行"判定会漂移。"""
+        ind = [{"thscode": "A.SH", "date": "2026-09-24"}]
+        price = [
+            {"thscode": "A.SH", "date": "2026-09-24", "close": 1.0},
+            {"thscode": "A.SH", "date": "2026-09-25", "close": 2.0},
+        ]
+        screener.merge_price_rows(ind, price)
+        assert len(ind) == 1, "不能因为价量多一天就给指标行加一天"
+        assert ind[0]["date"] == "2026-09-24"
+
+    def test_unmatched_price_is_left_absent_not_zero(self):
+        ind = [{"thscode": "A.SH", "date": "2026-09-24"}]
+        screener.merge_price_rows(ind, [{"thscode": "B.SH", "date": "2026-09-24",
+                                          "close": 1.0}])
+        assert "close" not in ind[0], "对不上就该是缺失，不能补 0"
+
+    def test_null_values_are_preserved_as_null(self):
+        ind = [{"thscode": "A.SH", "date": "2026-09-24"}]
+        screener.merge_price_rows(ind, [{"thscode": "A.SH", "date": "2026-09-24",
+                                          "close": None, "volume": 1e8}])
+        assert ind[0]["close"] is None, "库里是 NULL 就得是 None"
+        assert ind[0]["volume"] == 1e8
+
+    def test_empty_inputs(self):
+        assert screener.merge_price_rows([], []) == 0
+        assert screener.merge_price_rows([{"thscode": "A", "date": "d"}], []) == 0
+        assert screener.merge_price_rows([], [{"thscode": "A", "date": "d"}]) == 0
+
+
+class TestPriceAwareSignals:
+    """这两个信号过去锁在 SCREEN_UNSUPPORTED 里，因为 v_indicators_daily
+    一个价格列都没有。现在价量接进来了，它们必须真的能触发。"""
+
+    def _row(self, **over):
+        base = {
+            "rsi6": 50.0, "macd_hist": 0.0, "mfi": 50.0, "adx": 20.0,
+            "bb_upper": 11.0, "atr": 0.5, "obv": 0.0, "cmf": 0.0,
+            "zscore": 0.0, "lin_slope": 0.0, "k": 50.0, "d": 50.0, "j": 50.0,
+            "cci": 0.0, "willr": -50.0, "stoch_k": 50.0, "stoch_d": 50.0,
+            "dif": 0.0, "dea": 0.0, "di_plus": 10.0, "di_minus": 5.0,
+            "st_dir": 1.0, "st_val": 1.0, "psar": 1.0,
+            "aroon_up": 50.0, "aroon_down": 50.0,
+            "vi_plus": 1.0, "vi_minus": 1.0, "bb_width": 2.0,
+            "dc_upper": 12.0, "dc_lower": 8.0,
+            "kc_upper": 11.0, "kc_mid": 10.0, "kc_lower": 9.0, "vwap": 10.0,
+            "close": None, "high": None, "low": None, "volume": None,
+        }
+        base.update(over)
+        return base
+
+    def _series(self, latest_close, latest_vol, prev_close=10.0, prev_vol=1e8, n=11):
+        rows = [self._row(date=f"2026-09-{10 + i:02d}", close=prev_close,
+                          volume=prev_vol) for i in range(n)]
+        rows.insert(0, self._row(date="2026-09-24", close=latest_close,
+                                 volume=latest_vol))
+        return rows
+
+    def _hits(self, rows, name):
+        return [s for s in detect_signals(rows) if s["name"] == name]
+
+    def test_volume_breakout_fires_on_real_price_and_volume(self):
+        rows = self._series(latest_close=10.5, latest_vol=2.5e8)  # +5%, 量比 2.5
+        hits = self._hits(rows, "放量突破")
+        assert len(hits) == 1
+        assert hits[0]["signal"] == "bullish"
+        assert "2.50" in hits[0]["desc"]
+
+    def test_volume_breakout_needs_volume(self):
+        rows = self._series(latest_close=10.5, latest_vol=1.2e8)  # 量比 1.2
+        assert self._hits(rows, "放量突破") == []
+
+    def test_volume_breakout_needs_price_move(self):
+        rows = self._series(latest_close=10.2, latest_vol=3.0e8)  # +2%
+        assert self._hits(rows, "放量突破") == []
+
+    def test_volume_breakout_refuses_a_short_window(self):
+        """窗口不足不能拿残缺均量凑数：用 3 天均量算出的量比是另一个指标，
+        会让稀疏数据的票触发、完整数据的票不触发，而两边看起来一样。"""
+        rows = self._series(latest_close=10.5, latest_vol=5e8, n=3)
+        assert self._hits(rows, "放量突破") == []
+
+    def test_volume_breakout_refuses_missing_price(self):
+        rows = self._series(latest_close=None, latest_vol=5e8)
+        assert self._hits(rows, "放量突破") == []
+
+    def test_donchian_break_compares_against_the_previous_upper(self):
+        """判据必须拿**前一日**的上轨比。
+
+        指标库的 dc_upper 是含当日的 20 日最高价，而收盘价不可能高于当日
+        最高价 —— `close > dc_upper` 数学上恒不成立，实测 60 只票 × 1,200 行
+        回放命中 0 次。改比前一日上轨后同一批数据命中 55 次。
+        """
+        rows = self._series(latest_close=12.5, latest_vol=1e8, prev_close=12.0)
+        # 当日上轨被自己抬高（12.5 >= close），比当日必然不成立
+        rows[0]["dc_upper"] = 12.6
+        # 前一日上轨 12.0，收盘 12.5 越过它 = 真突破
+        rows[1]["dc_upper"] = 12.0
+        hits = self._hits(rows, "Donchian上轨突破")
+        assert len(hits) == 1, "收盘越过前一日上轨必须命中"
+        assert "12.00" in hits[0]["desc"]
+
+    def test_donchian_break_does_not_fire_when_close_stays_inside(self):
+        """前一日上轨仍在收盘之上时不触发：没突破就是没突破。"""
+        rows = self._series(latest_close=12.5, latest_vol=1e8, prev_close=12.0)
+        rows[0]["dc_upper"] = 13.0   # 当日上轨被自己抬高
+        rows[1]["dc_upper"] = 12.8   # 前一日上轨 12.8 > 收盘 12.5，未突破
+        assert self._hits(rows, "Donchian上轨突破") == []
+
+    def test_price_signals_are_no_longer_unsupported(self):
+        assert "放量突破" not in screener.SCREEN_UNSUPPORTED
+        assert "Donchian上轨突破" not in screener.SCREEN_UNSUPPORTED

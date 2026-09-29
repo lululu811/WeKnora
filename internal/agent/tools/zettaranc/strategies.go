@@ -16,8 +16,10 @@ func ScreenerStrategies() []string {
 		"B2",               // MACD 金叉
 		"SB1",              // B1 基础 + MACD 金叉
 		"shaofu",           // 少妇战法
-		"limit_up",         // 涨停/强势股
+		"limit_up",         // 涨停/强势股（真实涨停池）
 		"anomaly",          // 风险异常（direction=bearish）
 		"volatility_spike", // 波动率异动（ATR扩张 / 布林带收口）
+		"vol_breakout",     // 放量突破（涨幅>3% 且量比>1.5）
+		"donchian_break",   // Donchian 上轨突破
 	}
 }

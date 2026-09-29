@@ -326,6 +326,18 @@ STRATEGY_RULES: Dict[str, Dict[str, Any]] = {
         "min_count": 1,
         "allow_neutral": True,
     },
+    # 放量突破：涨幅 > 3% 且量比 > 1.5。依赖 close + volume，
+    # 价量维度接进选股池之前这条策略根本选不出票（信号在 SCREEN_UNSUPPORTED 里）。
+    "vol_breakout": {
+        "match_signals": ["放量突破"],
+        "min_count": 1,
+    },
+    # Donchian 上轨突破：收盘站上通道上轨。与单只扫描
+    # /zettaranc/analyze 的判定共用 detect_signals，口径一致。
+    "donchian_break": {
+        "match_signals": ["Donchian上轨突破"],
+        "min_count": 1,
+    },
 }
 
 
@@ -556,19 +568,68 @@ async def zettaranc_screen(request: ScreenRequest) -> Dict[str, Any]:
         if not names:
             raise fail(503, "涨停池里的代码都不在 A 股清单内，无法选股")
 
-    codes = ",".join(c for c in names if c)
-
-    try:
-        rows = await indicators_src.execute(
-            screener.build_indicator_snapshot_sql(),
-            [codes, screener.LOOKBACK_DAYS],
+    all_codes = [c for c in names if c]
+    shards = screener.shard_codes(all_codes)
+    if len(shards) > 1:
+        logger.info(
+            "选股 %s：%d 只切成 %d 片查询（单查询行数预算 %d）",
+            request.strategy, len(all_codes), len(shards), screener.QUERY_ROW_BUDGET,
         )
-    except Exception as exc:
-        logger.warning("选股取指标失败: %s", exc)
-        raise fail(503, f"选股取数失败：{exc}") from exc
+
+    rows: List[Dict[str, Any]] = []
+    price_rows: List[Dict[str, Any]] = []
+    universe_truncated = False
+    price_source = registry.get("market")
+
+    for shard in shards:
+        shard_csv = ",".join(shard)
+        try:
+            part = await indicators_src.execute(
+                screener.build_indicator_snapshot_sql(),
+                [shard_csv, screener.LOOKBACK_DAYS],
+            )
+        except Exception as exc:
+            logger.warning("选股取指标失败(分片 %d 只): %s", len(shard), exc)
+            raise fail(503, f"选股取数失败：{exc}") from exc
+        rows.extend(part)
+        if getattr(indicators_src, "last_result_truncated", False):
+            # 分片本应保证不超预算；这里真被截断说明预算算错了，必须报出来
+            # 而不是继续跑出一个"看起来正常、其实少了票"的结果。
+            universe_truncated = True
+            logger.error(
+                "分片 %d 只仍被截断，QUERY_ROW_BUDGET=%d 对 LOOKBACK_DAYS=%d 偏大",
+                len(shard), screener.QUERY_ROW_BUDGET, screener.LOOKBACK_DAYS,
+            )
+
+        # 价量维度：v_indicators_daily 没有任何价格列，close/volume 只能从
+        # market.v_daily_qfq 单独取，再按 (thscode, date) 并回指标行。
+        # 两个库是独立只读连接，不能 JOIN，只能在 Python 侧合。
+        if price_source is not None:
+            try:
+                price_rows.extend(await price_source.execute(
+                    screener.build_price_snapshot_sql(),
+                    [shard_csv, screener.LOOKBACK_DAYS],
+                ))
+            except Exception as exc:
+                # 价量拿不到不该让整个选股失败：没有价量只是"放量突破"这类
+                # 形态信号不触发，其余指标信号照常。降级优先于报错。
+                logger.warning("选股取价量失败(分片 %d 只): %s", len(shard), exc)
+                price_source = None
+            else:
+                if getattr(price_source, "last_result_truncated", False):
+                    universe_truncated = True
+                    logger.error("价量分片 %d 只被截断", len(shard))
 
     if not rows:
         raise fail(503, "指标快照为空")
+
+    price_merged = 0
+    if price_source is not None and price_rows:
+        price_merged = screener.merge_price_rows(rows, price_rows)
+        if price_merged == 0:
+            logger.warning(
+                "价量与指标按 (thscode,date) 一条都没对上，形态信号将全部失效"
+            )
 
     # 截断必须在这里说清楚。
     #
@@ -577,7 +638,6 @@ async def zettaranc_screen(request: ScreenRequest) -> Dict[str, Any]:
     # 有 12GB，全市场 × LOOKBACK_DAYS 天很容易撞上限），多出来的票被静默
     # 丢掉，而返回里的 `scanned` 仍然写着完整的 5,571 —— 调用方无从判断
     # 这次结果是不是全市场口径。
-    universe_truncated = bool(getattr(indicators_src, "last_result_truncated", False))
     scanned_codes = {r.get("thscode") for r in rows if r.get("thscode")}
     # 清单里有、但一行指标都没回来的票：不是被截断，就是该票确实没有指标数据。
     # 两种情况对调用方的含义不同，都不该藏进 `scanned` 里。
@@ -600,9 +660,9 @@ async def zettaranc_screen(request: ScreenRequest) -> Dict[str, Any]:
         )
     if universe_truncated:
         warnings.append(
-            f"指标快照被单次查询行数上限（{MAX_QUERY_ROWS} 行）截断，"
-            f"只有 {len(scanned_codes)} 只票参与了本次筛选，"
-            f"结果不代表全市场。请调小 strategy 的取数范围或改用 /zettaranc/scan 逐只扫。"
+            f"取数被单次查询行数上限（{MAX_QUERY_ROWS} 行）截断，"
+            f"只有 {len(scanned_codes)} 只票参与了本次筛选，结果不代表全市场。"
+            f"请调小 QUERY_ROW_BUDGET / LOOKBACK_DAYS 后重试。"
         )
     if dropped:
         preview = "、".join(dropped[:10]) + ("…" if len(dropped) > 10 else "")
@@ -650,6 +710,11 @@ async def zettaranc_screen(request: ScreenRequest) -> Dict[str, Any]:
         "matched": result["matched"],
         "unsupported_signals": screener.unsupported_signals(rule),
         "truncated": universe_truncated,
+        # 价量维度是否并上。0 表示「放量突破」这类形态信号本次全部失效，
+        # 必须让调用方知道，否则"没选出票"会被读成"市场里没有"。
+        "price_merged_rows": price_merged,
+        "price_available": price_source is not None,
+        "shards": len(shards),
         "no_indicator_count": max(0, no_indicator),
         "pool_size": len(limit_up_pool) if limit_up_pool else None,
         "pool_restricted": pool_restricted,
