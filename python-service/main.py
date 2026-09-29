@@ -844,6 +844,132 @@ async def get_annotations(
     }
 
 
+@app.get("/api/stock-profile")
+@app.get("/stock-profile")
+async def stock_profile(
+    symbol: str = Query(..., description="股票代码，如 600519.SH"),
+):
+    """
+    个股速览：资金面 + 估值 + 板块归属，一次返回。
+
+    为什么合并成一个接口而不是三个：这��数据是给**鼠标划过就触发的悬浮框**用的，
+    扫描 5 个 ticker 就会打 5 次。三个独立接口 = 15 个并发请求；合并成一个 = 5 个。
+
+    三个区块**各自独立降级**：任何一个库查不到，只影响它自己那一块（该块为空并
+    在 sources 里说明原因），不会让整张卡失败。查不到就是查不到，不返回 0 顶替 ——
+    前端拿到 null 就显示「无数据」。
+    """
+    from datasources import registry
+
+    if not _THSCODE.match(symbol):
+        return {"code": 0, "symbol": symbol, "capital": None, "valuation": None,
+                "sectors": [], "unavailable": ["代码格式非法"]}
+
+    unavailable: list[str] = []
+
+    async def safe(db: str, sql: str, params: list) -> list:
+        """查不到就返回空列表并记录原因，绝不把异常冒给前端。"""
+        src = registry.get(db)
+        if src is None:
+            unavailable.append(db)
+            return []
+        try:
+            return await src.execute(sql, params)
+        except Exception as exc:  # noqa: BLE001 —— 降级优先于报错
+            logger.warning("stock_profile 查询 %s 失败：%s", db, exc)
+            unavailable.append(db)
+            return []
+
+    # ---- 资金面 ----
+    limit_up = await safe(
+        "special",
+        """SELECT trade_date, continue_day_cnt, limit_up_time, seal_money
+           FROM v_limit_up_pool WHERE thscode = ?
+           ORDER BY trade_date DESC LIMIT 10""",
+        [symbol],
+    )
+    limit_break = await safe(
+        "special",
+        """SELECT trade_date, open_times, price_change_ratio
+           FROM v_limit_break_pool WHERE thscode = ?
+           ORDER BY trade_date DESC LIMIT 10""",
+        [symbol],
+    )
+    dragon = await safe(
+        "special",
+        """SELECT trade_date, board_type, net_value, net_rate, org_net_value
+           FROM v_dragon_tiger WHERE thscode = ?
+           ORDER BY trade_date DESC LIMIT 10""",
+        [symbol],
+    )
+    hot = await safe(
+        "special",
+        """SELECT capture_date, period, rank, heat
+           FROM v_hot_stock WHERE thscode = ?
+           ORDER BY capture_date DESC LIMIT 10""",
+        [symbol],
+    )
+
+    capital: dict | None = None
+    if any([limit_up, limit_break, dragon, hot]):
+        capital = {
+            "limit_up": limit_up or None,
+            "limit_break": limit_break or None,
+            "dragon_tiger": dragon or None,
+            "hot": hot or None,
+            "sources": {
+                "limit_up": "special.v_limit_up_pool",
+                "limit_break": "special.v_limit_break_pool",
+                "dragon_tiger": "special.v_dragon_tiger",
+                "hot": "special.v_hot_stock",
+            },
+        }
+    else:
+        capital = None
+
+    # ---- 估值（只取一行最新快照）----
+    val_rows = await safe(
+        "financials",
+        """SELECT snapshot_date, pe_ttm, pe_mrq, pb_mrq, ps_ttm, pcf_ttm
+           FROM v_valuation_latest WHERE thscode = ? LIMIT 1""",
+        [symbol],
+    )
+    valuation = None
+    if val_rows:
+        r = val_rows[0]
+        valuation = {
+            "snapshot_date": r.get("snapshot_date"),
+            "pe_ttm": r.get("pe_ttm"),
+            "pe_mrq": r.get("pe_mrq"),
+            "pb_mrq": r.get("pb_mrq"),
+            "ps_ttm": r.get("ps_ttm"),
+            "pcf_ttm": r.get("pcf_ttm"),
+            "source": "financials.v_valuation_latest",
+        }
+
+    # ---- 板块归属：constituents（个股→板块）+ universe（板块名/类型）----
+    sector_rows = await safe(
+        "index",
+        """SELECT u.name, u.tag
+           FROM v_index_constituents c
+           JOIN v_index_universe u ON u.thscode = c.index_thscode
+           WHERE c.thscode = ?
+           ORDER BY u.tag, u.name""",
+        [symbol],
+    )
+    sectors = [{"name": r.get("name"), "tag": r.get("tag")} for r in sector_rows] or []
+
+    return {
+        "code": 0,
+        "symbol": symbol,
+        "capital": capital,
+        "valuation": valuation,
+        "sectors": sectors,
+        "sector_source": "index.v_index_constituents ⋈ index.v_index_universe",
+        "unavailable": sorted(set(unavailable)),
+    }
+
+
 @app.get("/api/symbols/search")
 @app.get("/symbols/search")
 async def search_symbols(
