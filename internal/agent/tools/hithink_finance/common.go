@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -122,7 +123,59 @@ func QueryDuckDBParams(ctx context.Context, config *Config, dbName, query string
 		return nil, fmt.Errorf("查询失败")
 	}
 
+	injectProvenance(result.Data, dbName, query)
 	return result.Data, nil
+}
+
+// provenanceRe 抽出 SQL 里 FROM / JOIN 后面的对象名。
+// 与 schema_contract_test.go 里用的是同一套正则：那里的作用是抓表名漂移，
+// 这里的作用是把"这些数字从哪张表来"如实附在结果上。
+var provenanceRe = regexp.MustCompile(`(?i)\b(?:FROM|JOIN)\s+([a-zA-Z_][a-zA-Z0-9_]*)`)
+
+// SQL 关键字不是表名，出现在 FROM/JOIN 后面的这些要排除。
+var sqlKeywords = map[string]bool{
+	"SELECT": true, "WHERE": true, "ON": true, "AND": true, "OR": true,
+	"ORDER": true, "GROUP": true, "HAVING": true, "LIMIT": true,
+	"UNION": true, "JOIN": true, "INNER": true, "LEFT": true, "RIGHT": true,
+	"FULL": true, "CROSS": true, "LATERAL": true, "VALUES": true, "WITH": true,
+}
+
+// injectProvenance 给每行结果附上溯源信息。
+//
+// 为什么在这里做：19 个工具各自在 Execute 里拼结果，没有一处会交代"这些数字
+// 从哪张表来"。逐个改既漏得掉也改不动，而在唯一的出口做一次，全部工具自动覆盖。
+//
+// 附加在行内（_source）而不是行外：ToolResult.Output 是这些行的 JSON 序列化，
+// 行内字段会跟着一起进 LLM 的上下文，模型因而能在回答里引用出处；
+// 挂在行外的话模型看不到，"有溯源"就等于没有。
+func injectProvenance(rows []map[string]interface{}, dbName, sql string) {
+	if len(rows) == 0 {
+		return
+	}
+	tables := ExtractTables(sql)
+	for _, row := range rows {
+		row["_source"] = map[string]interface{}{
+			"db":     dbName,
+			"tables": tables,
+		}
+	}
+}
+
+// ExtractTables 返回 SQL 实际读到的表名（去重、保序）。
+// 只做字面量识别：CTE 别名、子查询别名会原样返回，这是已知的保守行为 ——
+// 多报一个别名好过漏掉一张真表，因为漏报会让"有出处"变成假出处。
+func ExtractTables(sql string) []string {
+	seen := make(map[string]bool)
+	out := make([]string, 0, 3)
+	for _, m := range provenanceRe.FindAllStringSubmatch(sql, -1) {
+		name := m[1]
+		if sqlKeywords[strings.ToUpper(name)] || seen[name] {
+			continue
+		}
+		seen[name] = true
+		out = append(out, name)
+	}
+	return out
 }
 
 // CheckSyncWindow returns an error if the current time is within a sync window.
