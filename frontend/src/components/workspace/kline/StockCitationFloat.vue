@@ -320,6 +320,12 @@ async function fetchJsonWithTimeout(
   const timer = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
   try {
     const r = await fetch(url, { signal: controller.signal });
+    // 必须先判 HTTP 状态再解析：网关 502/服务未就绪 503 也可能带 JSON 响应体，
+    // 直接 r.json() 会把故障当成正常响应，落到下面「查不到该标的的行情数据」，
+    // 于是服务挂掉被显示成"这只票没数据"。抛出去让 catch 报真实原因。
+    if (!r.ok) {
+      throw new Error(`HTTP ${r.status}`);
+    }
     return await r.json();
   } finally {
     window.clearTimeout(timer);
@@ -471,6 +477,8 @@ const loadStockData = async (symbolStr: string) => {
     if (isStale()) return;
 
     if (!dataList) {
+      // 走到这里说明请求成功且 code===0，只是答案里没有 K 线——
+      // 这才是"这只票本地没数据"。请求失败的情况在上面已经抛出并由 catch 处理。
       loadError.value = '查不到该标的的行情数据';
       return;
     }
@@ -497,10 +505,13 @@ const loadStockData = async (symbolStr: string) => {
     }
   } catch (err: any) {
     if (isStale()) return;
+    // 带上网关/服务端的真实原因，而不是一律"查询失败"：
+    // 502、503、超时、网络中断是完全不同的排查方向。
+    const reason = err?.message ? `：${err.message}` : '';
     if (err?.name === 'AbortError') {
       loadError.value = '行情查询超时';
     } else {
-      loadError.value = '行情查询失败';
+      loadError.value = `行情查询失败${reason}`;
     }
     console.warn('[StockCitationFloat] failed to load stock kline data:', err);
   } finally {
