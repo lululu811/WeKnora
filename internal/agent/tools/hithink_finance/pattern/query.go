@@ -1,5 +1,30 @@
 package pattern
 
+// ⚠️ 与 python-service/zettaranc 的已知偏差（2026-10-01）
+//
+// 这个包是 zettaranc 信号引擎的 Go 孪生实现。同一天，Python 侧的
+// data_loader.py 打通了 15 个新指标列的取数管道：
+//
+//	正交且已验证（9）: stc / stc_macd / stc_stoch / vosc / ui / coppock
+//	                  dd_abs / dd_frac / dd_log
+//	已隔离，禁止消费（6）: ztr_white / ztr_yellow / ztr_bbi / ztr_brick
+//	                      ztr_rsl_short / ztr_rsl_long
+//
+// 本文件的 `row` 结构体与 SELECT 列表**尚未包含**上述任何一列，因此
+// detectSignals 的行为与 Python 侧**不一致**：Python 能读到的新数据，
+// Go 读不到。这是刻意的，不是遗漏 —— 见下。
+//
+// 为什么先不对齐:
+//  1. 信号门禁只存在于本侧。signal_frequency_audit_test.go 跑的是这里
+//     的 detectSignals，Python 侧写的新信号**无法被审计**。先在 Go 实现
+//     才能拿到 dead/noisy/informative 的频率分布。
+//  2. ztr_* 六列数据实测不可用（16% 覆盖、99.6% 常数 0、值域是排名而非
+//     价格量纲），Python 侧已标注隔离，Go 侧更不该先接。
+//
+// 对齐顺序：新信号先在 signals.go 实现 → 登记进 declaredSignalNames →
+// 跑 signal_audit 确认 verdict 为 informative → 再回填 Python 侧。
+// 反过来做等于在两个语言里各维护一份没人验证过有效性的规则。
+
 import (
 	"context"
 	"encoding/json"

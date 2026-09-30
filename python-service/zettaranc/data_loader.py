@@ -101,6 +101,56 @@ INDICATOR_COLUMNS: Dict[str, str] = {
     "cdl_dark_cloud": "candles_cdl_darkcloudcover_0",
     "cdl_3white": "candles_cdl_3whitesoldiers_0",
     "cdl_3black": "candles_cdl_3blackcrows_0",
+
+    # ------------------------------------------------------------------
+    # zettaranc 自研列(6 列,2026-10-01 接入管道)—— ⚠️ **已隔离,禁止消费**
+    #
+    # 这 6 列由 a-stock/scripts/add_zettaranc_columns.py 产出,此前**只有工作台
+    # 图表在画**(`kline-studio/backend/src/routes/indicators.ts`),agent 的分析
+    # SQL 一次都没读过 —— INDICATORS_DB.md 声称"供 python-service/zettaranc 消费"
+    # 是错的。
+    #
+    # 2026-10-01 实测发现**数据不可用**,接入管道只为把它暴露出来便于复算:
+    #   1. 只回填了 2025-07-04 起的窗口 = 1,659,149 / 10,349,853 行(16.0%),
+    #      2016-09-12 ~ 2025-07-03 全部为 NULL。
+    #   2. 已回填的 1.66M 行里,1,652,990 行(99.6%)是**常数 0**。
+    #   3. 唯一的非零值是 zg_white_10 的 ±100.0,只出现在 2025-07 中旬约两周,
+    #      且同一行上 yellow/bbi/brick/rsl 全为 0。
+    #   4. 值域 [-100, +100] 是**排名量纲**,但 yaml 声称白线 = EMA(EMA(C,10),10),
+    #      那是**价格量纲**(601398.SH 应为 ~8.28,实测 0.0)。
+    #
+    # 这正是 a-stock/INDICATORS_DB.md 警告的"能算、不报错、值域离谱"那一类,
+    # 而该文档同时写了"进表前必须手工复算定义"—— 这 6 列显然没走那一步。
+    #
+    # 为什么不直接删:管道本身是对的,修好回填后无需再动这里。但在
+    # a-stock 侧复算通过之前,**任何信号规则都不得引用 ztr_***。
+    # 引用它们的后果是确定的:84% 的行缺值(按 signals.py 的"缺数据=不发信号"
+    # 规则永不触发),剩下 15% 里 99.6% 是常数 0(任何以 0 为判据的规则
+    # 会对几乎所有标的触发)。
+    # ------------------------------------------------------------------
+    "ztr_white": "zettaranc_zg_white_10",      # 白线 EMA(EMA(C,10),10) —— 实测值域 [-100,100],已隔离
+    "ztr_yellow": "zettaranc_dg_yellow_14",    # 黄线 MA(14,28,57,114)  —— 99.6% 为 0,已隔离
+    "ztr_bbi": "zettaranc_bbi",                # 多空线 BBI = MA(3,6,12,24) —— 99.6% 为 0,已隔离
+    "ztr_brick": "zettaranc_brick_value",      # 砖型 (C-O)/(H-L)      —— 99.6% 为 0,已隔离
+    "ztr_rsl_short": "zettaranc_rsl_short_3",  # RSL 短周期(3日涨幅,15窗口排名) —— 99.6% 为 0,已隔离
+    "ztr_rsl_long": "zettaranc_rsl_long_21",   # RSL 长周期(21日涨幅,105窗口排名)—— 99.6% 为 0,已隔离
+
+    # ------------------------------------------------------------------
+    # 2026-09-30 那批 33 列里**实测正交**的部分(2026-10-01 接入)
+    #
+    # 准入依据是全市场截面相关性(2025-10 至今, 6 开头, 与**已在消费**的 42 列比):
+    # 只接 corr < 0.45 的。被拒的见文件末尾 REJECTED 一节,别把它们捡回来。
+    # ------------------------------------------------------------------
+    "stc": "momentum_stc_line",                # vs macd 0.222
+    "stc_macd": "momentum_stc_macd",
+    "stc_stoch": "momentum_stc_stoch",         # vs slowk 0.432
+    "vosc": "volume_vosc_5_10",                # vs adosc 0.130 / vs obv 0.000
+    "ui": "statistics_ui_14",                  # vs atr 0.195 / vs stddev 0.228
+    "coppock": "momentum_coppock_10_10_14",    # vs macd_hist 0.335
+    # 风险维度:已有列里没有等价物
+    "dd_abs": "performance_drawdown_20_dd",
+    "dd_frac": "performance_drawdown_20_frac",  # 0~1 比例,不是百分数
+    "dd_log": "performance_drawdown_20_log",
 }
 
 # 分析层（趋势/形态/支撑阻力）用到的字段
@@ -115,6 +165,12 @@ INDICATORS_FIELDS: List[str] = [
     "cdl_hammer", "cdl_shooting_star", "cdl_doji", "cdl_engulfing",
     "cdl_harami", "cdl_morning_star", "cdl_evening_star",
     "cdl_piercing", "cdl_dark_cloud", "cdl_3white", "cdl_3black",
+    # zettaranc 自研框架列 —— ⚠️ 已隔离,数据实测不可用(见 INDICATOR_COLUMNS 注释)
+    "ztr_white", "ztr_yellow", "ztr_bbi", "ztr_brick",
+    "ztr_rsl_short", "ztr_rsl_long",
+    # 实测正交且值域正常的新指标(见 REJECTED 一节)
+    "stc", "vosc", "ui", "coppock",
+    "dd_abs", "dd_frac", "dd_log",
 ]
 # 扫描/信号用到的字段（比上面多一批振荡指标）
 INDICATORS_ONLY_FIELDS: List[str] = [
@@ -129,6 +185,12 @@ INDICATORS_ONLY_FIELDS: List[str] = [
     "cdl_morning_star", "cdl_evening_star", "cdl_hammer",
     "cdl_shooting_star", "cdl_doji", "cdl_engulfing", "cdl_harami",
     "cdl_piercing", "cdl_dark_cloud", "cdl_3white", "cdl_3black",
+    # 与 INDICATORS_FIELDS 同源:框架列(已隔离) + 正交新指标。信号规则本身
+    # 还没写(见 signal_frequency_audit 门禁),这里先打通取数管道。
+    "ztr_white", "ztr_yellow", "ztr_bbi", "ztr_brick",
+    "ztr_rsl_short", "ztr_rsl_long",
+    "stc", "stc_macd", "stc_stoch", "vosc", "ui", "coppock",
+    "dd_abs", "dd_frac", "dd_log",
 ]
 
 
@@ -258,3 +320,66 @@ async def fetch_indicators_only(indicators_source, thscode: str, days: int) -> L
         build_indicators_only_sql(), [thscode, days]
     )
     return [normalize_row(r, INDICATORS_ONLY_FIELDS) for r in raw_rows]
+
+
+# ---------------------------------------------------------------------------
+# REJECTED — 2026-09-30 那批 33 列里**故意不接**的(2026-10-01)
+#
+# 为什么专门记一份否决名单:这批列已经躺在 indicators.duckdb 里,任何人看到
+# `SHOW COLUMNS` 都会觉得"这 33 列还没用,加进去吧"。但把它们按 corr 排一遍
+# 之后,只有 13 列带新信息(见 INDICATOR_COLUMNS 里带注释的那批)。剩下的要么
+# 是已有列的数值替身,要么是**指标定义本身就是均线**。
+#
+# 相关系数 = 全市场截面,2025-10 至今,thscode LIKE '6%',与已在消费的 42 列比。
+# 复算:
+#   duckdb -readonly ~/.hithink-finance/indicators.duckdb -c "
+#   WITH s AS (SELECT * FROM v_indicators_daily
+#              WHERE date>='2025-10-01' AND thscode LIKE '6%')
+#   SELECT corr(<新列>, <已有列>) FROM s;"
+#
+# --- 数值替身(corr > 0.9),接进来等于把同一个信号数两遍 ---
+#   overlap_vwma_20        ~ overlap_sma_20            0.9998
+#   trend_accbands_20_*    ~ volatility_bbands_20_2_0_* 0.9983
+#   volume_ha_*            ~ close                     0.9858
+#   momentum_ao_5_34       ~ momentum_macd_12_26_9_macd 0.9693
+#   ↑ VWMA20 和 SMA20 相关 0.9998。任何线性加权里它们会成比例地**重复计权**
+#     同一个信号,不是"多一个弱信号",是趋势类判断的置信度被凭空放大。
+#
+# --- 中度冗余(0.7 ~ 0.8),边际信息不足以支付维护成本 ---
+#   trend_vwmacd_12_26_9_*  ~ momentum_macd_*_hist      0.785
+#   momentum_ultosc_7_14_28 ~ momentum_stoch_*_slowk    0.775
+#   momentum_bias_14        ~ momentum_rsi_14           0.800
+#   momentum_lrsi_14        ~ momentum_rsi_14           0.764
+#   momentum_rvi_10_252     ~ momentum_rsi_14           0.733
+#
+# --- 定义本身就是均线,不是新维度(2026-10-01 实测,推翻了"显式豁免"的判断) ---
+#   trend_ichimoku_tenkan    ~ overlap_sma_5   0.971
+#   trend_ichimoku_senkou_b ~ overlap_sma_60  0.992
+#   ↑ Ichimoku 的线本身就是均线:Tenkan=(9H+9L)/2,SenkouB=(52H+52L)/2。
+#     真正的新信息在**云的关系**(SenkouA vs SenkouB 的交叉 = 未来交叉)和
+#     **价格相对云的位置**,那是派生关系,不是这 4 个原始列。
+#     所以只接 chikou(26 日滞后收盘,结构上必为近期 26 根 NULL,属正常)。
+#     想要云的交叉信号,应该在策略层用 senkou_a/senkou_b 现算,而不是把
+#     两条均线塞进 INDICATOR_COLUMNS。
+#
+# --- 最新日恒为 NULL,接了也读不到 ---
+#   trend_ichimoku_chikou: 2026-09-30 全市场非空行数 = 0。
+#     Chikou 是"26 根之前的收盘价",结构性滞后,所以**最新一根必然 NULL**
+#     (framework.toml 已按 180 天窗口把它标成结构性 78.7%)。它不是坏数据,
+#     但接进"分析今天这只票"的管道里读不到任何值;要看它得在历史 bar 上取。
+#     → 暂不接,连上面那句"只接 chikou"也一并作废。
+#
+# --- 值域异常,先不接 ---
+#   momentum_brar_ar: 全库 max=370.7 / p99=218.3,远超 BRAR 经典的 0~100 带。
+#   momentum_brar_br: 最新日 max=564.1(2026-09-30),同样越界。
+#     → **两列都拒**(2026-10-01 修正:先前只拒 AR、接了 BR 是错的)。
+#     corr 上 BR 确实正交(vs willr 0.431),但**正交性救不了错公式**。
+#     a-stock/INDICATORS_DB.md 写过的"能算、不报错、值域离谱"说的就是这个:
+#     必须人工复算公式,不能只看相关性。
+#     复算命令:
+#       duckdb -readonly ~/.hithink-finance/indicators.duckdb -c \
+#       "SELECT max(momentum_brar_br) FROM v_indicators_daily WHERE date='2026-09-30';"
+#
+# 什么时候可以重新评估:若某条信号的实测触发频率落在 dead/noisy 档
+# (internal/agent/tools/hithink_finance/pattern/signal_frequency_audit.md),
+# 说明现有列不够用,再回来看这份名单,并**带上频率数据**而不是凭直觉。
