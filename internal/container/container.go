@@ -72,6 +72,7 @@ import (
 	"github.com/Tencent/WeKnora/internal/event"
 	"github.com/Tencent/WeKnora/internal/handler"
 	"github.com/Tencent/WeKnora/internal/handler/session"
+	"github.com/Tencent/WeKnora/internal/healthcheck"
 	imPkg "github.com/Tencent/WeKnora/internal/im"
 	"github.com/Tencent/WeKnora/internal/im/dingtalk"
 	"github.com/Tencent/WeKnora/internal/im/feishu"
@@ -525,6 +526,35 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	}))
 	must(container.Invoke(startForkSnapshotReaper))
 	logger.Debugf(ctx, "[Container] Fork snapshot reaper registered")
+
+	// Configuration/pipeline inspection.
+	//
+	// This is a startup + periodic health pass that surfaces silent
+	// configuration and pipeline failures — a config value pointing at a
+	// soft-deleted row, a dead-letter backlog, a wedged extraction queue —
+	// as a degraded readiness signal. It never fails startup and never
+	// blocks traffic: findings are reported, not enforced.
+	logger.Debugf(ctx, "[Container] Registering configuration health inspection...")
+	must(container.Provide(func(db *gorm.DB, mem interfaces.MemoryService) *healthcheck.Inspector {
+		var lister healthcheck.StuckExtractionLister
+		// The memory service is optional. Check 3 reuses the reconciler's
+		// own StuckExtractions so the number an operator reads and the
+		// number the repair pass acts on cannot drift; without the service
+		// the check reports itself as not-run rather than inventing its own
+		// staleness cutoff.
+		if mem != nil {
+			if s, ok := mem.(healthcheck.StuckExtractionLister); ok {
+				lister = s
+			} else {
+				logger.Warnf(context.Background(),
+					"[Healthcheck] memory service %T does not expose StuckExtractions; "+
+						"the extraction backlog check will report as not-run", mem)
+			}
+		}
+		return healthcheck.New(healthcheck.Config{DB: db, MemoryService: lister})
+	}))
+	must(container.Invoke(startConfigurationHealthInspection))
+	logger.Debugf(ctx, "[Container] Configuration health inspection registered")
 
 	// HTTP handlers layer
 	logger.Debugf(ctx, "[Container] Registering HTTP handlers...")
@@ -2024,6 +2054,36 @@ func startTemporaryDocumentCleanup(svc interfaces.TemporaryDocumentService, clea
 // retention_days <= 0 is the configured way to disable retention;
 // the runner short-circuits Start() on that path so we don't need
 // to gate the wiring here.
+// startConfigurationHealthInspection runs the inspection once at startup and
+// then hourly, and stops it on shutdown.
+//
+// The startup pass is not awaited: it runs on the inspector's own goroutine,
+// so a slow or unreachable database delays the report but never the first
+// request. That is the failure posture of this whole feature in one line —
+// a defect in configuration is reported, and reporting it must not be able
+// to delay or prevent serving.
+func startConfigurationHealthInspection(insp *healthcheck.Inspector, cleaner interfaces.ResourceCleaner) {
+	if insp == nil {
+		logger.Warnf(context.Background(),
+			"[Healthcheck] inspector unavailable; configuration inspection disabled")
+		return
+	}
+	stop := make(chan struct{})
+	if cleaner == nil {
+		// Still run: an inspection that cannot be stopped on shutdown is
+		// far better than no inspection. Log the gap loudly so it is a
+		// known limitation rather than a silent one.
+		logger.Warnf(context.Background(),
+			"[Healthcheck] resource cleaner missing; periodic inspection will not stop on shutdown")
+	} else {
+		cleaner.RegisterWithName("ConfigurationHealthInspection", func() error {
+			close(stop)
+			return nil
+		})
+	}
+	insp.StartUntil(context.Background(), healthcheck.DefaultInterval, stop)
+}
+
 func startAuditLogRetention(
 	runner *service.AuditLogRetentionRunner, cleaner interfaces.ResourceCleaner,
 ) {

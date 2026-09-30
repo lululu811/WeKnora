@@ -59,6 +59,10 @@ services:
       - ./config/builtin_models.yaml:/app/config/builtin_models.yaml:ro
       - ./config/models.json:/app/config/models.json:ro
       - ./config/prompt_templates/:/app/config/prompt_templates/:ro
+      # indicators.yaml 是三栈共享的指标注册表（Go / 前端 / Python 都读它）。
+      # 它此前只存在于镜像里——与上面这些 config 的行为不一致：改别的配置重启就生效，
+      # 改它必须重建镜像。挂上之后这一族的行为统一了。
+      - ./config/indicators.yaml:/app/config/indicators.yaml:ro
       # Hithink Finance DuckDB databases (read-write for lock files)
       - /Users/chenlei/.hithink-finance:/Users/chenlei/.hithink-finance:rw
     healthcheck:
@@ -1104,6 +1108,14 @@ services:
       - REDIS_PASSWORD=${REDIS_PASSWORD:-}
       # 设置后 /query/ 需要 Authorization: Bearer <key>；留空 = 不鉴权
       - WEKNORA_PY_SERVICE_API_KEY=${WEKNORA_PY_SERVICE_API_KEY:-}
+      # DuckDB buffer pool 上限，见 datasources/duckdb_source.py 的说明：没有它，
+      # DuckDB 会按宿主内存（而非容器可用内存）给自己 sizing，跑批量查询时把整个
+      # Docker VM 撑爆，内核 OOM killer 直接带走本容器且不留下任何 Python 级报错。
+      - DUCKDB_MEMORY_LIMIT_MB=${DUCKDB_MEMORY_LIMIT_MB:-2048}
+    # 兜底：即使上面那道失效，也不许把整个 VM 拖死。给 DuckDB 留 2 GiB 之后
+    # 剩下的 3 GiB 够 Python 运行时 + 临时溢出；余下 4.75 GiB 留给 redis /
+    # postgres / app / frontend。改 mem_limit 时两个值要一起看。
+    mem_limit: ${PY_SERVICE_MEM_LIMIT:-3g}
     depends_on:
       - redis
     healthcheck:

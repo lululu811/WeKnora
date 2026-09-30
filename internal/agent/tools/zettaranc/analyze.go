@@ -24,15 +24,21 @@ func (t *AnalyzeTool) Name() string {
 }
 
 func (t *AnalyzeTool) Description() string {
+	// 这份清单必须与 python-service /zettaranc/analyze 实际返回的段对得上。
+	// 刚删掉的「综合评分：B1评分、趋势评分、量价评分、风险评分」整条都是假的：
+	// analyze 的返回只有 trend / volume / chart_pattern / levels 四段加若干
+	// 元信息，一个评分字段都没有；而「B1评分」里的 B1 又与形态标注的 B1 撞名。
+	//
+	// 待办（未核实，不在本次改动范围）：本描述里的「三波理论阶段判断」「麒麟会」
+	// 「砖型图」「四块砖」是否真有实现，需要对着 trend.py / pattern.py 逐条核。
 	return `使用 Z哥交易体系对单只股票进行全面分析。
 
 返回内容：
 - 技术指标：KDJ、MACD、RSI、BBI、白线黄线、布林带、砖型图
 - 波浪分析：三波理论阶段判断
 - 麒麟会：庄家阶段和置信度
-- 战法信号：30+ 种战法（B1/B2、少妇战法、四块砖等）
+- 战法信号：30+ 种战法（超卖组合/B2、少妇战法、四块砖等）
 - 综合诊断：买卖点判断、风险等级
-- 综合评分：B1评分、趋势评分、量价评分、风险评分
 
 数据源：DuckDB (market.duckdb + indicators.duckdb) + Python 计算
 

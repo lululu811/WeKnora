@@ -17,6 +17,7 @@ import (
 	"github.com/Tencent/WeKnora/internal/config"
 	"github.com/Tencent/WeKnora/internal/handler"
 	"github.com/Tencent/WeKnora/internal/handler/session"
+	"github.com/Tencent/WeKnora/internal/healthcheck"
 	"github.com/Tencent/WeKnora/internal/logger"
 	"github.com/Tencent/WeKnora/internal/mcpserver"
 	"github.com/Tencent/WeKnora/internal/middleware"
@@ -94,6 +95,10 @@ type RouterParams struct {
 	WikiPageHandler              *handler.WikiPageHandler
 	MemoryHandler                *handler.MemoryHandler
 	HostSandbox                  service.HostSandboxManager
+	// HealthInspector serves the readiness/degraded signal. Optional: a nil
+	// inspector simply means the route is not registered, which is why the
+	// liveness path above never depends on it.
+	HealthInspector *healthcheck.Inspector
 }
 
 // NewRouter 创建新的路由
@@ -142,9 +147,22 @@ func NewRouter(params RouterParams) *gin.Engine {
 	r.Use(middleware.ErrorHandler())
 
 	// 健康检查（不需要认证）
+	// Liveness. Static 200 on purpose: the compose healthcheck and
+	// `cli doctor` probe this path, and a stale configuration value must
+	// never be able to restart the container. Refusing to boot over a
+	// dangling model id would turn a small defect into a full outage.
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "ok"})
 	})
+
+	// Readiness / degraded signal. Separate from liveness on purpose: it
+	// carries the configuration-inspection findings in its body and reports
+	// 503 when there are any, without affecting the liveness path above.
+	// Nothing in the deployment probes this, so a degraded verdict can
+	// never pull the instance out of rotation.
+	if params.HealthInspector != nil {
+		r.GET("/health/readiness", params.HealthInspector.ReadinessHandler)
+	}
 
 	// Swagger API 文档（仅在非生产环境下启用）
 	// 通过 GIN_MODE 环境变量判断：release 模式下禁用 Swagger

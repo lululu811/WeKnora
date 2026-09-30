@@ -143,6 +143,158 @@ func validExtractionLease(subject *types.MemorySubject, leaseID string) bool {
 	return subject.ExtractionState.LeaseID == leaseID && subject.ExtractionState.LeaseUntil.After(time.Now())
 }
 
+// RunFailureBudget bounds how often a run-level failure may leave a session
+// pending before the row is closed for good. Without a ceiling a permanently
+// unresolvable model keeps a row at pending=true indefinitely, and a row that
+// is pending forever is indistinguishable from a row that is merely slow —
+// which is the state this whole path exists to eliminate.
+//
+// Exported so the test that pins the terminal transition and anyone reasoning
+// about it are working from the same number rather than a copy of it.
+const RunFailureBudget = 5
+
+// claimRunFailure checks that the caller is allowed to stamp a failure onto
+// this scope's pending rows.
+//
+// A non-empty leaseID must match a live lease: the lease is the proof that
+// this caller is the run holding the subject. An empty leaseID means the
+// failure happened before the claim, or outside a worker entirely (the
+// enqueue path, the reconciler). Those callers get the same protection in the
+// other direction — they may only write while nothing else holds the subject,
+// so a stale repair pass can never stomp a run that is genuinely in flight.
+func claimRunFailure(subject *types.MemorySubject, leaseID string) error {
+	if leaseID != "" {
+		if !validExtractionLease(subject, leaseID) {
+			return types.ErrMemoryExtractionLeaseLost
+		}
+		return nil
+	}
+	if subject.ExtractionState.LeaseID != "" && subject.ExtractionState.LeaseUntil.After(time.Now()) {
+		return types.ErrMemoryExtractionLeaseLost
+	}
+	return nil
+}
+
+// MarkExtractionRunFailure records a failure that killed a whole run before
+// any segment could be checkpointed — a model that will not resolve, a subject
+// that will not load, an enqueue that never landed.
+//
+// It is deliberately NOT the segment-level RecordExtractionFailure. That call
+// describes a bad *range* of transcript and needs a cursor, a lease and a
+// segment to attach itself to; a run-level failure has none of them. Reaching
+// for the segment-level path there is what left production holding rows at
+// pending=true with failure_count=0 and failure_code=”: a state that reads as
+// "in flight" no matter how long it stays that way. The 27 dead-lettered
+// memory:extract tasks from 2026-09-25 are exactly those rows.
+//
+// After this call the scope's pending rows are distinguishable by
+// failure_count/failure_code alone, whether they stay retryable (pending=true,
+// counter advanced, failed_at still NULL) or are closed as permanently failed
+// (pending=false, failed_at set) once the budget is spent.
+func (r *memoryRepository) MarkExtractionRunFailure(
+	ctx context.Context, scope interfaces.MemoryScope, leaseID, code string,
+) error {
+	return r.withSubject(ctx, scope, func(tx *gorm.DB, subject *types.MemorySubject) error {
+		if err := claimRunFailure(subject, leaseID); err != nil {
+			return err
+		}
+		var rows []types.MemoryExtractionSession
+		if err := extractionRows(tx, scope).Where("pending = ?", true).Find(&rows).Error; err != nil {
+			return err
+		}
+		now := time.Now()
+		for _, row := range rows {
+			attempts := row.FailureCount + 1
+			updates := map[string]interface{}{
+				"failure_count": attempts, "failure_code": code,
+				"updated_at": now, "failed_at": nil,
+			}
+			if attempts >= RunFailureBudget {
+				updates["pending"] = false
+				updates["failed_at"] = now
+			}
+			if err := extractionRows(tx, scope).
+				Where("session_id = ?", row.SessionID).Updates(updates).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// ClosePendingExtraction takes a scope's pending rows out of the queue because
+// the work should not run at all, without advancing their cursor.
+//
+// The cursor is the point. A skip must be *deferred*, not *consumed*: the rows
+// stop claiming to be in flight, but the watermark stays where it was, so the
+// next turn after the switch is turned back on re-queues the same session from
+// the same position and the skipped turns are extracted after all. Moving the
+// cursor here instead would be the original bug wearing a different hat —
+// messages silently consumed by a run that deliberately did nothing.
+//
+// The resulting row reads pending=false with a code in failure_code and
+// failed_at still NULL, which is what separates "deferred on purpose" from
+// "abandoned after failing" (pending=false, failed_at set) and from "in
+// flight" (pending=true, failure_count=0, no code). A later successful
+// checkpoint clears the marker, because CheckpointExtraction resets the
+// counters whenever failed_at is NULL.
+func (r *memoryRepository) ClosePendingExtraction(
+	ctx context.Context, scope interfaces.MemoryScope, leaseID, code string,
+) (int64, error) {
+	var closed int64
+	err := r.withSubject(ctx, scope, func(tx *gorm.DB, subject *types.MemorySubject) error {
+		if err := claimRunFailure(subject, leaseID); err != nil {
+			return err
+		}
+		result := extractionRows(tx, scope).Where("pending = ?", true).Updates(map[string]interface{}{
+			"pending": false, "failure_code": code, "failed_at": nil, "updated_at": time.Now(),
+		})
+		closed = result.RowsAffected
+		return result.Error
+	})
+	return closed, err
+}
+
+// defaultStuckExtractionLimit bounds one sweep. The reconciler runs on a
+// fixed cadence and returns for the remainder of the backlog on the next tick,
+// so a small page is enough and keeps a pathological backlog from turning into
+// one enormous transaction.
+const defaultStuckExtractionLimit = 200
+
+// ListStuckExtractions returns the pending rows nobody is working on, oldest
+// first: pending=true and untouched since staleBefore. It is both the
+// reconciler's input and the operator's window onto the queue, so a subject
+// that has been stuck for a week is one query away instead of a log dive.
+//
+// Sibling state lives in the same columns and is worth knowing about when
+// reading these results: a row that is NOT returned here because it is not
+// pending may instead be permanently failed, which is pending=false with a
+// non-NULL failed_at. That is the terminal state a run-level failure reaches
+// after its budget, and it is the answer to "why did this subject learn
+// nothing" — the 17 production rows sitting at pending=true with
+// failure_count=0 predate this marker and are distinguishable by that counter
+// alone.
+//
+// The predicate leads with pending and not tenant_id, so the existing
+// idx_memory_extraction_pending cannot serve it as a prefix. That is
+// deliberate: the table holds one small row per conversation, the sweep is
+// bounded, and it runs once every few minutes. Add a (pending, updated_at)
+// index only if this query ever shows up in a slow-query log.
+func (r *memoryRepository) ListStuckExtractions(
+	ctx context.Context, staleBefore time.Time, limit int,
+) ([]types.MemoryExtractionSession, error) {
+	if limit <= 0 {
+		limit = defaultStuckExtractionLimit
+	}
+	var rows []types.MemoryExtractionSession
+	err := r.db.WithContext(ctx).Model(&types.MemoryExtractionSession{}).
+		Where("pending = ? AND updated_at < ?", true, staleBefore).
+		Order("updated_at ASC, tenant_id ASC, subject_id ASC, session_id ASC").
+		Limit(limit).
+		Find(&rows).Error
+	return rows, err
+}
+
 func (r *memoryRepository) CheckpointExtraction(ctx context.Context, scope interfaces.MemoryScope, leaseID string, session types.MemoryExtractionSession, cursor types.MemoryMessageCursor, drained bool) error {
 	return r.withSubject(ctx, scope, func(tx *gorm.DB, subject *types.MemorySubject) error {
 		if !validExtractionLease(subject, leaseID) {

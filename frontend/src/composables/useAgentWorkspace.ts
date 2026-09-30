@@ -4,12 +4,18 @@ import type { WorkspaceType, PickItem } from '@/components/workspace/types';
 export const WORKSPACE_MIN_WIDTH = 450;
 export const WORKSPACE_MAX_WIDTH = 1400;
 export const WORKSPACE_DEFAULT_WIDTH = 560;
+/** 折叠态窄边宽度：只够放一个竖排把手，但能让聊天区几乎完全回来。 */
+export const WORKSPACE_RAIL_WIDTH = 36;
 const STORAGE_KEY_WIDTH = 'weknora:chat:workspace-width';
 
 export interface AgentWorkspaceContext {
   isOpen: Ref<boolean>;
+  /** 折叠态：面板收成右侧窄边而非消失，当前股票/指标/周期全部保留。 */
+  isCollapsed: Ref<boolean>;
   activeType: Ref<WorkspaceType>;
   width: Ref<number>;
+  /** 实际占位宽度：折叠时是窄边宽度，展开时是用户拖出来的宽度。 */
+  effectiveWidth: ComputedRef<number>;
   picks: Ref<PickItem[]>;
   activeIndex: Ref<number>;
   activeThscode: ComputedRef<string>;
@@ -17,6 +23,7 @@ export interface AgentWorkspaceContext {
   open: (type: WorkspaceType, picks?: PickItem[], index?: number) => void;
   close: () => void;
   toggle: () => void;
+  toggleCollapsed: () => void;
   setWidth: (w: number) => void;
   setActiveIndex: (idx: number) => void;
   setActiveThscode: (thscode: string) => void;
@@ -31,6 +38,7 @@ const WorkspaceKey: InjectionKey<AgentWorkspaceContext> = Symbol('AgentWorkspace
 
 export function createAgentWorkspaceContext(): AgentWorkspaceContext {
   const isOpen = ref(false);
+  const isCollapsed = ref(false);
   const activeType = ref<WorkspaceType>('none');
   const picks = ref<PickItem[]>([]);
   const activeIndex = ref(0);
@@ -46,6 +54,9 @@ export function createAgentWorkspaceContext(): AgentWorkspaceContext {
     return WORKSPACE_DEFAULT_WIDTH;
   })();
   const width = ref(initialWidth);
+
+  // 折叠不改 width：用户上次拖出来的宽度要留着，展开时立刻回到原样。
+  const effectiveWidth = computed(() => (isCollapsed.value ? WORKSPACE_RAIL_WIDTH : width.value));
 
   const activeThscode = computed(() => {
     const p = picks.value[activeIndex.value];
@@ -71,6 +82,8 @@ export function createAgentWorkspaceContext(): AgentWorkspaceContext {
       picks.value = newPicks;
       activeIndex.value = Math.max(0, Math.min(index, newPicks.length - 1));
     }
+    // 显式打开一定要展开：否则点了股票却只看到一条 36px 窄边，像点击失效。
+    isCollapsed.value = false;
     isOpen.value = true;
   };
 
@@ -79,7 +92,12 @@ export function createAgentWorkspaceContext(): AgentWorkspaceContext {
   };
 
   const toggle = () => {
+    if (!isOpen.value) isCollapsed.value = false;
     isOpen.value = !isOpen.value;
+  };
+
+  const toggleCollapsed = () => {
+    isCollapsed.value = !isCollapsed.value;
   };
 
   const setActiveIndex = (idx: number) => {
@@ -99,6 +117,7 @@ export function createAgentWorkspaceContext(): AgentWorkspaceContext {
       picks.value = [{ ticker, exchange }, ...picks.value];
       activeIndex.value = 0;
     }
+    isCollapsed.value = false;
     isOpen.value = true;
   };
 
@@ -113,6 +132,7 @@ export function createAgentWorkspaceContext(): AgentWorkspaceContext {
       picks.value = [pick, ...picks.value];
       activeIndex.value = 0;
     }
+    isCollapsed.value = false;
     isOpen.value = true;
   };
 
@@ -136,8 +156,10 @@ export function createAgentWorkspaceContext(): AgentWorkspaceContext {
 
   const ctx: AgentWorkspaceContext = {
     isOpen,
+    isCollapsed,
     activeType,
     width,
+    effectiveWidth,
     picks,
     activeIndex,
     activeThscode,
@@ -145,6 +167,7 @@ export function createAgentWorkspaceContext(): AgentWorkspaceContext {
     open,
     close,
     toggle,
+    toggleCollapsed,
     setWidth,
     setActiveIndex,
     setActiveThscode,

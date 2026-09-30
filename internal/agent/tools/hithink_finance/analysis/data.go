@@ -29,6 +29,9 @@ type marketRow struct {
 	// Momentum
 	DIF, DEA, MACDHist float64
 	RSI6, RSI14        float64
+	// KDJ 随机指标 (9,3,3)。K/D < 20 为超卖、> 80 为超买。
+	// 列名与 python-service/zettaranc/data_loader.py 完全一致，跨栈同名。
+	KDJK, KDJD, KDJJ float64
 	// Trend
 	ADX, DIPlus, DIMinus float64
 	STDir, STVal         float64
@@ -42,10 +45,10 @@ type marketRow struct {
 	LinSlope           float64
 	ZScore             float64
 	// Candlestick patterns
-	CdlHammer, CdlShootingStar, CdlDoji        float64
-	CdlEngulfing, CdlHarami, CdlMorningStar    float64
-	CdlEveningStar, CdlPiercing, CdlDarkCloud  float64
-	Cdl3WhiteSold, Cdl3BlackCrows              float64
+	CdlHammer, CdlShootingStar, CdlDoji       float64
+	CdlEngulfing, CdlHarami, CdlMorningStar   float64
+	CdlEveningStar, CdlPiercing, CdlDarkCloud float64
+	Cdl3WhiteSold, Cdl3BlackCrows             float64
 
 	// OHLCValid 记录这行的价格四元组是不是真的查到了。
 	//
@@ -120,6 +123,9 @@ func FetchMarketData(ctx context.Context, config *hithink_finance.Config, thscod
 			momentum_macd_12_26_9_hist AS macd_hist,
 			momentum_rsi_6 AS rsi6,
 			momentum_rsi_14 AS rsi14,
+			momentum_kdj_9_3_k AS kdj_k,
+			momentum_kdj_9_3_d AS kdj_d,
+			momentum_kdj_9_3_j AS kdj_j,
 			trend_adx_14 AS adx,
 			momentum_dm_14_plus AS di_plus,
 			momentum_dm_14_minus AS di_minus,
@@ -153,7 +159,6 @@ func FetchMarketData(ctx context.Context, config *hithink_finance.Config, thscod
 		ORDER BY date DESC
 		LIMIT ?
 	`
-
 
 	marketRows, err := hithink_finance.QueryDuckDBParams(
 		ctx, config, "market", marketSQL, thscode, days)
@@ -211,6 +216,9 @@ func FetchMarketData(ctx context.Context, config *hithink_finance.Config, thscod
 			row.MACDHist = toF64(ind["macd_hist"])
 			row.RSI6 = toF64(ind["rsi6"])
 			row.RSI14 = toF64(ind["rsi14"])
+			row.KDJK = toF64(ind["kdj_k"])
+			row.KDJD = toF64(ind["kdj_d"])
+			row.KDJJ = toF64(ind["kdj_j"])
 			row.ADX = toF64(ind["adx"])
 			row.DIPlus = toF64(ind["di_plus"])
 			row.DIMinus = toF64(ind["di_minus"])

@@ -58,6 +58,24 @@ func registeredToolNames(t *testing.T) map[string]bool {
 	return out
 }
 
+// deliberatelyNotWhitelisted 是"故意存在但不授予 agent"的工具。
+//
+// 这份表只允许收**桩工具**：调用必然失败、且失败对模型有信息量的工具。
+// 把它交给模型是净损失——白白消耗迭代预算，污染工具调用记录。
+//
+// registeredToolNames 扫的是源码里的 Name() 字面量，不是运行时注册表，
+// 所以「从 register.go 里摘掉注册」并不足以让本测试变绿：文件还在，
+// 名字还在，测试就仍然认为「代码里注册了」。这不是测试的缺陷，是它的
+// 前提——它守的是「不存在无人认领的 zettaranc.* 工具」。
+//
+// 上限设为 1 是故意的：新增条目必须同时改这里的数字，说明新增者真的想过
+// 「这个工具为什么不该给模型」，而不是随手往垃圾桶里丢。
+var deliberatelyNotWhitelisted = map[string]string{
+	"zettaranc.backtest": "回测桩，Execute 恒返回 Success:false；真回测落地后连同本条目一起删除",
+}
+
+const deliberatelyNotWhitelistedLimit = 1
+
 // zettarancWhitelist 取出 builtin-zettaranc 的 tools 列表。
 func zettarancWhitelist(t *testing.T) []string {
 	t.Helper()
@@ -109,6 +127,9 @@ func TestZettarancWhitelistMatchesRegisteredTools(t *testing.T) {
 		if !strings.HasPrefix(n, "hithink.") && !strings.HasPrefix(n, "zettaranc.") {
 			continue
 		}
+		if _, excused := deliberatelyNotWhitelisted[n]; excused {
+			continue
+		}
 		if !inWhitelist[n] {
 			extra = append(extra, n)
 		}
@@ -122,6 +143,27 @@ func TestZettarancWhitelistMatchesRegisteredTools(t *testing.T) {
 	if len(extra) > 0 {
 		t.Errorf("代码里注册了这些工具但 Z哥白名单没列，模型根本不会去调：%v", extra)
 	}
+	// 豁免表本身也要被守：它一旦能随便增长，就变成了「没人认领的工具」的垃圾桶。
+	if len(deliberatelyNotWhitelisted) > deliberatelyNotWhitelistedLimit {
+		t.Errorf("故意不授予 agent 的工具已有 %d 个（上限 %d）：%v\n"+
+			"新增前请先回答——为什么模型不该调它？为什么要留着它？",
+			len(deliberatelyNotWhitelisted), deliberatelyNotWhitelistedLimit, keysOf(deliberatelyNotWhitelisted))
+	}
+	// 豁免的必须是真桩：真做了的工具藏在这里，等于既不注册也不承认。
+	for n := range deliberatelyNotWhitelisted {
+		if !strings.Contains(deliberatelyNotWhitelisted[n], "桩") {
+			t.Errorf("%s 在豁免表里但理由不像桩工具：%q", n, deliberatelyNotWhitelisted[n])
+		}
+	}
+}
+
+func keysOf(m map[string]string) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }
 
 func TestZettarancWhitelistHasNoDuplicates(t *testing.T) {

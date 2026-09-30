@@ -22,6 +22,24 @@ import duckdb
 
 from .base import DataSource, DataSourceType, DataSourceStatus
 
+# DuckDB 的 buffer pool 上限，单位 MiB。
+#
+# 不设它，DuckDB 会按"可见内存的 80%"给自己 sizing。在 Docker 里没有 cgroup 限制
+# 时它看到的是**宿主机**的内存（本机 48 GiB），而真正能给它的只有 Docker VM 的
+# 上限（本机 7.75 GiB，redis / postgres / app / frontend 还要分）。结果就是跑几千次
+# 查询之后 buffer pool 一路涨到把整个 VM 撑爆，内核 OOM killer 挑走内存占用最高的
+# 进程 —— 也就是本服务，exit 137 神秘消失，没有任何 Python 级报错。
+#
+# 所以这里必须显式给上限：超了就让 DuckDB 自己报错或走临时文件溢出，而不是拖死整台
+# 机器。留 2048 MiB 是因为这里的查询都是单票维度的（几千行量级），2 GiB 远远够用；
+# 真正吃内存的是"一次扫全市场"那种查询，那类查询本来就该改成分片。
+DUCKDB_MEMORY_LIMIT_MB = int(os.getenv("DUCKDB_MEMORY_LIMIT_MB", "2048"))
+
+
+def _duckdb_config() -> Dict[str, str]:
+    """连接配置。**所有** duckdb.connect 都必须走这里，不能各写各的。"""
+    return {"memory_limit": f"{DUCKDB_MEMORY_LIMIT_MB}MB"}
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_MAX_ROWS = 100_000
@@ -107,7 +125,7 @@ class DuckDBSource(DataSource):
                         self._conn.close()
                     except Exception:
                         pass
-                self._conn = duckdb.connect(self.db_path, read_only=self.read_only)
+                self._conn = duckdb.connect(self.db_path, read_only=self.read_only, config=_duckdb_config())
                 self._conn.execute("SELECT 1").fetchone()
                 self._signature = sig
                 self._generation += 1
@@ -134,7 +152,7 @@ class DuckDBSource(DataSource):
             if self._conn is None:
                 if not os.path.exists(self.db_path):
                     raise FileNotFoundError(f"DuckDB 文件不存在：{self.db_path}")
-                self._conn = duckdb.connect(self.db_path, read_only=self.read_only)
+                self._conn = duckdb.connect(self.db_path, read_only=self.read_only, config=_duckdb_config())
                 self._signature = self._file_signature()
                 self._status = DataSourceStatus.HEALTHY
 

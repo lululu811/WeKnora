@@ -332,8 +332,16 @@ builtin_agents:
         - "hithink.finance.query.sql"
 
         # Zettaranc exclusive tools (Python CLI)
+        #
+        # zettaranc.backtest **故意不在这里**。它是一个会明确失败的桩工具
+        # （backtest.go 的 Execute 直接返回 Success:false，描述首行就写着
+        # 「未实现，调用会直接失败」）。把它列进白名单 = 让模型看得见、点得着，
+        # 而且 100% 失败：白白烧掉一轮 ReAct 迭代，还往 tool-call 记录里掺一条
+        # 无用的调用。一个必定失败的工具比没有这个工具更糟。
+        #
+        # 实现文件仍留在仓库里（backtest.go + agent_service.go 的构造分支），
+        # 真实回测落地后加回这一行即可，无需重写工具本身。
         - "zettaranc.analyze"
-        - "zettaranc.backtest"
         - "zettaranc.screener"
 
       web_search_enabled: true

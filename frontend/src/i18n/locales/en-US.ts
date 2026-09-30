@@ -3003,12 +3003,6 @@ export default {
       recentsTitle: 'Nothing here yet',
       recentsDescription: 'Knowledge bases you recently opened will show up here'
     },
-    klineStudio: {
-      pushTooltip: 'Push stocks mentioned in this KB to kline-studio for K-line charts',
-      pushSuccess: 'Pushed {count} stocks to kline-studio ({name})',
-      noTickers: 'No stock codes were detected in "{name}"',
-      pushFailed: 'Failed to push to kline-studio'
-    },
     delete: {
       confirmTitle: 'Delete Confirmation',
       confirmMessage: 'Are you sure you want to delete the knowledge base "{name}"? This action cannot be undone.',

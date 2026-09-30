@@ -149,6 +149,76 @@ class TestMissingIndicatorData:
         assert summary["sell_signals"] == 0
 
 
+class TestStrengthReflectsDataCompleteness:
+    """strength = 规则基准分 × 数据完整度。
+
+    这组规则写在"5 日均值"上，以前只喂 2 根 K 线也能算出 0.6 / 0.55 的
+    strength，与喂满 5 根完全同分 —— 复盘统计分不出"数据残缺的票"。
+    """
+
+    @staticmethod
+    def _bb_rows(widths):
+        """widths 按 rows 的顺序给：widths[0] 是最新一根。"""
+        rows = newest_first([10.0] * len(widths))
+        for row, width in zip(rows, widths):
+            row["bb_width"] = width
+        return rows
+
+    @staticmethod
+    def _atr_rows(atrs):
+        """atrs 按 rows 的顺序给：atrs[0] 是最新一根。"""
+        rows = newest_first([10.0] * len(atrs))
+        for row, atr in zip(rows, atrs):
+            row["atr"] = atr
+        return rows
+
+    @staticmethod
+    def _pick(signals, name):
+        return next(s for s in signals if s["name"] == name)
+
+    def test_short_window_scores_strictly_lower_than_full_window(self):
+        short = self._pick(detect_signals(self._bb_rows([1.0, 5.0])), "布林带收口")
+        full = self._pick(
+            detect_signals(self._bb_rows([1.0, 5.0, 5.0, 5.0, 5.0])), "布林带收口")
+        assert short["strength"] < full["strength"], (
+            f"2 根 K 线算的 5 日收口 {short['strength']} 不该等于 "
+            f"5 根的 {full['strength']}"
+        )
+        assert short["completeness"] < full["completeness"] == 1.0
+
+    def test_atr_expansion_is_discounted_on_a_short_window(self):
+        short = self._pick(detect_signals(self._atr_rows([3.0, 1.0])), "ATR扩张")
+        full = self._pick(
+            detect_signals(self._atr_rows([3.0, 1.0, 1.0, 1.0, 1.0])), "ATR扩张")
+        assert short["strength"] < full["strength"]
+
+    def test_complete_data_keeps_the_previous_strength(self):
+        """完整数据上的 strength 必须与折扣前的基准分逐位相同 ——
+        折扣只该影响残缺数据，不该悄悄改动策略语义。"""
+        full = self._pick(
+            detect_signals(self._bb_rows([1.0, 5.0, 5.0, 5.0, 5.0])), "布林带收口")
+        assert full["strength"] == 0.6
+        assert full["completeness"] == 1.0
+
+    def test_single_bar_rules_are_never_discounted(self):
+        """单根判据缺数据时根本不发信号，所以完整度恒为 1，基准分不变。"""
+        rows = newest_first([10.0] * 10)
+        rows[0].update(rsi6=12.0)
+        signal = self._pick(detect_signals(rows), "RSI6超卖")
+        assert signal["completeness"] == 1.0
+        assert signal["strength"] == 0.7
+
+    def test_null_inside_the_window_suppresses_the_signal_entirely(self):
+        """窗口里有 None 是**不发信号**，不是打折 —— 折扣只处理"行数不够"。
+
+        两者不能混：拿缺值的窗口算出一个"打了折的均值"再据此发信号，
+        等于把没算出来的数当成算出来的数用。
+        """
+        rows = self._atr_rows([3.0, 1.0, 1.0, 1.0, 1.0])
+        rows[2]["atr"] = None
+        assert "ATR扩张" not in {s["name"] for s in detect_signals(rows)}
+
+
 class TestHeadAndShoulders:
 
     def test_measured_move_target_sits_below_the_neckline(self):

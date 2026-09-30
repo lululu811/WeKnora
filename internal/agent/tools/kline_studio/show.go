@@ -102,7 +102,7 @@ func (t *ShowTool) Parameters() json.RawMessage {
 
 func (t *ShowTool) Execute(ctx context.Context, args json.RawMessage) (*types.ToolResult, error) {
 	var params struct {
-		Tickers []Pick  `json:"tickers"`
+		Tickers []Pick   `json:"tickers"`
 		Thscode []string `json:"thscode"`
 	}
 	if err := json.Unmarshal(args, &params); err != nil {
@@ -149,8 +149,8 @@ func (t *ShowTool) Execute(ctx context.Context, args json.RawMessage) (*types.To
 	}
 	return &types.ToolResult{
 		Success: true,
-		Output:   string(outputJSON),
-		Data:     data,
+		Output:  string(outputJSON),
+		Data:    data,
 	}, nil
 }
 

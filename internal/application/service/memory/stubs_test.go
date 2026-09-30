@@ -150,6 +150,10 @@ type stubModelService struct {
 	calls   int
 	// failNext makes the next call fail, standing in for a provider outage.
 	failNext bool
+	// chatModelErr makes model resolution itself fail, which is the failure
+	// that stranded 27 tasks in the dead-letter table with every row they had
+	// claimed left pending=true and failure_count=0.
+	chatModelErr error
 	// lastFormat records the response schema the caller asked for.
 	lastFormat json.RawMessage
 }
@@ -176,8 +180,11 @@ func (s *stubModelService) GetEmbeddingModel(
 
 func (s *stubModelService) GetChatModel(_ context.Context, modelID string) (chat.Chat, error) {
 	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.requestedModelID = modelID
-	s.mu.Unlock()
+	if s.chatModelErr != nil {
+		return nil, s.chatModelErr
+	}
 	return &stubChatModel{owner: s}, nil
 }
 
@@ -285,6 +292,9 @@ type stubEnqueuer struct {
 	mu      sync.Mutex
 	tasks   []*asynq.Task
 	options []stubEnqueueOptions
+	// failWith stands in for a queue that refuses the write, which is the case
+	// that left a row pending=true with no task anywhere to be found.
+	failWith error
 }
 
 func (s *stubEnqueuer) Enqueue(task *asynq.Task, opts ...asynq.Option) (*asynq.TaskInfo, error) {
@@ -303,9 +313,19 @@ func (s *stubEnqueuer) Enqueue(task *asynq.Task, opts ...asynq.Option) (*asynq.T
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.failWith != nil {
+		return nil, s.failWith
+	}
 	s.tasks = append(s.tasks, task)
 	s.options = append(s.options, recorded)
 	return &asynq.TaskInfo{ID: "stub", Type: task.Type()}, nil
+}
+
+// count is how many tasks the enqueuer is holding.
+func (s *stubEnqueuer) count() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.tasks)
 }
 
 // pop returns the oldest queued task, or nil when the queue is empty.

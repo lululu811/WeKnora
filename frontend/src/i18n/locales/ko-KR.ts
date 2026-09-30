@@ -4088,6 +4088,14 @@ export default {
     attachmentUploadFailed: '첨부 파일 업로드 실패',
     attachmentParseFailed: '첨부 파일 분석 실패',
     attachmentStillProcessing: '첨부 파일 {name}을(를) 아직 분석 중입니다'
+    ,
+    klinePanel: {
+      title: 'K선 리뷰'
+    },
+    klineStudio: {
+      openInPanel: '사이드 패널에서 열기',
+      openNewTab: '새 탭에서 열기'
+    }
   },
   knowledgeEditor: {
     titleCreate: '지식베이스 생성',

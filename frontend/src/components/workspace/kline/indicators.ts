@@ -1,27 +1,48 @@
 /**
  * 注册同花顺风格与 Zettaranc 专属量化指标到 KLineChart
  *
- * 核心指标体系：
- * 1. Z_SIGNALS (同花顺主图增强): 神奇九转 (TD 1..9) + K线形态气泡胶囊 + 最高/最低价引导线
- * 2. ZG_WHITE (白线): 10日 EMA，主图叠加
- * 3. DG_YELLOW (黄线): 14日 EMA，主图叠加
- * 4. Z_BBI (牵牛绳): 多空平衡均线 (3, 6, 12, 24)，主图叠加
- * 5. Z_VOL (经典同花顺成交量): 红绿量柱 + MA5 (黄) + MA10 (蓝) 均量线
- * 6. Z_MACD (同花顺风 MACD): DIFF + DEA + 柱状图 + [金叉]/[死叉] 实时胶囊徽章
- * 7. Z_KDJ (同花顺风 KDJ): K/D/J 三线走势 + [金叉]/[死叉] 实时胶囊徽章
- * 8. Z_BRICK (四砖情绪): 势能/均线/BBI/阴阳四砖共振 [-4, +4]，副图柱状图
- * 9. Z_RSL (相对强度): 3 日短线 RSL 与 21 日长线 RSL，副图曲线
+ * **元数据不在这里。** 名字、参数、默认周期、精度、主图/副图归属全部来自
+ * config/indicators.yaml（经由生成的 indicator-meta.ts 读入）。改周期请改
+ * config/indicators.yaml 再跑：
+ *
+ *   go test ./internal/indicators/ -run TestGeneratedFrontendModule -update
+ *
+ * 下面这些 calc* 函数是**公式实现**，按约定各自保留、不跨栈统一；统一的是参数。
+ *
+ * 指标体系：
+ * 1. Z_MAIN (复合主图): DEMA10 白线 + 多空线 14/28/57/114 黄线 + BBI 牵牛绳
+ * 2. Z_SIGNALS: 神奇九转 (TD 1..9) + K线形态气泡胶囊 + 最高/最低价引导线
+ * 3. ZG_WHITE (白线): 10日 DEMA，主图叠加
+ * 4. DG_YELLOW (黄线): 多空线 14/28/57/114，主图叠加
+ * 5. Z_BBI (牵牛绳): 多空平衡均线 (3, 6, 12, 24)，主图叠加
+ * 6. Z_VOL (经典同花顺成交量): 红绿量柱 + MA5 (黄) + MA10 (蓝) 均量线
+ * 7. Z_MACD (同花顺风 MACD): DIFF + DEA + 柱状图 + [金叉]/[死叉] 实时胶囊徽章
+ * 8. Z_KDJ (同花顺风 KDJ): K/D/J 三线走势 + [金叉]/[死叉] 实时胶囊徽章
+ * 9. ZX_BRICK / Z_BRICK (砖型图): 同花顺知行砖型图
+ * 10. Z_RSL (相对强度): 3 日短线 RSL 与 21 日长线 RSL，副图曲线
  */
 
 import { registerIndicator, LineType, PolygonType, IndicatorSeries, type KLineData } from 'klinecharts';
 import { zettarancPalette as PAL } from './palette';
 import { drawMainCanvasTongHuaShun, drawCrossBadge, globalOverlayConfig } from './overlay-drawer';
 import { calcDEMA, calcLongBBI, calcZXBrick, type ZXBrickItem } from './stock-score';
+import { ALL_INDICATORS, indicatorMeta } from './indicator-meta';
 
 let registered = false;
 
+/**
+ * 把 indicators.yaml 里的颜色 token 翻译成实际颜色。
+ *
+ * 三个动态 token（volume_bar / macd_hist / brick）没有固定色：它们按当根 K 线的
+ * 方向在 draw 时算，所以这里返回 null，由调用方自己定色。
+ */
+function paletteColor(token: string): string | null {
+  const p = PAL() as unknown as Record<string, string>;
+  return p[token] ?? null;
+}
+
 // 1. 指数移动平均线 (EMA)
-function calcEMA(dataList: KLineData[], period: number): Array<number | null> {
+export function calcEMA(dataList: KLineData[], period: number): Array<number | null> {
   const result: Array<number | null> = [];
   const k = 2 / (period + 1);
   let ema: number | null = null;
@@ -42,7 +63,7 @@ function calcEMA(dataList: KLineData[], period: number): Array<number | null> {
 }
 
 // 2. 简单移动平均线 (SMA)
-function calcSMA(dataList: KLineData[], period: number): Array<number | null> {
+export function calcSMA(dataList: KLineData[], period: number): Array<number | null> {
   const result: Array<number | null> = [];
   let sum = 0;
   for (let i = 0; i < dataList.length; i++) {
@@ -65,11 +86,17 @@ function calcSMA(dataList: KLineData[], period: number): Array<number | null> {
 }
 
 // 3. 多空指标 (BBI = (MA3 + MA6 + MA12 + MA24) / 4)
-function calcBBI(dataList: KLineData[]): Array<number | null> {
-  const ma3 = calcSMA(dataList, 3);
-  const ma6 = calcSMA(dataList, 6);
-  const ma12 = calcSMA(dataList, 12);
-  const ma24 = calcSMA(dataList, 24);
+//
+// 与 stock-score.ts 的 calcBBI **有意不同**：这里的版本在任一条均线还没成形时
+// 返回 null（画布上就是断线），stock-score 的版本会用已有均线做降级平均。
+// 两者服务的场景不同（画线 vs 评分），但这是一处真实存在的语义分叉，
+// conformance 测试把它记录为已知差异，不在这里偷偷抹平。
+export function calcBBI(dataList: KLineData[]): Array<number | null> {
+  const [p3, p6, p12, p24] = indicatorMeta('Z_BBI').series[0].params;
+  const ma3 = calcSMA(dataList, p3);
+  const ma6 = calcSMA(dataList, p6);
+  const ma12 = calcSMA(dataList, p12);
+  const ma24 = calcSMA(dataList, p24);
   return dataList.map((_, i) => {
     const m3 = ma3[i];
     const m6 = ma6[i];
@@ -83,6 +110,10 @@ function calcBBI(dataList: KLineData[]): Array<number | null> {
 }
 
 // 4. 四砖共振得分与多维度砖型结构 (Four Bricks: score from -4 to +4)
+//
+// 注意：四砖评分**不在** config/indicators.yaml 里 —— 它不注册成图表指标，只是
+// KLineWorkspace 顶部的评分卡。它用的 5/10/14 三个周期目前仍是硬编码。
+// 把它收进 indicators.yaml 属于"新增指标条目"，不在本次统一范围内。
 export interface FourBrickItem {
   score: number; // -4 to +4
   text: string;
@@ -97,7 +128,6 @@ export function calcFourBricksDetails(dataList: KLineData[]): FourBrickItem[] {
   const ema10 = calcEMA(dataList, 10);
   const ema14 = calcEMA(dataList, 14);
   const bbi = calcBBI(dataList);
-
   return dataList.map((d, i) => {
     const close = d?.close ?? 0;
     const open = d?.open ?? close;
@@ -141,7 +171,7 @@ function calcFourBricks(dataList: KLineData[]): Array<number | null> {
 }
 
 // 5. 相对强度指标 (RSL)
-function calcRSL(dataList: KLineData[], period: number): Array<number | null> {
+export function calcRSL(dataList: KLineData[], period: number): Array<number | null> {
   const result: Array<number | null> = [];
   for (let i = 0; i < dataList.length; i++) {
     if (i < period) {
@@ -160,7 +190,8 @@ function calcRSL(dataList: KLineData[], period: number): Array<number | null> {
 }
 
 // 6. 成交量均线计算 (VOL + MA5 + MA10)
-function calcVOL(dataList: KLineData[]) {
+export function calcVOL(dataList: KLineData[]) {
+  const [maShort, maLong] = indicatorMeta('Z_VOL').params.map((p) => p.value);
   const result: Array<{ vol: number; ma5: number | null; ma10: number | null }> = [];
   let sum5 = 0;
   let sum10 = 0;
@@ -168,22 +199,30 @@ function calcVOL(dataList: KLineData[]) {
     const vol = dataList[i]?.volume ?? 0;
     sum5 += vol;
     sum10 += vol;
-    if (i >= 5) sum5 -= (dataList[i - 5]?.volume ?? 0);
-    if (i >= 10) sum10 -= (dataList[i - 10]?.volume ?? 0);
+    if (i >= maShort) sum5 -= (dataList[i - maShort]?.volume ?? 0);
+    if (i >= maLong) sum10 -= (dataList[i - maLong]?.volume ?? 0);
     result.push({
       vol,
-      ma5: i >= 4 ? Number((sum5 / 5).toFixed(0)) : null,
-      ma10: i >= 9 ? Number((sum10 / 10).toFixed(0)) : null,
+      ma5: i >= maShort - 1 ? Number((sum5 / maShort).toFixed(0)) : null,
+      ma10: i >= maLong - 1 ? Number((sum10 / maLong).toFixed(0)) : null,
     });
   }
   return result;
 }
 
 // 7. MACD 指标计算 (DIF, DEA, MACD)
-function calcMACD(dataList: KLineData[], shortP = 12, longP = 26, m = 9) {
-  const kShort = 2 / (shortP + 1);
-  const kLong = 2 / (longP + 1);
-  const kM = 2 / (m + 1);
+//
+// 周期全部来自 indicators.yaml 的 Z_MACD (12,26,9)；不传参数时用 yaml 里的默认值。
+// 注意 hist = (dif - dea) * 2 —— DuckDB 侧的 momentum_macd_12_26_9_hist 也是乘过 2 的，
+// 这是历史约定，两边必须同时改。
+export function calcMACD(dataList: KLineData[], shortP?: number, longP?: number, m?: number) {
+  const declared = indicatorMeta('Z_MACD').params.map((p) => p.value);
+  const short = shortP || declared[0];
+  const long = longP || declared[1];
+  const signal = m || declared[2];
+  const kShort = 2 / (short + 1);
+  const kLong = 2 / (long + 1);
+  const kM = 2 / (signal + 1);
   let emaShort = dataList[0]?.close ?? 0;
   let emaLong = dataList[0]?.close ?? 0;
   let dea = 0;
@@ -207,21 +246,27 @@ function calcMACD(dataList: KLineData[], shortP = 12, longP = 26, m = 9) {
 }
 
 // 8. KDJ 指标计算 (K, D, J)
-function calcKDJ(dataList: KLineData[], n = 9) {
+//
+// n / k_smooth / d_smooth 来自 indicators.yaml 的 Z_KDJ (9,3,3)。
+export function calcKDJ(dataList: KLineData[], n?: number) {
+  const declared = indicatorMeta('Z_KDJ').params;
+  const nPeriod = n || declared.find((p) => p.name === 'n')!.value;
+  const kSmooth = declared.find((p) => p.name === 'k_smooth')!.value;
+  const dSmooth = declared.find((p) => p.name === 'd_smooth')!.value;
   const result: Array<{ k: number; d: number; j: number }> = [];
   let k = 50, d = 50;
   for (let i = 0; i < dataList.length; i++) {
     let low = Infinity, high = -Infinity;
-    const start = Math.max(0, i - n + 1);
+    const start = Math.max(0, i - nPeriod + 1);
     for (let j = start; j <= i; j++) {
       low = Math.min(low, dataList[j]?.low ?? low);
       high = Math.max(high, dataList[j]?.high ?? high);
     }
     const close = dataList[i]?.close ?? 0;
     const rsv = high === low ? 50 : ((close - low) / (high - low)) * 100;
-    k = (2 * k + rsv) / 3;
-    d = (2 * d + k) / 3;
-    const jVal = 3 * k - 2 * d;
+    k = ((kSmooth - 1) * k + rsv) / kSmooth;
+    d = ((dSmooth - 1) * d + k) / dSmooth;
+    const jVal = kSmooth * k - (dSmooth - 1) * d;
     result.push({
       k: Number(k.toFixed(2)),
       d: Number(d.toFixed(2)),
@@ -231,43 +276,274 @@ function calcKDJ(dataList: KLineData[], n = 9) {
   return result;
 }
 
+/** 主图上的高级 canvas 装饰层：神奇九转 / 形态气泡 / 极值引导线。 */
+function mainCanvasOverlay() {
+  return ({ ctx, kLineDataList, visibleRange, xAxis, yAxis }: any) => {
+    drawMainCanvasTongHuaShun(
+      ctx,
+      kLineDataList,
+      visibleRange,
+      xAxis,
+      yAxis,
+      globalOverlayConfig,
+    );
+    return false;
+  };
+}
+
+/**
+ * 金叉/死叉胶囊徽章的通用 draw。
+ *
+ * MACD 比 DIF/DEA、KDJ 比 K/D，逻辑完全一样，只是取的字段不同，所以合成一个
+ * 函数而不是写两遍。cross 在 slow 线上打点（跟原来的行为一致）。
+ */
+function crossBadgeOverlay(calc: (data: KLineData[]) => Array<{ fast: number; slow: number }>) {
+  return ({ ctx, kLineDataList, visibleRange, xAxis, yAxis }: any) => {
+    const list = calc(kLineDataList);
+    const from = Math.max(1, visibleRange.from);
+    const to = Math.min(kLineDataList.length - 1, visibleRange.to);
+    for (let i = from; i <= to; i++) {
+      const prev = list[i - 1];
+      const curr = list[i];
+      if (!prev || !curr) continue;
+      if (prev.fast <= prev.slow && curr.fast > curr.slow) {
+        drawCrossBadge(ctx, true, xAxis.convertToPixel(i), yAxis.convertToPixel(curr.slow));
+      } else if (prev.fast >= prev.slow && curr.fast < curr.slow) {
+        drawCrossBadge(ctx, false, xAxis.convertToPixel(i), yAxis.convertToPixel(curr.slow));
+      }
+    }
+    return false;
+  };
+}
+
+/**
+ * 条形 figure 的按值着色。
+ *
+ * indicators.yaml 用 color token 声明"这条柱按什么规则上色"，这里把 token 翻成
+ * 具体规则：volume_bar 看当根 K 线涨跌，macd_hist 看柱子正负。
+ */
+function barStyles(token: string) {
+  return (data: any) => {
+    let color: string;
+    if (token === 'volume_bar') {
+      const kLine = data?.current?.kLineData;
+      const isUp = kLine ? kLine.close >= kLine.open : true;
+      color = isUp ? PAL().up : PAL().down;
+    } else {
+      const val = data?.current?.indicatorData?.macd ?? 0;
+      color = val > 0 ? PAL().up : val < 0 ? PAL().down : '#6b7280';
+    }
+    return { style: PolygonType.Fill, color, borderColor: color };
+  };
+}
+
+/**
+ * 把 indicators.yaml 的 series 条目铺成 klinecharts 的 figures 数组。
+ *
+ * 顺序 = yaml 里的声明顺序，styles.lines 也按同一个顺序取 line 型 series，
+ * 所以两边永远对得上，不会出现"颜色串到别的线"的老问题。
+ */
+function figuresFrom(indicatorId: string): any[] {
+  return indicatorMeta(indicatorId).series.map((s) => {
+    const fig: any = { key: s.key, title: `${s.label}: `, type: s.type === 'bar' ? 'bar' : 'line' };
+    if (s.baseValue !== undefined) fig.baseValue = s.baseValue;
+    if (s.type === 'bar') fig.styles = barStyles(s.color);
+    return fig;
+  });
+}
+
+/** line 型 series 的描边样式，颜色与线宽都来自 indicators.yaml。 */
+function lineStyles(indicatorId: string): any[] {
+  return indicatorMeta(indicatorId)
+    .series.filter((s) => s.type === 'line')
+    .map((s) => ({
+      color: paletteColor(s.color) ?? PAL().neutral,
+      size: s.lineWidth ?? 1.5,
+      style: LineType.Solid,
+      smooth: false,
+      dashedValue: [2, 2],
+    }));
+}
+
+/** klinecharts 的 series 类型：主图挂在价格轴上，副图用自己的轴。 */
+function seriesOf(panel: 'main' | 'sub') {
+  return panel === 'main' ? IndicatorSeries.Price : IndicatorSeries.Normal;
+}
+
+/**
+ * 砖型图（ZX_BRICK / Z_BRICK）的注册体。
+ *
+ * 两个 id 共用同一份实现：Z_BRICK 是旧 id 的兼容别名，参数必须与 ZX_BRICK 一致
+ * （internal/indicators 的 Validate 会强制这一点）。
+ */
+function createZXBrickIndicator(id: string) {
+  const meta = indicatorMeta(id);
+  return {
+    name: meta.id,
+    shortName: meta.shortName,
+    series: seriesOf(meta.panel),
+    calcParams: meta.calcParams ?? [],
+    precision: meta.precision,
+    figures: figuresFrom(id),
+    calc: (dataList: KLineData[]) => {
+      const items = calcZXBrick(dataList);
+      return items.map((it) => ({
+        brick: it.brick,
+        prevBrick: it.prevBrick,
+        direction: it.direction,
+        stepCount: it.stepCount,
+        countText: it.countText,
+        isBuyPoint: it.isBuyPoint,
+        isRiskPoint: it.isRiskPoint,
+      }));
+    },
+    createTooltipDataSource: ({ indicator, crosshair, kLineDataList }: any) => {
+      const activeIdx = crosshair && crosshair.dataIndex >= 0 ? crosshair.dataIndex : kLineDataList.length - 1;
+      const data = (indicator.result?.[activeIdx] || {}) as any;
+      const val = typeof data.brick === 'number' ? data.brick.toFixed(meta.precision) : '0.00';
+      const color = data.direction === 'up' ? PAL().up : data.direction === 'down' ? PAL().down : PAL().neutral;
+      return {
+        name: meta.shortName,
+        calcParamsText: '',
+        values: [
+          {
+            title: { text: `${meta.series[0].label}: `, color: PAL().neutral },
+            value: { text: `${val}  [${data.countText || '震荡'}]`, color },
+          },
+        ],
+      };
+    },
+    draw: ({ ctx, kLineDataList, visibleRange, bounding, barSpace, xAxis, yAxis }: any) => {
+      const items = calcZXBrick(kLineDataList);
+      const from = Math.max(0, visibleRange.from);
+      const to = Math.min(kLineDataList.length - 1, visibleRange.to);
+
+      ctx.save();
+
+      // 1. 绘制零轴基准跑道线
+      const yZero = Math.round(yAxis.convertToPixel(0));
+      if (yZero >= 0 && yZero <= bounding.height) {
+        ctx.beginPath();
+        ctx.strokeStyle = 'rgba(148, 163, 184, 0.2)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([3, 3]);
+        ctx.moveTo(0, yZero);
+        ctx.lineTo(bounding.width, yZero);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+
+      // 2. 逐根绘制同花顺实体阶梯砖块 (STICKLINE)
+      const barW = barSpace.gapBar;
+      const brickW = Math.max(3, Math.min(22, Math.floor(barW * 0.75)));
+
+      for (let i = from; i <= to; i++) {
+        const item = items[i];
+        if (!item) continue;
+
+        const cx = xAxis.convertToPixel(i);
+        const x = Math.round(cx - brickW / 2);
+
+        const y1 = yAxis.convertToPixel(item.prevBrick);
+        const y2 = yAxis.convertToPixel(item.brick);
+        const topY = Math.round(Math.min(y1, y2));
+        const bottomY = Math.round(Math.max(y1, y2));
+        const h = Math.max(2.5, bottomY - topY);
+
+        if (item.direction === 'up') {
+          // 红色上升砖块
+          ctx.fillStyle = PAL().up;
+          ctx.strokeStyle = '#dc2626';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          if (typeof (ctx as any).roundRect === 'function') {
+            (ctx as any).roundRect(x, topY, brickW, h, 1.5);
+          } else {
+            ctx.rect(x, topY, brickW, h);
+          }
+          ctx.fill();
+          ctx.stroke();
+
+          // 数砖数字标记 (1..4)
+          if (item.stepCount > 0 && item.stepCount <= 9) {
+            ctx.font = 'bold 9px -apple-system, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'bottom';
+            ctx.fillStyle = item.stepCount >= 4 ? PAL().auxAmber : PAL().up;
+            ctx.fillText(String(item.stepCount), cx, topY - 1);
+
+            // 红四清仓/减仓预警
+            if (item.stepCount >= 4) {
+              ctx.font = 'bold 8px -apple-system, sans-serif';
+              ctx.fillStyle = PAL().auxAmber;
+              ctx.fillText('减', cx, topY - 10);
+            }
+          }
+        } else if (item.direction === 'down') {
+          // 绿色下降砖块
+          ctx.fillStyle = PAL().down;
+          ctx.strokeStyle = '#059669';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          if (typeof (ctx as any).roundRect === 'function') {
+            (ctx as any).roundRect(x, topY, brickW, h, 1.5);
+          } else {
+            ctx.rect(x, topY, brickW, h);
+          }
+          ctx.fill();
+          ctx.stroke();
+
+          // 绿砖数字
+          if (item.stepCount > 0 && item.stepCount <= 9) {
+            ctx.font = 'bold 9px -apple-system, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'top';
+            ctx.fillStyle = PAL().down;
+            ctx.fillText(String(item.stepCount), cx, bottomY + 2);
+
+            // 翻绿第一根: 止损提醒
+            if (item.stepCount === 1) {
+              ctx.font = 'bold 8px -apple-system, sans-serif';
+              ctx.fillStyle = PAL().up;
+              ctx.fillText('止', cx, bottomY + 11);
+            }
+          }
+        } else {
+          // 平局砖块
+          if (item.brick > 0) {
+            ctx.fillStyle = PAL().neutral;
+            ctx.fillRect(x, Math.round(y2 - 1), brickW, 2);
+          }
+        }
+      }
+
+      ctx.restore();
+      return true; // 拦截默认折线，呈现纯同花顺梯级砖块
+    },
+  };
+}
+
 export function registerZettarancIndicators() {
   if (registered) return;
   try {
-    // 0. Z_MAIN (战法核心主图: 10日白线 + 14日黄线 + BBI多空牵牛绳 + 同花顺风形态装饰)
+    // 0. Z_MAIN —— 复合主图：三条**互相独立**的线（不是一条线的多段）。
+    //    白线/黄线/BBI 各自带自己的 series.params，calcParams 里的 [10,14] 是
+    //    klinecharts 设置面板的格子，calc 不读它们（见 config/indicators.yaml）。
+    const zMain = indicatorMeta('Z_MAIN');
+    const mainWhite = zMain.series.find((s) => s.formula === 'DEMA')!;
+    const mainYellow = zMain.series.find((s) => s.formula === 'LONGBBI')!;
+    const mainBbi = zMain.series.find((s) => s.formula === 'BBI')!;
     registerIndicator({
-      name: 'Z_MAIN',
-      shortName: '战法主图',
-      series: IndicatorSeries.Price,
-      calcParams: [10, 14],
-      precision: 2,
-      figures: [
-        {
-          key: 'zg_white',
-          title: '白线: ',
-          type: 'line',
-        },
-        {
-          key: 'dg_yellow',
-          title: '黄线: ',
-          type: 'line',
-        },
-        {
-          key: 'bbi',
-          title: 'BBI: ',
-          type: 'line',
-        },
-      ],
-      styles: {
-        lines: [
-          { color: PAL().white, size: 1.8, style: LineType.Solid, smooth: false, dashedValue: [2, 2] },
-          { color: PAL().yellow, size: 1.8, style: LineType.Solid, smooth: false, dashedValue: [2, 2] },
-          { color: PAL().orange, size: 1.8, style: LineType.Solid, smooth: false, dashedValue: [2, 2] },
-        ],
-      },
+      name: zMain.id,
+      shortName: zMain.shortName,
+      series: seriesOf(zMain.panel),
+      calcParams: zMain.calcParams ?? [],
+      precision: zMain.precision,
+      figures: figuresFrom('Z_MAIN'),
+      styles: { lines: lineStyles('Z_MAIN') },
       calc: (dataList: any) => {
-        const white = calcDEMA(dataList, 10);
-        const yellow = calcLongBBI(dataList, [14, 28, 57, 114]);
+        const white = calcDEMA(dataList, mainWhite.params[0]);
+        const yellow = calcLongBBI(dataList, mainYellow.params);
         const bbi = calcBBI(dataList);
         return dataList.map((_: any, i: number) => ({
           zg_white: white[i],
@@ -275,476 +551,153 @@ export function registerZettarancIndicators() {
           bbi: bbi[i],
         }));
       },
-      draw: ({ ctx, kLineDataList, visibleRange, xAxis, yAxis }: any) => {
-        drawMainCanvasTongHuaShun(
-          ctx,
-          kLineDataList,
-          visibleRange,
-          xAxis,
-          yAxis,
-          globalOverlayConfig,
-        );
-        return false;
-      },
+      draw: mainCanvasOverlay(),
     } as any);
 
-    // 0-b. Z_SIGNALS (同花顺风格主图装饰增强：神奇九转 + K线形态胶囊 + 极值价格标记)
+    // 0-b. Z_SIGNALS —— 纯装饰层：没有 series、不产生数值，只在 draw 里画
+    //      神奇九转 / 形态气泡 / 极值引导线。
+    const zSignals = indicatorMeta('Z_SIGNALS');
     registerIndicator({
-      name: 'Z_SIGNALS',
-      shortName: '信号层',
-      series: IndicatorSeries.Price,
-      calcParams: [],
+      name: zSignals.id,
+      shortName: zSignals.shortName,
+      series: seriesOf(zSignals.panel),
+      calcParams: zSignals.calcParams ?? [],
       figures: [],
       calc: (dataList: any) => dataList.map(() => ({})),
-      draw: ({ ctx, kLineDataList, visibleRange, xAxis, yAxis }: any) => {
-        drawMainCanvasTongHuaShun(
-          ctx,
-          kLineDataList,
-          visibleRange,
-          xAxis,
-          yAxis,
-          globalOverlayConfig,
-        );
-        return false;
-      },
+      draw: mainCanvasOverlay(),
     } as any);
 
-    // 1. ZG_WHITE (白线: 二次平滑EMA10 - 主图)
+    // 1. ZG_WHITE —— 白线（单线，主图）
+    const zWhite = indicatorMeta('ZG_WHITE');
     registerIndicator({
-      name: 'ZG_WHITE',
-      shortName: '白线',
-      series: IndicatorSeries.Price,
-      calcParams: [10],
-      figures: [
-        {
-          key: 'zg_white',
-          title: '白线(10): ',
-          type: 'line',
-        },
-      ],
-      styles: {
-        lines: [{ color: PAL().white, size: 1.8, style: LineType.Solid, smooth: false, dashedValue: [2, 2] }],
-      },
+      name: zWhite.id,
+      shortName: zWhite.shortName,
+      series: seriesOf(zWhite.panel),
+      calcParams: zWhite.calcParams ?? [],
+      precision: zWhite.precision,
+      figures: figuresFrom('ZG_WHITE'),
+      styles: { lines: lineStyles('ZG_WHITE') },
       calc: (dataList: any) => {
-        const dema = calcDEMA(dataList, 10);
-        return dataList.map((_: any, i: number) => ({ zg_white: dema[i] }));
+        const dema = calcDEMA(dataList, zWhite.series[0].params[0]);
+        return dataList.map((_: any, i: number) => ({ [zWhite.series[0].key]: dema[i] }));
       },
-      draw: ({ ctx, kLineDataList, visibleRange, xAxis, yAxis }: any) => {
-        drawMainCanvasTongHuaShun(ctx, kLineDataList, visibleRange, xAxis, yAxis, globalOverlayConfig);
-        return false;
-      },
+      draw: mainCanvasOverlay(),
     } as any);
 
-    // 2. DG_YELLOW (黄线: 多空线/大哥线 14/28/57/114 - 主图)
+    // 2. DG_YELLOW —— 黄线 / 多空线（单线，主图）
+    const dYellow = indicatorMeta('DG_YELLOW');
     registerIndicator({
-      name: 'DG_YELLOW',
-      shortName: '黄线',
-      series: IndicatorSeries.Price,
-      calcParams: [14, 28, 57, 114],
-      figures: [
-        {
-          key: 'dg_yellow',
-          title: '黄线(14/28/57/114): ',
-          type: 'line',
-        },
-      ],
-      styles: {
-        lines: [{ color: PAL().yellow, size: 1.8, style: LineType.Solid, smooth: false, dashedValue: [2, 2] }],
-      },
+      name: dYellow.id,
+      shortName: dYellow.shortName,
+      series: seriesOf(dYellow.panel),
+      calcParams: dYellow.calcParams ?? [],
+      precision: dYellow.precision,
+      figures: figuresFrom('DG_YELLOW'),
+      styles: { lines: lineStyles('DG_YELLOW') },
       calc: (dataList: any) => {
-        const yellow = calcLongBBI(dataList, [14, 28, 57, 114]);
-        return dataList.map((_: any, i: number) => ({ dg_yellow: yellow[i] }));
+        const yellow = calcLongBBI(dataList, dYellow.series[0].params);
+        return dataList.map((_: any, i: number) => ({ [dYellow.series[0].key]: yellow[i] }));
       },
     } as any);
 
-    // 3. Z_BBI (牵牛绳多空平衡线 - 主图叠加)
+    // 3. Z_BBI —— 牵牛绳多空平衡线（单线，主图）
+    const zBbi = indicatorMeta('Z_BBI');
     registerIndicator({
-      name: 'Z_BBI',
-      shortName: 'BBI',
-      series: IndicatorSeries.Price,
-      calcParams: [3, 6, 12, 24],
-      figures: [
-        {
-          key: 'bbi',
-          title: 'BBI: ',
-          type: 'line',
-        },
-      ],
-      styles: {
-        lines: [{ color: PAL().orange, size: 1.8, style: LineType.Solid, smooth: false, dashedValue: [2, 2] }],
-      },
+      name: zBbi.id,
+      shortName: zBbi.shortName,
+      series: seriesOf(zBbi.panel),
+      calcParams: zBbi.calcParams ?? [],
+      precision: zBbi.precision,
+      figures: figuresFrom('Z_BBI'),
+      styles: { lines: lineStyles('Z_BBI') },
       calc: (dataList: any) => {
         const bbi = calcBBI(dataList);
-        return dataList.map((_: any, i: number) => ({ bbi: bbi[i] }));
+        return dataList.map((_: any, i: number) => ({ [zBbi.series[0].key]: bbi[i] }));
       },
     } as any);
 
-    // 4. Z_VOL (同花顺风成交量 - 副图: 红绿量柱 + MA5均量线 + MA10均量线)
+    // 4. Z_VOL —— 副图：红绿量柱 + 均量线
+    const zVol = indicatorMeta('Z_VOL');
     registerIndicator({
-      name: 'Z_VOL',
-      shortName: '成交量',
-      series: IndicatorSeries.Normal,
-      calcParams: [5, 10],
-      precision: 0,
-      figures: [
-        {
-          key: 'vol',
-          title: '总量: ',
-          type: 'bar',
-          baseValue: 0,
-          styles: (data: any) => {
-            const kLine = data?.current?.kLineData;
-            const isUp = kLine ? kLine.close >= kLine.open : true;
-            const color = isUp ? PAL().up : PAL().down;
-            return {
-              style: PolygonType.Fill,
-              color,
-              borderColor: color,
-            };
-          },
-        },
-        {
-          key: 'ma5',
-          title: 'MA5: ',
-          type: 'line',
-        },
-        {
-          key: 'ma10',
-          title: 'MA10: ',
-          type: 'line',
-        },
-      ],
-      styles: {
-        lines: [
-          { color: PAL().auxAmber, size: 1.2, style: LineType.Solid, smooth: false, dashedValue: [2, 2] },
-          { color: PAL().sky, size: 1.2, style: LineType.Solid, smooth: false, dashedValue: [2, 2] },
-        ],
-      },
-      calc: (dataList: any) => {
-        return calcVOL(dataList);
-      },
+      name: zVol.id,
+      shortName: zVol.shortName,
+      series: seriesOf(zVol.panel),
+      calcParams: zVol.calcParams ?? [],
+      precision: zVol.precision,
+      figures: figuresFrom('Z_VOL'),
+      styles: { lines: lineStyles('Z_VOL') },
+      calc: (dataList: any) => calcVOL(dataList),
     } as any);
 
-    // 5. Z_MACD (同花顺风 MACD - 副图: DIFF + DEA + 柱状图 + [金叉]/[死叉] 胶囊徽章)
+    // 5. Z_MACD —— 副图：DIFF + DEA + 柱状图 + 金叉/死叉徽章
+    const zMacd = indicatorMeta('Z_MACD');
+    const macdDefaults = zMacd.params.map((p) => p.value);
     registerIndicator({
-      name: 'Z_MACD',
-      shortName: 'MACD',
-      series: IndicatorSeries.Normal,
-      calcParams: [12, 26, 9],
-      figures: [
-        {
-          key: 'dif',
-          title: 'DIFF: ',
-          type: 'line',
-        },
-        {
-          key: 'dea',
-          title: 'DEA: ',
-          type: 'line',
-        },
-        {
-          key: 'macd',
-          title: 'MACD: ',
-          type: 'bar',
-          baseValue: 0,
-          styles: (data: any) => {
-            const val = data?.current?.indicatorData?.macd ?? 0;
-            const color = val > 0 ? PAL().up : val < 0 ? PAL().down : '#6b7280';
-            return {
-              style: PolygonType.Fill,
-              color,
-              borderColor: color,
-            };
-          },
-        },
-      ],
-      styles: {
-        lines: [
-          { color: PAL().auxAmber, size: 1.3, style: LineType.Solid, smooth: false, dashedValue: [2, 2] },
-          { color: PAL().auxSky, size: 1.3, style: LineType.Solid, smooth: false, dashedValue: [2, 2] },
-        ],
-      },
+      name: zMacd.id,
+      shortName: zMacd.shortName,
+      series: seriesOf(zMacd.panel),
+      calcParams: zMacd.calcParams ?? [],
+      precision: zMacd.precision,
+      figures: figuresFrom('Z_MACD'),
+      styles: { lines: lineStyles('Z_MACD') },
       calc: (dataList: any, indicator: any) => {
-        const p1 = indicator.calcParams[0] || 12;
-        const p2 = indicator.calcParams[1] || 26;
-        const p3 = indicator.calcParams[2] || 9;
+        const p1 = indicator.calcParams[0] || macdDefaults[0];
+        const p2 = indicator.calcParams[1] || macdDefaults[1];
+        const p3 = indicator.calcParams[2] || macdDefaults[2];
         return calcMACD(dataList, p1, p2, p3);
       },
-      draw: ({ ctx, kLineDataList, visibleRange, xAxis, yAxis }: any) => {
-        const macdList = calcMACD(kLineDataList);
-        const from = Math.max(1, visibleRange.from);
-        const to = Math.min(kLineDataList.length - 1, visibleRange.to);
-        for (let i = from; i <= to; i++) {
-          const prev = macdList[i - 1];
-          const curr = macdList[i];
-          if (!prev || !curr) continue;
-          if (prev.dif <= prev.dea && curr.dif > curr.dea) {
-            // 金叉
-            const x = xAxis.convertToPixel(i);
-            const y = yAxis.convertToPixel(curr.dea);
-            drawCrossBadge(ctx, true, x, y);
-          } else if (prev.dif >= prev.dea && curr.dif < curr.dea) {
-            // 死叉
-            const x = xAxis.convertToPixel(i);
-            const y = yAxis.convertToPixel(curr.dea);
-            drawCrossBadge(ctx, false, x, y);
-          }
-        }
-        return false;
-      },
+      draw: crossBadgeOverlay((d) => calcMACD(d).map((m) => ({ fast: m.dif, slow: m.dea }))),
     } as any);
 
-    // 6. Z_KDJ (同花顺风 KDJ - 副图: K/D/J 三线走势 + [金叉]/[死叉] 胶囊徽章)
+    // 6. Z_KDJ —— 副图：K/D/J 三线 + 金叉/死叉徽章
+    const zKdj = indicatorMeta('Z_KDJ');
+    const kdjN = zKdj.params.find((p) => p.name === 'n')!.value;
     registerIndicator({
-      name: 'Z_KDJ',
-      shortName: 'KDJ',
-      series: IndicatorSeries.Normal,
-      calcParams: [9, 3, 3],
-      figures: [
-        {
-          key: 'k',
-          title: 'K: ',
-          type: 'line',
-        },
-        {
-          key: 'd',
-          title: 'D: ',
-          type: 'line',
-        },
-        {
-          key: 'j',
-          title: 'J: ',
-          type: 'line',
-        },
-      ],
-      styles: {
-        lines: [
-          { color: PAL().auxOrange, size: 1.3, style: LineType.Solid, smooth: false, dashedValue: [2, 2] },
-          { color: PAL().auxSky, size: 1.3, style: LineType.Solid, smooth: false, dashedValue: [2, 2] },
-          { color: PAL().kdjJ, size: 1.3, style: LineType.Solid, smooth: false, dashedValue: [2, 2] },
-        ],
-      },
+      name: zKdj.id,
+      shortName: zKdj.shortName,
+      series: seriesOf(zKdj.panel),
+      calcParams: zKdj.calcParams ?? [],
+      precision: zKdj.precision,
+      figures: figuresFrom('Z_KDJ'),
+      styles: { lines: lineStyles('Z_KDJ') },
       calc: (dataList: any, indicator: any) => {
-        const n = indicator.calcParams[0] || 9;
+        const n = indicator.calcParams[0] || kdjN;
         return calcKDJ(dataList, n);
       },
-      draw: ({ ctx, kLineDataList, visibleRange, xAxis, yAxis }: any) => {
-        const kdjList = calcKDJ(kLineDataList);
-        const from = Math.max(1, visibleRange.from);
-        const to = Math.min(kLineDataList.length - 1, visibleRange.to);
-        for (let i = from; i <= to; i++) {
-          const prev = kdjList[i - 1];
-          const curr = kdjList[i];
-          if (!prev || !curr) continue;
-          if (prev.k <= prev.d && curr.k > curr.d) {
-            // 金叉
-            const x = xAxis.convertToPixel(i);
-            const y = yAxis.convertToPixel(curr.d);
-            drawCrossBadge(ctx, true, x, y);
-          } else if (prev.k >= prev.d && curr.k < curr.d) {
-            // 死叉
-            const x = xAxis.convertToPixel(i);
-            const y = yAxis.convertToPixel(curr.d);
-            drawCrossBadge(ctx, false, x, y);
-          }
-        }
-        return false;
-      },
+      draw: crossBadgeOverlay((d) => calcKDJ(d).map((m) => ({ fast: m.k, slow: m.d }))),
     } as any);
 
-    // 7. Z_BRICK (四砖情绪: 短线/趋势/多空/阴阳 4层堆叠彩色实体砖型阵列)
-    // 7. ZX_BRICK (同花顺知行砖型图: 短期砖型图指标v2026 VAR1A..VAR6A 实体台阶砖块)
-    const createZXBrickIndicator = (name: string, shortName: string) => ({
-      name,
-      shortName,
-      series: IndicatorSeries.Normal,
-      calcParams: [],
-      precision: 2,
-      figures: [
-        {
-          key: 'brick',
-          title: '砖型图: ',
-          type: 'line',
-        },
-      ],
-      calc: (dataList: KLineData[]) => {
-        const items = calcZXBrick(dataList);
-        return items.map((it) => ({
-          brick: it.brick,
-          prevBrick: it.prevBrick,
-          direction: it.direction,
-          stepCount: it.stepCount,
-          countText: it.countText,
-          isBuyPoint: it.isBuyPoint,
-          isRiskPoint: it.isRiskPoint,
-        }));
-      },
-      createTooltipDataSource: ({ indicator, crosshair, kLineDataList }: any) => {
-        const activeIdx = crosshair && crosshair.dataIndex >= 0 ? crosshair.dataIndex : kLineDataList.length - 1;
-        const data = (indicator.result?.[activeIdx] || {}) as any;
-        const val = typeof data.brick === 'number' ? data.brick.toFixed(2) : '0.00';
-        const color = data.direction === 'up' ? PAL().up : data.direction === 'down' ? PAL().down : PAL().neutral;
-        return {
-          name: 'ZX砖型图',
-          calcParamsText: '',
-          values: [
-            {
-              title: { text: '砖型图: ', color: PAL().neutral },
-              value: { text: `${val}  [${data.countText || '震荡'}]`, color },
-            },
-          ],
-        };
-      },
-      draw: ({ ctx, kLineDataList, visibleRange, bounding, barSpace, xAxis, yAxis }: any) => {
-        const items = calcZXBrick(kLineDataList);
-        const from = Math.max(0, visibleRange.from);
-        const to = Math.min(kLineDataList.length - 1, visibleRange.to);
+    // 7. 砖型图。ZX_BRICK 是当前 id，Z_BRICK 是旧 id 的兼容别名。
+    for (const brickId of ALL_INDICATORS.filter((i) => i.series[0]?.formula === 'ZX_BRICK').map((i) => i.id)) {
+      registerIndicator(createZXBrickIndicator(brickId) as any);
+    }
 
-        ctx.save();
-
-        // 1. 绘制零轴基准跑道线
-        const yZero = Math.round(yAxis.convertToPixel(0));
-        if (yZero >= 0 && yZero <= bounding.height) {
-          ctx.beginPath();
-          ctx.strokeStyle = 'rgba(148, 163, 184, 0.2)';
-          ctx.lineWidth = 1;
-          ctx.setLineDash([3, 3]);
-          ctx.moveTo(0, yZero);
-          ctx.lineTo(bounding.width, yZero);
-          ctx.stroke();
-          ctx.setLineDash([]);
-        }
-
-        // 2. 逐根绘制同花顺实体阶梯砖块 (STICKLINE)
-        const barW = barSpace.gapBar;
-        const brickW = Math.max(3, Math.min(22, Math.floor(barW * 0.75)));
-
-        for (let i = from; i <= to; i++) {
-          const item = items[i];
-          if (!item) continue;
-
-          const cx = xAxis.convertToPixel(i);
-          const x = Math.round(cx - brickW / 2);
-
-          const y1 = yAxis.convertToPixel(item.prevBrick);
-          const y2 = yAxis.convertToPixel(item.brick);
-          const topY = Math.round(Math.min(y1, y2));
-          const bottomY = Math.round(Math.max(y1, y2));
-          const h = Math.max(2.5, bottomY - topY);
-
-          if (item.direction === 'up') {
-            // 红色上升砖块
-            ctx.fillStyle = PAL().up;
-            ctx.strokeStyle = '#dc2626';
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            if (typeof (ctx as any).roundRect === 'function') {
-              (ctx as any).roundRect(x, topY, brickW, h, 1.5);
-            } else {
-              ctx.rect(x, topY, brickW, h);
-            }
-            ctx.fill();
-            ctx.stroke();
-
-            // 数砖数字标记 (1..4)
-            if (item.stepCount > 0 && item.stepCount <= 9) {
-              ctx.font = 'bold 9px -apple-system, sans-serif';
-              ctx.textAlign = 'center';
-              ctx.textBaseline = 'bottom';
-              ctx.fillStyle = item.stepCount >= 4 ? PAL().auxAmber : PAL().up;
-              ctx.fillText(String(item.stepCount), cx, topY - 1);
-
-              // 红四清仓/减仓预警
-              if (item.stepCount >= 4) {
-                ctx.font = 'bold 8px -apple-system, sans-serif';
-                ctx.fillStyle = PAL().auxAmber;
-                ctx.fillText('减', cx, topY - 10);
-              }
-            }
-          } else if (item.direction === 'down') {
-            // 绿色下降砖块
-            ctx.fillStyle = PAL().down;
-            ctx.strokeStyle = '#059669';
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            if (typeof (ctx as any).roundRect === 'function') {
-              (ctx as any).roundRect(x, topY, brickW, h, 1.5);
-            } else {
-              ctx.rect(x, topY, brickW, h);
-            }
-            ctx.fill();
-            ctx.stroke();
-
-            // 绿砖数字
-            if (item.stepCount > 0 && item.stepCount <= 9) {
-              ctx.font = 'bold 9px -apple-system, sans-serif';
-              ctx.textAlign = 'center';
-              ctx.textBaseline = 'top';
-              ctx.fillStyle = PAL().down;
-              ctx.fillText(String(item.stepCount), cx, bottomY + 2);
-
-              // 翻绿第一根: 止损提醒
-              if (item.stepCount === 1) {
-                ctx.font = 'bold 8px -apple-system, sans-serif';
-                ctx.fillStyle = PAL().up;
-                ctx.fillText('止', cx, bottomY + 11);
-              }
-            }
-          } else {
-            // 平局砖块
-            if (item.brick > 0) {
-              ctx.fillStyle = PAL().neutral;
-              ctx.fillRect(x, Math.round(y2 - 1), brickW, 2);
-            }
-          }
-        }
-
-        ctx.restore();
-        return true; // 拦截默认折线，呈现纯同花顺梯级砖块
-      },
-    });
-
-    registerIndicator(createZXBrickIndicator('ZX_BRICK', 'ZX砖型图') as any);
-    registerIndicator(createZXBrickIndicator('Z_BRICK', 'ZX砖型图') as any);
-
-    // 8. Z_RSL (相对强度曲线 - 副图)
+    // 8. Z_RSL —— 相对强度曲线
+    const zRsl = indicatorMeta('Z_RSL');
+    const rslDefaults = zRsl.params.map((p) => p.value);
     registerIndicator({
-      name: 'Z_RSL',
-      shortName: 'RSL',
-      series: IndicatorSeries.Normal,
-      calcParams: [3, 21],
-      figures: [
-        {
-          key: 'rsl_short',
-          title: 'RSL短(3): ',
-          type: 'line',
-        },
-        {
-          key: 'rsl_long',
-          title: 'RSL长(21): ',
-          type: 'line',
-        },
-      ],
-      styles: {
-        lines: [
-          { color: PAL().sky, size: 1.5, style: LineType.Solid, smooth: false, dashedValue: [2, 2] },
-          { color: PAL().purple, size: 1.5, style: LineType.Solid, smooth: false, dashedValue: [2, 2] },
-        ],
-      },
+      name: zRsl.id,
+      shortName: zRsl.shortName,
+      series: seriesOf(zRsl.panel),
+      calcParams: zRsl.calcParams ?? [],
+      precision: zRsl.precision,
+      figures: figuresFrom('Z_RSL'),
+      styles: { lines: lineStyles('Z_RSL') },
       calc: (dataList: any, indicator: any) => {
-        const p1 = indicator.calcParams[0] || 3;
-        const p2 = indicator.calcParams[1] || 21;
+        const p1 = indicator.calcParams[0] || rslDefaults[0];
+        const p2 = indicator.calcParams[1] || rslDefaults[1];
         const rslShort = calcRSL(dataList, p1);
         const rslLong = calcRSL(dataList, p2);
+        const [shortKey, longKey] = zRsl.series.map((s) => s.key);
         return dataList.map((_: any, i: number) => ({
-          rsl_short: rslShort[i],
-          rsl_long: rslLong[i],
+          [shortKey]: rslShort[i],
+          [longKey]: rslLong[i],
         }));
       },
     } as any);
 
     registered = true;
-    console.log('[zettaranc] indicators registered: Z_MAIN, Z_SIGNALS, ZG_WHITE, DG_YELLOW, Z_BBI, Z_VOL, Z_MACD, Z_KDJ, Z_BRICK, Z_RSL');
+    console.log(`[zettaranc] indicators registered from config/indicators.yaml: ${ALL_INDICATORS.map((i) => i.id).join(', ')}`);
   } catch (err) {
     console.warn('[zettaranc] indicator register warning:', err);
   }

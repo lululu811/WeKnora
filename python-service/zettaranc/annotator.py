@@ -3,6 +3,18 @@ Z 哥交易体系形态识别器 (Python 实现)
 
 识别 B1/S1/关键K/暴力K 等形态标注，与 kline-studio 的标注规范 100% 对齐。
 输出结构直接供前端 KLineChart Pro 标注图层渲染。
+
+命名约定（重要）
+----------------
+这里的 B1 是**形态标注**：建仓波之后的第一次缩量回调（KDJ J<13）。
+它和选股策略 `STRATEGY_RULES["oversold_combo"]`（≥2 个超卖信号共振）
+是两件不同的事 —— 历史上选股策略也叫 "B1"，两套同名不同义，模型和人
+都会串。现已把选股策略改名为 oversold_combo，本模块的 B1 保持不变，
+函数名带上「建仓波」前缀（detect_build_wave_b1）以示区分。
+
+对外的 `type` 字段仍然是 `"b1"`：K 线工作台前端的形态调色板
+（frontend/src/components/workspace/kline/annotate-api.ts）按这个 key 取
+标签和颜色，改 key 会让前端拿不到样式。这是**线上协议**，不是内部命名。
 """
 
 from typing import Any, Dict, List, Optional
@@ -64,9 +76,9 @@ class ZettarancAnnotator:
     """Z 哥交易体系形态识别器"""
 
     @staticmethod
-    def detect_b1(bars: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def detect_build_wave_b1(bars: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
-        检测 B1 建仓波信号
+        检测 B1 建仓波信号（形态标注，不是选股策略 oversold_combo）
         - 建仓波：底部连续中大阳线放量上升 (涨幅 20%~50%，至少3根大阳线)
         - B1 信号：建仓波后的第一次回调低点，KDJ 的 J 值 < 13 且回调缩量
         """
@@ -246,7 +258,7 @@ class ZettarancAnnotator:
             pattern_types = ["b1", "key_k", "s1", "violent_k"]
 
         dispatch = {
-            "b1": cls.detect_b1,
+            "b1": cls.detect_build_wave_b1,
             "key_k": cls.detect_key_k,
             "s1": cls.detect_s1,
             "violent_k": cls.detect_violent_k,

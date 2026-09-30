@@ -98,8 +98,8 @@ func TestBuildDataQualityEmptyRows(t *testing.T) {
 func TestBuildDataQualityDetectsCoalescedZero(t *testing.T) {
 	rows := []marketRow{{
 		Date: "2026-09-01", Close: 10, OHLCValid: true,
-		IndicatorValid: true, // 上游声称有效
-		MA5: 0, MA10: 0, MA20: 0, RSI14: 0, ADX: 0, // 但值全是 0
+		IndicatorValid: true,                                  // 上游声称有效
+		MA5:            0, MA10: 0, MA20: 0, RSI14: 0, ADX: 0, // 但值全是 0
 	}}
 	dq := buildDataQuality(rows, rows[0])
 	if dq["indicator_bars"] != 0 {

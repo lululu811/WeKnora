@@ -68,6 +68,10 @@ const dismiss = () => {
 .follow-ups {
   width: 100%;
   max-width: 720px;
+  // 必须显式声明：默认 content-box 下，max-width 只约束内容盒，
+  // 加上 padding+border 后实际外宽是 746px，会和同级的
+  // .mentioned-stocks-bar（border-box，720px 外宽）差出一截。
+  box-sizing: border-box;
   margin: -4px 0 28px;
   margin-right: auto;
   padding: 12px;

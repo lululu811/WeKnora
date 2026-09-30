@@ -91,13 +91,13 @@ func (t *VolumeAnalysisTool) Execute(ctx context.Context, args json.RawMessage) 
 	}
 
 	result := map[string]interface{}{
-		"thscode":        params.Thscode,
-		"wyckoff_phase":  t.analyzeWyckoffPhase(rows),
-		"volume_price":   t.analyzeVolumePrice(rows),
+		"thscode":         params.Thscode,
+		"wyckoff_phase":   t.analyzeWyckoffPhase(rows),
+		"volume_price":    t.analyzeVolumePrice(rows),
 		"spring_upthrust": t.analyzeSpringUpthrust(rows),
-		"obv":            t.analyzeOBV(rows),
-		"money_flow":     t.analyzeMoneyFlow(rows),
-		"vwap":           t.analyzeVWAP(rows),
+		"obv":             t.analyzeOBV(rows),
+		"money_flow":      t.analyzeMoneyFlow(rows),
+		"vwap":            t.analyzeVWAP(rows),
 	}
 
 	result["summary"] = t.generateSummary(result)
@@ -282,8 +282,8 @@ func (t *VolumeAnalysisTool) analyzeSpringUpthrust(rows []marketRow) []map[strin
 func (t *VolumeAnalysisTool) analyzeOBV(rows []marketRow) map[string]interface{} {
 	if len(rows) < 11 {
 		return map[string]interface{}{
-			"trend":       "unknown",
-			"divergence":  "none",
+			"trend":      "unknown",
+			"divergence": "none",
 		}
 	}
 
@@ -355,10 +355,10 @@ func (t *VolumeAnalysisTool) analyzeVWAP(rows []marketRow) map[string]interface{
 
 	if vwap == 0 {
 		return map[string]interface{}{
-			"price":       price,
-			"vwap":        0,
+			"price":        price,
+			"vwap":         0,
 			"distance_pct": 0,
-			"position":    "unknown",
+			"position":     "unknown",
 		}
 	}
 

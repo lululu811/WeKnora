@@ -320,8 +320,16 @@ class ScreenRequest(BaseModel):
 # `signal == "bullish"` 发出来，否则该策略永远选不出票。
 # 旧版 `anomaly` 三条规则里两条是 neutral、剩下那条判据恒不成立，
 # 策略是结构性死掉的。
+#
+# 命名：策略名必须自解释，且不能和标注层的形态名撞名。
+# 原先这条规则叫 "B1"，而 zettaranc.annotator.detect_build_wave_b1 发出的
+# 形态标注也叫 B1（建仓波回调买点）—— 同一个名字两套语义，模型读策略清单
+# 时会把两者当成同一个东西。所以选股策略一律用描述性英文名：
+#   oversold_combo  = 超卖共振（≥2 个超卖信号），与建仓波 B1 无关
+#   SB1 的 "S…B1" 前缀是历史叫法，指的就是"超卖组合这一组再加 MACD 金叉"，
+#   与建仓波 B1 同样无关；它没有歧义，故保留原名不扩大改动面。
 STRATEGY_RULES: Dict[str, Dict[str, Any]] = {
-    "B1": {
+    "oversold_combo": {
         "match_signals": ["KDJ超卖金叉", "RSI6超卖", "Stochastic超卖金叉",
                           "CCI超卖", "Williams%R超卖", "Z-Score超卖"],
         "min_count": 2,
@@ -384,8 +392,8 @@ STRATEGY_RULES: Dict[str, Dict[str, Any]] = {
     # 全部是 bearish 方向或单根形态，也就是说选股器**只能选出想买的票，
     # 选不出"该躲开"的票** —— 而规避持仓通常比选新票更急。
 
-    # 超买/见顶：与 B1 严格镜像。B1 找超卖金叉，这组找超买。
-    "b1_overbought": {
+    # 超买/见顶：与 oversold_combo 严格镜像。超卖组合找超卖金叉，这组找超买。
+    "overbought_combo": {
         "match_signals": ["RSI6超买", "CCI超买", "Williams%R超买",
                           "Z-Score超买", "MFI超买"],
         "min_count": 2,
@@ -393,10 +401,31 @@ STRATEGY_RULES: Dict[str, Dict[str, Any]] = {
     },
     # 趋势转空：死叉 + 空头排列，与 anomaly（风险异动）互补 ——
     # anomaly 看资金流与波动，这组看趋势结构本身。
+    #
+    # 这条规则过去写着 `Vortex金叉`。direction="bearish" 的过滤是**逐信号**
+    # 做的（screener.evaluate_group：allowed={"bearish"}），金叉是 bullish，
+    # 于是它被静默丢掉、永远不参与计数 —— 三条规则实际只有两条在用，
+    # min_count=2 就退化成"必须 MACD死叉 与 Aroon空头排列 同一根 bar 同时
+    # 发生"，命中率远低于策略名字暗示的水平，而且没有任何报错。
+    #
+    # 换成方向相反的直接对偶 `Vortex死叉`（bearish），三条规则全部可用。
+    # 名字、min_count、direction 一律没动。
     "trend_down": {
-        "match_signals": ["MACD死叉", "Vortex金叉", "Aroon空头排列"],
+        "match_signals": ["MACD死叉", "Vortex死叉", "Aroon空头排列"],
         "min_count": 2,
         "direction": "bearish",
+    },
+    # Vortex 多头交叉的独立出口。min_count=1，与 hammer_reversal /
+    # shooting_star_reversal 同一套「单信号单策略」的拆法。
+    #
+    # 为什么需要它：Vortex金叉原先唯一的引用就是 trend_down，而那条规则是
+    # direction="bearish" —— 金叉是 bullish，被逐信号过滤掉，等于**算了但
+    # 永远选不出来**。trend_down 改用死叉之后，这条 bullish 信号就没有任何
+    # 策略引用了，test_no_signal_is_computed_but_unreachable 会变红。
+    # 补一个真实的 bullish 出口，而不是把金叉塞回某条看跌规则里。
+    "vortex_bull": {
+        "match_signals": ["Vortex金叉"],
+        "min_count": 1,
     },
     # 单根 K 线形态：锤头线（底部反转）与流星线（顶部反转）成对给出。
     # min_count=1 —— 单根形态本身就是一次信号，要求两个反而选不出票。
@@ -644,7 +673,7 @@ async def zettaranc_screen(request: ScreenRequest) -> Dict[str, Any]:
     all_codes = [c for c in names if c]
 
     # 板块限定放在取数**之前**：先缩小候选集，后面的指标/价量查询都只跑
-    # 板块内的票。「半导体 + B1」从 5,571 只缩到 188 只，取数量和耗时
+    # 板块内的票。「半导体 + oversold_combo」从 5,571 只缩到 188 只，取数量和耗时
     # 同比下降，而不是先全市场选完再在内存里过滤。
     sector_filter: Optional[Dict[str, Any]] = None
     if request.sector:
@@ -1343,7 +1372,9 @@ async def get_annotations(
     adjust: str = Query("forward", description="复权类型: none | forward | backward"),
 ):
     """
-    形态标注计算接口 — 识别指定股票的买卖形态 (B1, S1, 关键K, 暴力K)
+    形态标注计算接口 — 识别指定股票的买卖形态 (B1建仓波, S1, 关键K, 暴力K)
+    注意：这里的 B1 是 K 线**形态标注**（建仓波后第一次缩量回调、J<13），
+    和选股策略 oversold_combo（超卖信号组合）不是一回事，别混用。
     """
     from datasources import registry
     from zettaranc.annotator import annotator
@@ -1400,7 +1431,7 @@ async def stock_profile(
     """
     个股速览：资金面 + 估值 + 板块归属，一次返回。
 
-    为什么合并成一个接口而不是三个：这��数据是给**鼠标划过就触发的悬浮框**用的，
+    为什么合并成一个接口而不是三个：这这些数据是给**鼠标划过就触发的悬浮框**用的，
     扫描 5 个 ticker 就会打 5 次。三个独立接口 = 15 个并发请求；合并成一个 = 5 个。
 
     三个区块**各自独立降级**：任何一个库查不到，只影响它自己那一块（该块为空并

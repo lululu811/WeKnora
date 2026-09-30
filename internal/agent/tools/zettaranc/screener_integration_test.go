@@ -30,7 +30,7 @@ func liveClient() *zettaranc.HTTPClient {
 func requireLive(t *testing.T) *zettaranc.HTTPClient {
 	t.Helper()
 	c := liveClient()
-	if _, err := c.Screen(context.Background(), "B1", 1); err != nil {
+	if _, err := c.Screen(context.Background(), "oversold_combo", 1); err != nil {
 		t.Skipf("python-service 不可达（%v），跳过端到端测试", err)
 	}
 	return c
@@ -39,7 +39,7 @@ func requireLive(t *testing.T) *zettaranc.HTTPClient {
 func TestScreenSendsStrategyAndLimit(t *testing.T) {
 	c := requireLive(t)
 
-	res, err := c.Screen(context.Background(), "B1", 5)
+	res, err := c.Screen(context.Background(), "oversold_combo", 5)
 	if err != nil {
 		t.Fatalf("Screen 失败：%v", err)
 	}
@@ -55,7 +55,7 @@ func TestScreenSectorOptionReachesPython(t *testing.T) {
 	c := requireLive(t)
 
 	// 精确匹配：行业「银行」应远少于全市场
-	res, err := c.Screen(context.Background(), "B1", 5, zettaranc.WithSector("银行"))
+	res, err := c.Screen(context.Background(), "oversold_combo", 5, zettaranc.WithSector("银行"))
 	if err != nil {
 		t.Fatalf("Screen 失败：%v", err)
 	}
@@ -78,7 +78,7 @@ func TestScreenSectorOptionReachesPython(t *testing.T) {
 func TestScreenRiskOptionsReachPython(t *testing.T) {
 	c := requireLive(t)
 
-	res, err := c.Screen(context.Background(), "B1", 5,
+	res, err := c.Screen(context.Background(), "oversold_combo", 5,
 		zettaranc.WithMaxDebtRatio(0.5),
 		zettaranc.WithMinCurrentRatio(1.0),
 		zettaranc.WithRequireProfit(),
@@ -119,7 +119,7 @@ func TestScreenWithoutFiltersLeavesThemNull(t *testing.T) {
 	c := requireLive(t)
 
 	// 不传筛选 → 服务端不该去查 financials，risk_filter 应为 nil
-	res, err := c.Screen(context.Background(), "B1", 3)
+	res, err := c.Screen(context.Background(), "oversold_combo", 3)
 	if err != nil {
 		t.Fatalf("Screen 失败：%v", err)
 	}
@@ -136,7 +136,7 @@ func TestScreenWithoutFiltersLeavesThemNull(t *testing.T) {
 func TestScreenProvenanceReachesTheCaller(t *testing.T) {
 	c := requireLive(t)
 
-	res, err := c.Screen(context.Background(), "B1", 3)
+	res, err := c.Screen(context.Background(), "oversold_combo", 3)
 	if err != nil {
 		t.Fatalf("Screen 失败：%v", err)
 	}
@@ -166,7 +166,7 @@ func TestScreenRequestOmitsUnsetPointers(t *testing.T) {
 	// 不打网络，只验序列化：未设置的阈值必须整个字段消失，
 	// 而不是序列化成 null 或 0 —— 0 会被服务端当成"负债率上限 0"，
 	// 把所有票都筛掉。
-	b, err := json.Marshal(zettaranc.ScreenRequest{Strategy: "B1", Limit: 5})
+	b, err := json.Marshal(zettaranc.ScreenRequest{Strategy: "oversold_combo", Limit: 5})
 	if err != nil {
 		t.Fatalf("序列化失败：%v", err)
 	}
@@ -188,7 +188,7 @@ func TestScreenOptionZeroIsSentNotDropped(t *testing.T) {
 	// 0 是合法阈值（"负债率不超过 0"），不能因为是零值就被 omitempty 吞掉。
 	// 这就是用 *float64 而不是 float64 的原因。
 	b, _ := json.Marshal(zettaranc.ScreenRequest{
-		Strategy:     "B1",
+		Strategy:     "oversold_combo",
 		MaxDebtRatio: floatPtr(0),
 	})
 	var m map[string]interface{}

@@ -3,27 +3,41 @@
     <div v-if="workspace.isOpen.value && activeComponent" class="agent-workspace-container">
       <aside
         class="agent-workspace-panel"
-        :class="{ 'is-resizing': resizing }"
-        :style="{ '--agent-workspace-w': `${workspace.width.value}px` }"
+        :class="{ 'is-resizing': resizing, 'is-collapsed': workspace.isCollapsed.value }"
+        :style="{ '--agent-workspace-w': `${workspace.effectiveWidth.value}px` }"
         role="complementary"
         aria-label="Agent Workspace"
       >
-        <!-- 左侧拖拽拉手 -->
-        <PanelResizeHandle
-          edge="left"
-          label="调整工作台宽度"
-          :value="workspace.width.value"
-          :min="WORKSPACE_MIN_WIDTH"
-          :max="WORKSPACE_MAX_WIDTH"
-          @start="startResize"
-          @resize="handleResize"
-          @end="resizing = false"
-        />
+        <!-- 折叠态：整条窄边就是展开把手，组件不卸载，K 线状态原样留着 -->
+        <button
+          v-if="workspace.isCollapsed.value"
+          type="button"
+          class="agent-workspace-rail"
+          title="展开工作台"
+          @click="workspace.toggleCollapsed()"
+        >
+          <t-icon name="chevron-left" size="16px" />
+          <span class="agent-workspace-rail__text">{{ railLabel }}</span>
+        </button>
 
-        <!-- 动态工作台挂载插槽 -->
-        <div class="agent-workspace-body">
-          <component :is="activeComponent" />
-        </div>
+        <template v-else>
+          <!-- 左侧拖拽拉手 -->
+          <PanelResizeHandle
+            edge="left"
+            label="调整工作台宽度"
+            :value="workspace.width.value"
+            :min="WORKSPACE_MIN_WIDTH"
+            :max="WORKSPACE_MAX_WIDTH"
+            @start="startResize"
+            @resize="handleResize"
+            @end="resizing = false"
+          />
+
+          <!-- 动态工作台挂载插槽 -->
+          <div class="agent-workspace-body">
+            <component :is="activeComponent" />
+          </div>
+        </template>
       </aside>
     </div>
   </Transition>
@@ -33,7 +47,7 @@
 import { ref, computed } from 'vue';
 import { useAgentWorkspace, WORKSPACE_MIN_WIDTH, WORKSPACE_MAX_WIDTH } from '@/composables/useAgentWorkspace';
 import { useCurrentWorkbenchComponents } from '@/composables/useWorkbench';
-import { WORKSPACE_COMPONENTS } from './registry';
+import { WORKSPACE_COMPONENTS, WORKSPACE_LABELS } from './registry';
 import PanelResizeHandle from '@/components/PanelResizeHandle.vue';
 
 const workspace = useAgentWorkspace();
@@ -62,6 +76,9 @@ const handleResize = (delta: number) => {
   // 左侧把手：鼠标向左拖动（delta < 0），工作台宽度变大
   workspace.setWidth(startWidth - delta);
 };
+
+// 折叠窄边上竖排显示的名字；没登记就退回类型名，不留空白条。
+const railLabel = computed(() => WORKSPACE_LABELS[workspace.activeType.value] || workspace.activeType.value);
 </script>
 
 <style lang="less" scoped>
@@ -87,6 +104,9 @@ const handleResize = (delta: number) => {
   // 宽度走 CSS 变量而非行内 width，这样下面的断点能覆盖它
   width: var(--agent-workspace-w, 560px);
 
+  // 折叠/展开走宽度过渡。注意不能放在 .is-resizing 里——拖拽时要即时跟手。
+  transition: width var(--app-motion-slow) cubic-bezier(0.16, 1, 0.3, 1);
+
   &.is-resizing {
     transition: none;
     user-select: none;
@@ -94,10 +114,44 @@ const handleResize = (delta: number) => {
 
   // 窄屏：不再与聊天区并排（.chat 在此断点不做 padding 让位），
   // 改为整屏覆盖，否则 560px 面板会直接盖住聊天内容。
+  // 折叠态要排除在这条之外——整屏宽的竖排把手没法看，留 36px 窄边才合理。
   @media (max-width: 959.98px) {
-    width: 100vw;
+    &:not(.is-collapsed) {
+      width: 100vw;
+    }
   }
 }
+
+// 折叠态：竖排把手就是整个面板，hover 时提示展开
+.agent-workspace-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 100%;
+  padding: 12px 0;
+  border: 0;
+  border-left: 1px solid var(--td-component-stroke, #e7e7e7);
+  background: var(--td-bg-color-secondarycontainer, #f8f8f8);
+  color: var(--td-text-color-secondary, #5e5e5e);
+  cursor: pointer;
+  transition: background-color var(--app-motion-base), color var(--app-motion-base);
+
+  &:hover {
+    background: var(--td-bg-color-container-hover, #f0f0f0);
+    color: var(--td-brand-color, #0052d9);
+  }
+}
+
+.agent-workspace-rail__text {
+  writing-mode: vertical-rl;
+  letter-spacing: 2px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+// 展开态的折叠把手：贴左边框中线，和上方拖拽拉手不重叠
 
 .agent-workspace-body {
   flex: 1;

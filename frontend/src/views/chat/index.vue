@@ -289,7 +289,9 @@ const rightPanelsWidth = computed(() => {
   if (referencesDrawerVisible.value) total += referencesPanelWidth.value;
   if (sandboxPanel.visible.value) total += sandboxPanel.width.value;
   // klinePanel 是 agentWorkspace 的兼容 shim，共用同一份 isOpen/width，不能重复累加。
-  if (agentWorkspace.isOpen.value) total += agentWorkspace.width.value;
+  // 用 effectiveWidth 而非 width：工作台折叠成窄边时让位也应该缩到窄边宽度，
+  // 否则聊天区会一直空着原来 560px+ 的位置。
+  if (agentWorkspace.isOpen.value) total += agentWorkspace.effectiveWidth.value;
   return total;
 });
 

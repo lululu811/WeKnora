@@ -11,7 +11,8 @@ import (
 //
 // APIURL  — backend HTTP API base (e.g. http://127.0.0.1:4000); used for POST /api/picks.
 // BaseURL — frontend URL surfaced to the user (e.g. http://localhost:5173);
-//           the tool appends ?tab=picks so the browser opens the picks tab directly.
+//
+//	the tool appends ?tab=picks so the browser opens the picks tab directly.
 type Config struct {
 	APIURL  string
 	BaseURL string
@@ -21,8 +22,9 @@ type Config struct {
 // DefaultConfig returns the default configuration for local development.
 //
 // In docker compose, override via env:
-//   KLINE_STUDIO_API_URL  (default http://127.0.0.1:4000)
-//   KLINE_STUDIO_BASE_URL (default http://localhost:5173)
+//
+//	KLINE_STUDIO_API_URL  (default http://127.0.0.1:4000)
+//	KLINE_STUDIO_BASE_URL (default http://localhost:5173)
 func DefaultConfig() *Config {
 	apiURL := os.Getenv("KLINE_STUDIO_API_URL")
 	if apiURL == "" {

@@ -55,6 +55,9 @@ const handleClickStock = (stock: MentionedStock) => {
 <style lang="less" scoped>
 .mentioned-stocks-bar {
   width: 100%;
+  // 与 FollowUpSuggestions 的 .follow-ups 保持同宽，两者同属一个 .message-row，
+  // 宽度不一致会让"本轮提及个股"横跨整行而下面的追问卡片缩在左边一截。
+  max-width: 720px;
   margin: 6px 0 10px 0;
   box-sizing: border-box;
   animation: fadeIn 0.2s ease-out;

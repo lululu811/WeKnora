@@ -4199,6 +4199,14 @@ export default {
     attachmentUploadFailed: '添付ファイルのアップロードに失敗しました',
     attachmentParseFailed: '添付ファイルの解析に失敗しました',
     attachmentStillProcessing: '添付ファイル{name}は解析中です'
+    ,
+    klinePanel: {
+      title: 'K線レビュー'
+    },
+    klineStudio: {
+      openInPanel: 'サイドパネルで開く',
+      openNewTab: '新しいタブで開く'
+    }
   },
   tenant: {
     title: 'ワークスペース情報',

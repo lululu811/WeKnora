@@ -4088,6 +4088,14 @@ export default {
     attachmentUploadFailed: 'Не удалось загрузить вложение',
     attachmentParseFailed: 'Не удалось обработать вложение',
     attachmentStillProcessing: 'Вложение {name} ещё обрабатывается'
+    ,
+    klinePanel: {
+      title: 'Обзор K-линии'
+    },
+    klineStudio: {
+      openInPanel: 'Открыть в боковой панели',
+      openNewTab: 'Открыть в новой вкладке'
+    }
   },
   knowledgeEditor: {
     titleCreate: 'Создать базу знаний',

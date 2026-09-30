@@ -136,7 +136,19 @@ func (s *Service) ScheduleExtraction(ctx context.Context, sessionID, messageID, 
 		}
 	}
 
-	s.enqueueExtraction(ctx, scope, sessionID, messageID, chatModelID, delay)
+	// The row is already written with pending=true by the time we get here, so
+	// dropping this error on the floor creates durable work that no task will
+	// ever claim: the table says pending, the queue holds nothing, and nothing
+	// re-sends it. That is a promise the queue can never keep, made silently.
+	// Recording the failure keeps the row attributable and leaves it
+	// recoverable — the reconciler finds it by its updated_at and re-queues it
+	// once the queue works again.
+	//
+	// ScheduleExtraction has no error to return (callers are a chat turn that
+	// must not fail over memory), so the marker is the whole response.
+	if err := s.enqueueExtraction(ctx, scope, sessionID, messageID, chatModelID, delay); err != nil {
+		s.markRunFailure(ctx, &runState{scope: scope}, fmt.Errorf("%w: %v", errEnqueueExtraction, err))
+	}
 }
 
 // enqueueExtraction pushes one distillation task. The in-flight slot is
@@ -271,9 +283,54 @@ func (s *Service) Handle(ctx context.Context, task *asynq.Task) error {
 	if payload.Language != "" {
 		ctx = context.WithValue(ctx, types.LanguageContextKey, payload.Language)
 	}
+	return s.runExtraction(ctx, scope, payload)
+}
+
+// runExtraction is the part of a pass that can fail at the run level — before
+// any segment is checkpointed, or in the middle of a batch that never
+// completed.
+//
+// It is separate from Handle so that every exit has a named error to inspect.
+// Until this split, a failure here simply returned: MarkExtractionFailure was
+// never called because there was no segment to attach it to, and the claimed
+// rows went back to pending=true with failure_count=0. Those are the 17 rows
+// production is still sitting on after 27 tasks dead-lettered with
+// "model not found" — indistinguishable, in the database, from work that was
+// genuinely in flight.
+func (s *Service) runExtraction(
+	ctx context.Context, scope interfaces.MemoryScope, payload types.MemoryExtractPayload,
+) (runErr error) {
+	rs := &runState{scope: scope}
+	// Registered before anything can fail so that a failure *before* the claim
+	// — the subject will not load, the claim itself errors — is still recorded.
+	// It runs last (defers unwind in reverse) and no-ops once the claim-holding
+	// defer below has stamped the same failure.
+	defer func() {
+		if runErr == nil || rs.marked {
+			return
+		}
+		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		s.markRunFailure(cleanup, rs, runErr)
+	}()
 
 	cfg := s.workspaceConfig(ctx, payload.TenantID)
 	if !cfg.AutoExtractEnabled() {
+		// Returning nil is right — a workspace with auto-extract off is not a
+		// task failure, and returning an error would spend the retry budget
+		// and land every such task in the dead-letter table, which teaches
+		// operators to ignore that table. It used to be the *only* thing that
+		// happened, and that is the silent half of the bug: asynq marked the
+		// task COMPLETED and deleted it while the row it had claimed stayed
+		// pending=true forever. No dead letter, no error, no log line, and a
+		// subject whose queue advertised work nothing would ever collect.
+		//
+		// The task may be acknowledged; the table may not keep lying. Closing
+		// the rows states what happened and leaves the cursor untouched, so
+		// the next turn after the switch is flipped back on re-queues the same
+		// session from the same position and these turns are extracted after
+		// all. Deferring is not the same as consuming them.
+		s.closePendingWork(ctx, scope, failureCodeSkipAutoExtract)
 		s.releaseSlot(ctx, scope)
 		return nil
 	}
@@ -285,6 +342,10 @@ func (s *Service) Handle(ctx context.Context, task *asynq.Task) error {
 		return fmt.Errorf("load memory subject: %w", err)
 	}
 	if !subject.Enabled {
+		// Same shape as the workspace switch above, and the same reason for
+		// closing rather than returning: the user's own opt-out must not
+		// leave a row that looks like a run in progress.
+		s.closePendingWork(ctx, scope, failureCodeSkipSubjectOff)
 		s.releaseSlot(ctx, scope)
 		return nil
 	}
@@ -307,9 +368,17 @@ func (s *Service) Handle(ctx context.Context, task *asynq.Task) error {
 		}
 		return s.enqueueExtraction(ctx, scope, payload.SessionID, payload.MessageID, payload.ChatModelID, time.Until(batch.RetryAt)+time.Second)
 	}
+	rs.leaseID = leaseID
+	// One defer owns both halves of the unwind, in this order. They cannot be
+	// two separate defers: those unwind last-registered-first, so releasing
+	// the lease before stamping would drop the proof of ownership that the
+	// stamp needs, and the failure would be written by nobody.
 	defer func() {
 		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancel()
+		if runErr != nil {
+			s.markRunFailure(cleanup, rs, runErr)
+		}
 		if err := s.repo.ReleaseExtractionSlot(cleanup, scope, leaseID); err != nil {
 			logger.Warnf(cleanup, "memory: release worker lease failed: %v", err)
 		}
@@ -930,12 +999,19 @@ func (s *Service) callExtractionModel(
 		// them — which is how a workspace on default settings ends up with an
 		// enabled memory feature that has learned nothing.
 		return extractionResponse{}, fmt.Errorf(
-			"no chat model available for memory extraction; " +
-				"configure one under workspace memory settings")
+			"%w: no chat model available for memory extraction; "+
+				"configure one under workspace memory settings", errExtractionModelUnavailable)
 	}
 	chatModel, err := s.modelService.GetChatModel(ctx, modelID)
 	if err != nil {
-		return extractionResponse{}, fmt.Errorf("get extraction model: %w", err)
+		// This one cost a full day of production: a configured model id that no
+		// longer resolves failed 27 tasks into the dead-letter table, and
+		// because the failure is raised before any segment exists there was
+		// nothing for the segment-level failure recorder to attach to. The
+		// sentinel is what lets the run-level path label the rows it strands,
+		// so this specific cause is visible as "model_unavailable" instead of
+		// one undifferentiated run failure.
+		return extractionResponse{}, fmt.Errorf("%w: get extraction model: %w", errExtractionModelUnavailable, err)
 	}
 
 	userPrompt := buildExtractionPrompt(segment, existing, forgotten, knownTopics, cfg.ExtractInstructions)

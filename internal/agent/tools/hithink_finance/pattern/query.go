@@ -19,13 +19,17 @@ type row struct {
 	K        float64 `json:"k"`
 	D        float64 `json:"d"`
 	J        float64 `json:"j"`
-	RSI6     float64 `json:"rsi6"`
-	RSI14    float64 `json:"rsi14"`
-	StochK   float64 `json:"stoch_k"`
-	StochD   float64 `json:"stoch_d"`
-	CCI      float64 `json:"cci"`
-	WillR    float64 `json:"willr"`
-	MFI      float64 `json:"mfi"`
+	// ER = Kaufman Efficiency Ratio (momentum_er_10)：|10 日净变动| / 10 日逐日
+	// 绝对变动之和，取值 0~1。ADX 回答"趋势有多强"，ER 回答"这段趋势走得多干净"
+	//——同样 +10%，一根直线走到和来回震荡走到，是两个完全不同的持仓前提。
+	ER     float64 `json:"er"`
+	RSI6   float64 `json:"rsi6"`
+	RSI14  float64 `json:"rsi14"`
+	StochK float64 `json:"stoch_k"`
+	StochD float64 `json:"stoch_d"`
+	CCI    float64 `json:"cci"`
+	WillR  float64 `json:"willr"`
+	MFI    float64 `json:"mfi"`
 	// Trend
 	ADX       float64 `json:"adx"`
 	DIPlus    float64 `json:"di_plus"`
@@ -37,12 +41,19 @@ type row struct {
 	AroonDown float64 `json:"aroon_down"`
 	VIPlus    float64 `json:"vi_plus"`
 	VIMinus   float64 `json:"vi_minus"`
+	// Choppiness Index (trend_chop_14)，取值 0~100，固定区间，不随价格尺度变化。
+	// ADX 说"有没有趋势"，CHOP 说"这个趋势能不能一直跟下去"——震荡市里趋势型
+	// 持仓该减，这就是它要回答的"该不该继续拿着"。
+	Chop float64 `json:"chop"`
 	// Volatility
 	BBUpper float64 `json:"bb_upper"`
 	BBMid   float64 `json:"bb_mid"`
 	BBLower float64 `json:"bb_lower"`
 	BBWidth float64 `json:"bb_width"`
 	ATR     float64 `json:"atr"`
+	// NATR = 100 * ATR / Close (volatility_natr_14)：把 ATR 折算成百分比。
+	// ATR 是绝对价差，¥20 的票和 ¥200 的票没法共用一个止损距离；NATR 可以。
+	NATR    float64 `json:"natr"`
 	DCUpper float64 `json:"dc_upper"`
 	DCLower float64 `json:"dc_lower"`
 	KCUpper float64 `json:"kc_upper"`
@@ -52,9 +63,15 @@ type row struct {
 	CMF  float64 `json:"cmf"`
 	OBV  float64 `json:"obv"`
 	VWAP float64 `json:"vwap"`
+	// PVT/PVI/NVI 都是**累计量**（逐日求和），绝对水平由起点决定、没有跨标的
+	// 可比性；只有近 N 根 K 线之间的差值（斜率）有意义。signals.go 一律读差值，
+	// 不读绝对值，并且两侧都必须非 0 才算数——见 hasData 的注释。
+	PVT float64 `json:"pvt"`
+	PVI float64 `json:"pvi"`
+	NVI float64 `json:"nvi"`
 	// Statistics
-	ZScore    float64 `json:"zscore"`
-	LinSlope  float64 `json:"lin_slope"`
+	ZScore   float64 `json:"zscore"`
+	LinSlope float64 `json:"lin_slope"`
 	// Candlestick patterns (non-zero = pattern present)
 	CdlMorningStar  float64 `json:"cdl_morning_star"`
 	CdlEveningStar  float64 `json:"cdl_evening_star"`
@@ -87,6 +104,7 @@ func queryIndicatorRows(ctx context.Context, config *hithink_finance.Config, ths
 			COALESCE(momentum_kdj_9_3_k, 0) AS k,
 			COALESCE(momentum_kdj_9_3_d, 0) AS d,
 			COALESCE(momentum_kdj_9_3_j, 0) AS j,
+			COALESCE(momentum_er_10, 0) AS er,
 			COALESCE(momentum_rsi_6, 0) AS rsi6,
 			COALESCE(momentum_rsi_14, 0) AS rsi14,
 			COALESCE(momentum_stoch_14_3_3_slowk, 0) AS stoch_k,
@@ -104,11 +122,13 @@ func queryIndicatorRows(ctx context.Context, config *hithink_finance.Config, ths
 			COALESCE(momentum_aroon_25_aroondown, 0) AS aroon_down,
 			COALESCE(trend_vortex_14_plus, 0) AS vi_plus,
 			COALESCE(trend_vortex_14_minus, 0) AS vi_minus,
+			COALESCE(trend_chop_14, 0) AS chop,
 			COALESCE(volatility_bbands_20_2_0_upper, 0) AS bb_upper,
 			COALESCE(volatility_bbands_20_2_0_middle, 0) AS bb_mid,
 			COALESCE(volatility_bbands_20_2_0_lower, 0) AS bb_lower,
 			COALESCE(volatility_bbands_20_2_0_upper - volatility_bbands_20_2_0_lower, 0) AS bb_width,
 			COALESCE(volatility_atr_14, 0) AS atr,
+			COALESCE(volatility_natr_14, 0) AS natr,
 			COALESCE(volatility_donchian_20_upper, 0) AS dc_upper,
 			COALESCE(volatility_donchian_20_lower, 0) AS dc_lower,
 			COALESCE(volatility_kc_20_2_upper, 0) AS kc_upper,
@@ -117,6 +137,9 @@ func queryIndicatorRows(ctx context.Context, config *hithink_finance.Config, ths
 			COALESCE(volume_cmf_20, 0) AS cmf,
 			COALESCE(volume_obv, 0) AS obv,
 			COALESCE(volume_vwap, 0) AS vwap,
+			COALESCE(volume_pvt, 0) AS pvt,
+			COALESCE(volume_pvi, 0) AS pvi,
+			COALESCE(volume_nvi, 0) AS nvi,
 			COALESCE(statistics_zscore_20, 0) AS zscore,
 			COALESCE(statistics_linearreg_slope_14, 0) AS lin_slope,
 			COALESCE(candles_cdl_morningstar_0, 0) AS cdl_morning_star,
@@ -166,57 +189,63 @@ func queryIndicatorRows(ctx context.Context, config *hithink_finance.Config, ths
 
 func mapToRow(m map[string]interface{}) row {
 	return row{
-		Date:              str(m, "date"),
-		Close:             f64(m, "close"),
-		DIF:               f64(m, "dif"),
-		DEA:               f64(m, "dea"),
-		MACDHist:          f64(m, "macd_hist"),
-		K:                 f64(m, "k"),
-		D:                 f64(m, "d"),
-		J:                 f64(m, "j"),
-		RSI6:              f64(m, "rsi6"),
-		RSI14:             f64(m, "rsi14"),
-		StochK:            f64(m, "stoch_k"),
-		StochD:            f64(m, "stoch_d"),
-		CCI:               f64(m, "cci"),
-		WillR:             f64(m, "willr"),
-		MFI:               f64(m, "mfi"),
-		ADX:               f64(m, "adx"),
-		DIPlus:            f64(m, "di_plus"),
-		DIMinus:           f64(m, "di_minus"),
-		STDir:             f64(m, "st_dir"),
-		STVal:             f64(m, "st_val"),
-		PSAR:              f64(m, "psar"),
-		AroonUp:           f64(m, "aroon_up"),
-		AroonDown:         f64(m, "aroon_down"),
-		VIPlus:            f64(m, "vi_plus"),
-		VIMinus:           f64(m, "vi_minus"),
-		BBUpper:           f64(m, "bb_upper"),
-		BBMid:             f64(m, "bb_mid"),
-		BBLower:           f64(m, "bb_lower"),
-		BBWidth:           f64(m, "bb_width"),
-		ATR:               f64(m, "atr"),
-		DCUpper:           f64(m, "dc_upper"),
-		DCLower:           f64(m, "dc_lower"),
-		KCUpper:           f64(m, "kc_upper"),
-		KCMid:             f64(m, "kc_mid"),
-		KCLower:           f64(m, "kc_lower"),
-		CMF:               f64(m, "cmf"),
-		OBV:               f64(m, "obv"),
-		VWAP:              f64(m, "vwap"),
-		ZScore:            f64(m, "zscore"),
-		LinSlope:          f64(m, "lin_slope"),
-		CdlMorningStar:    f64(m, "cdl_morning_star"),
-		CdlEveningStar:    f64(m, "cdl_evening_star"),
-		CdlHammer:         f64(m, "cdl_hammer"),
-		CdlShootingStar:   f64(m, "cdl_shooting_star"),
-		CdlDoji:           f64(m, "cdl_doji"),
-		CdlEngulfing:      f64(m, "cdl_engulfing"),
-		CdlHarami:         f64(m, "cdl_harami"),
-		CdlPiercing:       f64(m, "cdl_piercing"),
-		CdlDarkCloud:      f64(m, "cdl_dark_cloud"),
-		Cdl3WhiteSold:     f64(m, "cdl_3white"),
-		Cdl3BlackCrows:    f64(m, "cdl_3black"),
+		Date:            str(m, "date"),
+		Close:           f64(m, "close"),
+		DIF:             f64(m, "dif"),
+		DEA:             f64(m, "dea"),
+		MACDHist:        f64(m, "macd_hist"),
+		K:               f64(m, "k"),
+		D:               f64(m, "d"),
+		J:               f64(m, "j"),
+		ER:              f64(m, "er"),
+		RSI6:            f64(m, "rsi6"),
+		RSI14:           f64(m, "rsi14"),
+		StochK:          f64(m, "stoch_k"),
+		StochD:          f64(m, "stoch_d"),
+		CCI:             f64(m, "cci"),
+		WillR:           f64(m, "willr"),
+		MFI:             f64(m, "mfi"),
+		ADX:             f64(m, "adx"),
+		DIPlus:          f64(m, "di_plus"),
+		DIMinus:         f64(m, "di_minus"),
+		STDir:           f64(m, "st_dir"),
+		STVal:           f64(m, "st_val"),
+		PSAR:            f64(m, "psar"),
+		AroonUp:         f64(m, "aroon_up"),
+		AroonDown:       f64(m, "aroon_down"),
+		VIPlus:          f64(m, "vi_plus"),
+		VIMinus:         f64(m, "vi_minus"),
+		Chop:            f64(m, "chop"),
+		BBUpper:         f64(m, "bb_upper"),
+		BBMid:           f64(m, "bb_mid"),
+		BBLower:         f64(m, "bb_lower"),
+		BBWidth:         f64(m, "bb_width"),
+		ATR:             f64(m, "atr"),
+		NATR:            f64(m, "natr"),
+		DCUpper:         f64(m, "dc_upper"),
+		DCLower:         f64(m, "dc_lower"),
+		KCUpper:         f64(m, "kc_upper"),
+		KCMid:           f64(m, "kc_mid"),
+		KCLower:         f64(m, "kc_lower"),
+		CMF:             f64(m, "cmf"),
+		OBV:             f64(m, "obv"),
+		VWAP:            f64(m, "vwap"),
+		PVT:             f64(m, "pvt"),
+		PVI:             f64(m, "pvi"),
+		NVI:             f64(m, "nvi"),
+		ZScore:          f64(m, "zscore"),
+		LinSlope:        f64(m, "lin_slope"),
+		CdlMorningStar:  f64(m, "cdl_morning_star"),
+		CdlEveningStar:  f64(m, "cdl_evening_star"),
+		CdlHammer:       f64(m, "cdl_hammer"),
+		CdlShootingStar: f64(m, "cdl_shooting_star"),
+		CdlDoji:         f64(m, "cdl_doji"),
+		CdlEngulfing:    f64(m, "cdl_engulfing"),
+		CdlHarami:       f64(m, "cdl_harami"),
+		CdlPiercing:     f64(m, "cdl_piercing"),
+		CdlDarkCloud:    f64(m, "cdl_dark_cloud"),
+		Cdl3WhiteSold:   f64(m, "cdl_3white"),
+		Cdl3BlackCrows:  f64(m, "cdl_3black"),
 	}
 }
 

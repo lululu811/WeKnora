@@ -67,8 +67,12 @@ func (t *ChartPatternTool) Execute(ctx context.Context, args json.RawMessage) (*
 	if params.Thscode == "" {
 		return &types.ToolResult{Success: false, Error: "thscode 不能为空"}, nil
 	}
-	if params.Days <= 0 { params.Days = 120 }
-	if params.Days > 250 { params.Days = 250 }
+	if params.Days <= 0 {
+		params.Days = 120
+	}
+	if params.Days > 250 {
+		params.Days = 250
+	}
 
 	rows, err := FetchMarketData(ctx, t.config, params.Thscode, params.Days)
 	if err != nil {
@@ -114,16 +118,24 @@ func (t *ChartPatternTool) Execute(ctx context.Context, args json.RawMessage) (*
 	// ── Summary ──
 	bullCount, bearCount := 0, 0
 	for _, p := range patterns {
-		if p["direction"] == "bullish" { bullCount++ } else { bearCount++ }
+		if p["direction"] == "bullish" {
+			bullCount++
+		} else {
+			bearCount++
+		}
 	}
 	verdict := "中性"
-	if bullCount > bearCount { verdict = "偏多" } else if bearCount > bullCount { verdict = "偏空" }
+	if bullCount > bearCount {
+		verdict = "偏多"
+	} else if bearCount > bullCount {
+		verdict = "偏空"
+	}
 
 	output := map[string]interface{}{
-		"thscode":            params.Thscode,
-		"patterns":           patterns,
+		"thscode":             params.Thscode,
+		"patterns":            patterns,
 		"candlestick_signals": candleSignals,
-		"bollinger_status":   bbStatus,
+		"bollinger_status":    bbStatus,
 		"summary": map[string]interface{}{
 			"total_patterns": len(patterns),
 			"bullish":        bullCount,
@@ -141,17 +153,23 @@ var _ types.Tool = (*ChartPatternTool)(nil)
 
 func detectHeadAndShoulders(rows []marketRow) map[string]interface{} {
 	highs, lows := findSwings(rows, 8)
-	if len(highs) < 3 || len(lows) < 2 { return nil }
+	if len(highs) < 3 || len(lows) < 2 {
+		return nil
+	}
 
 	// Check the 3 most recent swing highs for H&S top
 	h1, h2, h3 := rows[highs[0]].High, rows[highs[1]].High, rows[highs[2]].High
 	// h1 is most recent. Head should be the middle one chronologically = h2
 	// But our highs are newest-first, so h1=right_shoulder, h2=head, h3=left_shoulder
 	head, ls, rs := h2, h3, h1
-	if head <= ls || head <= rs { return nil }
+	if head <= ls || head <= rs {
+		return nil
+	}
 	// Check shoulder symmetry (within 5%)
 	avgShoulder := (ls + rs) / 2
-	if math.Abs(ls-rs)/avgShoulder > 0.05 { return nil }
+	if math.Abs(ls-rs)/avgShoulder > 0.05 {
+		return nil
+	}
 
 	// Neckline: the two reaction lows that bracket the head, i.e. the lows at
 	// the left shoulder (highs[2]) and the right shoulder (highs[0]).
@@ -164,19 +182,21 @@ func detectHeadAndShoulders(rows []marketRow) map[string]interface{} {
 	// collapses to `neckline` — the "target" was always the neckline.
 	target := neckline - (head - neckline)
 	confidence := 0.6
-	if rows[0].Close < neckline { confidence += 0.2 } // neckline broken
+	if rows[0].Close < neckline {
+		confidence += 0.2
+	} // neckline broken
 
 	return map[string]interface{}{
-		"name":      "头肩顶",
-		"type":      "reversal",
-		"direction": "bearish",
+		"name":       "头肩顶",
+		"type":       "reversal",
+		"direction":  "bearish",
 		"confidence": confidence,
 		"key_levels": map[string]float64{
 			"left_shoulder": ls, "head": head, "right_shoulder": rs,
 			"neckline": neckline, "target": target,
 		},
 		"volume_confirm": rows[0].Vol < rows[highs[2]].Vol,
-		"desc": fmt.Sprintf("头肩顶：左肩=%.2f 头=%.2f 右肩=%.2f 颈线=%.2f 目标=%.2f", ls, head, rs, neckline, target),
+		"desc":           fmt.Sprintf("头肩顶：左肩=%.2f 头=%.2f 右肩=%.2f 颈线=%.2f 目标=%.2f", ls, head, rs, neckline, target),
 	}
 }
 
@@ -193,9 +213,9 @@ func detectDoubleTopBottom(rows []marketRow) map[string]interface{} {
 			target := neckline - (avg - neckline)
 			return map[string]interface{}{
 				"name": "双顶", "type": "reversal", "direction": "bearish", "confidence": 0.65,
-				"key_levels": map[string]float64{"peak1": p1, "peak2": p2, "neckline": neckline, "target": target},
+				"key_levels":     map[string]float64{"peak1": p1, "peak2": p2, "neckline": neckline, "target": target},
 				"volume_confirm": rows[0].Vol < rows[highs[1]].Vol,
-				"desc": fmt.Sprintf("双顶：顶1=%.2f 顶2=%.2f 颈线=%.2f", p1, p2, neckline),
+				"desc":           fmt.Sprintf("双顶：顶1=%.2f 顶2=%.2f 颈线=%.2f", p1, p2, neckline),
 			}
 		}
 	}
@@ -209,9 +229,9 @@ func detectDoubleTopBottom(rows []marketRow) map[string]interface{} {
 			target := neckline + (neckline - avg)
 			return map[string]interface{}{
 				"name": "双底", "type": "reversal", "direction": "bullish", "confidence": 0.65,
-				"key_levels": map[string]float64{"bottom1": p1, "bottom2": p2, "neckline": neckline, "target": target},
+				"key_levels":     map[string]float64{"bottom1": p1, "bottom2": p2, "neckline": neckline, "target": target},
 				"volume_confirm": rows[0].Vol > rows[lows[1]].Vol,
-				"desc": fmt.Sprintf("双底：底1=%.2f 底2=%.2f 颈线=%.2f", p1, p2, neckline),
+				"desc":           fmt.Sprintf("双底：底1=%.2f 底2=%.2f 颈线=%.2f", p1, p2, neckline),
 			}
 		}
 	}
@@ -220,7 +240,9 @@ func detectDoubleTopBottom(rows []marketRow) map[string]interface{} {
 
 func detectTriangle(rows []marketRow) map[string]interface{} {
 	n := minInt(30, len(rows))
-	if n < 15 { return nil }
+	if n < 15 {
+		return nil
+	}
 	segment := rows[:n]
 
 	var upperSlope, lowerSlope float64
@@ -229,7 +251,9 @@ func detectTriangle(rows []marketRow) map[string]interface{} {
 		highs = append(highs, segment[i].High)
 		lows = append(lows, segment[i].Low)
 	}
-	if len(highs) < 3 { return nil }
+	if len(highs) < 3 {
+		return nil
+	}
 	for i := 1; i < len(highs); i++ {
 		upperSlope += highs[i] - highs[i-1]
 		lowerSlope += lows[i] - lows[i-1]
@@ -264,7 +288,9 @@ func detectTriangle(rows []marketRow) map[string]interface{} {
 
 func detectWedge(rows []marketRow) map[string]interface{} {
 	n := minInt(25, len(rows))
-	if n < 12 { return nil }
+	if n < 12 {
+		return nil
+	}
 
 	var peakTrend, troughTrend float64
 	for i := 0; i < n-1; i += 3 {
@@ -279,11 +305,15 @@ func detectWedge(rows []marketRow) map[string]interface{} {
 	// uptrend as a falling wedge and saying so in the desc.
 	nearSpan := 0.0
 	for i := 0; i < 5 && i < n; i++ {
-		if i == 0 { nearSpan = rows[i].High - rows[i].Low }
+		if i == 0 {
+			nearSpan = rows[i].High - rows[i].Low
+		}
 	}
 	farSpan := 0.0
 	for i := 5; i < 12 && i < n; i++ {
-		if i == 5 { farSpan = rows[i].High - rows[i].Low }
+		if i == 5 {
+			farSpan = rows[i].High - rows[i].Low
+		}
 	}
 	converging := farSpan > 0 && nearSpan < farSpan
 	conf := 0.55
@@ -319,21 +349,31 @@ func detectFlag(rows []marketRow) map[string]interface{} {
 	// (rows[:consolidationLen]). The old code had the two swapped, so it
 	// searched for "recent impulse + older drift" — the exact inverse of a
 	// flag — and matched none of the canonical shapes.
-	if len(rows) < 15 { return nil }
+	if len(rows) < 15 {
+		return nil
+	}
 
 	for consolidationLen := 3; consolidationLen <= 10; consolidationLen++ {
 		consolidation := rows[:consolidationLen]
 		pole := rows[consolidationLen:]
-		if len(pole) < 2 { continue }
+		if len(pole) < 2 {
+			continue
+		}
 
 		poleStart, poleEnd := pole[len(pole)-1], pole[0]
-		if poleStart.Close <= 0 { continue }
+		if poleStart.Close <= 0 {
+			continue
+		}
 		changePct := (poleEnd.Close - poleStart.Close) / poleStart.Close * 100
-		if math.Abs(changePct) < 5 { continue }
+		if math.Abs(changePct) < 5 {
+			continue
+		}
 
 		// Net drift across the consolidation, as a fraction of its oldest close.
 		first := consolidation[len(consolidation)-1].Close
-		if first <= 0 { continue }
+		if first <= 0 {
+			continue
+		}
 		consChange := (consolidation[0].Close - first) / first
 
 		if changePct > 0 && consChange > -0.03 && consChange < 0.03 {
@@ -353,7 +393,9 @@ func detectFlag(rows []marketRow) map[string]interface{} {
 }
 
 func detectCandlesticks(rows []marketRow) []map[string]interface{} {
-	if len(rows) == 0 { return nil }
+	if len(rows) == 0 {
+		return nil
+	}
 	r := rows[0]
 	var signals []map[string]interface{}
 
@@ -362,17 +404,17 @@ func detectCandlesticks(rows []marketRow) []map[string]interface{} {
 		signal string
 		desc   string
 	}{
-		r.CdlHammer:        {"锤子线", "bullish", "下影线长，潜在底部反转"},
-		r.CdlShootingStar:  {"流星线", "bearish", "上影线长，潜在顶部反转"},
-		r.CdlDoji:          {"十字星", "neutral", "多空平衡，变盘信号"},
-		r.CdlEngulfing:     {"看涨吞没", "bullish", "阳线吞没前日阴线"},
-		r.CdlHarami:        {"孕线", "neutral", "趋势放缓"},
-		r.CdlMorningStar:   {"晨星", "bullish", "底部反转形态"},
-		r.CdlEveningStar:   {"暮星", "bearish", "顶部反转形态"},
-		r.CdlPiercing:      {"刺透线", "bullish", "看涨刺透形态"},
-		r.CdlDarkCloud:     {"乌云盖顶", "bearish", "看跌乌云形态"},
-		r.Cdl3WhiteSold:    {"三白兵", "bullish", "连续三阳，强势上涨"},
-		r.Cdl3BlackCrows:   {"三乌鸦", "bearish", "连续三阴，强势下跌"},
+		r.CdlHammer:       {"锤子线", "bullish", "下影线长，潜在底部反转"},
+		r.CdlShootingStar: {"流星线", "bearish", "上影线长，潜在顶部反转"},
+		r.CdlDoji:         {"十字星", "neutral", "多空平衡，变盘信号"},
+		r.CdlEngulfing:    {"看涨吞没", "bullish", "阳线吞没前日阴线"},
+		r.CdlHarami:       {"孕线", "neutral", "趋势放缓"},
+		r.CdlMorningStar:  {"晨星", "bullish", "底部反转形态"},
+		r.CdlEveningStar:  {"暮星", "bearish", "顶部反转形态"},
+		r.CdlPiercing:     {"刺透线", "bullish", "看涨刺透形态"},
+		r.CdlDarkCloud:    {"乌云盖顶", "bearish", "看跌乌云形态"},
+		r.Cdl3WhiteSold:   {"三白兵", "bullish", "连续三阳，强势上涨"},
+		r.Cdl3BlackCrows:  {"三乌鸦", "bearish", "连续三阴，强势下跌"},
 	}
 
 	for val, info := range candleMap {
@@ -386,14 +428,18 @@ func detectCandlesticks(rows []marketRow) []map[string]interface{} {
 }
 
 func analyzeBollinger(rows []marketRow) map[string]interface{} {
-	if len(rows) < 5 { return nil }
+	if len(rows) < 5 {
+		return nil
+	}
 	r := rows[0]
 
 	// Width trend
 	var widths []float64
 	for i := 0; i < 5 && i < len(rows); i++ {
 		w := rows[i].BBUpper - rows[i].BBLower
-		if w > 0 { widths = append(widths, w) }
+		if w > 0 {
+			widths = append(widths, w)
+		}
 	}
 	widthTrend := "stable"
 	if len(widths) >= 3 {
@@ -406,28 +452,44 @@ func analyzeBollinger(rows []marketRow) map[string]interface{} {
 
 	// Position
 	position := "middle"
-	if r.Close >= r.BBUpper { position = "upper" }
-	if r.Close <= r.BBLower { position = "lower" }
+	if r.Close >= r.BBUpper {
+		position = "upper"
+	}
+	if r.Close <= r.BBLower {
+		position = "lower"
+	}
 
 	// Band walk: consecutive days at/above upper or at/below lower
 	upperWalk, lowerWalk := 0, 0
 	for _, row := range rows {
-		if row.Close >= row.BBUpper { upperWalk++; lowerWalk = 0 }
-		if row.Close <= row.BBLower { lowerWalk++; upperWalk = 0 }
+		if row.Close >= row.BBUpper {
+			upperWalk++
+			lowerWalk = 0
+		}
+		if row.Close <= row.BBLower {
+			lowerWalk++
+			upperWalk = 0
+		}
 	}
 
 	squeeze := widthTrend == "narrowing"
 	return map[string]interface{}{
 		"upper": r.BBUpper, "middle": r.BBMID, "lower": r.BBLower,
-		"position": position,
-		"width_trend": widthTrend,
-		"squeeze": squeeze,
+		"position":        position,
+		"width_trend":     widthTrend,
+		"squeeze":         squeeze,
 		"upper_band_walk": upperWalk,
 		"lower_band_walk": lowerWalk,
 		"desc": func() string {
-			if squeeze { return "布林带收口，变盘前兆" }
-			if upperWalk >= 3 { return fmt.Sprintf("连续%d日触及上轨，强势运行", upperWalk) }
-			if lowerWalk >= 3 { return fmt.Sprintf("连续%d日触及下轨，弱势运行", lowerWalk) }
+			if squeeze {
+				return "布林带收口，变盘前兆"
+			}
+			if upperWalk >= 3 {
+				return fmt.Sprintf("连续%d日触及上轨，强势运行", upperWalk)
+			}
+			if lowerWalk >= 3 {
+				return fmt.Sprintf("连续%d日触及下轨，弱势运行", lowerWalk)
+			}
 			return fmt.Sprintf("价格位于布林带%s区域", position)
 		}(),
 	}

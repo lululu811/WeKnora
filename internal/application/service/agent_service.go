@@ -13,14 +13,14 @@ import (
 	"github.com/Tencent/WeKnora/internal/agent/skills"
 	"github.com/Tencent/WeKnora/internal/agent/tools"
 	"github.com/Tencent/WeKnora/internal/agent/tools/hithink_finance"
+	"github.com/Tencent/WeKnora/internal/agent/tools/hithink_finance/analysis"
 	"github.com/Tencent/WeKnora/internal/agent/tools/hithink_finance/financial"
 	indexfinance "github.com/Tencent/WeKnora/internal/agent/tools/hithink_finance/index"
 	"github.com/Tencent/WeKnora/internal/agent/tools/hithink_finance/indicator"
 	"github.com/Tencent/WeKnora/internal/agent/tools/hithink_finance/market"
+	"github.com/Tencent/WeKnora/internal/agent/tools/hithink_finance/pattern"
 	"github.com/Tencent/WeKnora/internal/agent/tools/hithink_finance/query"
 	"github.com/Tencent/WeKnora/internal/agent/tools/hithink_finance/special"
-	"github.com/Tencent/WeKnora/internal/agent/tools/hithink_finance/analysis"
-	"github.com/Tencent/WeKnora/internal/agent/tools/hithink_finance/pattern"
 	"github.com/Tencent/WeKnora/internal/agent/tools/kline_studio"
 	"github.com/Tencent/WeKnora/internal/agent/tools/zettaranc"
 	"github.com/Tencent/WeKnora/internal/application/repository"
@@ -137,7 +137,7 @@ type agentService struct {
 	// Hithink Finance tools state
 	hithinkConfig *hithink_finance.Config
 	// Zettaranc tools state (all tools now go through python-service HTTP API)
-	zettarancHTTPClient   *zettaranc.HTTPClient
+	zettarancHTTPClient *zettaranc.HTTPClient
 	// Kline-studio tools state (push picks to kline-studio backend, return view URL)
 	klineStudioConfig *kline_studio.Config
 }
@@ -1352,7 +1352,9 @@ func (s *agentService) registerTools(
 			}
 			switch toolName {
 			case "hithink.finance.discover":
-				toolToRegister = hithink_finance.NewDiscoverTool(registry)
+				// WithConfig: kind="columns" 要实时读 DuckDB 的 information_schema，
+				// 走的是与其它 hithink 工具同一条 python-service 连接。
+				toolToRegister = hithink_finance.NewDiscoverToolWithConfig(registry, s.hithinkConfig)
 			case "hithink.finance.market.price.snapshot":
 				toolToRegister = market.NewPriceSnapshotTool(s.hithinkConfig)
 			case "hithink.finance.market.price.historical":
@@ -1399,7 +1401,23 @@ func (s *agentService) registerTools(
 			logger.Infof(ctx, "Registered hithink finance tool: %s", toolName)
 
 		// Zettaranc tools — all delegate to python-service HTTP API
-		case "zettaranc.analyze", "zettaranc.backtest", "zettaranc.screener":
+		//
+		// zettaranc.backtest is deliberately NOT in this list. It is a stub that
+		// always fails (backtest.go: Execute returns Success:false, and the very
+		// first line of its Description says 「未实现，调用会直接失败」）.
+		//
+		// Listing it here meant the model could see it in the tool schema, call it,
+		// and burn an iteration on a guaranteed failure — strictly worse than the
+		// tool not existing, because it also pollutes the tool-call record. So the
+		// name was dropped from every allowlist (config/builtin_agents.yaml and
+		// this switch), which is what actually gates registration: an allowlist
+		// entry that no case matches falls through to `default:` and is never
+		// registered, so a stale `custom_agents.config.allowed_tools` row that
+		// still names it cannot resurrect it either.
+		//
+		// backtest.go and NewBacktestTool are kept: they are a documented stub, and
+		// real backtesting will re-add one line here when it lands.
+		case "zettaranc.analyze", "zettaranc.screener":
 			// Lazy-initialize the HTTP client on first use
 			if s.zettarancHTTPClient == nil {
 				s.zettarancHTTPClient = zettaranc.NewHTTPClient("")
@@ -1407,8 +1425,6 @@ func (s *agentService) registerTools(
 			switch toolName {
 			case "zettaranc.analyze":
 				toolToRegister = zettaranc.NewAnalyzeTool(s.zettarancHTTPClient)
-			case "zettaranc.backtest":
-				toolToRegister = zettaranc.NewBacktestTool(s.zettarancHTTPClient)
 			case "zettaranc.screener":
 				toolToRegister = zettaranc.NewScreenerTool(s.zettarancHTTPClient)
 			}

@@ -34,7 +34,14 @@ var (
 
 // 无需认证的API列表
 var noAuthAPI = map[string][]string{
-	"/health":                 {"GET"},
+	"/health": {"GET"},
+	// Readiness carries configuration-inspection findings for operators and
+	// alerting. It is public for the same reason /health is: an operator
+	// diagnosing a degraded box has no reason to hold a session token, and
+	// the payload contains no tenant data — it names configuration objects
+	// and model ids, never content. It deliberately does not gate anything:
+	// /health, which the container healthcheck uses, is unaffected.
+	"/health/readiness":       {"GET"},
 	"/api/v1/auth/register":   {"POST"},
 	"/api/v1/auth/login":      {"POST"},
 	"/api/v1/auth/auto-setup": {"POST"},

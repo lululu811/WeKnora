@@ -261,9 +261,6 @@ func RegisterKnowledgeBaseRoutes(r *gin.RouterGroup, handler *handler.KnowledgeB
 			GET("/copy/progress/:task_id", g.Viewer(), handler.GetKBCloneProgress)
 		// 获取可移动目标知识库列表 — Viewer+ 且对 KB 有 read 权限
 		kb.GET("/:id/move-targets", g.Viewer(), g.KBAccessRead("id"), handler.ListMoveTargets)
-		// 推送 KB 内的股票到 kline-studio 复盘终端 — Viewer+ + KB read 权限，
-		// 只读扫描 KB 内知识条目的 Title/Description/Source 抽取 ticker。
-		kb.POST("/:id/push-to-kline-studio", g.Viewer(), g.KBAccessRead("id"), handler.PushKBToKlineStudio)
 	}
 }
 

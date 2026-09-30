@@ -110,8 +110,8 @@ POST /query/
 ### `/zettaranc/screen`
 
 ```jsonc
-POST /zettaranc/screen {"strategy": "B1", "limit": 20}
-// => {"success":true, "strategy":"B1", "universe":5571, "scanned":5571,
+POST /zettaranc/screen {"strategy": "oversold_combo", "limit": 20}
+// => {"success":true, "strategy":"oversold_combo", "universe":5571, "scanned":5571,
 //     "incomplete":38, "matched":880, "unsupported_signals":[], "stocks":[...]}
 ```
 

@@ -10,6 +10,7 @@ import (
 	"unsafe"
 
 	"github.com/Tencent/WeKnora/internal/application/service"
+	"github.com/Tencent/WeKnora/internal/application/service/memory"
 	"github.com/Tencent/WeKnora/internal/logger"
 	"github.com/Tencent/WeKnora/internal/middleware/asynqdl"
 	"github.com/Tencent/WeKnora/internal/types"
@@ -266,5 +267,41 @@ func RegisterSyncHandlers(params SyncTaskParams) {
 	params.Executor.RegisterHandler(types.TypeWikiIngest, params.WikiIngest.Handle)
 	params.Executor.RegisterHandler(types.TypeWikiFinalize, params.WikiIngest.Handle)
 	params.Executor.RegisterHandler(types.TypeMemoryExtract, params.MemoryService.Handle)
+	// Lite mode has no Redis, so it also has no asynq scheduler: Registering
+	// the reconcile handler is not enough, something has to enqueue it on a
+	// clock. The Redis path gets that from a PeriodicTaskManager; here it is
+	// an explicit ticker, and the two paths exist for the same reason the
+	// whole file does — a Lite deployment must not be a deployment where the
+	// extraction queue silently stops draining.
+	startSyncMemoryReconciler(params)
 	logger.Infof(context.Background(), "[SyncTask] All task handlers registered (Lite mode, no Redis)")
+}
+
+// startSyncMemoryReconciler enqueues the memory reconcile pass on a timer.
+//
+// The goroutine is deliberately not tied to any shutdown signal: it enqueues
+// a bounded, idempotent task, and a Lite server is expected to run until the
+// process ends. A tick that fails to enqueue is logged and the next tick
+// tries again, because the alternative — an unlogged failure here — is the
+// silent-forever state this whole path exists to end.
+func startSyncMemoryReconciler(params SyncTaskParams) {
+	if _, ok := params.MemoryService.(memoryReconciler); !ok {
+		logger.Errorf(context.Background(),
+			"[SyncTask] memory service has no HandleReconcile; stuck extraction rows will never be requeued")
+		return
+	}
+	go func() {
+		ticker := time.NewTicker(memory.ReconcileInterval)
+		defer ticker.Stop()
+		for range ticker.C {
+			if _, err := params.Executor.Enqueue(
+				asynq.NewTask(memory.TypeReconcile, nil), asynq.MaxRetry(2),
+			); err != nil {
+				logger.Errorf(context.Background(),
+					"[SyncTask] could not enqueue memory reconcile task: %v", err)
+			}
+		}
+	}()
+	logger.Infof(context.Background(), "[SyncTask] Memory reconciler scheduled every %s",
+		memory.ReconcileInterval)
 }

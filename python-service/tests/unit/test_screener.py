@@ -575,6 +575,186 @@ class TestNoDeadSignalConfig:
             del with_patch["这个信号不存在"]
 
 
+class TestSupertrendDeduplication:
+    """Supertrend 每根 K 线最多发一条信号。
+
+    背景：`Supertrend翻转` / `Supertrend翻空` 曾经由两段代码各自 add 一次
+    —— 前一段在 ADX 之前（st_dir_zero 交叉 + 符号翻转），后一段在 DI 交叉
+    之后（只看符号翻转）。翻空的判据两段逐字相同，所以它每次触发都发两条；
+    翻转在符号翻转那一支上也发两条。信号条数是命中率/信号频率的分母，
+    翻倍之后这类统计直接虚高一倍。
+    """
+
+    def _names_on_bar(self, prev_over, latest_over, date="2026-09-24"):
+        rows = [
+            _row("600519.SH", "2026-09-24", **latest_over),
+            _row("600519.SH", "2026-09-23", **prev_over),
+        ]
+        return [s for s in detect_signals(rows) if s["name"].startswith("Supertrend")]
+
+    def test_flip_down_emits_exactly_one_signal(self):
+        """prev>0>latest：翻空。两段旧代码都命中这里，所以过去是 2 条。"""
+        hits = self._names_on_bar(
+            {"st_dir": 1.0, "st_val": 10.2, "st_dir_zero": -0.1},
+            {"st_dir": -1.0, "st_val": 9.4, "st_dir_zero": 0.2},
+        )
+        assert [h["name"] for h in hits] == ["Supertrend翻空"]
+
+    def test_flip_up_emits_exactly_one_signal(self):
+        """prev<0<latest：翻转。符号翻转那一支过去同样是 2 条。"""
+        hits = self._names_on_bar(
+            {"st_dir": -1.0, "st_val": 9.4, "st_dir_zero": 0.2},
+            {"st_dir": 1.0, "st_val": 10.2, "st_dir_zero": -0.1},
+        )
+        assert [h["name"] for h in hits] == ["Supertrend翻转"]
+
+    def test_zero_line_cross_alone_still_fires_once(self):
+        """只靠 st_dir_zero 交叉、st_dir 符号没翻转的那一支不能被归并掉。
+
+        这是两段旧代码的**差集**（前段独有），归并时必须保住。
+        """
+        hits = self._names_on_bar(
+            {"st_dir": -1.0, "st_dir_zero": 0.5},
+            {"st_dir": 1.0, "st_dir_zero": -0.1},
+        )
+        assert [h["name"] for h in hits] == ["Supertrend翻转"]
+
+    def test_no_flip_emits_nothing(self):
+        assert self._names_on_bar(
+            {"st_dir": 1.0, "st_dir_zero": -0.1},
+            {"st_dir": 1.0, "st_dir_zero": -0.1},
+        ) == []
+
+    def test_no_duplicate_name_and_bar_pairs_anywhere(self):
+        """总闸：任何指标形状下，同一根 bar 上不得出现重名信号。
+
+        覆盖 bullish / bearish / 十字星 / 全部超买超卖等形态，确认去重不是
+        只对 Supertrend 生效的特例。
+        """
+        shapes = [
+            {"st_dir": -1.0, "st_val": 9.4, "st_dir_zero": 0.2, "dif": -0.5,
+             "dea": -0.2, "vi_plus": 1.0, "vi_minus": 1.2, "adx": 30.0,
+             "di_plus": 5.0, "di_minus": 20.0, "aroon_up": 10.0, "aroon_down": 80.0},
+            {"st_dir": 1.0, "st_val": 10.2, "st_dir_zero": -0.1, "dif": 0.5,
+             "dea": 0.2, "vi_plus": 1.2, "vi_minus": 1.0, "adx": 30.0,
+             "di_plus": 20.0, "di_minus": 5.0, "aroon_up": 80.0, "aroon_down": 10.0},
+            {"st_dir": 0.0, "st_val": 0.0, "st_dir_zero": 0.0, "rsi6": 88.0,
+             "mfi": 85.0, "willr": -15.0, "cci": 150.0, "zscore": 2.5,
+             "cdl_doji": 120.0, "cdl_harami": 120.0, "cdl_shooting_star": 120.0,
+             "cdl_evening_star": 120.0, "cdl_dark_cloud": 120.0, "cdl_3black": 120.0},
+            {"st_dir": 1.0, "st_val": 10.2, "st_dir_zero": -0.1, "rsi6": 12.0,
+             "mfi": 15.0, "willr": -85.0, "cci": -150.0, "zscore": -2.5,
+             "cdl_hammer": 120.0, "cdl_morning_star": 120.0,
+             "cdl_engulfing": 120.0, "cdl_piercing": 120.0, "cdl_3white": 120.0},
+        ]
+        for latest in shapes:
+            prior = _row("600519.SH", "2026-09-23")
+            # 只让 st_dir_zero 跟着动，制造"前一日在零线上、最新一根在零线下"
+            # 这种单靠零线交叉就能触发的形状；其余字段保持中性。
+            if "st_dir_zero" in latest:
+                prior["st_dir_zero"] = latest["st_dir_zero"]
+            rows = [_row("600519.SH", "2026-09-24", **latest), prior]
+            seen = [(s["name"], s["date"]) for s in detect_signals(rows)]
+            dupes = {p for p in seen if seen.count(p) > 1}
+            assert not dupes, f"同一根 bar 上出现重名信号 {sorted(dupes)}：{seen}"
+
+
+class TestTrendDownStrategy:
+    """trend_down 必须只引用真正看跌的信号，且能选出票。
+
+    背景：规则里曾写着 `Vortex金叉` —— direction="bearish" 的过滤是逐信号
+    做的（screener.evaluate_group 里 allowed={"bearish"}），金叉是 bullish，
+    被静默丢掉、永远不参与计数，三条规则实际只有两条在用，min_count=2 于是
+    退化成"MACD死叉 与 Aroon空头排列 同一根 bar 同时发生"，且不报任何错。
+    """
+
+    def _bearish_rows(self):
+        """一只典型的走坏票：动量死叉 + Vortex 转弱 + 空头排列。"""
+        return [
+            _row("600519.SH", "2026-09-24",
+                 dif=-0.5, dea=-0.2, vi_plus=1.0, vi_minus=1.2,
+                 adx=32.0, di_plus=5.0, di_minus=20.0,
+                 aroon_up=10.0, aroon_down=80.0,
+                 rsi6=88.0, mfi=85.0, willr=-15.0, cci=150.0, zscore=2.5,
+                 st_dir=-1.0, st_val=9.0, cmf=-0.2, lin_slope=-1.5),
+            _row("600519.SH", "2026-09-23",
+                 dif=-0.1, dea=-0.3, vi_plus=1.05, vi_minus=1.0,
+                 adx=30.0, di_plus=8.0, di_minus=15.0,
+                 aroon_up=30.0, aroon_down=60.0, rsi6=80.0),
+        ]
+
+    def test_every_rule_signal_is_genuinely_bearish(self):
+        from main import STRATEGY_RULES
+        from zettaranc.signals import detect_signals as _ds
+
+        rule = STRATEGY_RULES["trend_down"]
+        assert rule["direction"] == "bearish"
+        # 命中的信号必须真的被判为 bearish，而不是"名字在列表里就算数"。
+        emitted = {
+            s["name"]: s["signal"]
+            for s in _ds(self._bearish_rows())
+        }
+        for sig in rule["match_signals"]:
+            assert emitted.get(sig) == "bearish", (
+                f"trend_down 引用了 {sig}，但 detect_signals 判它是 "
+                f"{emitted.get(sig)!r} —— 方向不符的信号会被 direction "
+                f"静默过滤掉，策略等于少一条规则。"
+            )
+
+    def test_selects_candidates_on_a_bearish_fixture(self):
+        from main import STRATEGY_RULES
+
+        result = screener.screen(self._bearish_rows(), STRATEGY_RULES["trend_down"], 10)
+        assert result["matched"] >= 1, (
+            "trend_down 在看跌 fixture 上选不出票 —— 规则引用了不可满足的信号"
+        )
+        stock = result["stocks"][0]
+        assert stock["matched_directions"] == ["bearish"]
+        assert set(stock["matched_signals"]) <= {"MACD死叉", "Vortex死叉", "Aroon空头排列"}
+
+    def test_all_three_rules_can_now_participate(self):
+        """min_count=2 时三条规则都得能算数，否则策略实际只剩 2 条规则。"""
+        from main import STRATEGY_RULES
+        from zettaranc.signals import detect_signals as _ds
+
+        rule = STRATEGY_RULES["trend_down"]
+        names = {s["name"] for s in _ds(self._bearish_rows())}
+        usable = names & set(rule["match_signals"])
+        assert len(usable) >= rule["min_count"], (
+            f"fixture 上只有 {sorted(usable)} 可用，少于 min_count="
+            f"{rule['min_count']}"
+        )
+        assert len(rule["match_signals"]) == 3
+
+    def test_macd_plus_vortex_death_cross_is_enough(self):
+        """只用两条信号（MACD死叉 + Vortex死叉）也该入选。
+
+        这条是修复价值的直接证据。旧规则引用 Vortex金叉，被 direction 静默
+        过滤后只剩 MACD死叉 / Aroon空头排列 两条可用，min_count=2 于是
+        退化成"这两条必须同一根 bar 同时发生"。下面这只票 Aroon 还没翻空，
+        修复前选不出来，修复后能选出来。
+        """
+        from main import STRATEGY_RULES
+
+        rows = [
+            _row("600519.SH", "2026-09-24",
+                 dif=-0.5, dea=-0.2, vi_plus=1.0, vi_minus=1.2,
+                 # Aroon 仍在多头侧、没有空头排列 —— 少了第三条可用规则
+                 aroon_up=80.0, aroon_down=10.0, adx=32.0,
+                 di_plus=5.0, di_minus=20.0),
+            _row("600519.SH", "2026-09-23",
+                 dif=-0.1, dea=-0.3, vi_plus=1.05, vi_minus=1.0,
+                 aroon_up=75.0, aroon_down=20.0, adx=30.0),
+        ]
+        rule = STRATEGY_RULES["trend_down"]
+        stock = screener.screen(rows, rule, 10)["stocks"]
+        assert stock, (
+            "MACD死叉 + Vortex死叉 已经满足 min_count=2，却选不出票 —— "
+            "说明规则里还有被 direction 静默过滤掉的信号"
+        )
+        assert set(stock[0]["matched_signals"]) == {"MACD死叉", "Vortex死叉"}
+
+
 class TestSignalUtilisation:
     """每种能发出来的信号，都该至少被一个策略用上。
 
@@ -601,7 +781,7 @@ class TestSignalUtilisation:
         这是"能不能筛出该躲开的票"的能力检查。之前所有 bearish 信号
         都没有策略引用，规避持仓这个用例整个是空的。
 
-        neutral 信号（ATR扩张、布林带收口）**不算**在内：它们方向未���，
+        neutral 信号（ATR扩张、布林带收口）**不算**在内：它们方向未它们方向无关，
         波动加剧不等于看跌，走 `volatility_spike` + allow_neutral 是对的。
         """
         from main import STRATEGY_RULES

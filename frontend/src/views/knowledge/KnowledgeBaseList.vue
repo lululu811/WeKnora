@@ -169,21 +169,6 @@
                   <KbWikiBadge v-if="isWikiKb(kb)" />
                   <span class="card-title-text">{{ kb.name }}</span>
                 </span>
-                <div class="card-header-actions">
-                  <t-tooltip
-                    :content="$t('knowledgeList.klineStudio.pushTooltip')"
-                    placement="top">
-                    <button
-                      type="button"
-                      class="kline-studio-push"
-                      :disabled="pushingKbId === kb.id"
-                      :aria-label="$t('knowledgeList.klineStudio.pushTooltip')"
-                      @click.stop="handlePushToKlineStudio(kb)"
-                    >
-                      <t-icon name="chart" size="14px" />
-                    </button>
-                  </t-tooltip>
-                </div>
                 <!-- The card menu always exists when the card is visible: pin
                      is now per-user and available to anyone who can see the KB
                      (backend route only requires KB read access). Settings /
@@ -288,21 +273,6 @@
                   <KbWikiBadge v-if="isWikiKb(kb)" />
                   <span class="card-title-text">{{ kb.name }}</span>
                 </span>
-                <div class="card-header-actions">
-                  <t-tooltip
-                    :content="$t('knowledgeList.klineStudio.pushTooltip')"
-                    placement="top">
-                    <button
-                      type="button"
-                      class="kline-studio-push"
-                      :disabled="pushingKbId === kb.id"
-                      :aria-label="$t('knowledgeList.klineStudio.pushTooltip')"
-                      @click.stop="handlePushToKlineStudio(kb)"
-                    >
-                      <t-icon name="chart" size="14px" />
-                    </button>
-                  </t-tooltip>
-                </div>
                 <t-tooltip :content="$t('knowledgeList.menu.viewDetails')" placement="top">
                   <button type="button" class="shared-detail-trigger" @click.stop="openSharedDetailFromAll(kb)"
                     :aria-label="$t('knowledgeList.menu.viewDetails')">
@@ -432,21 +402,6 @@
                   <KbWikiBadge v-if="isWikiKb(kb)" />
                   <span class="card-title-text">{{ kb.name }}</span>
                 </span>
-                <div class="card-header-actions">
-                  <t-tooltip
-                    :content="$t('knowledgeList.klineStudio.pushTooltip')"
-                    placement="top">
-                    <button
-                      type="button"
-                      class="kline-studio-push"
-                      :disabled="pushingKbId === kb.id"
-                      :aria-label="$t('knowledgeList.klineStudio.pushTooltip')"
-                      @click.stop="handlePushToKlineStudio(kb)"
-                    >
-                      <t-icon name="chart" size="14px" />
-                    </button>
-                  </t-tooltip>
-                </div>
                 <!-- See the matching block in the "all" tab template for why
                      this is no longer gated by canManageKBCard. -->
                 <t-popup v-model="kb.showMore" overlayClassName="card-more-popup"
@@ -759,7 +714,7 @@ import { MessagePlugin, Icon as TIcon } from 'tdesign-vue-next'
 import EmptyState from '@/components/EmptyState.vue'
 import ResourceIcon from '@/components/icons/ResourceIcon.vue'
 import { useConfirmDelete } from '@/components/settings/useConfirmDelete'
-import { deleteKnowledgeBase, duplicateKnowledgeBase, togglePinKnowledgeBase, pushKBToKlineStudio } from '@/api/knowledge-base'
+import { deleteKnowledgeBase, duplicateKnowledgeBase, togglePinKnowledgeBase } from '@/api/knowledge-base'
 import { useChatResourcesStore } from '@/stores/chatResources'
 import { formatStringDate } from '@/utils/index'
 import { useUIStore } from '@/stores/ui'
@@ -871,7 +826,6 @@ const confirmDelete = useConfirmDelete()
 const currentMoreIndex = ref<number>(-1)
 const highlightedKbId = ref<string | null>(null)
 const highlightedCardRef = ref<HTMLElement | null>(null)
-const pushingKbId = ref<string | null>(null)
 let uploadRefreshTimer: ReturnType<typeof setTimeout> | null = null
 
 // Shared knowledge bases (everything cross-tenant shared to me, including
@@ -1408,34 +1362,6 @@ const duplicateKB = async (id: string) => {
   }
 }
 
-const handlePushToKlineStudio = async (kb: KB) => {
-  if (pushingKbId.value) return
-  pushingKbId.value = kb.id
-  try {
-    const res: any = await pushKBToKlineStudio(kb.id)
-    const count = res?.data?.count ?? 0
-    const url: string = res?.data?.url || ''
-    if (res?.success) {
-      if (count === 0) {
-        MessagePlugin.warning(t('knowledgeList.klineStudio.noTickers', { name: kb.name }))
-      } else {
-        MessagePlugin.success(
-          t('knowledgeList.klineStudio.pushSuccess', { count, name: kb.name }),
-        )
-      }
-      if (url) {
-        window.open(url, '_blank', 'noopener,noreferrer')
-      }
-    } else {
-      MessagePlugin.error(res?.message || t('knowledgeList.klineStudio.pushFailed'))
-    }
-  } catch (e: any) {
-    MessagePlugin.error(e?.message || t('knowledgeList.klineStudio.pushFailed'))
-  } finally {
-    pushingKbId.value = null
-  }
-}
-
 const handleSharedKbClick = (sharedKb: SharedKnowledgeBase) => {
   pins.touchRecent('kb', sharedKb.knowledge_base.id)
   // 跳转到共享知识库详情页
@@ -1814,38 +1740,6 @@ watch(keyword, () => { collapsedKbSections.value = new Set() })
   }
 
   .kb-favorite-star { .resource-favorite-button(); }
-
-  .card-header-actions {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    flex-shrink: 0;
-  }
-
-  .kline-studio-push {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 24px;
-    height: 24px;
-    padding: 0;
-    border: none;
-    border-radius: 4px;
-    background: transparent;
-    color: var(--td-text-color-secondary, #666);
-    cursor: pointer;
-    transition: background 0.12s ease, color 0.12s ease;
-
-    &:hover:not(:disabled) {
-      background: var(--td-brand-color-light, rgba(0, 82, 217, 0.08));
-      color: var(--td-brand-color, #0052d9);
-    }
-
-    &:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-  }
 
 }
 

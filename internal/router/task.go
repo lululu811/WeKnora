@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"os"
 	"strconv"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/Tencent/WeKnora/internal/application/service"
+	"github.com/Tencent/WeKnora/internal/application/service/memory"
 	"github.com/Tencent/WeKnora/internal/common"
 	"github.com/Tencent/WeKnora/internal/logger"
 	"github.com/Tencent/WeKnora/internal/middleware/asynqdl"
@@ -319,6 +321,13 @@ func RunAsynqServer(params AsynqTaskParams) *asynq.ServeMux {
 	// Register long-term memory distillation handler
 	mux.HandleFunc(types.TypeMemoryExtract, params.MemoryService.Handle)
 
+	// Register the memory reconciler and start its schedule. It is not
+	// optional: memory_extraction_sessions is a durable queue with no reader
+	// of its own, so without this pass a row that a failed task stranded stays
+	// pending forever and the only symptom is a subject that quietly never
+	// learns anything.
+	startMemoryReconciler(mux, params.MemoryService)
+
 	// Run the same mux on every pool. Shared and dedicated servers intentionally
 	// overlap, but Redis dequeue is atomic, so each task still executes once.
 	runPool := func(name string, srv *asynq.Server) {
@@ -335,6 +344,87 @@ func RunAsynqServer(params AsynqTaskParams) *asynq.ServeMux {
 	runPool("shared-pool", params.SharedServer)
 	runPool("wiki-pool", params.WikiServer)
 	return mux
+}
+
+// memoryReconciler is the capability the reconcile task needs. The memory
+// service is injected as its wide read/write interface, which is right for
+// request handlers and wrong for a periodic repair pass: a pass that cannot
+// find stale work has nothing to say, and that failure must not be
+// indistinguishable from a pass that correctly found none.
+type memoryReconciler interface {
+	HandleReconcile(ctx context.Context, task *asynq.Task) error
+}
+
+// memoryReconcileCron is the cronspec form of memory.ReconcileInterval.
+// asynq's scheduler takes a cronspec rather than a duration, so the interval
+// itself stays the single source of truth in the memory package.
+var memoryReconcileCron = fmt.Sprintf("*/%d * * * *", int(memory.ReconcileInterval/time.Minute))
+
+// staticPeriodicTaskProvider returns one fixed task config. asynq's manager
+// takes a provider so schedules can be re-read on an interval; this
+// deployment has exactly one and it never changes.
+type staticPeriodicTaskProvider struct {
+	configs []*asynq.PeriodicTaskConfig
+}
+
+func (p staticPeriodicTaskProvider) GetConfigs() ([]*asynq.PeriodicTaskConfig, error) {
+	return p.configs, nil
+}
+
+// startMemoryReconciler registers the reconcile handler and puts it on a
+// schedule.
+//
+// Both halves are required and neither implies the other: a registered handler
+// that nothing enqueues never runs, and a scheduled task type with no handler
+// is refused by the mux. Registering only the handler is what the Redis path
+// did for months, which is why nothing ever compared the pending rows against
+// the queue — the 17 rows the 27 dead-lettered memory:extract tasks left
+// behind are still pending, and nothing in the deployment was looking.
+func startMemoryReconciler(mux *asynq.ServeMux, svc interface{}) {
+	reconciler, ok := svc.(memoryReconciler)
+	if !ok {
+		logger.Errorf(context.Background(),
+			"memory: service %T has no HandleReconcile, so stuck extraction rows will never be requeued", svc)
+		return
+	}
+	mux.HandleFunc(memory.TypeReconcile, reconciler.HandleReconcile)
+
+	mgr, err := asynq.NewPeriodicTaskManager(asynq.PeriodicTaskManagerOpts{
+		RedisConnOpt: getAsynqRedisClientOpt(),
+		PeriodicTaskConfigProvider: staticPeriodicTaskProvider{
+			[]*asynq.PeriodicTaskConfig{
+				{
+					Cronspec: memoryReconcileCron,
+					Task:     asynq.NewTask(memory.TypeReconcile, nil),
+					Opts: []asynq.Option{
+						asynq.Queue(types.QueueMemory),
+						asynq.MaxRetry(2),
+						asynq.Timeout(2 * time.Minute),
+						// Every replica registers this same schedule, so
+						// without the uniqueness window an N-node deployment
+						// would run the sweep N times per tick. The pass is
+						// already idempotent — the subject row serializes the
+						// requeue — but N tasks to discover that is N tasks
+						// of pure overhead.
+						asynq.Unique(2 * time.Minute),
+					},
+				},
+			},
+		},
+	})
+	if err != nil {
+		logger.Errorf(context.Background(), "memory: could not schedule the extraction reconciler: %v", err)
+		return
+	}
+	go func() {
+		// Run blocks until an OS signal. It owns Start, so calling Start here
+		// first would run the manager's sync loop twice.
+		if err := mgr.Run(); err != nil {
+			log.Printf("memory: extraction reconciler schedule stopped: %v", err)
+		}
+	}()
+	log.Printf("memory extraction reconciler scheduled every %s (cron %q)",
+		memory.ReconcileInterval, memoryReconcileCron)
 }
 
 // deadLetterKnowledgePayload extracts only the field we need from any

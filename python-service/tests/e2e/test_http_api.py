@@ -96,9 +96,9 @@ class TestServiceContract:
         assert result["days"] <= result["requested_days"]
 
     def test_zettaranc_screen_returns_ranked_stocks(self, client):
-        status, body = client.post("/zettaranc/screen", {"strategy": "B1", "limit": 5})
+        status, body = client.post("/zettaranc/screen", {"strategy": "oversold_combo", "limit": 5})
         assert status == 200 and body["success"]
-        assert body["strategy"] == "B1"
+        assert body["strategy"] == "oversold_combo"
         assert len(body["stocks"]) <= 5
         scores = [s["score"] for s in body["stocks"]]
         assert scores == sorted(scores, reverse=True)
@@ -116,7 +116,7 @@ class TestServiceContract:
         status, body = client.post("/zettaranc/screen", {"strategy": "NOPE"})
         assert status == 422
         assert body["success"] is False
-        assert "B1" in body["error"]
+        assert "oversold_combo" in body["error"]
 
 
 # ----------------------------------------------------------------------
@@ -251,13 +251,13 @@ class TestScreenCoverageRegression:
 
         旧实现把 `scanned` 报成 `len(names)`（清单长度），于是哪怕指标
         快照被 max_rows 截掉一半，返回里的 scanned 仍写着完整的全市场数，
-        调用方无从判断这次结果是不是全市场口径。现在两��数分开报。
+        调用方无从判断这次结果是不是全市场口径。现在两现在两个数分开报。
         """
         universe = client.query_rows(
             "market",
             "SELECT count(*) AS c FROM dim_symbol WHERE asset_type = 'a-share'",
         )[0]["c"]
-        status, body = client.post("/zettaranc/screen", {"strategy": "B1", "limit": 5})
+        status, body = client.post("/zettaranc/screen", {"strategy": "oversold_combo", "limit": 5})
         assert status == 200
         assert body["scanned_from_universe"] == universe, (
             f"清单应有 {universe} 只，实报 {body['scanned_from_universe']}"
@@ -288,7 +288,7 @@ class TestScreenCoverageRegression:
     def test_every_strategy_is_recognised(self, client):
         """`anomaly` used to be structurally dead: two of its rules emitted
         `neutral` signals and the third compared two floats for equality."""
-        for strategy in ("B1", "B2", "SB1", "shaofu", "limit_up",
+        for strategy in ("oversold_combo", "B2", "SB1", "shaofu", "limit_up",
                          "anomaly", "volatility_spike"):
             status, body = client.post("/zettaranc/screen",
                                         {"strategy": strategy, "limit": 5})
@@ -315,14 +315,14 @@ class TestScreenCoverageRegression:
                 f"{s.get('matched_signals')}"
             )
 
-    def test_b1_only_returns_bullish_signals(self, client):
+    def test_oversold_combo_only_returns_bullish_signals(self, client):
         status, body = client.post("/zettaranc/screen",
-                                    {"strategy": "B1", "limit": 50})
+                                    {"strategy": "oversold_combo", "limit": 50})
         assert status == 200, body
         for s in (body.get("stocks") or []):
             dirs = set(s.get("matched_directions") or [])
             assert dirs == {"bullish"}, (
-                f"{s['thscode']} 命中方向 {dirs}，B1 只该返回 bullish"
+                f"{s['thscode']} 命中方向 {dirs}，oversold_combo 只该返回 bullish"
             )
 
 
@@ -459,7 +459,7 @@ class TestScreenProvenance:
 
     def test_reports_every_source_table(self, client):
         status, body = client.post("/zettaranc/screen",
-                                    {"strategy": "B1", "limit": 3})
+                                    {"strategy": "oversold_combo", "limit": 3})
         assert status == 200, body
         src = body.get("sources")
         assert src, "返回里必须有 sources"
@@ -482,7 +482,7 @@ class TestScreenProvenance:
         """截止日必须报。指标是 3 个交易日前的快照时，
         「当前超卖」和「快照当天的超卖」不是一回事。"""
         status, body = client.post("/zettaranc/screen",
-                                    {"strategy": "B1", "limit": 3})
+                                    {"strategy": "oversold_combo", "limit": 3})
         assert status == 200, body
         src = body["sources"]
         assert src["indicator_as_of"], "必须报指标截止日"
@@ -490,7 +490,7 @@ class TestScreenProvenance:
 
     def test_stale_data_is_called_out(self, client):
         status, body = client.post("/zettaranc/screen",
-                                    {"strategy": "B1", "limit": 3})
+                                    {"strategy": "oversold_combo", "limit": 3})
         assert status == 200, body
         as_of = datetime.date.fromisoformat(
             body["sources"]["indicator_as_of"][:10])

@@ -127,7 +127,7 @@ db="special"
 - 技术指标：KDJ、MACD、RSI、BBI、白线黄线等
 - 波浪分析：三波理论阶段判断
 - 麒麟会：阶段和置信度
-- 战法信号：30+ 种战法（B1/B2、少妇战法、四块砖等）
+- 战法信号：30+ 种战法（超卖组合/B2、少妇战法、四块砖等）
 - 综合诊断：买卖点判断
 
 **示例：**
@@ -157,7 +157,7 @@ db="special"
 使用 Z哥交易体系进行智能选股。
 
 **参数：**
-- `strategy`: 选股策略（B1, B2, SB1, shaofu, limit_up, anomaly）
+- `strategy`: 选股策略（oversold_combo, B2, SB1, shaofu, limit_up, anomaly）
 - `limit`: 返回数量（默认 20，最大 100）
 
 **返回：**
@@ -166,7 +166,7 @@ db="special"
 - 技术指标快照
 
 **示例：**
-- B1 买点选股：`strategy="B1", limit=20`
+- 超卖组合选股：`strategy="oversold_combo", limit=20`
 
 ## 配置
 

@@ -161,40 +161,15 @@
       <div class="toolbar__group">
         <span class="group__label">主图:</span>
         <button
+          v-for="preset in MAIN_PRESETS"
+          :key="preset.id"
           type="button"
           class="toolbar__btn"
-          :class="{ 'is-active': mainMode === 'zettaranc' }"
-          @click="setMainMode('zettaranc')"
-          title="战法核心主图：快线 DEMA10 + 大哥线 LongBBI(14/28/57/114) + BBI牵牛绳(3/6/12/24)。双线判断多空节奏，牵牛绳是多空分界"
+          :class="{ 'is-active': mainMode === preset.id }"
+          :title="preset.hint"
+          @click="setMainMode(preset.id)"
         >
-          双线+BBI
-        </button>
-        <button
-          type="button"
-          class="toolbar__btn"
-          :class="{ 'is-active': mainMode === 'all' }"
-          @click="setMainMode('all')"
-          title="战法核心线 + 传统 MA5/10/20。给短期均线做参考，适合看价格与短期成本的相对位置"
-        >
-          战法+MA
-        </button>
-        <button
-          type="button"
-          class="toolbar__btn"
-          :class="{ 'is-active': mainMode === 'ma' }"
-          @click="setMainMode('ma')"
-          title="纯传统均线 MA5/10/20/60/120/250，不叠加战法线。最基础的看图方式"
-        >
-          传统MA
-        </button>
-        <button
-          type="button"
-          class="toolbar__btn"
-          :class="{ 'is-active': mainMode === 'boll' }"
-          @click="setMainMode('boll')"
-          title="布林带 BOLL(20,2) + 战法信号层。价格触上轨偏强、触下轨偏弱，带宽收窄常预示变盘"
-        >
-          BOLL
+          {{ preset.label }}
         </button>
       </div>
 
@@ -204,7 +179,7 @@
       <div class="toolbar__group">
         <span class="group__label">副图:</span>
         <button
-          v-for="sub in SUB_INDICATOR_LIST"
+          v-for="sub in SUB_PRESETS"
           :key="sub.id"
           type="button"
           class="toolbar__btn"
@@ -253,9 +228,16 @@
         画线
       </button>
 
-      <!-- 关闭工作台 -->
-      <button type="button" class="toolbar__icon-btn" :title="t('common.close')" @click="workspace.close()">
-        <t-icon name="close" size="16px" />
+      <!-- 折叠工作台：收成右侧窄边而不是销毁，当前股票/指标/周期全部保留。
+           面板再打开时仍是原来那只股票，不用重新选；这正是它取代原来那个
+           「× 直接 close」的原因——两个按钮干同一件事会让人分不清。 -->
+      <button
+        type="button"
+        class="toolbar__icon-btn"
+        :title="workspace.isCollapsed.value ? '展开工作台' : '折叠工作台（保留当前股票）'"
+        @click="workspace.toggleCollapsed()"
+      >
+        <t-icon :name="workspace.isCollapsed.value ? 'chevron-left' : 'chevron-right'" size="16px" />
       </button>
     </div>
 
@@ -276,6 +258,21 @@
           该代码不在本地代码表中（v_symbol），或本地行情尚未同步到它。<br />
           如果这是模型提到的代码，它很可能是<b>幻觉出的不存在的代码</b>；<br />
           代码格式为 6 位数字 + 交易所后缀（.SH / .SZ / .BJ）。
+        </p>
+      </div>
+
+      <!-- 5c. 取数失败状态
+           必须和上面的"本地无此票数据"分开：那是**代码/数据**的问题，
+           这里是**链路/服务**的问题（网关 502、服务未就绪、网络不通）。
+           曾经两者被合并成同一句提示，代理层一挂就显示成"本地无此票行情"，
+           让人以为是数据没同步，排查方向整个跑偏。 -->
+      <div v-else-if="loadError" class="kline-workspace__empty is-error">
+        <div class="empty__icon">⚠️</div>
+        <p class="empty__title">{{ loadError.symbol }} 行情查询失败</p>
+        <p class="empty__hint">
+          {{ loadError.message }}<br />
+          这是<b>取数链路</b>的问题，不是这只票没有行情数据——数据可能完好。<br />
+          可稍后重试；若持续失败，请检查 python-service 容器与 nginx 代理。
         </p>
       </div>
     </div>
@@ -324,6 +321,7 @@ import { ZettarancDatafeed, type Adjust } from './datafeed';
 import { setZettarancPalette } from './palette';
 import { getKlineChartTheme } from './theme';
 import { registerZettarancIndicators } from './indicators';
+import { MAIN_PRESETS, SUB_PRESETS } from './indicator-meta';
 import { fetchAnnotations, type Annotation, PATTERN_CONFIG } from './annotate-api';
 import { setGlobalOverlayConfig } from './overlay-drawer';
 import { calcDEMA, calcLongBBI, calcBBI, calcZXBrick } from './stock-score';
@@ -341,6 +339,11 @@ const chartContainer = ref<HTMLDivElement | null>(null);
 // 由 datafeed 的 onNoData 置位，由 handleDataLoaded 清空——后者必须清，否则
 // 换到有数据的票时空状态会残留。
 const noDataSymbol = ref('');
+
+// 取数失败（网络/网关/服务端故障）时的错误态。必须与 noDataSymbol 分开存：
+// 两者触发的是完全不同的问题，合并成一个状态就没法给出正确的下一步指引。
+// null 表示当前没有错误。
+const loadError = ref<{ symbol: string; message: string } | null>(null);
 const chartInstance = ref<KLineChartPro | null>(null);
 let resizeObserver: ResizeObserver | null = null;
 
@@ -374,53 +377,18 @@ const periodIdx = ref(0);
 const isTD9Enabled = ref(true);
 const isPatternsEnabled = ref(true);
 
-// 主图模式：双线+BBI、战法+MA、传统均线、布林带
-type MainIndicatorMode = 'zettaranc' | 'all' | 'ma' | 'boll';
-const mainMode = ref<MainIndicatorMode>('zettaranc');
+// 主图模式 / 副图模式：全部来自 config/indicators.yaml 的 views 段
+// （经由生成的 indicator-meta.ts 读入），代码里不再出现任何指标名字符串。
+// 改模式就是改 YAML，然后跑 go test ./internal/indicators/ -run TestGeneratedFrontendModule -update。
+type MainIndicatorMode = (typeof MAIN_PRESETS)[number]['id'];
+type SubIndicatorMode = (typeof SUB_PRESETS)[number]['id'];
 
-// 副图模式：双副图(量+ZX砖型推荐)、双副图(量+MACD经典)、单ZX砖型、单成交量、单MACD、单KDJ、RSL
-type SubIndicatorMode = 'VOL_AND_BRICK' | 'VOL_AND_MACD' | 'ZX_BRICK' | 'Z_VOL' | 'Z_MACD' | 'Z_KDJ' | 'Z_RSL';
-const subMode = ref<SubIndicatorMode>('VOL_AND_BRICK');
+// 默认模式取 YAML 里的第一个（主图 = 双线+BBI，副图 = 量+ZX砖型）。
+const mainMode = ref<MainIndicatorMode>(MAIN_PRESETS[0].id);
+const subMode = ref<SubIndicatorMode>(SUB_PRESETS[0].id);
 
-// 副图选项。hint 是悬停说明——之前 7 个副图按钮一个 tooltip 都没有，
-// 新指标加进来时没人能靠界面搞清楚它算什么，只能一个个试。
-const SUB_INDICATOR_LIST = [
-  {
-    id: 'VOL_AND_BRICK' as const,
-    label: '量+ZX砖型 (推荐)',
-    hint: '成交量 + 同花顺知行砖型图。砖型把连续同向的 K 线合并成一块，块数代表趋势强度：4 块以上为强势。推荐作为默认副图。',
-  },
-  {
-    id: 'ZX_BRICK' as const,
-    label: 'ZX砖型图',
-    hint: '仅砖型图，不带成交量。适合专注看多空节奏；减号标记回调、止字标记止跌。',
-  },
-  {
-    id: 'VOL_AND_MACD' as const,
-    label: '量+MACD',
-    hint: '成交量 + MACD。DIF/DEA 金叉死叉会打标记，红柱绿柱表示动能强弱，适合判断趋势转折。',
-  },
-  {
-    id: 'Z_VOL' as const,
-    label: '成交量',
-    hint: '成交量柱 + MA5/MA10 均量线。放量上涨代表资金进场，缩量回调代表抛压不重。',
-  },
-  {
-    id: 'Z_MACD' as const,
-    label: 'MACD',
-    hint: 'MACD (12,26,9)。DIF 上穿 DEA 为金叉、下穿为死叉，柱状体表示动能变化速度。',
-  },
-  {
-    id: 'Z_KDJ' as const,
-    label: 'KDJ',
-    hint: 'KDJ 随机指标 (9,3,3)。K/D 在 20 以下为超卖区、80 以上为超买区，金叉死叉会打标记。',
-  },
-  {
-    id: 'Z_RSL' as const,
-    label: 'RSL强弱',
-    hint: '相对强弱线，3 日与 21 日两个周期。RSL 向上表示这只票强于大盘，适合在同板块内比强弱。',
-  },
-];
+// 副图选项的 label / hint / 成员同样来自 indicators.yaml —— 之前 7 个副图按钮
+// 一个 tooltip 都没有，hint 是 yaml 里的必填字段，加新指标时漏了就过不了 Validate。
 
 interface LatestQuoteInfo {
   close: number;
@@ -495,33 +463,17 @@ const formatTurnover = (amount: number) => {
   return amount.toFixed(0);
 };
 
-// 计算主图指标列表
+// 计算主图指标列表。成员取自 indicators.yaml 的 views.main_presets。
 const getMainIndicators = () => {
-  const list: string[] = [];
-  if (mainMode.value === 'zettaranc') {
-    list.push('Z_MAIN');
-  } else if (mainMode.value === 'all') {
-    list.push('MA', 'Z_MAIN');
-  } else if (mainMode.value === 'boll') {
-    list.push('BOLL', 'Z_SIGNALS');
-  } else {
-    list.push('MA', 'Z_SIGNALS');
-  }
-  return list;
+  const preset = MAIN_PRESETS.find((p) => p.id === mainMode.value);
+  return preset ? [...preset.indicators] : [];
 };
 
-// 计算副图指标列表（严格控制在1~2个，确保蜡烛图主图饱满）
+// 计算副图指标列表（严格控制在1~2个，确保蜡烛图主图饱满）。成员取自
+// indicators.yaml 的 views.sub_presets。
 const getSubIndicators = () => {
-  if (subMode.value === 'VOL_AND_BRICK') {
-    return ['Z_VOL', 'ZX_BRICK'];
-  }
-  if (subMode.value === 'VOL_AND_MACD') {
-    return ['Z_VOL', 'Z_MACD'];
-  }
-  if (subMode.value === 'ZX_BRICK') {
-    return ['ZX_BRICK'];
-  }
-  return [subMode.value];
+  const preset = SUB_PRESETS.find((p) => p.id === subMode.value);
+  return preset ? [...preset.indicators] : [];
 };
 
 const setMainMode = (mode: MainIndicatorMode) => {
@@ -584,8 +536,9 @@ const selectSymbol = (item: { ticker: string; name: string; exchange: string }) 
 // 抽取并计算最新行情快照指标
 const handleDataLoaded = (dataList: KLineData[]) => {
   if (!dataList || dataList.length === 0) return;
-  // 有数据了，清掉上一只票可能残留的空状态。
+  // 有数据了，清掉上一只票可能残留的空状态/错误态。
   noDataSymbol.value = '';
+  loadError.value = null;
   const lastIdx = dataList.length - 1;
   const last = dataList[lastIdx];
   const prev = dataList.length > 1 ? dataList[dataList.length - 2] : last;
@@ -668,6 +621,11 @@ const initChart = () => {
     onDataLoaded: handleDataLoaded,
     onNoData: (symbol) => {
       noDataSymbol.value = `${symbol.ticker}.${symbol.exchange}`;
+      loadError.value = null;
+    },
+    onError: (symbol, message) => {
+      loadError.value = { symbol: `${symbol.ticker}.${symbol.exchange}`, message };
+      noDataSymbol.value = '';
     },
   });
 
@@ -1506,6 +1464,29 @@ onUnmounted(() => {
     b {
       color: #d1d5db;
     }
+  }
+}
+
+/* 错误态：与"无数据"在视觉上也要能一眼分开。
+   只靠文案区分不够——用户扫一眼标题时，"这只票没数据"和"服务挂了"
+   需要在第一眼就是两件事。图标不降透明度，标题用告警色。 */
+&.kline-workspace__empty.is-error {
+  .empty__icon {
+    opacity: 1;
+  }
+
+  .empty__title {
+    color: #B45309;
+  }
+
+  .empty__hint {
+    max-width: 460px;
+  }
+}
+
+.is-dark &.kline-workspace__empty.is-error {
+  .empty__title {
+    color: #F59E0B;
   }
 }
 

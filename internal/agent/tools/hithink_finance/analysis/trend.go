@@ -125,16 +125,16 @@ func (t *TrendAnalysisTool) Execute(ctx context.Context, args json.RawMessage) (
 	result := map[string]interface{}{
 		"thscode": params.Thscode,
 		"trend": map[string]interface{}{
-			"direction":    dowDir,
+			"direction":     dowDir,
 			"dow_structure": dowDesc,
-			"strength":     strengthLabel,
-			"adx":          round2(latest.ADX),
+			"strength":      strengthLabel,
+			"adx":           round2(latest.ADX),
 		},
 		"moving_averages": map[string]interface{}{
-			"alignment":    alignment,
-			"ma_values":    maValues,
+			"alignment":     alignment,
+			"ma_values":     maValues,
 			"price_vs_ma20": priceVsMA20,
-			"crossovers":   crossovers,
+			"crossovers":    crossovers,
 		},
 		"granville_signals": granville,
 		"supertrend": map[string]interface{}{
@@ -154,8 +154,14 @@ func (t *TrendAnalysisTool) Execute(ctx context.Context, args json.RawMessage) (
 	}
 
 	data, _ := json.MarshalIndent(result, "", "  ")
+	// Output 是唯一会进模型上下文的字段（modelcontext/registry.go 成功分支只读
+	// result.Output，observe.go 的 ModelToolResultForTool 也走同一条路）。原先这里
+	// 只填 Data，导致本工具返回 Success:true 但模型收到空字符串——buildDataQuality
+	// 的全部如实说明都到不了模型眼前，而这恰恰是这个工具存在的意义。
+	// Data 仅供 Langfuse 记录 data_keys，保留不动。
 	return &types.ToolResult{
 		Success: true,
+		Output:  string(data),
 		Data: map[string]interface{}{
 			"result": string(data),
 		},
@@ -184,7 +190,7 @@ func buildDataQuality(rows []marketRow, latest marketRow) map[string]interface{}
 				"下面这些结论不可采信")
 	} else if indicatorRows < total {
 		notes = append(notes, fmt.Sprintf("指标数据只覆盖 %d/%d 个交易日，其余 %d 天的指标字段为占位 0，"+
-				"涉及缺失日的信号判断不可采信", indicatorRows, total, total-indicatorRows))
+			"涉及缺失日的信号判断不可采信", indicatorRows, total, total-indicatorRows))
 	}
 	if !latest.OHLCValid {
 		notes = append(notes, "最新一根 K 线的价格字段不完整，涨跌幅类判断不可用")
@@ -332,19 +338,19 @@ func detectMACrossovers(rows []marketRow) []map[string]interface{} {
 		// Golden cross: short was below long, now above
 		if ps <= pl && cs > cl {
 			crosses = append(crosses, map[string]interface{}{
-				"type":  "golden_cross",
-				"mas":   p.name,
-				"date":  curr.Date,
-				"desc":  fmt.Sprintf("%s 金叉", p.name),
+				"type": "golden_cross",
+				"mas":  p.name,
+				"date": curr.Date,
+				"desc": fmt.Sprintf("%s 金叉", p.name),
 			})
 		}
 		// Death cross: short was above long, now below
 		if ps >= pl && cs < cl {
 			crosses = append(crosses, map[string]interface{}{
-				"type":  "death_cross",
-				"mas":   p.name,
-				"date":  curr.Date,
-				"desc":  fmt.Sprintf("%s 死叉", p.name),
+				"type": "death_cross",
+				"mas":  p.name,
+				"date": curr.Date,
+				"desc": fmt.Sprintf("%s 死叉", p.name),
 			})
 		}
 	}

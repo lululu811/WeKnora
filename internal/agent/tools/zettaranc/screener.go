@@ -26,18 +26,22 @@ func (t *ScreenerTool) Description() string {
 	return `全市场集合式选股。一条 SQL 取回全市场指标 + 价量后在本地判定，
 不走逐只扫描（逐只是 5,571 次往返、36~51 秒）。
 
-13 个策略，按方向分三类。**先看用户想干什么再选策略**：
+14 个策略，按方向分三类。**先看用户想干什么再选策略**：
 
-看涨（B1 买点、超卖金叉类）
-  B1 / B2 / SB1 / shaofu / limit_up / vol_breakout / donchian_break
-  / hammer_reversal
+看涨（超卖共振、买点类）
+  oversold_combo / B2 / SB1 / shaofu / limit_up / vol_breakout / donchian_break
+  / hammer_reversal / vortex_bull
 
 看跌（超买、死叉、空头排列）—— 用于**规避持仓**，比选新票更常用
-  b1_overbought（B1 的镜像） / trend_down / anomaly
+  overbought_combo（oversold_combo 的镜像） / trend_down / anomaly
   / shooting_star_reversal
 
-方向未���（波动本身无方向，涨途中也会出现）
+方向无关（波动本身无方向，涨途中也会出现）
   volatility_spike
+
+名字对不上号时以本清单为准：oversold_combo 是**选股策略**（≥2 个超卖信号
+共振）；K 线形态标注里的 B1（建仓波后第一次缩量回调、J<13）是另一回事，
+走 annotate 接口，不在本工具的策略里。
 
 形态信号只回答"图形像不像"，不回答"会不会暴雷"。可选筛选构成第二道关：
 
