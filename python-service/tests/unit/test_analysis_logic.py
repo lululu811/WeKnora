@@ -403,3 +403,79 @@ class TestCache:
     def test_stable_hash_separates_different_inputs(self):
         assert stable_hash("SELECT 1") != stable_hash("SELECT 2")
         assert stable_hash("db", "SELECT 1") != stable_hash("dbx", "SELECT 1")
+
+
+# ----------------------------------------------------------------------
+# The annotator's `source` contract.
+#
+# 前端要能区分「算法算出来的位」和「模型嘴上说的位」——两者会画在同一张 K 线上
+# 但形状与颜色不同。source 缺失时前端会把它当成未知来源而静默不画（不报错），
+# 所以这个字段的缺失是静默失效，必须由测试守住。
+# ----------------------------------------------------------------------
+
+def _annotator_bars(n=25, *, doji_low_vol_on_last=True):
+    """Chronological bars that trip detect_key_k on the final bar.
+
+    十字星 + 缩量：body 为 0（open == close），最后一天的成交量远低于 20 日均量。
+    """
+    rows = []
+    for i in range(n):
+        close = 10.0
+        volume = 1000.0
+        rows.append({
+            "date": f"d{i:02d}",
+            "open": close,
+            "high": close + 0.5,
+            "low": close - 0.5,
+            "close": close,
+            "volume": volume,
+        })
+    if doji_low_vol_on_last:
+        rows[-1]["volume"] = 100.0
+    return rows
+
+
+class TestAnnotatorSourceContract:
+
+    def test_every_annotation_carries_source(self):
+        from zettaranc.annotator import annotator
+
+        found = annotator.annotate_all(_annotator_bars())
+        assert found, "用例数据应当触发至少一个形态，否则测试没有意义"
+        missing = [a for a in found if "source" not in a]
+        assert not missing, f"缺 source 的标注会被前端静默丢弃: {missing}"
+
+    def test_algorithm_detections_are_labelled_algorithm(self):
+        from zettaranc.annotator import annotator
+
+        found = annotator.annotate_all(_annotator_bars())
+        assert {a["source"] for a in found} == {"algorithm"}
+
+    def test_annotation_keeps_its_existing_shape(self):
+        """加 source 不能动到既有字段——前端按 type/date/price 渲染。"""
+        from zettaranc.annotator import annotator
+
+        found = annotator.annotate_all(_annotator_bars())
+        for a in found:
+            assert set(a) >= {"type", "date", "price", "text", "confidence", "metadata", "source"}
+
+    def test_a_detector_supplied_source_is_not_overwritten(self):
+        """模型侧的标注走同一张表但带 source="llm"，不能被盖成 algorithm。"""
+        from zettaranc.annotator import ZettarancAnnotator
+
+        original = ZettarancAnnotator.detect_key_k
+
+        def fake_detect(bars):
+            return [{
+                "type": "key_k", "date": "d01", "price": 10.0, "text": "模型说的",
+                "confidence": 0.5, "metadata": {}, "source": "llm",
+            }]
+
+        ZettarancAnnotator.detect_key_k = staticmethod(fake_detect)
+        try:
+            found = ZettarancAnnotator.annotate_all(_annotator_bars(), ["key_k"])
+        finally:
+            ZettarancAnnotator.detect_key_k = original
+
+        assert len(found) == 1
+        assert found[0]["source"] == "llm", "显式 source 不应被 setdefault 覆盖"

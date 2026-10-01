@@ -74,6 +74,9 @@ CREATE TABLE IF NOT EXISTS halo_filing_facts (
     report_type  TEXT NOT NULL,
     field        TEXT NOT NULL,
     value        REAL,
+    -- 枚举型事实（审计意见类型等）存这里。value 留给数值，布尔编码成 0/1
+    -- 以便参与计算（内控非标=1 应当影响风险评分，而不是只被展示）。
+    value_text   TEXT,
     unit         TEXT,
     scope        TEXT NOT NULL,
     source_page  INTEGER,
@@ -149,6 +152,7 @@ class FactStore:
                 r["report_type"],
                 r["field"],
                 r.get("value"),
+                r.get("value_text"),
                 r.get("unit"),
                 r.get("scope", SCOPE_CONSOLIDATED),
                 r.get("source_page"),
@@ -165,12 +169,13 @@ class FactStore:
             conn.executemany(
                 """
                 INSERT INTO halo_filing_facts
-                    (thscode, period, report_type, field, value, unit, scope,
-                     source_page, raw_text, extract_by, status, confidence,
-                     verified_by, verified_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (thscode, period, report_type, field, value, value_text,
+                     unit, scope, source_page, raw_text, extract_by, status,
+                     confidence, verified_by, verified_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT (thscode, period, report_type, field, scope) DO UPDATE SET
                     value       = excluded.value,
+                    value_text  = excluded.value_text,
                     unit        = excluded.unit,
                     source_page = excluded.source_page,
                     raw_text    = excluded.raw_text,

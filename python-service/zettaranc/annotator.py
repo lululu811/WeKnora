@@ -274,6 +274,19 @@ class ZettarancAnnotator:
                 all_patterns.extend(dispatch[ptype](bars))
 
         all_patterns.sort(key=lambda x: str(x["date"]))
+
+        # 统一盖上 source 戳，而不是在四个 detect_* 里各写一遍。
+        #
+        # 前端要能区分「算法算出来的位」和「模型嘴上说的位」，两者会画在同一张
+        # K 线上但形状与颜色不同——混成一种墨迹，用户就无法判断哪条线是数据、
+        # 哪条线是观点。这里盖的是 algorithm；模型生成的那些走另一条通道，
+        # 带 source="llm"。
+        #
+        # 盖在这一层是为了覆盖所有探测器：新增 detect_* 时不必记得补这个字段，
+        # 漏了会让它在前端被当成未知来源而静默不画。
+        for pattern in all_patterns:
+            pattern.setdefault("source", "algorithm")
+
         return all_patterns
 
 
