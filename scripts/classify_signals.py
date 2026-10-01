@@ -1,24 +1,33 @@
 """classify_signals.py — 用真实 DuckDB 复算信号触发频率（2026-10-01）
 
-为什么不用 run_signal_audit.sh:
-  那条路径打 python-service（:50052），需要容器在跑。这里直接读
-  indicators.duckdb —— 审计要的就是"某条件在多少比例的 bar 上成立"，
-  而那一批条件全部能用 SQL 表达，不需要绕 HTTP。
+## 这个脚本**不是** noisy 名单的来源
 
-判据沿用 signal_frequency_audit.md 的三条:
-  dead        0 次
-  noisy       > 20% 的 bar
-  informative 1% .. 20%
+名单的权威是 `internal/agent/tools/hithink_finance/pattern/signal_frequency_audit.md`
+—— 由 `signal_frequency_audit_test.go` 跑**真实的 detectSignals** 量出，
+在 `signals.go` 的 `noisySignalNames` 里落地。
 
-⚠️ **每条 SQL 必须与 signals.go 的实现逐条一致。**
-   第一版这个脚本里的条件是凭理解重写的，结果 11 条里有 6 条量错了对象 ——
-   最典型的是把「MACD动能衰减」（柱体连续 4 根同向收窄）写成 `hist > 0`
-   （柱体为正），把「Aroon多头排列」（up>70 且 down<30）写成 `up > down`。
-   量出来的频率驱动着 signals.go 的 noisySignalNames —— 也就是**哪些信号被
-   默认折叠给模型**，判据错了就折叠错了对象。
+**不要用本脚本决定名单。** 它是用 SQL 重写判据的旁路，分母是"bar 数"而
+审计是"7-bar 窗口数"，同一条件下两者能差一倍：
 
-   所以下方每条 SQL 后面的注释都标了 signals.go 的行号与原始条件。改
-   signals.go 的判据时这里必须同步；改这里之前先读 signals.go。
+    MACD动能衰减   SQL 20.43%  vs  审计 10.25%
+
+前者越过 20% 阈值、后者没越，于是按 SQL 会把它错折掉。2026-10-01 先信了
+SQL 那一版，同时错了两条：MACD动能衰减 错折、Donchian下轨跌破 漏折。
+
+## 本脚本的正确定途
+
+**核对判据有没有抄错。** 判据抄错是这个工作流最容易出的错 —— 2026-10-01
+第一版里 11 条有 6 条量错了对象（把「MACD动能衰减」写成 `hist > 0`、
+把「Aroon多头排列」写成 `up > down`、CMF 门槛用 ±0.05 而不是 ±0.1…），
+而判据一致时两条路径的频率会**很接近**（线性回归 47.03% vs 47.03%、
+Aroon空头 23.84% vs 23.65%）。所以：
+
+    频率对不上 → 多半是判据抄错了，先去 signals.go 逐条核对
+    频率对得上 → 判据没问题，差异来自分母口径，以审计为准
+
+脚本里每条 SQL 后面的注释都标了 signals.go 的行号与原始条件。
+
+判据沿用审计的三档: dead 0 次 / noisy > 20% / informative 1%~20%。
 """
 from __future__ import annotations
 
@@ -208,7 +217,7 @@ def main() -> int:
     print(f"\n量不了的（{len(UNMEASURABLE)}）：")
     for n, why in UNMEASURABLE.items():
         print(f"  - {n}: {why}")
-    print(f"\n### noisy 名单（同步到 signals.go 的 noisySignalNames）\n")
+    print(f"\n### 本口径下的 noisy（**仅供与审计对照**，不要直接抄进 signals.go）\n")
     for n, f in sorted(noisy, key=lambda x: -x[1]):
         print(f'  "{n}",'.ljust(34) + f"  // {f:.2f}%")
     con.close()

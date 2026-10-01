@@ -1,9 +1,16 @@
 package pattern
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"regexp"
+	"strconv"
+	"strings"
+	"testing"
+)
 
-// noisySignalNames 是**数据结论**（scripts/classify_signals.py 在真实 DuckDB 上
-// 量出来的触发频率），不是随手列的。这两个方向都必须守住：
+// noisySignalNames 是**数据结论**（run_signal_audit.sh 跑真实 detectSignals
+// 在真实 DuckDB 上量出来的触发频率），不是随手列的。这几个方向都必须守住：
 //
 //  1. 名单里的每条都必须是真实存在的信号 —— 否则折叠的是一个不存在的名字，
 //     拼错一个字符就会让那条信号**既不默认返回、也永远拿不到**（include_noisy
@@ -33,24 +40,135 @@ func TestNoisySignalNamesAreRealSignals(t *testing.T) {
 	}
 }
 
-// wantNoisySignalCount 钉住条数。
+// TestNoisySignalCountPinned 钉住条数。
 //
-// 这条名单 2026-10-01 改过一次：11 条 → 8 条，因为统计脚本的判据与
-// signals.go 对不上（Aroon多头 / CMF资金流入 / Keltner挤压 掉出了名单）。
-// 改名单本身是有正当理由的，但**静默**改就危险了 —— 折叠哪些信号直接决定
-// 模型看不到什么。所以条数与内容都要有人点头。
+// 这份名单 2026-10-01 改过两次：11 条 → 8 条（统计脚本判据与
+// signals.go 对不上），8 条 → 8 条但换了成员（SQL 口径 vs 审计口径：
+// MACD动能衰减 错折、Donchian下轨跌破 漏折）。改名单本身有正当理由，
+// 但**静默**改就危险了 —— 折叠哪些信号直接决定模型看不到什么。
 //
-// 要改时：重跑 scripts/classify_signals.py，同步本文件、signals.go 的
-// noisySignalNames 与注释里的百分比，再更新这个数字。
+// 要改时：重跑 run_signal_audit.sh，同步本文件、noisySignalNames 的定义
+// 与注释里的百分比，再更新这个数字。
 const wantNoisySignalCount = 8
 
 func TestNoisySignalCountPinned(t *testing.T) {
 	if got := len(noisySignalNames); got != wantNoisySignalCount {
 		t.Errorf("noisySignalNames 有 %d 条，期望 %d 条。\n"+
-			"如果刚改了 signals.go 的判据或重跑了 classify_signals.py：请同步 "+
-			"本文件、noisySignalNames 的定义与注释里的百分比。\n"+
+			"如果刚改了 signals.go 的判据或重跑了审计：请同步本文件、"+
+			"noisySignalNames 的定义与注释里的百分比。\n"+
 			"当前名单：%v", got, wantNoisySignalCount, noisySignalNames)
 	}
+}
+
+// TestNoisyListMatchesTheAudit pins the list against the audit report that
+// produced it.
+//
+// 这份名单的权威是 signal_frequency_audit.md（跑真实 detectSignals 量出），
+// 不是 scripts/classify_signals.py 的 SQL —— 后者分母是"bar 数"而审计是
+// "7-bar 窗口数"，同一条件下能差一倍。2026-10-01 先信了 SQL 那一版，
+// 同时错了两条：MACD动能衰减 错折（SQL 20.43% vs 审计 10.25%）、
+// Donchian下轨跌破 漏折（它需要 close 列，SQL 侧根本量不了）。
+//
+// 本测试读那份 markdown，把 verdict 为 `noisy` 的行与代码里的名单逐条
+// 对比，并校验 signals.go 注释里写的百分比与报告一致。审计重跑后忘了
+// 改代码（或反过来），这里会红。
+func TestNoisyListMatchesTheAudit(t *testing.T) {
+	path := filepath.Join(repoRootForTest(t),
+		"internal/agent/tools/hithink_finance/pattern/signal_frequency_audit.md")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("读审计报告失败: %v", err)
+	}
+
+	// 解析 `| # | 信号 | ... | <freq>% | ... | `verdict` |` 这一行。
+	auditNoisy := map[string]float64{}
+	for _, line := range strings.Split(string(raw), "\n") {
+		if !strings.HasPrefix(line, "| ") || strings.Contains(line, "|---") {
+			continue
+		}
+		c := strings.Split(line, "|")
+		if len(c) < 9 {
+			continue
+		}
+		idx := strings.TrimSpace(c[1])
+		if _, err := strconv.Atoi(idx); err != nil {
+			continue // 表头或非数据行
+		}
+		name := strings.TrimSpace(c[2])
+		freq, err := strconv.ParseFloat(strings.TrimSuffix(strings.TrimSpace(c[6]), "%"), 64)
+		if err != nil {
+			continue
+		}
+		verdict := strings.Trim(strings.TrimSpace(c[8]), "`")
+		if verdict == "noisy" {
+			auditNoisy[name] = freq
+		}
+	}
+	if len(auditNoisy) == 0 {
+		t.Fatal("审计报告里没有 verdict=noisy 的行 —— 报告格式变了？")
+	}
+
+	got := map[string]bool{}
+	for _, n := range noisySignalNames {
+		got[n] = true
+	}
+	for n := range auditNoisy {
+		if !got[n] {
+			t.Errorf("%q 在审计里是 noisy（%.2f%%），但不在 noisySignalNames 里 —— "+
+				"该折叠的没折叠。审计重跑后请同步 signals.go。", n, auditNoisy[n])
+		}
+	}
+	for _, n := range noisySignalNames {
+		if _, ok := auditNoisy[n]; !ok {
+			t.Errorf("%q 在 noisySignalNames 里，但审计判定它不是 noisy —— "+
+				"该折叠的折错了对象。审计重跑后请同步 signals.go。", n)
+		}
+	}
+
+	// 注释里的百分比必须与报告一致，否则读者会被误导去核对另一个数。
+	for _, n := range noisySignalNames {
+		want := auditNoisy[n]
+		pat := regexp.MustCompile(`"` + regexp.QuoteMeta(n) + `",\s*//\s*([\d.]+)%`)
+		m := pat.FindStringSubmatch(sourceOfSignalsGo(t))
+		if m == nil {
+			t.Errorf("signals.go 的 noisySignalNames 里 %q 缺少百分比注释", n)
+			continue
+		}
+		got, _ := strconv.ParseFloat(m[1], 64)
+		if diff := got - want; diff > 0.05 || diff < -0.05 {
+			t.Errorf("%q 的注释写 %.2f%%，审计是 %.2f%%", n, got, want)
+		}
+	}
+}
+
+// repoRootForTest walks up to the repo root from this package's directory
+// (internal/agent/tools/hithink_finance/pattern -> four levels up). It cannot
+// reuse internal/indicators' loadRepoRegistry — that lives in another package.
+func repoRootForTest(t *testing.T) string {
+	t.Helper()
+	dir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("取工作目录失败: %v", err)
+	}
+	for range 8 {
+		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+			return dir
+		}
+		dir = filepath.Dir(dir)
+	}
+	t.Fatal("找不到仓库根目录（往上没有 go.mod）")
+	return ""
+}
+
+func sourceOfSignalsGo(t *testing.T) string {
+	t.Helper()
+	p := filepath.Join(repoRootForTest(t),
+		"internal/agent/tools/hithink_finance/pattern/signals.go")
+	b, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatalf("读 signals.go 失败: %v", err)
+	}
+	return string(b)
 }
 
 // TestPartitionSignalsSplitsCleanly checks the split itself: nothing may be lost
