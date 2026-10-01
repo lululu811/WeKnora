@@ -16,7 +16,6 @@
     "regenerate-i18n-locales": "tsx src/i18n/regeneratePrunedLocales.ts"
   },
   "dependencies": {
-    "@klinecharts/pro": "^0.1.1",
     "@microsoft/fetch-event-source": "^2.0.1",
     "@novnc/novnc": "^1.7.0",
     "@types/dompurify": "^3.2.0",

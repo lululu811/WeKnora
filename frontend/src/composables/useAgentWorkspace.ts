@@ -1,5 +1,6 @@
 import { ref, computed, inject, provide, type InjectionKey, type Ref, type ComputedRef } from 'vue';
 import type { WorkspaceType, PickItem } from '@/components/workspace/types';
+import type { KLineAnchor } from '@/utils/klineAnchors';
 
 export const WORKSPACE_MIN_WIDTH = 450;
 export const WORKSPACE_MAX_WIDTH = 1400;
@@ -32,7 +33,55 @@ export interface AgentWorkspaceContext {
   prevStock: () => void;
   sendToChatCallback?: Ref<((text: string) => void) | null>;
   sendToChat: (text: string) => void;
+  /**
+   * 正文日期区间 → 右侧 K 线图。聊天侧调用，K 线侧注册处理器。
+   *
+   * 这是「聊天 → 图表」第二条通道（第一条是正文 ticker 点击走 picks/activeIndex）。
+   * 走注册而非直接持 chart 引用，是为了让两个组件保持解耦：K 线组件是
+   * `registry.ts` 里的 `defineAsyncComponent`，加载时机不确定，工作台不该假设它已就绪。
+   */
+  registerChartFocus: (handler: ChartFocusHandler | null) => void;
+  focusRange: (range: DateRangeFocus) => void;
+  /**
+   * 当前这条回答的锚点集合（见 utils/klineAnchors.ts）。
+   *
+   * 「一条回答 = 一组锚点」：切到另一条回答时整组替换，而不是往里累积——
+   * 累积会很快退化成图上几十个框，正是之前清理掉的那种糊屏。
+   *
+   * 这条通道替代了「hover 时单发一个区间」的老做法：锚点是**常驻**的，
+   * 不需要用户先猜到「这里能悬停」才能建立正文与图的对应关系。
+   */
+  anchors: Ref<KLineAnchor[]>;
+  setAnchors: (list: KLineAnchor[]) => void;
+  /** 当前被 hover 的锚点编号（null = 没有）。图侧据此压暗框外并叠统计。 */
+  hoveredAnchorIndex: Ref<number | null>;
+  setHoveredAnchor: (index: number | null) => void;
+  /** 点击正文锚点：让图滚到它。 */
+  focusAnchor: (index: number) => void;
+  registerAnchorFocus: (handler: AnchorFocusHandler | null) => void;
+  /**
+   * 用户在本轮里手动选过的标的（null = 还没表态）。
+   *
+   * 放在工作台上下文里而不是聊天视图里，是因为「手动选标的」这件事有三个入口
+   * 分属不同组件：正文 ticker 点击与票签点击在聊天视图，对比条点击在 K 线组件。
+   * 三者必须写同一个标志位，否则对比条选的票会被下一次自动联动抢走。
+   */
+  userPickedThscode: Ref<string | null>;
+  markUserPick: (thscode: string) => void;
+  resetUserPick: () => void;
 }
+
+/** 正文里一个日期区间在图上的诉求。任一端可为 undefined（单点日期）。 */
+export interface DateRangeFocus {
+  from?: number;
+  to?: number;
+  /** 「05-20」这种缺年份的月日，图表侧在已加载数据里就近定位。 */
+  md?: string;
+}
+
+export type ChartFocusHandler = (range: DateRangeFocus) => void;
+/** 图上点某个锚点时回调：正文据此高亮对应句子。 */
+export type AnchorFocusHandler = (index: number) => void;
 
 const WorkspaceKey: InjectionKey<AgentWorkspaceContext> = Symbol('AgentWorkspace');
 
@@ -154,6 +203,50 @@ export function createAgentWorkspaceContext(): AgentWorkspaceContext {
     }
   };
 
+  // 当前回答的锚点集合。切回答时整组替换（见接口注释）。
+  const anchors = ref<KLineAnchor[]>([]);
+  const setAnchors = (list: KLineAnchor[]) => {
+    anchors.value = Array.isArray(list) ? [...list] : [];
+    // 换了锚点集合，旧的 hover 编号就没意义了——不清会让图上压暗到不存在的锚点。
+    hoveredAnchorIndex.value = null;
+  };
+
+  const hoveredAnchorIndex = ref<number | null>(null);
+  const setHoveredAnchor = (index: number | null) => {
+    hoveredAnchorIndex.value = index;
+  };
+
+  let anchorFocusHandler: AnchorFocusHandler | null = null;
+  const registerAnchorFocus = (handler: AnchorFocusHandler | null) => {
+    anchorFocusHandler = handler;
+  };
+  const focusAnchor = (index: number) => {
+    if (anchorFocusHandler) anchorFocusHandler(index);
+  };
+
+  // 用户是否已在本轮手动表态。自动联动只允许在它为空时发生。
+  const userPickedThscode = ref<string | null>(null);
+  const markUserPick = (thscode: string) => {
+    userPickedThscode.value = thscode;
+  };
+  const resetUserPick = () => {
+    userPickedThscode.value = null;
+  };
+
+  // 图表侧注册的处理器。存 plain 变量而不是 ref：它是外部对象的方法引用，
+  // 放进响应式系统只会带来无意义的代理与依赖收集。
+  let chartFocusHandler: ChartFocusHandler | null = null;
+
+  const registerChartFocus = (handler: ChartFocusHandler | null) => {
+    chartFocusHandler = handler;
+  };
+
+  // 图还没就绪（面板未打开 / 组件仍在懒加载）时静默忽略：用户 hover 了一个日期
+  // 却弹「加载中」是噪音。真正的反馈由 K 线侧在就绪后自行恢复。
+  const focusRange = (range: DateRangeFocus) => {
+    if (chartFocusHandler) chartFocusHandler(range);
+  };
+
   const ctx: AgentWorkspaceContext = {
     isOpen,
     isCollapsed,
@@ -176,6 +269,17 @@ export function createAgentWorkspaceContext(): AgentWorkspaceContext {
     prevStock,
     sendToChatCallback,
     sendToChat,
+    registerChartFocus,
+    focusRange,
+    anchors,
+    setAnchors,
+    hoveredAnchorIndex,
+    setHoveredAnchor,
+    focusAnchor,
+    registerAnchorFocus,
+    userPickedThscode,
+    markUserPick,
+    resetUserPick,
   };
 
   return ctx;
