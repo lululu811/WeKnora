@@ -216,6 +216,15 @@
         <button
           type="button"
           class="toolbar__btn feature-btn"
+          :class="{ 'is-active': isChartPatternsEnabled }"
+          title="形态轮廓：把服务端识别出的几何形态（头肩顶/双底/三角/楔形/旗形）与艾略特波浪画成轮廓——顶点连成折线，颈线与目标位画成虚线。波浪是自动数浪，只是一种可能的数法，请当作参考而非结论"
+          @click="toggleChartPatterns"
+        >
+          形态轮廓<span v-if="chartPatternGeometry.length > 0" class="feature-count">({{ chartPatternGeometry.length }})</span>
+        </button>
+        <button
+          type="button"
+          class="toolbar__btn feature-btn"
           :class="{ 'is-active': isLevelsEnabled }"
           title="关键位：在现价上下标出最近的两个支撑与两个阻力（枢轴点 / 斐波那契 / 摆动高低点 / 整数关口，重合的合并）。觉得画面太满时可以关掉"
           @click="toggleLevels"
@@ -349,6 +358,7 @@ import { registerZettarancIndicators } from './indicators';
 import { MAIN_PRESETS, SUB_PRESETS } from './indicator-meta';
 import { fetchAnnotations, type Annotation, PATTERN_CONFIG } from './annotate-api';
 import { setGlobalOverlayConfig } from './overlay-drawer';
+import { fetchChartPatterns, resolvePatternGeometry, type DrawablePattern } from './chart-patterns';
 import { computeLevels, pickChartLevels } from './levels';
 import { resolveAnchorsForChart, hitTestAnchor, MAX_PERSISTENT_ANCHORS } from './anchor-render';
 import { ActionType, type Coordinate } from 'klinecharts';
@@ -434,6 +444,11 @@ interface LatestQuoteInfo {
 
 const latestQuote = ref<LatestQuoteInfo | null>(null);
 const annotations = ref<Annotation[]>([]);
+// 几何形态与波浪（后端识别，前端只负责画）。和标注一样是"增强信息"，
+// 拉不到就是空数组，不影响 K 线本身。
+const chartPatternGeometry = ref<DrawablePattern[]>([]);
+// 形态轮廓开关。默认打开——它比气泡更有信息量（有形状），但画面满时同样要能关。
+const isChartPatternsEnabled = ref(true);
 const enabledPatterns = ref<Set<string>>(new Set(Object.keys(PATTERN_CONFIG)));
 
 // 股票搜索状态
@@ -522,16 +537,27 @@ const toggleLevels = () => {
   redrawOverlays(chartInstance.value);
 };
 
+// 让主图重画一次。
+//
+// 这五个开关以前都是 `window.dispatchEvent(new Event('resize'))`。那条路在绕过
+// klinecharts Pro 之后已经不存在了（见 onMounted 里 resizeObserver 的注释），
+// 派发出去没有任何人监听 —— 于是开关改了 `globalOverlayConfig`、画布却纹丝不动：
+// 九转、形态气泡、形态轮廓全都是「点了没反应」，要等一次无关的重绘（比如切副图）
+// 才一起生效。核心 Chart 有自己的 resize()，直接调它。
+const repaintOverlay = () => {
+  chartInstance.value?.resize();
+};
+
 const toggleTD9 = () => {
   isTD9Enabled.value = !isTD9Enabled.value;
   setGlobalOverlayConfig({ showTD9: isTD9Enabled.value });
-  window.dispatchEvent(new Event('resize'));
+  repaintOverlay();
 };
 
 const togglePatterns = () => {
   isPatternsEnabled.value = !isPatternsEnabled.value;
   setGlobalOverlayConfig({ showPatterns: isPatternsEnabled.value });
-  window.dispatchEvent(new Event('resize'));
+  repaintOverlay();
 };
 
 // 股票搜索处理
@@ -622,6 +648,10 @@ const handleDataLoaded = (dataList: KLineData[]) => {
   // 才有意义——换标的时 swapSymbol 会先清空 overlay，若不等数据到达就画，
   // 算出来的会是上一只票的价位。
   redrawOverlays(chartInstance.value);
+
+  // 形态也挂在这里，理由同上：后端给的是日期，换算成图上下标要拿这批 bar。
+  // 放在 watch 里会在数据到达前就换算，形态会落到上一只票的坐标上。
+  loadChartPatterns();
 };
 
 // 加载形态标注
@@ -634,10 +664,34 @@ const loadAnnotations = async () => {
     setGlobalOverlayConfig({ backendAnnotations: annotations.value });
     // 标注也画成水平位，和关键位共用同一批 overlay，必须一起重画。
     redrawOverlays(chartInstance.value);
-    window.dispatchEvent(new Event('resize'));
+    repaintOverlay();
   } catch (err) {
     annotations.value = [];
   }
+};
+
+// 加载几何形态与波浪（后端 /api/chart-pattern）
+//
+// 必须等 K 线到位后再拉：后端给的是**日期**，换算成图上下标要拿当前这批 bar，
+// 换标的时若不等数据到达就换算，形态会落到上一只票的坐标上。
+const loadChartPatterns = async () => {
+  if (!currentTicker.value || !currentExchange.value) return;
+  const symbolStr = `${currentTicker.value}.${currentExchange.value}`;
+  const res = await fetchChartPatterns(symbolStr, 250);
+  const bars = getChartData(chartInstance.value);
+  chartPatternGeometry.value = resolvePatternGeometry(res, bars);
+  setGlobalOverlayConfig({
+    patternGeometry: isChartPatternsEnabled.value ? chartPatternGeometry.value : [],
+  });
+  repaintOverlay();
+};
+
+const toggleChartPatterns = () => {
+  isChartPatternsEnabled.value = !isChartPatternsEnabled.value;
+  setGlobalOverlayConfig({
+    patternGeometry: isChartPatternsEnabled.value ? chartPatternGeometry.value : [],
+  });
+  repaintOverlay();
 };
 // 建图（首次）与整体换主题时才走这里。
 //
@@ -1202,6 +1256,7 @@ onMounted(() => {
   setGlobalOverlayConfig({
     showTD9: isTD9Enabled.value,
     showPatterns: isPatternsEnabled.value,
+    patternGeometry: isChartPatternsEnabled.value ? chartPatternGeometry.value : [],
   });
 
   nextTick(() => {

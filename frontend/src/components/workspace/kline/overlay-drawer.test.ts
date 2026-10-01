@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { detectKLinePatterns, selectPatternIndicesToDraw, type KLinePatternItem } from './overlay-drawer.ts'
+import { detectKLinePatterns, selectPatternIndicesToDraw, drawPatternGeometry, type KLinePatternItem } from './overlay-drawer.ts'
+import type { DrawablePattern } from './chart-patterns.ts'
 import type { Annotation } from './annotate-api.ts'
 import type { KLineData } from './types.ts'
 
@@ -206,4 +207,107 @@ test('间距裁剪：空输入与零间距', () => {
   patterns[2] = pat('doji')
   // 间距 0 表示不去重，两个都留下
   assert.deepEqual(selectPatternIndicesToDraw(patterns, 0, 4, 0), [1, 2])
+})
+
+// ---------------------------------------------------------------------------
+// 形态轮廓绘制
+//
+// 这层只做**像素映射**（下标/价格 -> 屏幕坐标），换算已经在 chart-patterns.ts
+// 里验过了。这里守的是：参考线必须是虚线、顶点必须打点、换算不出坐标的点不能
+// 被画到 (0,0) 这种假位置上。
+// ---------------------------------------------------------------------------
+
+interface Recorded {
+  moveTo: Array<[number, number]>
+  lineTo: Array<[number, number]>
+  arcs: Array<[number, number]>
+  texts: string[]
+  dashes: number[][]
+  strokes: number
+  fills: number
+}
+
+function recordingCtx(): { ctx: CanvasRenderingContext2D; rec: Recorded } {
+  const rec: Recorded = { moveTo: [], lineTo: [], arcs: [], texts: [], dashes: [], strokes: 0, fills: 0 }
+  const ctx = {
+    save() {}, restore() {},
+    beginPath() {}, stroke() { rec.strokes++ }, fill() { rec.fills++ },
+    moveTo(x: number, y: number) { rec.moveTo.push([x, y]) },
+    lineTo(x: number, y: number) { rec.lineTo.push([x, y]) },
+    arc(x: number, y: number) { rec.arcs.push([x, y]) },
+    fillText(t: string) { rec.texts.push(t) },
+    setLineDash(d: number[]) { rec.dashes.push(d) },
+    strokeStyle: '', fillStyle: '', globalAlpha: 1, lineWidth: 1, font: '', textAlign: '',
+  } as unknown as CanvasRenderingContext2D
+  return { ctx, rec }
+}
+
+/** 轴换算：下标 -> 10*i，价格 -> 1000 - price（够用即可，只验映射发生）。 */
+const fakeAxes = {
+  xAxis: { convertToPixel: (i: number) => i * 10 },
+  yAxis: { convertToPixel: (p: number) => 1000 - p },
+}
+
+function mkPattern(over: Partial<DrawablePattern> = {}): DrawablePattern {
+  return {
+    name: '头肩顶', direction: 'bearish', kind: 'geometry', confidence: 0.7, desc: '',
+    points: [
+      { index: 1, price: 12, label: '左肩' },
+      { index: 3, price: 16, label: '头' },
+      { index: 5, price: 12, label: '右肩' },
+    ],
+    lines: [{ label: '颈线', points: [{ index: 1, price: 10, label: '' }, { index: 5, price: 10, label: '' }] }],
+    ...over,
+  }
+}
+
+test('形态轮廓：顶点连成折线、打点并标字', () => {
+  const { ctx, rec } = recordingCtx()
+  drawPatternGeometry(ctx, [mkPattern()], fakeAxes.xAxis, fakeAxes.yAxis)
+  // 折线：3 个点 -> moveTo(首点) + 2 次 lineTo。
+  // 不能用 deepEqual 断言整个数组——颈线同样会调 moveTo/lineTo。
+  assert.ok(rec.moveTo.some(([x, y]) => x === 10 && y === 988), `折线首点应为 moveTo: ${JSON.stringify(rec.moveTo)}`)
+  assert.ok(rec.lineTo.some(([x, y]) => x === 30 && y === 984), '第二个顶点应连到 x=30')
+  assert.ok(rec.lineTo.some(([x, y]) => x === 50 && y === 988), '第三个顶点应连到 x=50')
+  // 每个顶点一个圆点
+  assert.equal(rec.arcs.length, 3)
+  assert.deepEqual(rec.arcs[0], [10, 988])
+  // 顶点标签
+  assert.deepEqual(rec.texts, ['左肩', '头', '右肩'])
+})
+
+test('参考线画成虚线，不是实线', () => {
+  const { ctx, rec } = recordingCtx()
+  drawPatternGeometry(ctx, [mkPattern()], fakeAxes.xAxis, fakeAxes.yAxis)
+  assert.ok(rec.dashes.some((d) => d.length > 0), '颈线必须以虚线画出')
+  // 颈线两端：index 1 -> x=10，index 5 -> x=50，价格 10 -> y=990
+  assert.ok(rec.moveTo.some(([x, y]) => x === 10 && y === 990), `缺颈线左端: ${JSON.stringify(rec.moveTo)}`)
+  assert.ok(rec.lineTo.some(([x, y]) => x === 50 && y === 990), '缺颈线右端')
+})
+
+test('换算不出坐标的点被跳过，不会画到 (0,0)', () => {
+  const { ctx, rec } = recordingCtx()
+  const badAxes = {
+    xAxis: { convertToPixel: (i: number) => (i === 3 ? Number.NaN : i * 10) },
+    yAxis: { convertToPixel: (p: number) => 1000 - p },
+  }
+  drawPatternGeometry(ctx, [mkPattern()], badAxes.xAxis, badAxes.yAxis)
+  // 中间那个顶点被跳过，只剩两个可画的点 -> 只连一段
+  assert.equal(rec.arcs.length, 2, 'NaN 坐标的顶点不应打点')
+  assert.ok(rec.arcs.every(([x]) => x !== 0), '不能兜底到 0')
+  assert.deepEqual(rec.texts, ['左肩', '右肩'], '被跳过的顶点不画标签')
+})
+
+test('空输入不画任何东西', () => {
+  const { ctx, rec } = recordingCtx()
+  drawPatternGeometry(ctx, [], fakeAxes.xAxis, fakeAxes.yAxis)
+  assert.equal(rec.strokes + rec.fills, 0)
+  assert.deepEqual(rec.arcs, [])
+})
+
+test('只有参考线、没有顶点的形态也能画', () => {
+  const { ctx, rec } = recordingCtx()
+  drawPatternGeometry(ctx, [mkPattern({ points: [] })], fakeAxes.xAxis, fakeAxes.yAxis)
+  assert.ok(rec.dashes.length > 0, '颈线仍然要画')
+  assert.deepEqual(rec.arcs, [], '没有顶点就不打点')
 })

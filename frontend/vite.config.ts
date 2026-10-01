@@ -148,6 +148,13 @@ export default defineConfig({
         target: process.env.VITE_PY_SERVICE_TARGET || 'http://localhost:50052',
         changeOrigin: true,
       },
+      // 形态识别（几何形态 + 波浪）也走 python-service。
+      // 不加这条会落到下面那个泛化的 '/api' 规则上、被转到 Go 应用，而那条链路
+      // 需要鉴权 —— 表现为图表静默拿不到形态，没有任何报错。
+      '/api/chart-pattern': {
+        target: process.env.VITE_PY_SERVICE_TARGET || 'http://localhost:50052',
+        changeOrigin: true,
+      },
       '/api/indicators': {
         target: process.env.VITE_PY_SERVICE_TARGET || 'http://localhost:50052',
         changeOrigin: true,

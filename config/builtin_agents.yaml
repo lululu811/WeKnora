@@ -292,6 +292,14 @@ builtin_agents:
       agent_mode: "smart-reasoning"
       agent_type: "custom"
       system_prompt_id: "zettaranc"
+      # 声明工作台，否则 K 线面板不会渲染。
+      #
+      # 工作台由 `session → agent → config.workbench` 推导，前端据此决定侧栏能挂哪些
+      # 组件（见 frontend/src/composables/useWorkbench.ts）。`finance` 词表在
+      # internal/types/workbench.go 里定义、components 为 ["kline"]，但此前**没有任何
+      # agent 引用它** —— 于是 K 线整条链路（数据、指标、形态、标注）全都是死代码：
+      # 组件不报错，只是永远不出现。改/删这个字段前先确认 Z 哥是唯一该挂 K 线的 agent。
+      workbench: "finance"
       temperature: 0.3
       max_completion_tokens: 0
       max_iterations: 100

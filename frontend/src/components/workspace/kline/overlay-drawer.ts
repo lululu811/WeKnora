@@ -11,17 +11,21 @@
 import type { KLineData } from './types';
 import { zettarancPalette as PAL } from './palette';
 import { isLlmAnnotation, annotationLabel, type Annotation } from './annotate-api';
+import type { DrawablePattern } from './chart-patterns';
 
 export interface OverlayConfig {
   showTD9: boolean;
   showPatterns: boolean;
   backendAnnotations: Annotation[];
+  /** 几何形态与波浪的轮廓（下标已换算好，见 chart-patterns.ts）。 */
+  patternGeometry: DrawablePattern[];
 }
 
 export const globalOverlayConfig: OverlayConfig = {
   showTD9: true,
   showPatterns: true,
   backendAnnotations: [],
+  patternGeometry: [],
 };
 
 export function setGlobalOverlayConfig(cfg: Partial<OverlayConfig>) {
@@ -567,13 +571,20 @@ export function drawMainCanvasTongHuaShun(
     showTD9?: boolean;
     showPatterns?: boolean;
     backendAnnotations?: Annotation[];
+    /** 几何形态与波浪的轮廓（下标已换算好，见 chart-patterns.ts）。 */
+    patternGeometry?: DrawablePattern[];
   } = {},
 ) {
-  const { showTD9 = true, showPatterns = true, backendAnnotations = [] } = options;
+  const { showTD9 = true, showPatterns = true, backendAnnotations = [], patternGeometry = [] } = options;
   if (!kLineDataList || kLineDataList.length === 0) return;
 
   const from = Math.max(0, visibleRange.from);
   const to = Math.min(kLineDataList.length - 1, visibleRange.to);
+
+  // 0. 几何形态与波浪的轮廓画在最底层，避免盖住 K 线本身
+  if (patternGeometry.length > 0) {
+    drawPatternGeometry(ctx, patternGeometry, xAxis, yAxis);
+  }
 
   // 1. 绘制最高价与最低价引导标签
   drawHighLowPriceMarks(ctx, kLineDataList, from, to, xAxis, yAxis);
@@ -629,4 +640,92 @@ export function drawCrossBadge(
   const bgColor = isGolden ? 'rgba(239, 68, 68, 0.45)' : 'rgba(16, 185, 129, 0.45)';
   const badgeY = isGolden ? y - 10 : y + 10;
   drawCapsuleBadge(ctx, text, x, badgeY, color, bgColor, undefined, undefined, 9);
+}
+
+// ---------------------------------------------------------------------------
+// 6. 几何形态与波浪的轮廓绘制
+//
+// 上面第 3 项的胶囊徽章只标注「这里有个形态」，不表达形状。这里把后端识别出的
+// 关键点画成折线轮廓、把颈线/目标位/趋势边界画成虚线 —— 这样「说」和「看」
+// 才真正对得上，而不是两件并排的事。
+//
+// 日期 -> 下标的换算已经在 chart-patterns.ts 里做完了，这里只负责像素映射。
+// ---------------------------------------------------------------------------
+
+function patternDirectionColor(direction: DrawablePattern['direction']): string {
+  if (direction === 'bullish') return PAL().up;
+  if (direction === 'bearish') return PAL().down;
+  return '#94a3b8';
+}
+
+/** 取像素坐标；轴换算不出有限值时返回 null（缩放中途可能拿到 NaN）。 */
+function safePx(axis: any, value: number): number | null {
+  const px = axis?.convertToPixel?.(value);
+  return Number.isFinite(px) ? px : null;
+}
+
+export function drawPatternGeometry(
+  ctx: CanvasRenderingContext2D,
+  patterns: DrawablePattern[],
+  xAxis: any,
+  yAxis: any,
+) {
+  if (!patterns || patterns.length === 0) return;
+
+  for (const pat of patterns) {
+    const color = patternDirectionColor(pat.direction);
+
+    // 参考线（颈线 / 目标位 / 上下边界）：虚线，不填充
+    for (const ln of pat.lines) {
+      const [a, b] = ln.points;
+      const ax = safePx(xAxis, a.index), ay = safePx(yAxis, a.price);
+      const bx = safePx(xAxis, b.index), by = safePx(yAxis, b.price);
+      if (ax === null || ay === null || bx === null || by === null) continue;
+      ctx.save();
+      ctx.strokeStyle = color;
+      ctx.globalAlpha = 0.55;
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(ax, ay);
+      ctx.lineTo(bx, by);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // 顶点轮廓：折线 + 顶点圆点 + 标签
+    const px: Array<{ x: number; y: number; label: string }> = [];
+    for (const p of pat.points) {
+      const x = safePx(xAxis, p.index);
+      const y = safePx(yAxis, p.price);
+      if (x === null || y === null) continue;
+      px.push({ x, y, label: p.label });
+    }
+
+    if (px.length >= 2) {
+      ctx.save();
+      ctx.strokeStyle = color;
+      ctx.globalAlpha = 0.9;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      px.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    for (const p of px) {
+      ctx.save();
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+      if (p.label) {
+        ctx.fillStyle = color;
+        ctx.font = '9px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(p.label, p.x, p.y - 6);
+      }
+      ctx.restore();
+    }
+  }
 }
