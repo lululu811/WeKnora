@@ -103,37 +103,30 @@ INDICATOR_COLUMNS: Dict[str, str] = {
     "cdl_3black": "candles_cdl_3blackcrows_0",
 
     # ------------------------------------------------------------------
-    # zettaranc 自研列(6 列,2026-10-01 接入管道)—— ⚠️ **已隔离,禁止消费**
+    # zettaranc 自研列(2026-10-01 修复后接入)
     #
-    # 这 6 列由 a-stock/scripts/add_zettaranc_columns.py 产出,此前**只有工作台
-    # 图表在画**(`kline-studio/backend/src/routes/indicators.ts`),agent 的分析
-    # SQL 一次都没读过 —— INDICATORS_DB.md 声称"供 python-service/zettaranc 消费"
-    # 是错的。
+    # 曾被隔离:2026-10-01 首次接入时实测发现数据不可用(99.6% 常数 0、
+    # 值域 [-100,100] 与 yaml 声称的价格量纲矛盾)。根因在
+    # a-stock/scripts/add_zettaranc_columns.py,与本文件无关:
+    #   1. `import pandas_ta_classic` 写在 sys.path.insert 之前,而该库是
+    #      仓库内本地目录(目录名带连字符),脚本**从未成功运行过**;
+    #   2. 砖型图算的是 (C-O)/(H-L),与工作台的通达信 ZX 砖型不是同一指标;
+    #   3. RSL 旧列名 *_short_3 / *_long_21 里的 3/21 是 pct_change 回看天数,
+    #      不是窗口长度,读起来像涨跌幅。
+    # 三者已全部修复并全量回填(1035 万行,6 列 100% 非空 / 0% 零值),
+    # 详见 ~/.hithink-finance/INDICATORS_DB.md。回填脚本内置校验闸门,
+    # 复验用 `python3 scripts/add_zettaranc_columns.py --verify-only`。
     #
-    # 2026-10-01 实测发现**数据不可用**,接入管道只为把它暴露出来便于复算:
-    #   1. 只回填了 2025-07-04 起的窗口 = 1,659,149 / 10,349,853 行(16.0%),
-    #      2016-09-12 ~ 2025-07-03 全部为 NULL。
-    #   2. 已回填的 1.66M 行里,1,652,990 行(99.6%)是**常数 0**。
-    #   3. 唯一的非零值是 zg_white_10 的 ±100.0,只出现在 2025-07 中旬约两周,
-    #      且同一行上 yellow/bbi/brick/rsl 全为 0。
-    #   4. 值域 [-100, +100] 是**排名量纲**,但 yaml 声称白线 = EMA(EMA(C,10),10),
-    #      那是**价格量纲**(601398.SH 应为 ~8.28,实测 0.0)。
-    #
-    # 这正是 a-stock/INDICATORS_DB.md 警告的"能算、不报错、值域离谱"那一类,
-    # 而该文档同时写了"进表前必须手工复算定义"—— 这 6 列显然没走那一步。
-    #
-    # 为什么不直接删:管道本身是对的,修好回填后无需再动这里。但在
-    # a-stock 侧复算通过之前,**任何信号规则都不得引用 ztr_***。
-    # 引用它们的后果是确定的:84% 的行缺值(按 signals.py 的"缺数据=不发信号"
-    # 规则永不触发),剩下 15% 里 99.6% 是常数 0(任何以 0 为判据的规则
-    # 会对几乎所有标的触发)。
+    # RSL 列名已改为 *_rank_15 / *_rank_105:它是**滚动窗口百分位排名**
+    # (值域 [0,100]),不是涨跌幅。注意与工作台前端那条同名不同义 ——
+    # 前端 indicators.ts 的 Z_RSL 画的是 % 涨跌幅,见 config/indicators.yaml。
     # ------------------------------------------------------------------
-    "ztr_white": "zettaranc_zg_white_10",      # 白线 EMA(EMA(C,10),10) —— 实测值域 [-100,100],已隔离
-    "ztr_yellow": "zettaranc_dg_yellow_14",    # 黄线 MA(14,28,57,114)  —— 99.6% 为 0,已隔离
-    "ztr_bbi": "zettaranc_bbi",                # 多空线 BBI = MA(3,6,12,24) —— 99.6% 为 0,已隔离
-    "ztr_brick": "zettaranc_brick_value",      # 砖型 (C-O)/(H-L)      —— 99.6% 为 0,已隔离
-    "ztr_rsl_short": "zettaranc_rsl_short_3",  # RSL 短周期(3日涨幅,15窗口排名) —— 99.6% 为 0,已隔离
-    "ztr_rsl_long": "zettaranc_rsl_long_21",   # RSL 长周期(21日涨幅,105窗口排名)—— 99.6% 为 0,已隔离
+    "ztr_white": "zettaranc_zg_white_10",      # 白线 DEMA = EMA(EMA(C,10),10)，价格量纲
+    "ztr_yellow": "zettaranc_dg_yellow_14",    # 黄线 (MA14+MA28+MA57+MA114)/4，价格量纲
+    "ztr_bbi": "zettaranc_bbi",                # 牵牛绳 (MA3+MA6+MA12+MA24)/4，价格量纲
+    "ztr_brick": "zettaranc_brick_value",      # 知行 ZX 砖型（通达信口径），值域 >= 0
+    "ztr_rsl_rank_15": "zettaranc_rsl_rank_15",    # 3日涨幅在15窗口的百分位 [0,100]
+    "ztr_rsl_rank_105": "zettaranc_rsl_rank_105",  # 21日涨幅在105窗口的百分位 [0,100]
 
     # ------------------------------------------------------------------
     # 2026-09-30 那批 33 列里**实测正交**的部分(2026-10-01 接入)
@@ -165,9 +158,9 @@ INDICATORS_FIELDS: List[str] = [
     "cdl_hammer", "cdl_shooting_star", "cdl_doji", "cdl_engulfing",
     "cdl_harami", "cdl_morning_star", "cdl_evening_star",
     "cdl_piercing", "cdl_dark_cloud", "cdl_3white", "cdl_3black",
-    # zettaranc 自研框架列 —— ⚠️ 已隔离,数据实测不可用(见 INDICATOR_COLUMNS 注释)
+    # zettaranc 自研框架列 —— 2026-10-01 已修复回填,数据可用
     "ztr_white", "ztr_yellow", "ztr_bbi", "ztr_brick",
-    "ztr_rsl_short", "ztr_rsl_long",
+    "ztr_rsl_rank_15", "ztr_rsl_rank_105",
     # 实测正交且值域正常的新指标(见 REJECTED 一节)
     "stc", "vosc", "ui", "coppock",
     "dd_abs", "dd_frac", "dd_log",
@@ -185,10 +178,10 @@ INDICATORS_ONLY_FIELDS: List[str] = [
     "cdl_morning_star", "cdl_evening_star", "cdl_hammer",
     "cdl_shooting_star", "cdl_doji", "cdl_engulfing", "cdl_harami",
     "cdl_piercing", "cdl_dark_cloud", "cdl_3white", "cdl_3black",
-    # 与 INDICATORS_FIELDS 同源:框架列(已隔离) + 正交新指标。信号规则本身
-    # 还没写(见 signal_frequency_audit 门禁),这里先打通取数管道。
+    # 与 INDICATORS_FIELDS 同源:框架列(2026-10-01 已修复) + 正交新指标。
+    # 信号规则本身还没写(见 signal_frequency_audit 门禁),这里先打通取数管道。
     "ztr_white", "ztr_yellow", "ztr_bbi", "ztr_brick",
-    "ztr_rsl_short", "ztr_rsl_long",
+    "ztr_rsl_rank_15", "ztr_rsl_rank_105",
     "stc", "stc_macd", "stc_stoch", "vosc", "ui", "coppock",
     "dd_abs", "dd_frac", "dd_log",
 ]
