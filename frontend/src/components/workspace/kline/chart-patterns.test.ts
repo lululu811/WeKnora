@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { resolvePatternGeometry, resolveCandleMarks } from './chart-patterns.ts'
-import type { RawChartPatternResponse } from './chart-patterns.ts'
+import { resolvePatternGeometry, resolveCandleMarks, patternIndexRange, patternsAtBar, samePatternSet } from './chart-patterns.ts'
+import type { RawChartPatternResponse, DrawablePattern } from './chart-patterns.ts'
 import type { LevelBar } from './levels.ts'
 
 const DAY = 86400000
@@ -287,4 +287,67 @@ test('背离、几何形态、波浪三者可以同时存在', () => {
   }
   const out = resolvePatternGeometry(raw, BARS)
   assert.deepEqual(out.map((p) => p.kind).sort(), ['divergence', 'geometry', 'wave'])
+})
+
+// ---------------------------------------------------------------------------
+// 光标联动：算每个形态覆盖哪一段、光标落在某根时点亮谁
+//
+// 这一层必须是纯函数 —— 光标事件每秒来几十次，判定要是塞进绘制里，
+// 就没法单测，也没法「集合没变就跳过重绘」。
+// ---------------------------------------------------------------------------
+
+function drawable(name: string, pointIdx: number[], lineIdx: Array<[number, number]> = []): DrawablePattern {
+  return {
+    name,
+    direction: 'neutral',
+    kind: 'geometry',
+    confidence: 0,
+    desc: '',
+    points: pointIdx.map((i) => ({ index: i, price: 10, label: '' })),
+    lines: lineIdx.map(([a, b]) => ({
+      label: 'l',
+      points: [
+        { index: a, price: 10, label: '' },
+        { index: b, price: 12, label: '' },
+      ] as [{ index: number; price: number; label: string }, { index: number; price: number; label: string }],
+    })),
+  };
+}
+
+test('区间取 points 与 lines 端点并集的 min/max', () => {
+  const p = drawable('双顶', [3, 9], [[1, 12]]);
+  assert.deepEqual(patternIndexRange(p), { min: 1, max: 12 })
+})
+
+test('只有参考线没有顶点的形态也有区间', () => {
+  const p = drawable('下降楔形', [], [[5, 20]]);
+  assert.deepEqual(patternIndexRange(p), { min: 5, max: 20 })
+})
+
+test('一个点都画不出来的形态区间为 null，不参与命中', () => {
+  assert.equal(patternIndexRange(drawable('空形态', [])), null)
+})
+
+test('光标落在区间内（含端点）命中', () => {
+  const ps = [drawable('双顶', [3, 9])]
+  assert.deepEqual(patternsAtBar(ps, 3), ['双顶'], '左端点算命中')
+  assert.deepEqual(patternsAtBar(ps, 9), ['双顶'], '右端点算命中')
+  assert.deepEqual(patternsAtBar(ps, 6), ['双顶'], '区间内算命中')
+  assert.deepEqual(patternsAtBar(ps, 2), [], '区间外不命中')
+  assert.deepEqual(patternsAtBar(ps, 10), [], '区间外不命中')
+})
+
+test('多个形态重叠时全部命中', () => {
+  const ps = [drawable('双顶', [3, 9]), drawable('矩形整理', [], [[1, 20]]), drawable('远处', [50, 60])]
+  assert.deepEqual(patternsAtBar(ps, 5), ['双顶', '矩形整理'])
+  assert.deepEqual(patternsAtBar(ps, 55), ['远处'])
+  assert.deepEqual(patternsAtBar(ps, 30), [])
+})
+
+test('集合比较就是逐项比较（用于跳过重绘）', () => {
+  assert.equal(samePatternSet(['a', 'b'], ['a', 'b']), true)
+  assert.equal(samePatternSet([], []), true)
+  assert.equal(samePatternSet(['a'], ['b']), false)
+  assert.equal(samePatternSet(['a'], ['a', 'b']), false)
+  assert.equal(samePatternSet(['a', 'b'], ['b', 'a']), false, '顺序不同也算变了')
 })

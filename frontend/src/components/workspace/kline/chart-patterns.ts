@@ -99,6 +99,49 @@ export interface DrawablePattern {
   lines: DrawableLine[]
 }
 
+/**
+ * 一个形态在图上覆盖的下标区间。
+ *
+ * 取 points 与 lines 所有端点的最小/最大下标。**hugging** 语义：区间是"这个形态
+ * 关心哪一段"，不是"这条线画在哪"—— 光标落在这段里就算命中它。
+ *
+ * 一个点都画不出来的形态返回 null（它本来就没画在图上，不该参与命中）。
+ */
+export function patternIndexRange(pattern: DrawablePattern): { min: number; max: number } | null {
+  let min = Number.POSITIVE_INFINITY;
+  let max = Number.NEGATIVE_INFINITY;
+  const consider = (i: number) => {
+    if (i < min) min = i;
+    if (i > max) max = i;
+  };
+  for (const p of pattern.points) consider(p.index);
+  for (const ln of pattern.lines) for (const p of ln.points) consider(p.index);
+  if (!Number.isFinite(min) || !Number.isFinite(max)) return null;
+  return { min, max };
+}
+
+/**
+ * 光标落在 `index` 这根 K 线上时，**应该点亮**哪几个形态。
+ *
+ * 返回名字集合。用名字而不是下标：形态是按名字勾选的，用户看到的也是名字。
+ * 落空时返回空集合 —— 调用方据此决定"是不是全部保持常态"。
+ */
+export function patternsAtBar(patterns: readonly DrawablePattern[], index: number): string[] {
+  const out: string[] = [];
+  for (const p of patterns) {
+    const range = patternIndexRange(p);
+    if (range && index >= range.min && index <= range.max) out.push(p.name);
+  }
+  return out;
+}
+
+/** 两个名字集合是否相同（用于「集合没变就跳过重绘」的判断）。 */
+export function samePatternSet(a: readonly string[], b: readonly string[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
+
 /** 日期 -> 下标的索引，建一次复用。 */
 function buildDateIndex(bars: readonly LevelBar[]): Map<string, number> {
   const map = new Map<string, number>()

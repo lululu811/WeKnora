@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { detectKLinePatterns, selectPatternIndicesToDraw, drawPatternGeometry, type KLinePatternItem } from './overlay-drawer.ts'
+import { detectKLinePatterns, selectPatternIndicesToDraw, drawPatternGeometry, reserveLabel, type KLinePatternItem, type PlacedLabel } from './overlay-drawer.ts'
 import type { DrawablePattern } from './chart-patterns.ts'
 import type { Annotation } from './annotate-api.ts'
 import type { KLineData } from './types.ts'
@@ -223,18 +223,27 @@ interface Recorded {
   widths: number[]
   /** 圆角矩形的弧角调用次数（胶囊徽章会用它描底色）。 */
   arcTos: number
+  /** 每次 stroke 时的 globalAlpha（含 halo 的固有值，不能直接用来判压暗）。 */
+  alphas: number[]
+  /** 每次 fill 时的 globalAlpha：顶点圆点与徽章底，常态为 1，压暗时 < 1。 */
+  fillAlphas: number[]
 }
 
 function recordingCtx(): { ctx: CanvasRenderingContext2D; rec: Recorded } {
   const rec: Recorded = {
     moveTo: [], lineTo: [], arcs: [], texts: [], dashes: [],
-    strokes: 0, fills: 0, widths: [], arcTos: 0,
+    strokes: 0, fills: 0, widths: [], arcTos: 0, alphas: [], fillAlphas: [],
   }
+  // save/restore 必须真的实现（只存 globalAlpha 就够）：它们在产品代码里被用来
+  // 把"压暗"限制在一段绘制内。假 ctx 把这两个做成 no-op 的话，alpha 会从
+  // strokePatternLine 泄漏到后面所有 fill，测试就会因为替身不忠实而误报。
+  const alphaStack: number[] = []
   const ctx = {
-    save() {}, restore() {},
+    save(this: { globalAlpha: number }) { alphaStack.push(this.globalAlpha) },
+    restore(this: { globalAlpha: number }) { this.globalAlpha = alphaStack.pop() ?? 1 },
     beginPath() {},
-    stroke(this: { lineWidth: number }) { rec.strokes++; rec.widths.push(this.lineWidth) },
-    fill() { rec.fills++ },
+    stroke(this: { lineWidth: number; globalAlpha: number }) { rec.strokes++; rec.widths.push(this.lineWidth); rec.alphas.push(this.globalAlpha) },
+    fill(this: { globalAlpha: number }) { rec.fills++; rec.fillAlphas.push(this.globalAlpha) },
     arcTo() { rec.arcTos++ },
     measureText(t: string) { return { width: String(t).length * 6 } },
     // 画布 API 的其余部分：测试只关心上面记录的那几类调用，
@@ -339,4 +348,77 @@ test('顶点标签用胶囊徽章，不是裸文字', () => {
   drawPatternGeometry(ctx, [mkPattern()], fakeAxes.xAxis, fakeAxes.yAxis)
   // 胶囊徽章会先描一个圆角矩形再填色；裸 fillText 在 K 线上读不出来。
   assert.ok(rec.arcTos > 0, '标签必须走胶囊徽章（深色底 + 描边）')
+})
+
+// ---------------------------------------------------------------------------
+// 光标联动（压暗）与两层共享的标签占位
+// ---------------------------------------------------------------------------
+
+test('非当前形态被压暗，当前形态保持常态', () => {
+  const { ctx, rec } = recordingCtx()
+  const a = mkPattern({ name: '双顶' })
+  const b = mkPattern({ name: '熊市旗形' })
+  drawPatternGeometry(ctx, [a, b], fakeAxes.xAxis, fakeAxes.yAxis, ['双顶'])
+  assert.ok(rec.fillAlphas.some((x) => x === 1), '命中的那个应保持不透明')
+  assert.ok(rec.fillAlphas.some((x) => x > 0 && x < 0.5),
+    `未命中的应被压暗，实际: ${[...new Set(rec.fillAlphas)]}`)
+  // 线也必须跟着压暗。这里单独守一道：strokePatternLine 曾经是**覆盖**
+  // globalAlpha 而不是相乘，于是压暗对参考线完全无效、只有徽章在变淡。
+  assert.ok(rec.alphas.some((x) => x > 0 && x < 0.15),
+    `参考线也应被压暗，实际 stroke alpha: ${[...new Set(rec.alphas)]}`)
+})
+
+test('activeNames 为空时全都不压暗（没悬停/悬停处没形态）', () => {
+  const { ctx, rec } = recordingCtx()
+  drawPatternGeometry(ctx, [mkPattern({ name: '双顶' })], fakeAxes.xAxis, fakeAxes.yAxis, [])
+  assert.ok(rec.fillAlphas.every((x) => x === 1),
+    `空集合 = 常态，不该有任何压暗，实际: ${[...new Set(rec.fillAlphas)]}`)
+})
+
+test('压暗是按名字匹配，不是按下标', () => {
+  const { ctx, rec } = recordingCtx()
+  // 两个同名形态：命中名字时两个都亮（名字是用户勾选的单位）
+  drawPatternGeometry(ctx, [mkPattern({ name: 'X' }), mkPattern({ name: 'X' })],
+    fakeAxes.xAxis, fakeAxes.yAxis, ['X'])
+  assert.ok(rec.fillAlphas.every((x) => x === 1), '同名都命中，不该有压暗')
+})
+
+test('气泡先占位时不平移（它锚定在某根 K 线上）', () => {
+  const { ctx } = recordingCtx()
+  const placed: PlacedLabel[] = []
+  const y = reserveLabel(ctx, '十字星', 100, 200, 10, placed)
+  assert.equal(y, 200, '占位不应改变 y —— 挪走了气泡就指向了别的 K 线')
+  assert.equal(placed.length, 1)
+  assert.ok(placed[0].w > 0 && placed[0].h > 0)
+})
+
+test('传给形态的共享占位表里有气泡时，形态名会让位', () => {
+  const { ctx, rec } = recordingCtx()
+  const placed: PlacedLabel[] = []
+  // 先在形态名会出现的位置放一个气泡
+  const patX = 10 + 34;   // mkPattern 最左顶点 x=10，名字锚在 +34
+  reserveLabel(ctx, '占位气泡', patX, 988 - 14, 10, placed)
+  const before = placed.length
+  drawPatternGeometry(ctx, [mkPattern()], fakeAxes.xAxis, fakeAxes.yAxis, [], placed)
+  assert.ok(placed.length > before, '形态名应登记进同一张表')
+  // 形态名的 rect 不能和气泡的 rect 完全重合（说明避让发生了）
+  const bubble = placed[0]
+  const name = placed[placed.length - 1]
+  const overlap = !(name.x + name.w < bubble.x || bubble.x + bubble.w < name.x ||
+                    name.y + name.h < bubble.y || bubble.y + bubble.h < name.y)
+  assert.equal(overlap, false, `形态名应避开气泡：bubble=${JSON.stringify(bubble)} name=${JSON.stringify(name)}`)
+})
+
+test('形态名之间的避让仍然生效（同一张表内）', () => {
+  const { ctx } = recordingCtx()
+  const placed: PlacedLabel[] = []
+  drawPatternGeometry(ctx, [mkPattern({ name: 'A' }), mkPattern({ name: 'B' })],
+    fakeAxes.xAxis, fakeAxes.yAxis, [], placed)
+  // 每个形态先登记 3 个顶点标签再登记形态名 -> 名字在第 4 个和第 8 个
+  assert.equal(placed.length, 8, `期望 4 个标签 x 2 个形态，实际 ${placed.length}`)
+  const a = placed[3]
+  const b = placed[7]
+  const overlap = !(a.x + a.w < b.x || b.x + b.w < a.x || a.y + a.h < b.y || b.y + b.h < a.y)
+  assert.equal(overlap, false,
+    `两个同位置形态的名字应错开：A=${JSON.stringify(a)} B=${JSON.stringify(b)}`)
 })

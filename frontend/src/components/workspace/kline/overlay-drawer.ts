@@ -28,6 +28,12 @@ export interface OverlayConfig {
    * （K 线上方的胶囊），用同一套间距避让和用户勾选逻辑。
    */
   candleMarks: DrawableCandle[];
+  /**
+   * 光标所在位置命中的形态名。**空数组 = 不做任何压暗**（常态）。
+   *
+   * 形态是按名字勾选的，所以这里也用名字而不是下标 —— 与用户看到的一致。
+   */
+  activePatternNames: string[];
 }
 
 export const globalOverlayConfig: OverlayConfig = {
@@ -37,6 +43,7 @@ export const globalOverlayConfig: OverlayConfig = {
   patternGeometry: [],
   hiddenPatternTypes: [],
   candleMarks: [],
+  activePatternNames: [],
 };
 
 export function setGlobalOverlayConfig(cfg: Partial<OverlayConfig>) {
@@ -524,6 +531,8 @@ export function drawMainCanvasTongHuaShun(
     hiddenPatternTypes?: string[];
     /** 蜡烛形态标记（后端识别）。 */
     candleMarks?: DrawableCandle[];
+    /** 光标命中的形态名（空 = 不压暗）。 */
+    activePatternNames?: string[];
   } = {},
 ) {
   const {
@@ -533,11 +542,17 @@ export function drawMainCanvasTongHuaShun(
     patternGeometry = [],
     hiddenPatternTypes = [],
     candleMarks = [],
+    activePatternNames = [],
   } = options;
   if (!kLineDataList || kLineDataList.length === 0) return;
 
   const from = Math.max(0, visibleRange.from);
   const to = Math.min(kLineDataList.length - 1, visibleRange.to);
+
+  // 两层标签共用一张占位表：气泡先登记（它锚定在某根 K 线上，不能挪），
+  // 形态名后放（它是浮动的，可以往上让）。以前两层各排各的，于是
+  // 「顶1 / 双顶 / 矩形整理」会叠在同一片区域上。
+  const placedLabels: PlacedLabel[] = [];
 
   // 1. 绘制最高价与最低价引导标签
   drawHighLowPriceMarks(ctx, kLineDataList, from, to, xAxis, yAxis);
@@ -580,6 +595,8 @@ export function drawMainCanvasTongHuaShun(
         const y = pat.position === 'top'
           ? (hasTD9 ? candleY - 34 : candleY - 20)
           : (hasTD9 ? candleY + 34 : candleY + 20);
+        // 先登记再画：登记时**不平移**，气泡必须留在它自己那根 K 线上。
+        reserveLabel(ctx, pat.text, x, y, 10, placedLabels);
         drawCapsuleBadge(ctx, pat.text, x, y, pat.color, pat.bgColor, pat.position, candleY, 10);
       }
     }
@@ -591,7 +608,7 @@ export function drawMainCanvasTongHuaShun(
   // 「形态有了但看不清」。形态线本身是半透明带光晕的细线，压在 K 线上不会
   // 遮住价格读法，反而因为始终可见才起到「说」与「看」对上的作用。
   if (patternGeometry.length > 0) {
-    drawPatternGeometry(ctx, patternGeometry, xAxis, yAxis);
+    drawPatternGeometry(ctx, patternGeometry, xAxis, yAxis, activePatternNames, placedLabels);
   }
 }
 
@@ -637,6 +654,7 @@ function strokePatternLine(
   color: string,
   width: number,
   dash: number[],
+  baseAlpha = 1,
 ) {
   for (const pass of [
     { w: width + 3, alpha: 0.16 },
@@ -644,7 +662,9 @@ function strokePatternLine(
   ]) {
     ctx.save();
     ctx.strokeStyle = color;
-    ctx.globalAlpha = pass.alpha;
+    // **相乘**而不是覆盖：覆盖会把外层的"压暗"整个吃掉，于是光标联动对参考线
+    // 完全失效 —— 线不动、只有徽章在变淡，看起来像"压暗只压了一半"。
+    ctx.globalAlpha = pass.alpha * baseAlpha;
     ctx.lineWidth = pass.w;
     ctx.lineCap = 'round';
     ctx.setLineDash(dash);
@@ -688,7 +708,26 @@ function badgeSize(ctx: CanvasRenderingContext2D, text: string, fontSize: number
   return { w, h: fontSize + 7 };
 }
 
-type PlacedLabel = { x: number; y: number; w: number; h: number };
+export type PlacedLabel = { x: number; y: number; w: number; h: number };
+
+/**
+ * 只把位置**登记**下来，不平移。
+ *
+ * 气泡用这个：它的 x 锚定在某根 K 线上，挪走就等于指向了另一根 K 线 ——
+ * 那比标签重叠更糟（重叠只是难看，错位是错误信息）。
+ */
+export function reserveLabel(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  cx: number,
+  cy: number,
+  fontSize: number,
+  placed: PlacedLabel[],
+): number {
+  const { w, h } = badgeSize(ctx, text, fontSize);
+  placed.push({ x: cx - w / 2, y: cy - h / 2, w, h });
+  return cy;
+}
 
 /**
  * 给标签找一个不压住别人的位置。
@@ -724,14 +763,23 @@ export function drawPatternGeometry(
   patterns: DrawablePattern[],
   xAxis: any,
   yAxis: any,
+  activeNames: readonly string[] = [],
+  sharedPlaced: PlacedLabel[] = [],
 ) {
   if (!patterns || patterns.length === 0) return;
 
-  // 一次绘制内共享的标签占位表：形态之间也要互相避让，不然两个形态名会叠住。
-  const placed: PlacedLabel[] = [];
+  // 占位表由调用方传进来，气泡已经登记过了 —— 形态名要连同**气泡**一起避让，
+  // 不能只管形态之间。不传时自己建一张（单测与独立调用走这条）。
+  const placed: PlacedLabel[] = sharedPlaced;
+  // 光标落在某根 K 线时，只把**那一段所属的**形态画亮，其余压暗。
+  // 空集合 = 没悬停 / 悬停处没有任何形态 -> 全部常态，不压暗。
+  const dimming = activeNames.length > 0;
 
   for (const pat of patterns) {
     const color = patternDirectionColor(pat.direction);
+    // 压暗具体值取 0.18：再低就完全看不见（用户会以为形态消失了，而不是被压暗）；
+    // 再高则和常态区分不开。标签也跟着淡，否则"压暗"只剩下线、名字还在抢注意力。
+    const alpha = dimming && !activeNames.includes(pat.name) ? 0.18 : 1;
 
     // 参考线（颈线 / 目标位 / 上下边界）。长划线：和关键位的短虚线区分开，
     // 免得两种「虚线水平位」混在一起分不清谁是谁。
@@ -740,7 +788,7 @@ export function drawPatternGeometry(
       const ax = safePx(xAxis, a.index), ay = safePx(yAxis, a.price);
       const bx = safePx(xAxis, b.index), by = safePx(yAxis, b.price);
       if (ax === null || ay === null || bx === null || by === null) continue;
-      strokePatternLine(ctx, ax, ay, bx, by, color, 1.8, [6, 4]);
+      strokePatternLine(ctx, ax, ay, bx, by, color, 1.8, [6, 4], alpha);
     }
 
     // 顶点轮廓：折线 + 顶点圆点 + 标签
@@ -752,17 +800,24 @@ export function drawPatternGeometry(
       px.push({ x, y, label: p.label });
     }
 
+    ctx.save();
+    // drawVertexDot 不碰 globalAlpha，所以这里设一次就能盖住折线与顶点圆点。
+    ctx.globalAlpha = alpha;
     for (let i = 1; i < px.length; i++) {
-      strokePatternLine(ctx, px[i - 1].x, px[i - 1].y, px[i].x, px[i].y, color, 2.2, []);
+      strokePatternLine(ctx, px[i - 1].x, px[i - 1].y, px[i].x, px[i].y, color, 2.2, [], alpha);
     }
     for (const p of px) drawVertexDot(ctx, p.x, p.y, color);
+    ctx.restore();
 
     // 顶点标签走胶囊徽章（深色底 + 彩色描边）：直接 fillText 的字在 K 线上
     // 基本读不出来，这也是第一版看不清的一部分。
     for (const p of px) {
       if (!p.label) continue;
       const ly = placeLabel(ctx, p.label, p.x, p.y - 17, 10, placed);
+      ctx.save();
+      ctx.globalAlpha = alpha;
       drawCapsuleBadge(ctx, p.label, p.x, ly, color, color, 'top', p.y, 10);
+      ctx.restore();
     }
 
     // 形态名：锚在整个形态的左上角，让人一眼知道画的是什么。
@@ -787,7 +842,10 @@ export function drawPatternGeometry(
         // 名字放端点右上角，避开端点圆点与顶点标签。
         const cx = anchor.x + 34;
         const ny = placeLabel(ctx, pat.name, cx, anchor.y - 14, 10, placed);
+        ctx.save();
+        ctx.globalAlpha = alpha;
         drawCapsuleBadge(ctx, pat.name, cx, ny, color, color, undefined, undefined, 10);
+        ctx.restore();
       }
     }
   }

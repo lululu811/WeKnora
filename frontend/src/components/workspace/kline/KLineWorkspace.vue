@@ -384,7 +384,7 @@ import { fetchAnnotations, type Annotation, PATTERN_CONFIG } from './annotate-ap
 import { setGlobalOverlayConfig } from './overlay-drawer';
 import LayerFilterDropdown from './LayerFilterDropdown.vue';
 import { clearAllOptions, enabledCount, isOptionEnabled, loadSelection, saveSelection, selectAllOptions, toggleOption, type LayerOption, type LayerSelection } from './layer-selection';
-import { fetchChartPatterns, resolvePatternGeometry, resolveCandleMarks, type DrawableCandle, type DrawablePattern } from './chart-patterns';
+import { fetchChartPatterns, resolvePatternGeometry, resolveCandleMarks, patternsAtBar, samePatternSet, type DrawableCandle, type DrawablePattern } from './chart-patterns';
 import { computeLevels, pickChartLevels } from './levels';
 import { resolveAnchorsForChart, hitTestAnchor, MAX_PERSISTENT_ANCHORS } from './anchor-render';
 import { ActionType, type Coordinate } from 'klinecharts';
@@ -476,6 +476,9 @@ const chartPatternGeometry = ref<DrawablePattern[]>([]);
 // 蜡烛形态：后端 TA-Lib 识别的信号（下标已换算）+ 它的形态目录（下拉选项来源）。
 const candleMarks = ref<DrawableCandle[]>([]);
 const candleCatalog = ref<Array<{ key: string; name: string; desc?: string }>>([]);
+// 光标所在的这根 K 线落在哪几个形态里。非空时其余形态压暗 —— 这是「气泡」与
+// 「轮廓」之间唯一的联动：两者共同的主语是**当前这根 K 线**，而不是互相映射。
+const activePatternNames = ref<string[]>([]);
 // 形态轮廓图层总开关。默认打开——它比气泡更有信息量（有形状），但画面满时同样要能关。
 const isChartPatternsEnabled = ref(true);
 
@@ -781,7 +784,8 @@ const loadChartPatterns = async () => {
     candleMarks: candleMarks.value,
     hiddenPatternTypes: bubbleSelection.value.disabled,
   });
-  // 勾选按**形态名**记，所以换了票、同名形态仍然保持用户的取舍。
+  // 形态整批换了，光标位置对应的命中集合也要重算 —— 否则会残留上一只票的压暗。
+  activePatternNames.value = [];
   syncOutline(outlineSelection.value);
 };
 
@@ -1259,6 +1263,7 @@ const applyAnchorHover = (chart: Chart | null) => {
  */
 const applyChartHoverHit = (data: { dataIndex?: number; y?: number } | null | undefined) => {
   const chart = chartInstance.value;
+  syncPatternHighlight(data?.dataIndex);
   if (!chart || !isAnchorsEnabled.value) return;
   const anchors = resolveAnchorsForChart(workspace.anchors.value, getChartData(chart));
   const boxes = anchorCanvasBoxes(chart, anchors);
@@ -1268,8 +1273,27 @@ const applyChartHoverHit = (data: { dataIndex?: number; y?: number } | null | un
   }
 };
 
+/**
+ * 光标 -> 点亮包含这根 K 线的形态。
+ *
+ * **只有集合真的变了才重绘**：crosshair 每秒来几十次，而形态动辄跨 20~40 根，
+ * 绝大多数移动落在同一个形态区间内、集合不变。不判这一下就等于每帧重绘整张图。
+ */
+const syncPatternHighlight = (dataIndex: number | undefined) => {
+  const next = Number.isFinite(dataIndex as number)
+    ? patternsAtBar(chartPatternGeometry.value, dataIndex as number)
+    : [];
+  if (samePatternSet(next, activePatternNames.value)) return;
+  activePatternNames.value = next;
+  setGlobalOverlayConfig({ activePatternNames: next });
+  repaintOverlay();
+};
+
 const handleChartMouseLeave = () => {
   workspace.setHoveredAnchor(null);
+  // 移出图区要清掉压暗。crosshair 不一定补一次事件，不兜底的话压暗会一直挂着，
+  // 用户会以为形态坏了（锚点那套同样有这个兜底）。
+  syncPatternHighlight(undefined);
 };
 
 const toggleAnchors = () => {
@@ -1351,6 +1375,7 @@ onMounted(() => {
     showPatterns: isPatternsEnabled.value,
     patternGeometry: isChartPatternsEnabled.value ? chartPatternGeometry.value : [],
     candleMarks: candleMarks.value,
+    activePatternNames: activePatternNames.value,
     // 恢复上次的勾选，否则首帧会把用户关掉的类型又画出来一次。
     hiddenPatternTypes: bubbleSelection.value.disabled,
   });
