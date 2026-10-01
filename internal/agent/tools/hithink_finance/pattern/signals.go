@@ -818,6 +818,70 @@ var declaredSignalNames = []string{
 	"Dark Cloud乌云盖顶", "Three White Soldiers三白兵", "Three Black Crows三乌鸦",
 }
 
+// noisySignalNames 是"触发频率高到不再携带信息"的信号，默认**不**返回。
+//
+// 为什么要有这层：信号是按 bar 注入模型上下文的。一条在 20% 以上的 bar 上都成立
+// 的信号，报的是**当前市场状态**（"趋势线斜率为正"）而不是**转折事件**；连续
+// 若干天读到同一句话，模型会学会无视它 —— 真正的转折（1%~5% 那一档）就被淹没。
+// 所以默认只给 informative，需要时用 include_noisy 显式索取。
+//
+// 数据来自 scripts/classify_signals.py（2026-10-01，200 只票跨步抽样、
+// 193,163 根 bar、2022-08 起跨 2022 熊市与 2024-26 行情）。判据沿用
+// signal_frequency_audit.md：频率 > 20% 记 noisy，0 记 dead。
+//
+// ⚠️ **这份名单第一次统计时是错的**，错在脚本凭理解重写判据、与本文件的实现
+// 对不上。已修正的六条（括号内是修正前后）：
+//
+//	MACD动能衰减  48.70% → 20.45%  原写成 hist>0（柱体为正），
+//	                              真实判据是柱体连续 4 根同向收窄（本文件 :70）
+//	Aroon多头排列  46.91% → 18.21%  原写成 up>down，真实是 up>70 且 down<30（:303）
+//	CMF资金流入   28.56% → 18.42%  原用 ±0.05，真实是 ±0.1（:546）
+//	Aroon空头排列  50.08% → 23.84%  同 Aroon多头（:309）
+//	CMF资金流出   44.13% → 31.60%  同 CMF资金流入（:552）
+//	RSI6超卖      15.79% →  4.33%  原写 <30，真实是 <20 且前一根不跌（:144）
+//
+// 三条（Aroon多头 / CMF资金流入 / Keltner挤压）因此**掉出**了名单。
+// 这份名单直接决定哪些信号被折叠给模型，判据错了就折叠错了对象 —— 所以
+// classify_signals.py 里每条 SQL 都标了本文件的行号与原始条件，改判据时两边同步。
+//
+// 名单是**数据结论**，不是价值判断：线性回归 47%/51% 报的是趋势方向，用户在
+// "这只票现在什么趋势"的问题上可能真的想要它们。所以它们被**默认折叠**，不是
+// 被删除 —— include_noisy=true 拿得到全量。
+var noisySignalNames = []string{
+	"线性回归下降",                    // 51.36%
+	"线性回归上升",                    // 47.03%
+	"CMF资金流出",                     // 31.60%
+	"Williams%R超卖",                  // 25.86%
+	"ADX多头趋势",                     // 25.67%
+	"Aroon空头排列",                   // 23.84%
+	"CCI超卖",                         // 21.41%
+	"MACD动能衰减",                    // 20.45%
+}
+
+// isNoisySignal 报告某个信号名是否在默认折叠名单里。
+func isNoisySignal(name string) bool {
+	for _, n := range noisySignalNames {
+		if n == name {
+			return true
+		}
+	}
+	return false
+}
+
+// partitionSignals 把信号分成默认返回与按需返回两半。
+//
+// 返回的 suppressed 保持原顺序，便于模型知道"确实有这些信号，只是没给你"。
+func partitionSignals(signals []Signal) (keep, suppressed []Signal) {
+	for _, s := range signals {
+		if isNoisySignal(s.Name) {
+			suppressed = append(suppressed, s)
+		} else {
+			keep = append(keep, s)
+		}
+	}
+	return keep, suppressed
+}
+
 func psarState(r row) (bullish bool, ok bool) {
 	if r.PSAR <= 0 || r.Close <= 0 {
 		return false, false

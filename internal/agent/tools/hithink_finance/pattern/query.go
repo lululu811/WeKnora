@@ -7,8 +7,8 @@ package pattern
 //
 //	正交且已验证（9）: stc / stc_macd / stc_stoch / vosc / ui / coppock
 //	                  dd_abs / dd_frac / dd_log
-//	已隔离，禁止消费（6）: ztr_white / ztr_yellow / ztr_bbi / ztr_brick
-//	                      ztr_rsl_short / ztr_rsl_long
+//	2026-10-01 已修复（6）: ztr_white / ztr_yellow / ztr_bbi / ztr_brick
+//	                      ztr_rsl_rank_15 / ztr_rsl_rank_105
 //
 // 本文件的 `row` 结构体与 SELECT 列表**尚未包含**上述任何一列，因此
 // detectSignals 的行为与 Python 侧**不一致**：Python 能读到的新数据，
@@ -18,8 +18,9 @@ package pattern
 //  1. 信号门禁只存在于本侧。signal_frequency_audit_test.go 跑的是这里
 //     的 detectSignals，Python 侧写的新信号**无法被审计**。先在 Go 实现
 //     才能拿到 dead/noisy/informative 的频率分布。
-//  2. ztr_* 六列数据实测不可用（16% 覆盖、99.6% 常数 0、值域是排名而非
-//     价格量纲），Python 侧已标注隔离，Go 侧更不该先接。
+//  2. ztr_* 六列此前数据不可用（16% 覆盖、99.6% 常数 0、值域是排名而非
+//     价格量纲），已由 a-stock 侧修复合入管道；Go 侧仍按同样的顺序
+//     等信号实现后再接 —— 接入**数据**不等于接入**信号规则**。
 //
 // 对齐顺序：新信号先在 signals.go 实现 → 登记进 declaredSignalNames →
 // 跑 signal_audit 确认 verdict 为 informative → 再回填 Python 侧。

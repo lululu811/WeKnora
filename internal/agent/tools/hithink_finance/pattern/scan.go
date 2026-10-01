@@ -73,9 +73,22 @@ func (t *PatternScanTool) Description() string {
 凡是用到价格、通道边界、累计量指标的信号，缺失值（query.go 的 COALESCE 补 0）
 都会被显式跳过——缺数据不会伪造出信号，所以某些标的可能少于 %d 条。
 
+**默认只返回"转折类"信号。** 另有 %d 条状态类信号在 20%%~52%% 的 bar 上都成立
+（线性回归升降、CMF 资金流出、Williams%%R超卖、ADX多头趋势、Aroon空头排列、
+CCI超卖、MACD动能衰减），报的是**当前状态**而不是转折事件 —— 连着几天读到同一句
+话，模型会学会无视它，真正的转折就被淹没。所以它们默认折叠，只在返回的
+suppressed 字段里报出**名字和条数**（不静默丢弃：你看到"没有 MACD动能衰减"
+时要知道那个条件其实是成立的）。
+
+用户问"这只票趋势方向如何""资金是流出还是流入"这类**要状态**的问题时，
+用 include_noisy=true 重调；问"有什么转折信号"就用默认。
+
 每个信号的 strength 是 0~1 的相对强度（规则基准分，**尚未**按数据完整度折扣）。
 
-使用示例：thscode="600519.SH", days=10`, len(declaredSignalNames), len(declaredSignalNames))
+使用示例：
+- 默认（只看转折）：thscode="600519.SH", days=10
+- 连状态一起看：thscode="600519.SH", days=10, include_noisy=true`,
+		len(declaredSignalNames), len(declaredSignalNames), len(noisySignalNames))
 }
 
 func (t *PatternScanTool) Parameters() json.RawMessage {
@@ -91,6 +104,13 @@ func (t *PatternScanTool) Parameters() json.RawMessage {
 				"description": "扫描天数（默认 10，用于检测交叉信号）",
 				"default":     10,
 			},
+			"include_noisy": map[string]interface{}{
+				"type": "boolean",
+				"description": "是否同时返回高频状态类信号（默认 false）。" +
+					"这些信号在 20%~52% 的 bar 上都成立，报的是当前状态而非转折事件，" +
+					"默认返回会让真正的转折被淹没。仅在用户明确要看趋势方向/资金流向状态时置 true。",
+				"default": false,
+			},
 		},
 		"required": []string{"thscode"},
 	}
@@ -104,8 +124,9 @@ func (t *PatternScanTool) Execute(ctx context.Context, args json.RawMessage) (*t
 	}
 
 	var params struct {
-		Thscode string `json:"thscode"`
-		Days    int    `json:"days"`
+		Thscode      string `json:"thscode"`
+		Days         int    `json:"days"`
+		IncludeNoisy bool   `json:"include_noisy"`
 	}
 	if err := json.Unmarshal(args, &params); err != nil {
 		return &types.ToolResult{Success: false, Error: fmt.Sprintf("参数解析失败：%v", err)}, nil
@@ -128,7 +149,11 @@ func (t *PatternScanTool) Execute(ctx context.Context, args json.RawMessage) (*t
 		return &types.ToolResult{Success: false, Error: fmt.Sprintf("未找到指标数据：%s", params.Thscode)}, nil
 	}
 
-	signals := detectSignals(rows)
+	all := detectSignals(rows)
+	signals, suppressed := all, []Signal(nil)
+	if !params.IncludeNoisy {
+		signals, suppressed = partitionSignals(all)
+	}
 
 	output := map[string]interface{}{
 		"thscode": params.Thscode,
@@ -136,6 +161,20 @@ func (t *PatternScanTool) Execute(ctx context.Context, args json.RawMessage) (*t
 		"latest":  rows[0],
 		"signals": signals,
 		"summary": summarizeSignals(signals),
+	}
+	// 折叠掉的信号要**如实报数**而不是静默丢弃：不说的话，模型看到"没有
+	// MACD动能衰减"会以为那个条件没成立，而它其实成立了。
+	if len(suppressed) > 0 {
+		names := make([]string, 0, len(suppressed))
+		for _, s := range suppressed {
+			names = append(names, s.Name)
+		}
+		output["suppressed"] = map[string]interface{}{
+			"count": len(suppressed),
+			"names": names,
+			"note": "这些信号触发频率过高（>20% 的 bar），报的是状态而非转折，" +
+				"默认不返回。需要它们时用 include_noisy=true 重调。",
+		}
 	}
 	out, _ := json.MarshalIndent(output, "", "  ")
 	return &types.ToolResult{Success: true, Output: string(out)}, nil

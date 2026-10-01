@@ -24,21 +24,36 @@ func (t *AnalyzeTool) Name() string {
 }
 
 func (t *AnalyzeTool) Description() string {
-	// 这份清单必须与 python-service /zettaranc/analyze 实际返回的段对得上。
-	// 刚删掉的「综合评分：B1评分、趋势评分、量价评分、风险评分」整条都是假的：
-	// analyze 的返回只有 trend / volume / chart_pattern / levels 四段加若干
-	// 元信息，一个评分字段都没有；而「B1评分」里的 B1 又与形态标注的 B1 撞名。
+	// 这份清单逐条对着 python-service /zettaranc/analyze 的实际返回核过
+	// (main.py:1136-1176 + trend.py/volume.py/pattern.py/levels.py 的返回键)。
 	//
-	// 待办（未核实，不在本次改动范围）：本描述里的「三波理论阶段判断」「麒麟会」
-	// 「砖型图」「四块砖」是否真有实现，需要对着 trend.py / pattern.py 逐条核。
-	return `使用 Z哥交易体系对单只股票进行全面分析。
+	// 此前描述里的话**逐条是假的**：
+	//   - "三波理论阶段判断" / "麒麟会：庄家阶段和置信度" —— 两个都不存在，
+	//     任何 Python 模块里都没有对应实现；
+	//   - "砖型图" / "四块砖" —— 不在这四个模块里（ZX_BRICK 是工作台前端的
+	//     指标，见 config/indicators.yaml）；
+	//   - "30+ 种战法" —— analyze 不做战法识别，那是 zettaranc.screener 的事；
+	//   - "综合评分 / 风险等级 / 买卖点判断" —— 返回里一个评分字段都没有。
+	// 另有一处更早删掉的"综合评分：B1评分/趋势评分/量价评分/风险评分"，同样是假的。
+	//
+	// 假描述的代价是确定的：模型会向用户承诺这些段，返回里没有，于是要么
+	// 编一个读数，要么回答"分析失败"。所以这里只写实际存在的四段。
+	return `使用 Z哥交易体系对单只股票做单维度分析。
 
-返回内容：
-- 技术指标：KDJ、MACD、RSI、BBI、白线黄线、布林带、砖型图
-- 波浪分析：三波理论阶段判断
-- 麒麟会：庄家阶段和置信度
-- 战法信号：30+ 种战法（超卖组合/B2、少妇战法、四块砖等）
-- 综合诊断：买卖点判断、风险等级
+返回四个分析段（数据不足的段为 null，原因列在 insufficient_data）：
+
+- trend（需 20 根 K 线）：道氏 HH/HL/LH/LL 结构、均线排列与金叉死叉、
+  葛兰碧法则、ADX 与 DI 多空强度、Supertrend 方向，并给出方向与置信度
+- volume（需 10 根 K 线）：威科夫四阶段判定、量价配合与背离、
+  Spring/Upthrust、OBV 趋势、CMF/MFI 资金流、VWAP 位置与偏离
+- chart_pattern（需 10 根 K 线）：11 种蜡烛形态、头肩顶/底、双顶/双底、
+  三角形/楔形/旗形、布林带形态与带宽变化、量能确认
+- levels：摆动高低点、均线、整数关口、布林带边界与共振区、斐波那契回撤、
+  枢轴点 PP·R1-3·S1-3
+
+本工具**不做**：战法信号识别（用 zettaranc.screener）、全市场选股
+（用 zettaranc.screener）、技术指标数值读取（用 hithink.finance.indicator.*）、
+以及四块砖/三波理论/麒麟会——这三项本地无实现，用户问起要说明去看 K 线工作台。
 
 数据源：DuckDB (market.duckdb + indicators.duckdb) + Python 计算
 
