@@ -22,7 +22,7 @@ import {
   calcSMA,
   calcKDJ,
   calcMACD,
-  calcRSL,
+  calcPctRet,
   calcVOL,
 } from '../src/components/workspace/kline/indicators';
 import { indicatorMeta } from '../src/components/workspace/kline/indicator-meta';
@@ -129,12 +129,12 @@ async function run() {
     ];
   })();
 
-  // Z_RSL — 短线 / 长线两个周期
-  const [rslShort, rslLong] = params('Z_RSL');
-  const rslSeries = indicatorMeta('Z_RSL').series;
-  result.indicators.Z_RSL = [
-    { key: rslSeries[0].key, values: calcRSL(bars, rslShort) },
-    { key: rslSeries[1].key, values: calcRSL(bars, rslLong) },
+  // Z_PCT_RET — 3 日 / 21 日两个周期的**涨跌幅**（2026-10-01 由 Z_RSL 改名）。
+  const [retShort, retLong] = params('Z_PCT_RET');
+  const retSeries = indicatorMeta('Z_PCT_RET').series;
+  result.indicators.Z_PCT_RET = [
+    { key: retSeries[0].key, values: calcPctRet(bars, retShort) },
+    { key: retSeries[1].key, values: calcPctRet(bars, retLong) },
   ];
 
   // ZX_BRICK / Z_BRICK — 砖型图。两者是同一份实现，必须逐点相同。

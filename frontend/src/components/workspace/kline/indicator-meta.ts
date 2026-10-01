@@ -557,14 +557,14 @@ export const INDICATOR_META: IndicatorRegistryMeta = {
       }
     },
     {
-      id: "Z_RSL",
-      shortName: "RSL",
+      id: "Z_PCT_RET",
+      shortName: "涨跌幅",
       kind: "subchart",
       panel: "sub",
       formulaVersion: "v1",
       precision: 2,
       defaultEnabled: false,
-      summary: "相对强度线：3 日短线 RSL 与 21 日长线 RSL",
+      summary: "区间涨跌幅（百分比）：3 日与 21 日两个周期。与 DuckDB 的 RSL 百分位排名不同义",
       params: [
         {
           name: "short",
@@ -577,9 +577,9 @@ export const INDICATOR_META: IndicatorRegistryMeta = {
       ],
       series: [
         {
-          key: "rsl_short",
-          label: "RSL短(3)",
-          formula: "RSL",
+          key: "pct_ret_short",
+          label: "3日涨跌幅(%)",
+          formula: "PCT_RET",
           type: "line",
           precision: 2,
           color: "sky",
@@ -587,9 +587,9 @@ export const INDICATOR_META: IndicatorRegistryMeta = {
           params: [3]
         },
         {
-          key: "rsl_long",
-          label: "RSL长(21)",
-          formula: "RSL",
+          key: "pct_ret_long",
+          label: "21日涨跌幅(%)",
+          formula: "PCT_RET",
           type: "line",
           precision: 2,
           color: "purple",
@@ -693,11 +693,11 @@ export const INDICATOR_META: IndicatorRegistryMeta = {
       ]
     },
     {
-      id: "Z_RSL",
-      label: "RSL强弱",
-      hint: "相对强弱线，3 日与 21 日两个周期。RSL 向上表示这只票强于大盘，适合在同板块内比强弱。",
+      id: "Z_PCT_RET",
+      label: "涨跌幅",
+      hint: "区间涨跌幅（百分比），3 日与 21 日两个周期。向上表示这只票在涨，适合快速比对强弱。与 RSL 百分位排名不同指标。",
       indicators: [
-        "Z_RSL"
+        "Z_PCT_RET"
       ]
     }
   ]
@@ -714,7 +714,7 @@ export const INDICATORS_BY_ID: Record<string, IndicatorMeta> = {
   Z_KDJ: INDICATOR_META.indicators[7],
   ZX_BRICK: INDICATOR_META.indicators[8],
   Z_BRICK: INDICATOR_META.indicators[9],
-  Z_RSL: INDICATOR_META.indicators[10],
+  Z_PCT_RET: INDICATOR_META.indicators[10],
 };
 
 /** All registered indicators, in config/indicators.yaml declaration order. */

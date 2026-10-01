@@ -44,7 +44,7 @@ func mustList() []string {
 		"Z_KDJ",     //
 		"ZX_BRICK",  //
 		"Z_BRICK",   // legacy alias of ZX_BRICK
-		"Z_RSL",     //
+		"Z_PCT_RET", //
 	}
 }
 
@@ -103,7 +103,7 @@ func TestCompositeAndPanels(t *testing.T) {
 		}
 	}
 
-	for _, id := range []string{"Z_VOL", "Z_MACD", "Z_KDJ", "ZX_BRICK", "Z_BRICK", "Z_RSL"} {
+	for _, id := range []string{"Z_VOL", "Z_MACD", "Z_KDJ", "ZX_BRICK", "Z_BRICK", "Z_PCT_RET"} {
 		ind := reg.Get(id)
 		if ind == nil {
 			t.Fatalf("找不到 %s", id)
@@ -120,20 +120,31 @@ func TestCompositeAndPanels(t *testing.T) {
 // TestPeriodsAreTheOnesTheStackAlreadyUses pins the numbers that were
 // previously hardcoded in three places. Changing one of these is a behaviour
 // change for users, not a refactor.
+//
+// 这条测试存在的理由:conformance_test.go 的 TestCrossStackConformance
+// **抓不到 param 改动** —— 它的 Go reference 与 TS 都从本 YAML 读参数
+// (conformance_test.go:665-672),两边一起跟着改,测试保持绿。参数是这套
+// 体系里唯一"改了不会自动被发现"的东西,所以必须在这里钉死。
+//
+// 漏掉过 Z_MAIN:它是最重要的复合主图(白线+黄线+牵牛绳三条线),
+// params 只有 white_period=10,而三条线真正的周期藏在 series.params 里。
+// 下面 TestSeriesParamsArePinned 补上了这个洞。
 func TestPeriodsAreTheOnesTheStackAlreadyUses(t *testing.T) {
 	reg, _ := loadRepoRegistry(t)
 	cases := []struct {
 		id     string
 		params []int
 	}{
+		{"Z_MAIN", []int{10}},
 		{"ZG_WHITE", []int{10}},
 		{"DG_YELLOW", []int{14, 28, 57, 114}},
 		{"Z_BBI", []int{3, 6, 12, 24}},
 		{"Z_VOL", []int{5, 10}},
 		{"Z_MACD", []int{12, 26, 9}},
 		{"Z_KDJ", []int{9, 3, 3}},
-		{"Z_RSL", []int{3, 21}},
+		{"Z_PCT_RET", []int{3, 21}},
 		{"ZX_BRICK", []int{4}},
+		{"Z_BRICK", []int{4}},
 	}
 	for _, c := range cases {
 		ind := reg.Get(c.id)
@@ -149,6 +160,76 @@ func TestPeriodsAreTheOnesTheStackAlreadyUses(t *testing.T) {
 			if got[i] != c.params[i] {
 				t.Errorf("%s params = %v, want %v", c.id, got, c.params)
 				break
+			}
+		}
+	}
+}
+
+// TestSeriesParamsArePinned pins the per-series periods, which is where the
+// real periods of a composite indicator live. Z_MAIN's `params` carries only
+// white_period=10; the yellow line (14/28/57/114) and the BBI rope (3/6/12/24)
+// are declared on the series and read from there by
+// indicators.ts:532-545. Nothing else guards them.
+func TestSeriesParamsArePinned(t *testing.T) {
+	reg, _ := loadRepoRegistry(t)
+	cases := []struct {
+		id     string
+		series map[string][]int
+	}{
+		{"Z_MAIN", map[string][]int{
+			"zg_white":  {10},
+			"dg_yellow": {14, 28, 57, 114},
+			"bbi":       {3, 6, 12, 24},
+		}},
+		{"ZG_WHITE", map[string][]int{"zg_white": {10}}},
+		{"DG_YELLOW", map[string][]int{"dg_yellow": {14, 28, 57, 114}}},
+		{"Z_BBI", map[string][]int{"bbi": {3, 6, 12, 24}}},
+		{"Z_MACD", map[string][]int{
+			// key 是 series 名（画布上的线），不是 DuckDB 列 alias ——
+			// hist 那条线的 key 叫 macd，alias 才叫 macd_hist。
+			"dif":  {12, 26},
+			"dea":  {12, 26, 9},
+			"macd": {12, 26, 9},
+		}},
+		{"Z_KDJ", map[string][]int{
+			"k": {9, 3},
+			"d": {9, 3, 3},
+			"j": {9, 3, 3},
+		}},
+		{"Z_PCT_RET", map[string][]int{
+			"pct_ret_short": {3},
+			"pct_ret_long":  {21},
+		}},
+		{"Z_VOL", map[string][]int{
+			"ma5":  {5},
+			"ma10": {10},
+		}},
+		{"ZX_BRICK", map[string][]int{"brick": {4}}},
+	}
+	for _, c := range cases {
+		ind := reg.Get(c.id)
+		if ind == nil {
+			t.Fatalf("找不到 %s", c.id)
+		}
+		byKey := map[string][]int{}
+		for _, s := range ind.Series {
+			byKey[s.Key] = s.Params
+		}
+		for key, want := range c.series {
+			got, ok := byKey[key]
+			if !ok {
+				t.Errorf("%s: 缺少 series %q", c.id, key)
+				continue
+			}
+			if len(got) != len(want) {
+				t.Errorf("%s/%s params = %v, want %v", c.id, key, got, want)
+				continue
+			}
+			for i := range got {
+				if got[i] != want[i] {
+					t.Errorf("%s/%s params = %v, want %v", c.id, key, got, want)
+					break
+				}
 			}
 		}
 	}
@@ -245,7 +326,7 @@ func TestValidateRejectsBadInput(t *testing.T) {
 		},
 		{
 			name:    "zero period",
-			mutate:  func(r *Registry) { r.Get("Z_RSL").Params[0].Value = 0 },
+			mutate:  func(r *Registry) { r.Get("Z_PCT_RET").Params[0].Value = 0 },
 			wantErr: "non-positive",
 		},
 		{

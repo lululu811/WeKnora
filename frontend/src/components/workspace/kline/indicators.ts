@@ -19,7 +19,9 @@
  * 7. Z_MACD (同花顺风 MACD): DIFF + DEA + 柱状图 + [金叉]/[死叉] 实时胶囊徽章
  * 8. Z_KDJ (同花顺风 KDJ): K/D/J 三线走势 + [金叉]/[死叉] 实时胶囊徽章
  * 9. ZX_BRICK / Z_BRICK (砖型图): 同花顺知行砖型图
- * 10. Z_RSL (相对强度): 3 日短线 RSL 与 21 日长线 RSL，副图曲线
+ * 10. Z_PCT_RET (区间涨跌幅): 3 日与 21 日**百分比涨跌幅**，副图曲线
+ *     （2026-10-01 由 Z_RSL 改名 —— 它算的是涨跌幅；真正的 RSL 百分位排名
+ *      在 DuckDB 的 zettaranc_rsl_rank_15 / _rank_105，两者不是同一个东西）
  */
 
 import { registerIndicator, LineType, PolygonType, IndicatorSeries, type KLineData } from 'klinecharts';
@@ -170,8 +172,11 @@ function calcFourBricks(dataList: KLineData[]): Array<number | null> {
   return details.map((d) => d.score);
 }
 
-// 5. 相对强度指标 (RSL)
-export function calcRSL(dataList: KLineData[], period: number): Array<number | null> {
+// 5. 区间涨跌幅 (百分比) —— 2026-10-01 由 calcRSL 改名而来。
+// 它算的是 (close[i]-close[i-n])/close[i-n]*100，就是涨跌幅，不是相对强弱排名。
+// 真正的 RSL（滚动窗口百分位排名，值域 [0,100]）在 DuckDB 的
+// zettaranc_rsl_rank_15 / _rank_105，两者是不同指标，此前却共用 RSL 这个名字。
+export function calcPctRet(dataList: KLineData[], period: number): Array<number | null> {
   const result: Array<number | null> = [];
   for (let i = 0; i < dataList.length; i++) {
     if (i < period) {
@@ -672,26 +677,26 @@ export function registerZettarancIndicators() {
       registerIndicator(createZXBrickIndicator(brickId) as any);
     }
 
-    // 8. Z_RSL —— 相对强度曲线
-    const zRsl = indicatorMeta('Z_RSL');
-    const rslDefaults = zRsl.params.map((p) => p.value);
+    // 8. Z_PCT_RET —— 区间涨跌幅（%）。2026-10-01 由 Z_RSL 改名。
+    const zPctRet = indicatorMeta('Z_PCT_RET');
+    const pctRetDefaults = zPctRet.params.map((p) => p.value);
     registerIndicator({
-      name: zRsl.id,
-      shortName: zRsl.shortName,
-      series: seriesOf(zRsl.panel),
-      calcParams: zRsl.calcParams ?? [],
-      precision: zRsl.precision,
-      figures: figuresFrom('Z_RSL'),
-      styles: { lines: lineStyles('Z_RSL') },
+      name: zPctRet.id,
+      shortName: zPctRet.shortName,
+      series: seriesOf(zPctRet.panel),
+      calcParams: zPctRet.calcParams ?? [],
+      precision: zPctRet.precision,
+      figures: figuresFrom('Z_PCT_RET'),
+      styles: { lines: lineStyles('Z_PCT_RET') },
       calc: (dataList: any, indicator: any) => {
-        const p1 = indicator.calcParams[0] || rslDefaults[0];
-        const p2 = indicator.calcParams[1] || rslDefaults[1];
-        const rslShort = calcRSL(dataList, p1);
-        const rslLong = calcRSL(dataList, p2);
-        const [shortKey, longKey] = zRsl.series.map((s) => s.key);
+        const p1 = indicator.calcParams[0] || pctRetDefaults[0];
+        const p2 = indicator.calcParams[1] || pctRetDefaults[1];
+        const shortRet = calcPctRet(dataList, p1);
+        const longRet = calcPctRet(dataList, p2);
+        const [shortKey, longKey] = zPctRet.series.map((s) => s.key);
         return dataList.map((_: any, i: number) => ({
-          [shortKey]: rslShort[i],
-          [longKey]: rslLong[i],
+          [shortKey]: shortRet[i],
+          [longKey]: longRet[i],
         }));
       },
     } as any);

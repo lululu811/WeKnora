@@ -355,29 +355,38 @@ indicators:
       duckdb_view: ""
       columns: []
 
-  - id: Z_RSL
-    short_name: RSL
+  - id: Z_PCT_RET
+    short_name: 涨跌幅
     kind: subchart
     panel: sub
     formula_version: v1
     precision: 2
     default_enabled: false
-    summary: 相对强度线：3 日短线 RSL 与 21 日长线 RSL
+    # 此前这个 id 叫 Z_RSL，summary 写"相对强度线"，但画的是**百分比涨跌幅**
+    # (indicators.ts calcRSL: ((curr-prev)/prev)*100)。而 DuckDB 的
+    # zettaranc_rsl_rank_15 / _rank_105 才是真正的相对强弱——滚动窗口**百分位
+    # 排名**，值域 [0,100]。同名不同义，且没有任何测试发现：YAML 声明
+    # backend: frontend / columns: []，跨栈比对压根不覆盖它。
+    #
+    # 两个指标各有存在理由（排名是 RSL 的原义，涨跌幅是你每天看的直线），所以
+    # 不强行统一，而是**改名让它们各归各位**。2026-10-01 库侧已把 RSL 两列
+    # 改名为 *_rank_15 / *_rank_105 以示区别。
+    summary: 区间涨跌幅（百分比）：3 日与 21 日两个周期。与 DuckDB 的 RSL 百分位排名不同义
     params:
       - { name: short, value: 3 }
       - { name: long, value: 21 }
     series:
-      - key: rsl_short
-        label: RSL短(3)
-        formula: RSL
+      - key: pct_ret_short
+        label: 3日涨跌幅(%)
+        formula: PCT_RET
         type: line
         precision: 2
         color: sky
         line_width: 1.5
         params: [3]
-      - key: rsl_long
-        label: RSL长(21)
-        formula: RSL
+      - key: pct_ret_long
+        label: 21日涨跌幅(%)
+        formula: PCT_RET
         type: line
         precision: 2
         color: purple
@@ -438,10 +447,10 @@ views:
       label: KDJ
       hint: KDJ 随机指标 (9,3,3)。K/D 在 20 以下为超卖区、80 以上为超买区，金叉死叉会打标记。
       indicators: [Z_KDJ]
-    - id: Z_RSL
-      label: RSL强弱
-      hint: 相对强弱线，3 日与 21 日两个周期。RSL 向上表示这只票强于大盘，适合在同板块内比强弱。
-      indicators: [Z_RSL]
+    - id: Z_PCT_RET
+      label: 涨跌幅
+      hint: 区间涨跌幅（百分比），3 日与 21 日两个周期。向上表示这只票在涨，适合快速比对强弱。与 RSL 百分位排名不同指标。
+      indicators: [Z_PCT_RET]
 
 # ---------------------------------------------------------------------------
 # 已知的跨栈缺口。每一项都由 internal/indicators/conformance_test.go **大声失败**，
@@ -453,3 +462,50 @@ known_gaps:
 # KDJ 三列）已修复并移出本清单 —— 已在 indicatorSQL 补上
 # momentum_kdj_9_3_k/d/j 并映射到 marketRow.KDJK/KDJD/KDJJ，
 # 由 analysis/kdj_contract_test.go 拿真实 DuckDB fixture 守住非零。
+#
+# rsl_same_name_different_meaning（Z_RSL / zettaranc_rsl_*）已修复并移出本清单
+# —— 前端那条改名为 Z_PCT_RET（它画的是 %涨跌幅），库侧两列改名为
+# *_rank_15 / *_rank_105（滚动窗口百分位排名），两者不再共用 RSL 这个名字。
+#
+# four_bricks_frontend_only_no_backend 已于 2026-10-01 修复并移出本清单：
+# 四块砖的数值计算搬到 python-service/zettaranc/four_bricks.py，周期
+# （MA5 / EMA10 / EMA14 / BBI 3-6-12-24）由该模块单点定义，不再散在前端；
+# 新增 zettaranc.four_bricks 工具与 /zettaranc/four-bricks 端点，agent 与
+# 工作台读同一份实现。搬后与前端原实现做过 260 根 bar 逐点比对，零差异。
+# 战法**解释**（红2=黄金买点）刻意留在知识库，没有进计算层。
+#
+# 下面两条是**当前仍然成立**的失真。TestKnownGapsAreStillTrue 会在任一条
+# 被修好时报警提醒删除 —— 写在这里是为了说明"这个失败是已知的、该由谁去修"，
+# 不是为了让测试变绿。
+
+  - id: frontend_recomputes_declared_duckdb_indicators
+    indicator: Z_MACD
+    stacks: [frontend, duckdb]
+    detected_by: internal/indicators/conformance_test.go
+    description: >-
+      Z_MACD / Z_KDJ / Z_VOL 声明 storage.backend: duckdb 并列出了
+      momentum_macd_12_26_9_* / momentum_kdj_9_3_* / volume 这些列，但工作台
+      从未读过它们 —— indicators.ts 的 calcMACD(:218) / calcKDJ(:251) /
+      calcVOL(:193) 全都从同一份 OHLCV 在浏览器里重算了一遍。
+      GET /api/indicators 端点（python-service/main.py:1668）至今**零调用方**。
+      后果：同一个指标在两个地方各有一份实现，任何一侧的公式修正都不会传导到
+      另一侧，conformance 测试也只比 Go reference 与 TS，够不到 DuckDB 那一列。
+    resolution: >-
+      让 /api/kline 一次返回 OHLCV + 这些预计算列，前端改为读列；
+      或把 Z_MACD/Z_KDJ/Z_VOL 的 storage 改成 frontend 并承认前端是唯一实现。
+      两者选其一，但不能维持"声明走列、实际本地算"的现状。
+
+  - id: brick_formula_duplicated_in_two_frontends
+    indicator: ZX_BRICK
+    stacks: [frontend, kline_studio]
+    detected_by: manual review 2026-10-01
+    description: >-
+      知行 ZX 砖型图有**两份**前端实现：WeKnora 工作台的
+      frontend/.../stock-score.ts:166 calcZXBrick，和 kline-studio 的
+      kline-studio/frontend/src/lib/。2026-10-01 修 a-stock 回填脚本时，
+      砖型公式重写为通达信口径并与前者逐字验证一致（抽样 [92.74, 94.25, 104.25]
+      两侧完全相同），但 kline-studio 那份**没有**对应的验证，也没有 Go reference
+      —— 它是通达信口径的唯一未被交叉验证的实现。
+    resolution: >-
+      把 kline-studio 的实现纳入 conformance 测试（同一份 fixture、同一份 Go
+      reference），或直接复用工作台的实现删掉重复。

@@ -326,8 +326,9 @@ func refKDJ(bars []Bar, n, kSmooth, dSmooth int) (k, d, j []*float64) {
 	return k, d, j
 }
 
-// refRSL is (close[i] - close[i-n]) / close[i-n] * 100, null for the first n bars.
-func refRSL(closes []float64, n int) []*float64 {
+// refPctRet is (close[i] - close[i-n]) / close[i-n] * 100, null for the first n bars.
+// 名为 pct_ret 而非 rsl：它就是涨跌幅，不是相对强弱排名（见 Z_PCT_RET 的注释）。
+func refPctRet(closes []float64, n int) []*float64 {
 	out := make([]*float64, len(closes))
 	for i := range closes {
 		if i < n {
@@ -667,9 +668,12 @@ func TestCrossStackConformance(t *testing.T) {
 		},
 		"Z_MACD": {"dif": macdDif, "dea": macdDea, "macd": macdHist},
 		"Z_KDJ":  {"k": kdjK, "d": kdjD, "j": kdjJ},
-		"Z_RSL": {
-			"rsl_short": refRSL(closes, params("Z_RSL", "short")),
-			"rsl_long":  refRSL(closes, params("Z_RSL", "long")),
+		// Z_RSL → Z_PCT_RET（2026-10-01）。此前 id 叫 RSL 却画的是百分比
+		// 涨跌幅，而 DuckDB 的 zettaranc_rsl_rank_* 才是真正的相对强弱排名
+		// ——同名不同义。改名后 series key 也随之改为 pct_ret_short/long。
+		"Z_PCT_RET": {
+			"pct_ret_short": refPctRet(closes, params("Z_PCT_RET", "short")),
+			"pct_ret_long":  refPctRet(closes, params("Z_PCT_RET", "long")),
 		},
 		"ZX_BRICK": {"brick": refZXBrick(bars, seriesParams("ZX_BRICK", 0)[0])},
 	}
@@ -906,6 +910,62 @@ func gapNote(gap *KnownGap) string {
 	}
 	return fmt.Sprintf("\n      已知缺口 %s（config/indicators.yaml known_gaps）：%s\n      修法：%s",
 		gap.ID, strings.TrimSpace(gap.Desc), strings.TrimSpace(gap.Resolution))
+}
+
+// TestKnownGapsAreStillTrue guards the known_gaps list in the other direction.
+//
+// gapNote 只在**列名对不上**时才被调用，而当前登记的三条缺口都不是列名问题：
+// 前端重算已声明的 duckdb 指标、砖型图有两份未交叉验证的实现、四块砖只在
+// 前端。结果是 known_gaps 变成一份纯文档 —— 缺口被修好后没有任何东西会提醒
+// 人删掉它，于是清单只增不减，几条之后就不再可信（这正是本文件开头
+// "写在这里只是为了说明这个失败是已知的" 想避免的状态）。
+//
+// 这里给每条缺口一个**可机械检查的断言**：条件一旦不再成立就报错，让人把条目
+// 移走。仍成立则通过 —— 缺口本身由各自对应的测试负责报警。
+func TestKnownGapsAreStillTrue(t *testing.T) {
+	reg, root := loadRepoRegistry(t)
+	if len(reg.KnownGaps) == 0 {
+		t.Fatal("known_gaps 是空的，但仓库里确实还有未修的跨栈失真（见 yaml 注释）")
+	}
+
+	frontendSrc := readRepoFile(t, root,
+		"frontend/src/components/workspace/kline/indicators.ts")
+
+	for _, g := range reg.KnownGaps {
+		switch g.ID {
+		case "frontend_recomputes_declared_duckdb_indicators":
+			// 缺口成立的条件：前端仍然自己算 MACD/KDJ/VOL，即 indicators.ts
+			// 里有 calcMACD/calcKDJ 的**函数声明**。**两者都不存在**才算修好 ——
+			// 只改一个不构成"前端改读 DuckDB 列"，此时把条目删掉会让剩下的
+			// 重算实现重新变成无人记录的缺口。
+			//
+			// 匹配的是带参数的完整声明，不是 "calcMACD" 这个裸词：后者是
+			// calcMACDFROMDUCKDB 这类新名字的子串，会让缺口在真的修好之后
+			// 仍然报"仍成立"，于是条目永远删不掉。
+			const frontendCalcMACD = "export function calcMACD("
+			const frontendCalcKDJ = "export function calcKDJ("
+			hasMACD := bytes.Contains(frontendSrc, []byte(frontendCalcMACD))
+			hasKDJ := bytes.Contains(frontendSrc, []byte(frontendCalcKDJ))
+			if !hasMACD && !hasKDJ {
+				t.Errorf("known_gaps[%s] 已不成立：indicators.ts 里既没有 %q 也没有 %q，"+
+					"说明前端已改为读取 DuckDB 预计算列。请删掉这条 known_gaps 条目。",
+					g.ID, frontendCalcMACD, frontendCalcKDJ)
+			}
+
+		case "brick_formula_duplicated_in_two_frontends":
+			// 缺口成立的条件：kline-studio 仍在，且它有自己的砖型实现。
+			// 两处都消失才算修好。
+			ksPath := filepath.Join(root, "kline-studio/frontend/src/lib/zettaranc-indicators.ts")
+			if _, err := os.Stat(ksPath); os.IsNotExist(err) {
+				t.Errorf("known_gaps[%s] 已不成立：kline-studio 已不存在。"+
+					"请删掉这条 known_gaps 条目。", g.ID)
+			}
+
+		default:
+			t.Errorf("known_gaps 里有条目 %q，但本测试没有为它写断言 —— "+
+				"新的缺口要么补上断言，要么别登记（无断言的条目等于纯文档）", g.ID)
+		}
+	}
 }
 
 // TestPeriodsMatchTheDuckDBColumnNames checks the numbers inside the column
