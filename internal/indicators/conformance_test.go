@@ -880,15 +880,32 @@ func refDEMAFullPrecision(closes []float64, n int) []*float64 {
 // fails here instead of returning zeros at runtime.
 //
 // Note: this reads the other stacks' source as *text*. It does not modify them.
+//
+// 2026-10-01: 这条测试曾断言"必须有声明的列"，那时 Z_MACD / Z_KDJ / Z_VOL
+// 声明走 v_indicators_daily 的预计算列。那三条声明是**假的** —— 工作台从未
+// 读过它们（/api/indicators 至今零调用方），已在同一天改成 backend: frontend。
+// 于是 11 个工作台指标现在**全部**是 frontend 实现，本文件**一条** DuckDB 列
+// 声明都没有了。
+//
+// 这不是"守卫失效"，而是它守的东西确实搬走了：工作台的 11 个图表指标本来就
+// 全在浏览器算，indicators.yaml 的定位是"工作台图表指标"，不是"agent 侧指标
+// 目录"。Go/Python 栈仍在读 100+ 个 DuckDB 列（data_loader.py 的
+// INDICATOR_COLUMNS），但那些列由那边自己维护，不经本文件。
+//
+// 所以断言从"必须有列"改成"声明了列就必须拼写正确" —— 前者是让测试为一个
+// 已经不存在的前提硬性失败，后者守的是仍然成立的那半条不变量。
 func TestDuckDBColumnContractHoldsInBothStacks(t *testing.T) {
 	reg, root := loadRepoRegistry(t)
+	cols := reg.DeclaredColumns()
+	if len(cols) == 0 {
+		// 不是失败。当前全部指标都是 frontend 实现（本函数上方有说明）。
+		// 一旦有人重新声明 DuckDB 列，这个测试会立刻恢复它的逐列校验。
+		t.Skip("indicators.yaml 当前没有声明任何 DuckDB 列（工作台 11 个指标均为 " +
+			"frontend 实现）。若将来某个指标改回读列，本测试会自动重新生效。")
+	}
 	goSrc := readRepoFile(t, root, "internal/agent/tools/hithink_finance/analysis/data.go")
 	pySrc := readRepoFile(t, root, "python-service/zettaranc/data_loader.py")
 
-	cols := reg.DeclaredColumns()
-	if len(cols) == 0 {
-		t.Fatal("indicators.yaml 没有声明任何 DuckDB 列")
-	}
 	for _, c := range cols {
 		if !bytes.Contains(goSrc, []byte(c.Column)) {
 			t.Errorf("Go 栈 data.go 里找不到列 %s（指标 %s 声明要用它）%s",
@@ -922,10 +939,18 @@ func gapNote(gap *KnownGap) string {
 //
 // 这里给每条缺口一个**可机械检查的断言**：条件一旦不再成立就报错，让人把条目
 // 移走。仍成立则通过 —— 缺口本身由各自对应的测试负责报警。
+// 本清单**现在是空的**（2026-10-01 全部关闭），而那正是本测试想要的状态：
+// 清单只增不减是它的天敌，一旦缺口都修完却没有东西提示删条目，它就会退化成
+// 一份没人核对的陈旧文档。所以空清单**通过**，并在说明里点出这一点 ——
+// 让下一个读到这个空的人知道"这里是空的"是有意为之，而不是忘了填。
+//
+// 反向不变量仍然守着：有人登记了新缺口却没写断言分支，会在这里报错。
 func TestKnownGapsAreStillTrue(t *testing.T) {
 	reg, root := loadRepoRegistry(t)
 	if len(reg.KnownGaps) == 0 {
-		t.Fatal("known_gaps 是空的，但仓库里确实还有未修的跨栈失真（见 yaml 注释）")
+		t.Log("known_gaps 为空 —— 全部已知跨栈失真已关闭。" +
+			"这是期望状态；若你刚修好一条缺口，记得把对应条目删掉。")
+		return
 	}
 
 	frontendSrc := readRepoFile(t, root,
@@ -966,7 +991,15 @@ func TestKnownGapsAreStillTrue(t *testing.T) {
 // indicator means two different things depending on which stack answers.
 func TestPeriodsMatchTheDuckDBColumnNames(t *testing.T) {
 	reg, _ := loadRepoRegistry(t)
-	for _, c := range reg.DeclaredColumns() {
+	cols := reg.DeclaredColumns()
+	if len(cols) == 0 {
+		// 与上面两条同因：2026-10-01 起本文件没有声明的 DuckDB 列，循环体
+		// 一次都不执行。不加这道门的话它会**静默地空转通过** —— 一个跑
+		// 零次断言却显示 PASS 的测试比没有更危险，它让人以为这条不变量
+		// 还守着。
+		t.Skip("当前没有声明的 DuckDB 列，列名里的周期无从比对")
+	}
+	for _, c := range cols {
 		got := periodsInColumnName(c.Column)
 		if len(got) == 0 {
 			continue // e.g. volume_obv, statistics_zscore_20 has one

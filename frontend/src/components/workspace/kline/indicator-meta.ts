@@ -331,14 +331,9 @@ export const INDICATOR_META: IndicatorRegistryMeta = {
         }
       ],
       storage: {
-        backend: "duckdb",
-        duckdbView: "v_daily_qfq",
-        columns: [
-          {
-            alias: "vol",
-            column: "volume"
-          }
-        ]
+        backend: "frontend",
+        duckdbView: "",
+        columns: []
       }
     },
     {
@@ -397,22 +392,9 @@ export const INDICATOR_META: IndicatorRegistryMeta = {
         }
       ],
       storage: {
-        backend: "duckdb",
-        duckdbView: "v_indicators_daily",
-        columns: [
-          {
-            alias: "dif",
-            column: "momentum_macd_12_26_9_macd"
-          },
-          {
-            alias: "dea",
-            column: "momentum_macd_12_26_9_signal"
-          },
-          {
-            alias: "macd_hist",
-            column: "momentum_macd_12_26_9_hist"
-          }
-        ]
+        backend: "frontend",
+        duckdbView: "",
+        columns: []
       }
     },
     {
@@ -471,22 +453,9 @@ export const INDICATOR_META: IndicatorRegistryMeta = {
         }
       ],
       storage: {
-        backend: "duckdb",
-        duckdbView: "v_indicators_daily",
-        columns: [
-          {
-            alias: "k",
-            column: "momentum_kdj_9_3_k"
-          },
-          {
-            alias: "d",
-            column: "momentum_kdj_9_3_d"
-          },
-          {
-            alias: "j",
-            column: "momentum_kdj_9_3_j"
-          }
-        ]
+        backend: "frontend",
+        duckdbView: "",
+        columns: []
       }
     },
     {

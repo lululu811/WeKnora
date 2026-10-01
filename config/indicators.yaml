@@ -204,10 +204,14 @@ indicators:
         line_width: 1.2
         params: [10]
     storage:
-      backend: duckdb
-      duckdb_view: v_daily_qfq
-      columns:
-        - { alias: vol, column: volume }
+      # 2026-10-01 从 duckdb 改为 frontend，与 Z_MACD / Z_KDJ 同理。
+      # 此前声明走 v_daily_qfq 的 volume，但工作台的 calcVOL 从 /api/kline
+      # 返回的 OHLCV 里取量（那条链路本来就传 volume），没有单独查过这一列。
+      # 顺带说明：这一项只有 volume 一个别名，而它有 3 条 series（vol/ma5/ma10）——
+      # ma5/ma10 是前端算的，此前声明里根本没有它们的列，即便走 duckdb 也对不上。
+      backend: frontend
+      duckdb_view: ""
+      columns: []
 
   - id: Z_MACD
     short_name: MACD
@@ -247,14 +251,23 @@ indicators:
         color: macd_hist
         params: [12, 26, 9]
     storage:
-      backend: duckdb
-      duckdb_view: v_indicators_daily
-      # 注意 dif/dea/macd 三列：DuckDB 的 hist 是**已经乘过 2** 的，
-      # 前端 calcMACD 也用 (dif-dea)*2。这个"×2"是历史约定，不要单方面改。
-      columns:
-        - { alias: dif, column: momentum_macd_12_26_9_macd }
-        - { alias: dea, column: momentum_macd_12_26_9_signal }
-        - { alias: macd_hist, column: momentum_macd_12_26_9_hist }
+      # 2026-10-01 从 duckdb 改为 frontend。此前声明走 v_indicators_daily 的
+      # momentum_macd_12_26_9_* 三列，但工作台从未读过它们 —— indicators.ts 的
+      # calcMACD 从同一份 OHLCV 在浏览器里算了一遍，`/api/indicators` 端点至今
+      # 零调用方。声明"走列"而实际本地算，是一处会骗人的失真：改公式时去改列的
+      # 生产者（a-stock 侧）不会影响工作台显示。
+      #
+      # 选 frontend 而不是改前端读列的理由:
+      #  - DuckDB 那份由 conformance 的 Go reference 间接保证（refMACD 与前端
+      #    逐 bar 对照，容差 0.01），两边不会各自漂;
+      #  - 改前端读列要给 /api/kline 加协议（一次返回 1035 万行指标列的前缀
+      #    膨胀），引入新的网络失败模式，换来的是"概念上更纯"。
+      backend: frontend
+      duckdb_view: ""
+      # 前端口径：hist = (dif - dea) * 2。DuckDB 的
+      # momentum_macd_12_26_9_hist 同样是**已经乘过 2** 的 —— 这个「×2」是历史
+      # 约定，两边一致，不要单方面改。
+      columns: []
 
   - id: Z_KDJ
     short_name: KDJ
@@ -294,15 +307,17 @@ indicators:
         line_width: 1.3
         params: [9, 3, 3]
     storage:
-      backend: duckdb
-      duckdb_view: v_indicators_daily
-      # 与 MACD 不同：Go 的 data.go **没有**读 kdj 三列，Python 的
-      # data_loader.py 有（momentum_kdj_9_3_k/d/j）。这是三栈不一致的实锤，
-      # 修它需要改 data.go —— 见本 worker 的报告，不在这里偷偷替别人改。
-      columns:
-        - { alias: k, column: momentum_kdj_9_3_k }
-        - { alias: d, column: momentum_kdj_9_3_d }
-        - { alias: j, column: momentum_kdj_9_3_j }
+      # 2026-10-01 从 duckdb 改为 frontend，与 Z_MACD / Z_VOL 同理。
+      # 此前声明走 v_indicators_daily 的 momentum_kdj_9_3_k/d/j，但工作台的
+      # calcKDJ 从 OHLCV 在浏览器里算 —— /api/indicators 零调用方。
+      #
+      # 这一项此前还带着一处更旧的注释说「Go 的 data.go 没有读 kdj 三列」，
+      # 那条早已修掉（由 analysis/kdj_contract_test.go 拿真实 DuckDB fixture
+      # 守住非零）。Go 侧现在确实读这三列，但那是 **agent 的 analysis 工具**在读，
+      # 与工作台无关：工作台是浏览器直连 python-service，两条链路互不相干。
+      backend: frontend
+      duckdb_view: ""
+      columns: []
 
   - id: ZX_BRICK
     short_name: ZX砖型图
@@ -482,24 +497,13 @@ known_gaps:
 # 且 a-stock/strategies 零依赖它 —— 随该服务一并删除。工作台那份由
 # conformance_test.go 的 refZXBrick 交叉验证，保持不变。
 #
-# 下面一条是**当前仍然成立**的失真。TestKnownGapsAreStillTrue 会在它被
-# 修好时报警提醒删除 —— 写在这里是为了说明"这个失败是已知的、该由谁去修"，
-# 不是为了让测试变绿。
+# frontend_recomputes_declared_duckdb_indicators 已于 2026-10-01 修复并移出：
+# Z_MACD / Z_KDJ / Z_VOL 的 storage 从 duckdb 改成 frontend，承认工作台本来
+# 就在浏览器里算（/api/indicators 至今零调用方，那三条"走列"的声明是假的）。
+# 代价是放弃"工作台指标走预计算列"这个说法，收益是不再有会骗人的声明。
+#
+# **本清单现在是空的** —— 11 个工作台指标全部 frontend 实现，已知缺口都清完了。
+# TestKnownGapsAreStillTrue 在清单为空时会失败（提醒别让它悄悄变空），并在
+# 有人登记新缺口却没有断言时报警。
 
-  - id: frontend_recomputes_declared_duckdb_indicators
-    indicator: Z_MACD
-    stacks: [frontend, duckdb]
-    detected_by: internal/indicators/conformance_test.go
-    description: >-
-      Z_MACD / Z_KDJ / Z_VOL 声明 storage.backend: duckdb 并列出了
-      momentum_macd_12_26_9_* / momentum_kdj_9_3_* / volume 这些列，但工作台
-      从未读过它们 —— indicators.ts 的 calcMACD(:218) / calcKDJ(:251) /
-      calcVOL(:193) 全都从同一份 OHLCV 在浏览器里重算了一遍。
-      GET /api/indicators 端点（python-service/main.py:1668）至今**零调用方**。
-      后果：同一个指标在两个地方各有一份实现，任何一侧的公式修正都不会传导到
-      另一侧，conformance 测试也只比 Go reference 与 TS，够不到 DuckDB 那一列。
-    resolution: >-
-      让 /api/kline 一次返回 OHLCV + 这些预计算列，前端改为读列；
-      或把 Z_MACD/Z_KDJ/Z_VOL 的 storage 改成 frontend 并承认前端是唯一实现。
-      两者选其一，但不能维持"声明走列、实际本地算"的现状。
 

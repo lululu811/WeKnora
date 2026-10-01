@@ -282,14 +282,9 @@ INDICATOR_META: Dict[str, Any] = {
         }
       ],
       "storage": {
-        "backend": "duckdb",
-        "duckdbView": "v_daily_qfq",
-        "columns": [
-          {
-            "alias": "vol",
-            "column": "volume"
-          }
-        ]
+        "backend": "frontend",
+        "duckdbView": "",
+        "columns": []
       }
     },
     {
@@ -348,22 +343,9 @@ INDICATOR_META: Dict[str, Any] = {
         }
       ],
       "storage": {
-        "backend": "duckdb",
-        "duckdbView": "v_indicators_daily",
-        "columns": [
-          {
-            "alias": "dif",
-            "column": "momentum_macd_12_26_9_macd"
-          },
-          {
-            "alias": "dea",
-            "column": "momentum_macd_12_26_9_signal"
-          },
-          {
-            "alias": "macd_hist",
-            "column": "momentum_macd_12_26_9_hist"
-          }
-        ]
+        "backend": "frontend",
+        "duckdbView": "",
+        "columns": []
       }
     },
     {
@@ -422,22 +404,9 @@ INDICATOR_META: Dict[str, Any] = {
         }
       ],
       "storage": {
-        "backend": "duckdb",
-        "duckdbView": "v_indicators_daily",
-        "columns": [
-          {
-            "alias": "k",
-            "column": "momentum_kdj_9_3_k"
-          },
-          {
-            "alias": "d",
-            "column": "momentum_kdj_9_3_d"
-          },
-          {
-            "alias": "j",
-            "column": "momentum_kdj_9_3_j"
-          }
-        ]
+        "backend": "frontend",
+        "duckdbView": "",
+        "columns": []
       }
     },
     {
@@ -652,19 +621,7 @@ INDICATOR_META: Dict[str, Any] = {
       ]
     }
   ],
-  "knownGaps": [
-    {
-      "id": "frontend_recomputes_declared_duckdb_indicators",
-      "indicator": "Z_MACD",
-      "stacks": [
-        "frontend",
-        "duckdb"
-      ],
-      "detectedBy": "internal/indicators/conformance_test.go",
-      "description": "Z_MACD / Z_KDJ / Z_VOL 声明 storage.backend: duckdb 并列出了 momentum_macd_12_26_9_* / momentum_kdj_9_3_* / volume 这些列，但工作台 从未读过它们 —— indicators.ts 的 calcMACD(:218) / calcKDJ(:251) / calcVOL(:193) 全都从同一份 OHLCV 在浏览器里重算了一遍。 GET /api/indicators 端点（python-service/main.py:1668）至今**零调用方**。 后果：同一个指标在两个地方各有一份实现，任何一侧的公式修正都不会传导到 另一侧，conformance 测试也只比 Go reference 与 TS，够不到 DuckDB 那一列。",
-      "resolution": "让 /api/kline 一次返回 OHLCV + 这些预计算列，前端改为读列； 或把 Z_MACD/Z_KDJ/Z_VOL 的 storage 改成 frontend 并承认前端是唯一实现。 两者选其一，但不能维持\"声明走列、实际本地算\"的现状。"
-    }
-  ]
+  "knownGaps": []
 }
 
 
