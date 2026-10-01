@@ -333,7 +333,7 @@ async def _maybe_reconcile(
     if reconciler is not None:
         return await reconciler(thscode, period, report_type, records)
 
-    from .reconcile import apply_reconcile, get_financials_source, reconcile_records
+    from .reconcile import finalize_status, get_financials_source, reconcile_records
 
     src = get_financials_source()
     if src is None:
@@ -343,7 +343,7 @@ async def _maybe_reconcile(
         results = await reconcile_records(
             src, records, thscode=thscode, period=period, report_type=report_type
         )
-        return apply_reconcile(records, results)
+        return finalize_status(records, results)
     except Exception as exc:  # noqa: BLE001
         logger.warning("对账失败，保留抽取原状态：%s", exc)
         return records

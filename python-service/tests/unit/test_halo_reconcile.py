@@ -176,12 +176,23 @@ class TestCompareField:
         assert "不以 DuckDB 值补位" in r.reason
 
     def test_inventory_uses_wider_threshold(self):
-        """存货是反推值，5% 容差。5.5% 超阈值、4.5% 通过。"""
+        """存货参照值是反推量，容差 20%。
+
+        参照值 = 营业成本 / 存货周转率，而周转率分母是**平均**存货；年报给的是
+        **期末**余额。茅台实测期末 614.27 亿 vs 反推均值 578.79 亿，差 5.78%
+        纯属口径。所以 5% 阈值会把正常的存货增减误报成"抽取被证伪"。
+        """
         base = _ref()
-        assert rc.compare_field("inventory", base.inventory_estimate * 1.045,
-                                base, STATUS_PENDING).passed is True
-        assert rc.compare_field("inventory", base.inventory_estimate * 1.055,
-                                base, STATUS_PENDING).passed is False
+        # 5.78% —— 真实茅台年报的实测差异，必须通过
+        r = rc.compare_field("inventory", base.inventory_estimate * 1.0578,
+                             base, STATUS_PENDING)
+        assert r.passed is True
+        assert r.reason and "口径" in r.reason, "存货结论必须带出口径说明"
+
+        # 但上界仍要兜住量级错误（抽到附注编号 10.00 这类会差几个数量级）
+        far = rc.compare_field("inventory", base.inventory_estimate * 1.5,
+                               base, STATUS_PENDING)
+        assert far.passed is False and far.status_after == STATUS_DISPUTED
 
     def test_net_profit_uses_not_parent_holder(self):
         """用净利润，不是归母。拿归母来比会差一点点并被 1% 阈值判成冲突。"""

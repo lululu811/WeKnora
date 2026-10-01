@@ -42,6 +42,13 @@ STATUS_VERIFIED = "verified"
 STATUS_DISPUTED = "disputed"
 STATUS_PENDING = "pending"
 
+# verified 的来源标注。两者都算可信，但依据不同，审计时必须能分开看：
+# reconcile = 与 DuckDB 逐位对账通过，是直接的证据；
+# pipeline  = 该 scope 下有口径的字段全部对账通过，说明抽取器本身准，本值
+#             沿用这份可信度（详见 reconcile.promote_by_pipeline 的说明）。
+VERIFIED_BY_RECONCILE = "reconcile"
+VERIFIED_BY_PIPELINE = "pipeline"
+
 # 报表口径。report_type 与 DuckDB 的 period 列（annual/quarterly）不同：
 # 这里要区分年报/半年报/季报，因为员工数等字段只在年报出现。
 REPORT_ANNUAL = "annual"
@@ -74,6 +81,7 @@ CREATE TABLE IF NOT EXISTS halo_filing_facts (
     extract_by   TEXT,
     status       TEXT NOT NULL,
     confidence   REAL,
+    verified_by  TEXT,
     verified_at  TEXT,
     PRIMARY KEY (thscode, period, report_type, field, scope)
 );
@@ -148,6 +156,7 @@ class FactStore:
                 r.get("extract_by"),
                 status,
                 r.get("confidence"),
+                r.get("verified_by"),
                 r.get("verified_at") or (now if status == STATUS_VERIFIED else None),
             ))
         if not rows:
@@ -157,8 +166,9 @@ class FactStore:
                 """
                 INSERT INTO halo_filing_facts
                     (thscode, period, report_type, field, value, unit, scope,
-                     source_page, raw_text, extract_by, status, confidence, verified_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     source_page, raw_text, extract_by, status, confidence,
+                     verified_by, verified_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT (thscode, period, report_type, field, scope) DO UPDATE SET
                     value       = excluded.value,
                     unit        = excluded.unit,
@@ -167,6 +177,7 @@ class FactStore:
                     extract_by  = excluded.extract_by,
                     status      = excluded.status,
                     confidence  = excluded.confidence,
+                    verified_by = excluded.verified_by,
                     verified_at = excluded.verified_at
                 """,
                 rows,

@@ -7,6 +7,8 @@ DuckDB 里的 hithink 数据是对账的尺子，不是裁判。
 from .store import (
     EXTRACT_LLM,
     EXTRACT_RULE,
+    VERIFIED_BY_PIPELINE,
+    VERIFIED_BY_RECONCILE,
     FactStore,
     REPORT_ANNUAL,
     REPORT_H1,
@@ -32,4 +34,6 @@ __all__ = [
     "STATUS_DISPUTED",
     "STATUS_PENDING",
     "STATUS_VERIFIED",
+    "VERIFIED_BY_PIPELINE",
+    "VERIFIED_BY_RECONCILE",
 ]
