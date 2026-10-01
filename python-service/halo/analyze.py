@@ -297,7 +297,63 @@ def render_markdown(result: Dict[str, Any]) -> str:
         L.append(f"分析：{{{s['dimension']}_analysis}}")
         L.append("")
 
-    L.append("## 五、综合评分")
+    # --- 第十二章：产业链定位 ---
+    # 素材由 Python 备好，**判定由 AI 做**。不移植 halo-skill 的 Serenity：
+    # 它靠「经营范围里有没有某个词」查表拼装，一半字段是全常量（所有公司
+    # 逐字相同），还会把医用敷料公司判成「半导体」。这里给的是真实营收结构
+    # 与毛利率 + 行业归属，AI 读这些比查表可靠得多。
+    segs = result.get("narratives", {}).get("business_segments") or {}
+    L.append("## 五、产业链定位")
+    L.append("")
+    if segs:
+        for dim, blk in segs.items():
+            L.append(f"### 主营业务构成 · 分{dim}")
+            L.append("")
+            L.append("| 业务 | 收入 | 占比 | 毛利率 |")
+            L.append("|:--|--:|--:|--:|")
+            for x in blk.get("rows", []):
+                L.append(
+                    f"| {x['segment']} | {x['revenue'] / 1e8:,.2f} 亿 | "
+                    f"{(x.get('share') or 0) * 100:.1f}% | "
+                    f"{x['gross_margin'] * 100:.1f}% |"
+                    if x.get("revenue") else f"| {x['segment']} | - | - | - |"
+                )
+            L.append("")
+        L.append("> 分行业/分产品/分地区/分销售模式是同一收入的四种切法，各维度内占比"
+                 "之和为 100%，**不可跨维度相加**。")
+        L.append("")
+    ind_map = (result.get("narratives", {}).get("industry_map") or {})
+    if ind_map.get("level1") or ind_map.get("level2"):
+        L.append(f"**行业归属**：一级 {ind_map.get('level1') or '—'} ／ "
+                 f"二级 {ind_map.get('level2') or '—'}")
+        L.append("")
+    ext = result.get("external") or {}
+    vault = ((ext.get("datacenter") or {}).get("valuation_percentiles") or {})
+    if vault:
+        L.append("**估值历史分位**：" + "、".join(
+            f"{k.upper()} {v['value']:.1f}（{v['percentile']:.0f}%）"
+            for k, v in vault.items() if v.get("value") is not None
+        ))
+        L.append("")
+
+    L.append("**判定**（基于上表真实营收结构与毛利率推断，不要套模板）：")
+    L.append("")
+    L.append("- 产业链位置：`{{chain_position}}`")
+    L.append("- 关键瓶颈：`{{bottleneck}}`")
+    L.append("- 稀缺性评级：`{{scarcity_rating}}`")
+    L.append("- 判定依据：`{{chain_evidence}}`")
+    L.append("")
+
+    ext_section = (result.get("narratives", {}).get("research_reports") or [])
+    if ext_section:
+        L.append("### 附：研报观点（第三方观点，不是事实）")
+        L.append("")
+        for r in ext_section[:6]:
+            L.append(f"- [{r.get('rating_bucket') or '未分类'}] {r.get('org')} "
+                     f"{r.get('date')}：{r.get('title')}")
+        L.append("")
+
+    L.append("## 六、综合评分")
     L.append("")
     L.append("先给出九个维度的分数，再由 Python 按权重复算校验：")
     L.append("")
@@ -312,7 +368,8 @@ def render_markdown(result: Dict[str, Any]) -> str:
     L.append("")
     L.append("声明综合分：`{{comprehensive_score}}` 声明评级：`{{comprehensive_rating}}`")
     L.append("")
-    L.append("> 复算容差 0.05，且声明评级必须与复算分同档。")
+    L.append("> 复算容差 0.05，且声明评级必须与复算分同档。**用 halo.verify 提交，"
+             "不要自己心算。**")
     L.append("")
     L.append("---")
     L.append("")
@@ -339,28 +396,84 @@ def build_narratives(segment_rows: List[Dict[str, Any]]) -> Dict[str, Any]:
     主营构成（分部收入 + 毛利率）是产业链定位最可靠的输入 —— 真实营收结构
     带上毛利率，比「经营范围里有没有『制造』两个字」这种关键词匹配强得多。
     """
-    segments: Dict[str, Dict[str, float]] = {}
+    # 按切分维度分组：分行业 / 分产品 / 分地区 / 分销售模式 是**同一总量的
+    # 四种切法**，平铺会让读者以为它们是四个独立业务（茅台：酒类 1688 亿、
+    # 茅台酒 1465 亿、国内 1639 亿、直销 845 亿，误加会得到 5600 亿的幻觉）。
+    by_dim: Dict[str, Dict[str, Dict[str, float]]] = {}
     for row in segment_rows:
         name = row.get("value_text")
         field = row.get("field", "")
         if not name or not field.startswith("segment_"):
             continue
-        slot = segments.setdefault(name, {})
-        if field == "segment_revenue":
-            slot["revenue"] = row.get("value")
-        elif field == "segment_cost":
-            slot["cost"] = row.get("value")
-        elif field == "segment_gross_margin":
-            slot["gross_margin"] = row.get("value")
+        rest = field[len("segment_"):]
+        metric, _, dimension = rest.partition("__")
+        if not dimension:
+            dimension = "unspecified"
+        by_dim.setdefault(dimension, {}).setdefault(name, {})[metric] = row.get("value")
 
-    ordered = sorted(segments.items(), key=lambda kv: -(kv[1].get("revenue") or 0))
+    out_dims = {}
+    for dim, items in by_dim.items():
+        total = sum((v.get("revenue") or 0) for v in items.values()) or 0
+        ordered = sorted(items.items(), key=lambda kv: -(kv[1].get("revenue") or 0))
+        rows = []
+        for name, vals in ordered:
+            share = (vals["revenue"] / total) if (total and vals.get("revenue")) else None
+            rows.append({"segment": name, "share": round(share, 4) if share else None, **vals})
+        out_dims[dim] = {"rows": rows, "total_revenue": total or None}
+
     return {
-        "business_segments": [
-            {"segment": name, **vals} for name, vals in ordered
-        ],
-        "segment_count": len(ordered),
-        "has_business_breakdown": bool(ordered),
+        "business_segments": out_dims,
+        "segment_dimensions": list(out_dims.keys()),
+        "segment_count": sum(len(v["rows"]) for v in out_dims.values()),
+        "has_business_breakdown": bool(out_dims),
+        "segment_note": (
+            "分行业/分产品/分地区/分销售模式是同一总收入的四种切法，"
+            "各维度内 share 之和为 1；**不可跨维度相加**。"
+        ),
     }
+
+
+async def fetch_external(code: str, *, with_fund_flow: bool = True) -> Dict[str, Any]:
+    """拉外网数据（治理/风险/估值分位/研报/资金流）。
+
+    **默认不随 analyze 一起跑**。理由：分析是按需行为，而外网慢、会封 IP，
+    稳定档的数据（估值分位、股东户数）又是慢变量。把它做成显式可选，
+    agent 可以在需要「最新治理动态 / 研报观点」时再拉。
+
+    分档降级：稳定档（datacenter-web）与第三档（reportapi）独立可用；易封档
+    （push2his）失败只影响资金流这一项，不牵连其它。实测 push2his 封禁时
+    另两个子域完全正常 —— 这就是按子域分级而非按「东财」整体的回报。
+    """
+    from . import extdata
+
+    out: Dict[str, Any] = {
+        "enabled": True, "subdomains": {}, "errors": {},
+    }
+    buckets = [
+        ("datacenter", "stable", lambda: {
+            "valuation_percentiles": extdata.valuation_percentiles(code),
+            "holder_count_latest": extdata.holder_count(code),
+            "equity_pledge": extdata.equity_pledge(code),
+            "holder_trades": extdata.holder_trades(code, limit=5),
+            "earnings_forecast": extdata.earnings_forecast(code, limit=3),
+            "institution_surveys": extdata.institution_surveys(code, limit=3),
+        }),
+        ("reportapi", "third", lambda: {
+            "research_reports": extdata.research_reports(code, limit=8),
+        }),
+    ]
+    if with_fund_flow:
+        buckets.append(
+            ("push2his", "volatile", lambda: {"fund_flow": extdata.fund_flow(code, days=60)})
+        )
+    for name, tier, fn in buckets:
+        try:
+            out[name] = fn()
+            out["subdomains"][name] = {"tier": tier, "ok": bool(out[name])}
+        except Exception as exc:  # noqa: BLE001 —— 单档失败不牵连其它档
+            out["errors"][name] = str(exc)[:200]
+            out["subdomains"][name] = {"tier": tier, "ok": False}
+    return out
 
 
 async def analyze(
@@ -371,8 +484,14 @@ async def analyze(
     report_type: str = "annual",
     scope: str = SCOPE_CONSOLIDATED,
     pages: Optional[ExtractResult] = None,
+    include_external: bool = False,
 ) -> Dict[str, Any]:
-    """对一只股票出评分结果。"""
+    """对一只股票出评分结果。
+
+    Args:
+        include_external: 额外拉外网数据（治理/估值分位/研报）。默认关闭 ——
+            分析是按需行为，外网慢且会封 IP，需要时再显式开启。
+    """
     thscode = normalize_thscode(thscode)
     if period is None:
         period = store.latest_period(thscode, report_type)
@@ -550,5 +669,10 @@ async def analyze(
     }
     if fact_records:
         result["fresh_facts"] = [f["field"] for f in fact_records]
+    if include_external:
+        result["external"] = await fetch_external(thscode)
+        result["narratives"]["research_reports"] = [
+            r for r in (result["external"].get("reportapi") or {}).get("research_reports", [])
+        ]
     result["markdown"] = render_markdown(result)
     return result

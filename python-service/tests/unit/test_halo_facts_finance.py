@@ -107,7 +107,7 @@ def test_segment_respects_table_unit():
         "钢铁制造 322116 304546 3.4\n"
     )
     rev = {s["value_text"]: s for s in extract_business_segments(_pages(text))
-           if s["field"] == "segment_revenue"}
+           if s["field"].startswith("segment_revenue__")}
     assert rev["钢铁制造"]["value"] == pytest.approx(322116e6)
 
 
@@ -119,6 +119,33 @@ def test_segment_skips_page_without_unit_declaration():
         "钢铁制造 322116 304546 3.4\n"
     )
     assert extract_business_segments(_pages(text)) == []
+
+
+def test_segment_groups_by_the_four_cut_dimensions():
+    """分行业/分产品/分地区/分销售模式是**同一总量的四种切分**。
+
+    茅台：酒类 1688 + 茅台酒 1465 + 国内 1639 + 直销 845 平铺出来会让人
+    误加出 6749 亿的幻觉。field 名里带 __<维度> 就是为了不让下游这么算。
+    """
+    text = (
+        "单位：元 币种：人民币\n"
+        "主营业务分行业情况\n"
+        "分行业 营业收入 营业成本 毛利率\n"
+        "酒类 168800000000 14805900000 91.2\n"
+        "主营业务分产品情况\n"
+        "分产品 营业收入 营业成本 毛利率\n"
+        "茅台酒 146500000000 9500000000 93.5\n"
+        "其他系列酒 22300000000 5300000000 76.1\n"
+        "主营业务分地区情况\n"
+        "分地区 营业收入 营业成本 毛利率\n"
+        "国内 163900000000 14500000000 91.2\n"
+    )
+    segs = extract_business_segments(_pages(text))
+    dims = {s["field"].split("__", 1)[1] for s in segs if s["field"].endswith(("行业", "产品", "地区"))
+            or "__" in s["field"]}
+    assert "行业" in dims and "产品" in dims and "地区" in dims
+    prod = [s for s in segs if s["field"] == "segment_revenue__产品"]
+    assert len(prod) == 2, f"分产品表应有两行，实际 {len(prod)}"
 
 
 def test_segment_ignores_income_statement_rows():
@@ -148,8 +175,8 @@ def test_segment_drops_mismatched_cost_column():
     )
     segs = extract_business_segments(_pages(text))
     fields = {s["field"] for s in segs}
-    assert "segment_revenue" in fields
-    assert "segment_gross_margin" not in fields, "错位时不应产出毛利率"
+    assert any(f.startswith("segment_revenue__") for f in fields)
+    assert not any(f.startswith("segment_gross_margin") for f in fields), "错位时不应产出毛利率"
 
 
 # ---------------------------------------------------------------------------
@@ -163,14 +190,15 @@ def test_moutai_real_segments_and_dividend():
     pages = extract_pages(MAOTAI_PDF)
 
     segs = {s["value_text"]: s for s in extract_business_segments(pages)
-            if s["field"] == "segment_revenue"}
+            if s["field"] == "segment_revenue__产品"}
     assert segs["茅台酒"]["value"] / 1e8 == pytest.approx(1465.0, abs=0.5)
-    assert segs["酒类"]["value"] / 1e8 == pytest.approx(1687.7, abs=0.5)
     # 直销毛利率应高于批发代理（真实商业常识）
     margins = {s["value_text"]: s["value"] for s in extract_business_segments(pages)
-                if s["field"] == "segment_gross_margin"}
+                if s["field"] == "segment_gross_margin__销售模式"}
     assert margins["直销"] > margins["批发代理"]
-    assert 0.90 < margins["茅台酒"] < 0.95
+    prod_margins = {s["value_text"]: s["value"] for s in extract_business_segments(pages)
+                    if s["field"] == "segment_gross_margin__产品"}
+    assert 0.90 < prod_margins["茅台酒"] < 0.95, f"茅台酒毛利率 {prod_margins}"
 
     div = {f["field"]: f for f in extract_dividend_facts(pages)}
     assert div["dividend_total"]["value"] / 1e8 == pytest.approx(650.33, abs=0.01)
@@ -187,10 +215,10 @@ def test_baosteel_real_segments_in_million_yuan():
     pages = extract_pages(BAOSTEEL_PDF)
 
     names = {s["value_text"] for s in extract_business_segments(pages)
-             if s["field"] == "segment_revenue"}
+             if s["field"].startswith("segment_revenue__")}
     assert names == {"钢铁制造"}, f"应只有钢铁制造一个分部，实际 {names}"
     rev = [s for s in extract_business_segments(pages)
-           if s["field"] == "segment_revenue"][0]
+           if s["field"].startswith("segment_revenue__")][0]
     assert rev["value"] / 1e8 == pytest.approx(2513.5, abs=1.0), "百万元→元换算"
 
     div = {f["field"]: f for f in extract_dividend_facts(pages)}

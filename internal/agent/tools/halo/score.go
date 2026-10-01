@@ -75,6 +75,13 @@ func (t *ScoreTool) Parameters() json.RawMessage {
 				"enum":        []string{"consolidated", "parent"},
 				"default":     "consolidated",
 			},
+			"include_external": map[string]interface{}{
+				"type": "boolean",
+				"description": "额外拉外网数据：治理与风险硬信号（股权质押、股东增减持、业绩预告、" +
+					"机构调研）、PE/PB/PS/PCF 历史分位、研报评级。默认关闭 —— 分析是按需行为，" +
+					"外网慢且会触发 IP 封禁；用户问「最近有什么减持/研报怎么看/现在贵不贵」时再开。",
+				"default": false,
+			},
 		},
 		"required": []string{"thscode"},
 	}
@@ -88,6 +95,7 @@ func (t *ScoreTool) Execute(ctx context.Context, args json.RawMessage) (*types.T
 		Period     string `json:"period"`
 		ReportType string `json:"report_type"`
 		Scope      string `json:"scope"`
+		IncludeExt bool   `json:"include_external"`
 	}
 	if err := json.Unmarshal(args, &params); err != nil {
 		return &types.ToolResult{Success: false, Error: fmt.Sprintf("参数解析失败：%v", err)}, nil
@@ -104,10 +112,11 @@ func (t *ScoreTool) Execute(ctx context.Context, args json.RawMessage) (*types.T
 
 	var out map[string]any
 	req := map[string]any{
-		"thscode":     params.Thscode,
-		"period":      params.Period,
-		"report_type": params.ReportType,
-		"scope":       params.Scope,
+		"thscode":          params.Thscode,
+		"period":           params.Period,
+		"report_type":      params.ReportType,
+		"scope":            params.Scope,
+		"include_external": params.IncludeExt,
 	}
 	if err := t.client.post(ctx, "/halo/score", req, queryTimeout, &out); err != nil {
 		return &types.ToolResult{Success: false, Error: err.Error()}, nil

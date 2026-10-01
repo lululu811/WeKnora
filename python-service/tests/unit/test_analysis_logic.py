@@ -13,6 +13,7 @@ These pin the *shape* of the data contract:
 """
 
 import asyncio
+import pytest
 import subprocess
 import sys
 import time
@@ -479,3 +480,138 @@ class TestAnnotatorSourceContract:
 
         assert len(found) == 1
         assert found[0]["source"] == "llm", "显式 source 不应被 setdefault 覆盖"
+
+
+# ----------------------------------------------------------------------
+# 可绘制坐标契约：形态要能画到图上，就必须给出关键点的位置（日期 + 价格）。
+#
+# 前端按**日期**把点对齐到 K 线（与 annotate 同口径），所以 date 必须是
+# 数据里真实存在的日期串——空串或 None 会让这个点画不出来。
+#
+# 两个字段的分工：
+#   points —— 离散顶点（头肩的三个肩、双顶的两个顶）
+#   lines  —— 参考线，统一成"两端点"形状，水平线两端同价、斜线两端不同价
+# ----------------------------------------------------------------------
+
+class TestDrawableCoordinates:
+
+    @staticmethod
+    def _assert_points_ok(rows, points):
+        assert isinstance(points, list) and len(points) >= 2, "顶点至少两个才画得出线"
+        for p in points:
+            assert set(p) >= {"index", "date", "price", "label"}
+            assert isinstance(p["index"], int) and 0 <= p["index"] < len(rows)
+            assert isinstance(p["price"], float) and p["price"] > 0
+            assert p["date"] and p["date"] == str(rows[p["index"]].get("date")), \
+                "date 必须与对应 K 线一致，否则前端对不上"
+            assert p["label"]
+
+    @staticmethod
+    def _assert_lines_ok(rows, lines):
+        assert isinstance(lines, list) and lines, "至少一条参考线"
+        for ln in lines:
+            assert "label" in ln and ln["label"]
+            pts = ln["points"]
+            assert isinstance(pts, list) and len(pts) == 2, "参考线统一两端点"
+            for p in pts:
+                assert p["date"] and p["date"] == str(rows[p["index"]].get("date"))
+                assert p["price"] > 0
+
+    def test_头肩顶给出三个顶点与颈线目标(self):
+        from zettaranc.pattern import detect_head_and_shoulders
+        # 形状取自本文件已有的头肩顶用例（左肩 12 / 头 15 / 右肩 12）
+        rows = newest_first(zigzag(
+            peaks=[(10, 12.0), (30, 15.0), (50, 12.0)],
+            troughs=[(4, 9.0), (20, 10.0), (40, 10.0), (56, 10.5)],
+            n=60,
+        ))
+        found = detect_head_and_shoulders(rows)
+        assert found is not None, "这个形状在既有用例里是能触发的，不该失配"
+        self._assert_points_ok(rows, found["points"])
+        assert [p["label"] for p in found["points"]] == ["左肩", "头", "右肩"]
+        self._assert_lines_ok(rows, found["lines"])
+        labels = {ln["label"] for ln in found["lines"]}
+        assert {"颈线", "目标"} <= labels
+
+    def test_双顶双底的顶点按时间顺序(self):
+        from zettaranc.pattern import detect_double_top_bottom
+        # 两个等高的顶（PEAK_TOLERANCE 3% 之内）
+        rows = newest_first(zigzag(
+            peaks=[(20, 15.0), (40, 15.0)],
+            troughs=[(10, 10.0), (30, 12.0), (50, 12.0)],
+            n=60,
+        ))
+        found = detect_double_top_bottom(rows)
+        assert found is not None, "两个等高的顶应被判为双顶"
+        self._assert_points_ok(rows, found["points"])
+        idx = [p["index"] for p in found["points"]]
+        # rows 倒序：index 大 = 更老。按时间顺序（老 -> 新）应递减
+        assert idx == sorted(idx, reverse=True), f"顶点应按时间顺序：{idx}"
+        self._assert_lines_ok(rows, found["lines"])
+
+    def test_三角形给出上下两条边界线(self):
+        from zettaranc.pattern import detect_triangle
+        # 必须自己造行：conftest 的 newest_first 让 high/low 与 close 成同一比例，
+        # 斜率必然同号，对称三角形（上边界下移、下边界上移）在那里永远触发不了。
+        rows = []
+        for i in range(30):  # i=0 最新
+            # 振幅随「越老」越大 -> 最新端最小 = 收敛。
+            # 方向写反的话上边界会变成上移，判定条件（upper_slope < 0 表示高点下移）
+            # 就不成立，检测器直接返回 None。
+            amp = 1.0 + i * 0.15
+            rows.append({
+                "date": f"d{i:02d}", "open": 20.0,
+                "high": 20.0 + amp, "low": 20.0 - amp,
+                "close": 20.0, "vol": 1000.0,
+            })
+        found = detect_triangle(rows)
+        assert found is not None, "收敛的上下边界应被判为对称三角形"
+        self._assert_lines_ok(rows, found["lines"])
+        labels = {ln["label"] for ln in found["lines"]}
+        assert labels == {"上边界", "下边界"}
+
+    def test_边界线两端价格不同才算斜线(self):
+        from zettaranc.pattern import _boundary_lines
+        rows = newest_first([10 + i * 0.5 for i in range(40)], n=40)
+        lines = _boundary_lines(rows, 30, 5)
+        assert len(lines) == 2
+        upper = next(l for l in lines if l["label"] == "上边界")
+        # 单调上涨的数据里，上边界两端价格不应相同
+        assert upper["points"][0]["price"] != upper["points"][1]["price"]
+
+    def test_所有形态的坐标都能对齐到真实日期(self):
+        """跨检测器的统一契约：给出的 date 必须能在 rows 里找到。"""
+        from zettaranc.pattern import analyze_chart_pattern
+        rows = newest_first(zigzag(
+            [(4, 20.0), (16, 20.0), (28, 18.0)],
+            [(10, 12.0), (22, 13.0), (34, 11.0)]), n=60)
+        out = analyze_chart_pattern(rows)
+        valid_dates = {str(r.get("date")) for r in rows}
+        for p in out["patterns"]:
+            for pt in (p.get("points") or []):
+                assert pt["date"] in valid_dates, f"{p['name']} 的顶点日期不在数据里：{pt['date']}"
+            for ln in (p.get("lines") or []):
+                for pt in ln["points"]:
+                    assert pt["date"] in valid_dates, f"{p['name']} 的参考线日期不在数据里"
+
+    def test_旗杆不会横跨整段历史(self):
+        """真实数据动辄 250+ 根，旗杆必须封顶。
+
+        不封顶时 `pole = rows[consolidation_len:]` 会吃下全部历史：判出来的
+        change_pct 是区间总涨跌幅（这里会是 -70% 的"熊市旗形"），画出来的旗杆
+        线横跨一年多。短窗口的单测发现不了，所以这条用长序列守住。
+        """
+        from zettaranc.pattern import detect_flag, FLAG_POLE_MAX
+
+        closes = [100.0 - i * 0.2 for i in range(380)]   # 长期阴跌
+        closes += [24.0 + i * 0.6 for i in range(10)]    # 急涨 24.0 -> 29.4
+        closes += [29.4, 29.5, 29.3, 29.4, 29.5, 29.4, 29.5, 29.3, 29.4, 29.5]  # 横盘
+        rows = newest_first(closes)
+
+        found = detect_flag(rows)
+        assert found is not None, "急涨后横盘应被判为牛市旗形"
+        assert found["direction"] == "bullish", f"不该被整段历史带偏：{found['desc']}"
+
+        pole = next(l for l in found["lines"] if l["label"] == "旗杆")
+        span = abs(pole["points"][0]["index"] - pole["points"][1]["index"])
+        assert span <= FLAG_POLE_MAX, f"旗杆跨度 {span} 超过上限 {FLAG_POLE_MAX}"

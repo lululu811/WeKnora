@@ -9,9 +9,57 @@
 
 from typing import Dict, List, Optional
 
-from .utils import find_swings, min_int, num, nz
+from .utils import find_swings, min_int, num, nz, round2
+
+def _point(rows: List[Dict], idx: int, price: float, label: str) -> Dict:
+    """
+    一个可绘制的顶点。
+
+    `index` 是 rows 里的下标（rows[0] 最新），`date` 用于前端把它对齐到 K 线
+    ——前端按日期匹配（与 annotate 同口径），比传下标稳。
+    """
+    return {
+        "index": int(idx),
+        "date": str(rows[idx].get("date") or ""),
+        "price": round2(price),
+        "label": label,
+    }
+
+
+def _boundary_lines(rows: List[Dict], n: int, step: int) -> List[Dict]:
+    """
+    按固定步长取样，用**最老与最新**的样本连出上下两条边界线。
+
+    三角形/楔形这类形态没有离散的顶点，它们的形状就是两条收敛的边界线。
+    取样步长与检测器内部保持一致，画出来的线与判定用的线是同一组数据。
+    """
+    idxs = list(range(0, n, step))
+    if len(idxs) < 2:
+        return []
+    newest, oldest = idxs[0], idxs[-1]
+    return [
+        _line(rows, oldest, nz(rows[oldest]["high"]), newest, nz(rows[newest]["high"]), "上边界"),
+        _line(rows, oldest, nz(rows[oldest]["low"]), newest, nz(rows[newest]["low"]), "下边界"),
+    ]
+
+
+def _line(rows: List[Dict], i1: int, p1: float, i2: int, p2: float, label: str) -> Dict:
+    """
+    一条可绘制的参考线（颈线 / 目标位 / 趋势线）。
+
+    统一成"两端点"的形状：水平线两端价格相同，斜线两端不同——前端一种画法通吃。
+    """
+    return {
+        "label": label,
+        "points": [_point(rows, i1, p1, label), _point(rows, i2, p2, label)],
+    }
+
 
 MIN_BARS = 10
+
+# 旗杆的最大长度（根）。旗形是"急涨/急跌 + 短整理"，旗杆是十几根以内的事；
+# 不封顶的话，真实数据里它会横跨整段历史，识别与绘制都失真。
+FLAG_POLE_MAX = 15
 SWING_WINDOW = 8
 SHOULDER_TOLERANCE = 0.05
 PEAK_TOLERANCE = 0.03
@@ -55,11 +103,25 @@ def detect_head_and_shoulders(rows: List[Dict]) -> Optional[Dict]:
     right_shoulder_vol = nz(rows[highs[0]]["vol"])
     volume_confirm = nz(rows[0]["vol"]) < right_shoulder_vol
 
+    # 可绘制坐标。find_swings 的下标升序、rows 倒序 => highs[0] 最新（右肩），
+    # 所以按时间顺序排是 [左肩, 头, 右肩]。
+    points = [
+        _point(rows, highs[2], left, "左肩"),
+        _point(rows, highs[1], head, "头"),
+        _point(rows, highs[0], right, "右肩"),
+    ]
+    lines = [
+        _line(rows, highs[2], neckline, highs[0], neckline, "颈线"),
+        _line(rows, highs[2], target, highs[0], target, "目标"),
+    ]
+
     return {
         "name": "头肩顶",
         "type": "reversal",
         "direction": "bearish",
         "confidence": confidence,
+        "points": points,
+        "lines": lines,
         "key_levels": {
             "left_shoulder": left,
             "head": head,
@@ -94,6 +156,14 @@ def detect_double_top_bottom(rows: List[Dict]) -> Optional[Dict]:
                 "type": "reversal",
                 "direction": "bearish",
                 "confidence": 0.65,
+                "points": [
+                    _point(rows, highs[1], p1, "顶1"),
+                    _point(rows, highs[0], p2, "顶2"),
+                ],
+                "lines": [
+                    _line(rows, highs[1], neckline, highs[0], neckline, "颈线"),
+                    _line(rows, highs[1], target, highs[0], target, "目标"),
+                ],
                 "key_levels": {
                     "peak1": p1, "peak2": p2,
                     "neckline": neckline, "target": target,
@@ -114,6 +184,14 @@ def detect_double_top_bottom(rows: List[Dict]) -> Optional[Dict]:
                 "type": "reversal",
                 "direction": "bullish",
                 "confidence": 0.65,
+                "points": [
+                    _point(rows, lows[1], p1, "底1"),
+                    _point(rows, lows[0], p2, "底2"),
+                ],
+                "lines": [
+                    _line(rows, lows[1], neckline, lows[0], neckline, "颈线"),
+                    _line(rows, lows[1], target, lows[0], target, "目标"),
+                ],
                 "key_levels": {
                     "bottom1": p1, "bottom2": p2,
                     "neckline": neckline, "target": target,
@@ -150,18 +228,21 @@ def detect_triangle(rows: List[Dict]) -> Optional[Dict]:
         return {
             "name": "对称三角形", "type": "continuation", "direction": "neutral",
             "confidence": 0.6,
+            "lines": _boundary_lines(rows, n, 5),
             "desc": f"高点递减(斜率{upper_slope:.3f}) + 低点递增(斜率{lower_slope:.3f})，收敛整理中",
         }
     if abs(upper_slope) < 0.3 and lower_slope > 0.1:
         return {
             "name": "上升三角形", "type": "continuation", "direction": "bullish",
             "confidence": 0.65,
+            "lines": _boundary_lines(rows, n, 5),
             "desc": f"高点持平 + 低点递增(斜率{lower_slope:.3f})，看涨突破形态",
         }
     if upper_slope < -0.1 and abs(lower_slope) < 0.3:
         return {
             "name": "下降三角形", "type": "continuation", "direction": "bearish",
             "confidence": 0.65,
+            "lines": _boundary_lines(rows, n, 5),
             "desc": f"高点递减(斜率{upper_slope:.3f}) + 低点持平，看跌突破形态",
         }
     return None
@@ -207,6 +288,7 @@ def detect_wedge(rows: List[Dict]) -> Optional[Dict]:
         return {
             "name": "上升楔形", "type": "reversal", "direction": "bearish",
             "confidence": 0.65 if converging else 0.55,
+            "lines": _boundary_lines(rows, n, 3),
             "desc": (
                 f"高点和低点同时上升（高点斜率{peak_trend:.3f}，低点斜率{trough_trend:.3f}）"
                 + ("且振幅收敛" if converging else "但未见收敛")
@@ -216,6 +298,7 @@ def detect_wedge(rows: List[Dict]) -> Optional[Dict]:
     return {
         "name": "下降楔形", "type": "reversal", "direction": "bullish",
         "confidence": 0.65 if converging else 0.55,
+        "lines": _boundary_lines(rows, n, 3),
         "desc": (
             f"高点和低点同时下降（高点斜率{peak_trend:.3f}，低点斜率{trough_trend:.3f}）"
             + ("且振幅收敛" if converging else "但未见收敛")
@@ -237,7 +320,12 @@ def detect_flag(rows: List[Dict]) -> Optional[Dict]:
     # consolidation 是最近的一段；flag_len 为其长度
     for consolidation_len in range(3, 11):
         consolidation = rows[:consolidation_len]
-        pole = rows[consolidation_len:]
+        # 旗杆必须**紧邻**整理段，所以窗口要封顶。
+        #
+        # 原来取 `rows[consolidation_len:]`（剩下的全部历史），短窗口下单测看不出来，
+        # 但接真实数据（250+ 根）时"旗杆"会横跨一两年，change_pct 变成区间总涨跌幅，
+        # 判出来的旗形和画出来的旗杆线都是错的。标准旗形的旗杆是几根到十几根。
+        pole = rows[consolidation_len:consolidation_len + FLAG_POLE_MAX]
         if len(pole) < 2:
             continue
 
@@ -256,10 +344,21 @@ def detect_flag(rows: List[Dict]) -> Optional[Dict]:
         # 整理段净漂移
         cons_change = (drifts[0] - drifts[-1]) / drifts[-1] if drifts[-1] > 0 else 0.0
 
+        # 可绘制坐标：旗杆是一条斜线（旗杆起点 -> 整理段起点），整理段是一个矩形。
+        cons_high = max(nz(r["high"]) for r in consolidation)
+        cons_low = min(nz(r["low"]) for r in consolidation)
+        i_pole_start = consolidation_len + len(pole) - 1
+        flag_lines = [
+            _line(rows, i_pole_start, start_close, consolidation_len, end_close, "旗杆"),
+            _line(rows, consolidation_len - 1, cons_high, 0, cons_high, "整理上沿"),
+            _line(rows, consolidation_len - 1, cons_low, 0, cons_low, "整理下沿"),
+        ]
+
         if change_pct > 0 and -0.03 < cons_change < 0.03:
             return {
                 "name": "牛市旗形", "type": "continuation", "direction": "bullish",
                 "confidence": 0.55,
+                "lines": flag_lines,
                 "desc": (
                     f"{change_pct:.1f}% 急涨后横向整理{consolidation_len}日"
                     f"（净漂移{cons_change * 100:+.2f}%），看涨中继形态"
@@ -269,6 +368,7 @@ def detect_flag(rows: List[Dict]) -> Optional[Dict]:
             return {
                 "name": "熊市旗形", "type": "continuation", "direction": "bearish",
                 "confidence": 0.55,
+                "lines": flag_lines,
                 "desc": (
                     f"{change_pct:.1f}% 急跌后横向整理{consolidation_len}日"
                     f"（净漂移{cons_change * 100:+.2f}%），看跌中继形态"

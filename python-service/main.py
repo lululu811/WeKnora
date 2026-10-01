@@ -1343,6 +1343,11 @@ class HaloScoreRequest(BaseModel):
     period: Optional[str] = Field(None, description="报告期日期，默认取最新已落库期次")
     report_type: str = Field("annual", description="annual / h1 / q1 / q3")
     scope: str = Field("consolidated", description="consolidated / parent")
+    include_external: bool = Field(
+        False,
+        description="是否额外拉外网数据（治理/风险硬信号、估值历史分位、研报评级）。"
+                    "默认关闭：分析是按需行为，外网慢且可能触发 IP 封禁。",
+    )
 
 
 @app.post("/halo/score", dependencies=[Depends(require_api_key)])
@@ -1369,6 +1374,7 @@ async def halo_score(request: HaloScoreRequest) -> Dict[str, Any]:
         period=request.period,
         report_type=request.report_type,
         scope=request.scope,
+        include_external=request.include_external,
     )
     return jsonable_encoder(result)
 
@@ -1801,6 +1807,87 @@ async def get_annotations(
         "pattern_types": pattern_list,
         "annotation_count": len(filtered_ann),
         "annotations": filtered_ann,
+    }
+
+
+@app.get("/api/chart-pattern")
+@app.get("/chart-pattern")
+async def get_chart_pattern(
+    symbol: str = Query(..., description="股票代码，如 600519.SH"),
+    days: int = Query(250, ge=30, le=1000, description="回溯天数"),
+    adjust: str = Query("forward", description="复权类型: none | forward | backward"),
+):
+    """
+    形态识别接口 — 几何形态（头肩/双顶底/三角/楔形/旗形）+ 艾略特波浪。
+
+    与 `/zettaranc/analyze` 的区别：那个返回的是**给人读的分析**（描述文本为主），
+    这个返回的是**给图画的坐标**——每个形态都带关键点（日期 + 价格）与参考线
+    （颈线/目标位/趋势边界），前端可以直接落成 overlay。
+
+    行序注意：`analyze_chart_pattern` / `detect_elliott_waves` 都要求
+    **rows[0] 是最新一根**，所以这里**不能**像 annotate 那样先 reverse。
+    """
+    from datasources import registry
+    from zettaranc.data_loader import MARKET_FIELDS, normalize_row
+    from zettaranc.pattern import analyze_chart_pattern
+    from zettaranc.waves import detect_elliott_waves
+
+    thscode = _require_thscode(symbol)
+    if adjust not in _ADJUST_VIEWS:
+        raise fail(400, f"无效的复权类型: {adjust}")
+
+    market_src = registry.get("market")
+    if market_src is None:
+        raise fail(503, "market 数据源未就绪")
+
+    view = _ADJUST_VIEWS[adjust]
+    # 列名必须按分析层的约定来：检测器读的是 `vol`，而底层列叫 `volume`。
+    # 直接 `SELECT volume` 会让 detect_double_top_bottom 抛 KeyError —— 这个坑
+    # 只有走真实数据才会暴露（单测喂的是带 `vol` 的合成行）。约定集中在
+    # data_loader.MARKET_COLUMNS，这里与它保持一致。
+    fetch_limit = days + 60
+    sql = f"""
+        SELECT date, open, high, low, close, volume AS vol, turnover
+        FROM {view}
+        WHERE thscode = ?
+        ORDER BY date DESC
+        LIMIT {fetch_limit}
+    """
+
+    try:
+        raw_rows = await market_src.execute(sql, [thscode])
+    except Exception as exc:
+        raise fail(503, f"查询 K 线数据失败: {exc}") from exc
+
+    if not raw_rows:
+        raise fail(404, f"未找到股票 {thscode} 的行情数据")
+
+    # 与分析层同口径：date 走字符串，数值缺失保留 None（不用 0 冒充）。
+    rows = [normalize_row(r, MARKET_FIELDS) for r in raw_rows]
+
+    # 数据不足时如实说明，而不是静默返回空——调用方要能区分"没形态"和"没数据"。
+    insufficient: List[str] = []
+    chart_pattern = None
+    waves = None
+
+    try:
+        chart_pattern = analyze_chart_pattern(rows)
+    except ValueError as exc:
+        insufficient.append(f"chart_pattern: {exc}")
+
+    try:
+        waves = detect_elliott_waves(rows)
+    except Exception as exc:  # pragma: no cover - 防御性
+        insufficient.append(f"waves: {exc}")
+
+    return {
+        "code": 0,
+        "symbol": thscode,
+        "days": len(rows),
+        "data_source": "duckdb",
+        "chart_pattern": chart_pattern,
+        "waves": waves,
+        "insufficient_data": insufficient,
     }
 
 

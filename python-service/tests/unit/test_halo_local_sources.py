@@ -211,20 +211,26 @@ def test_analyze_segments_not_collapsed_by_field(tmp_path, monkeypatch):
          "field": "fixed_assets", "value": 1.0, "scope": "consolidated", "status": "verified"},
         # 同 field、不同 value_text：应各自成行
         {"thscode": "600519.SH", "period": "2025-12-31", "report_type": "annual",
-         "field": "segment_revenue", "value": 168_774_585_187.65, "value_text": "酒类",
+         "field": "segment_revenue__产品", "value": 168_774_585_187.65, "value_text": "酒类",
          "scope": "consolidated", "status": "verified"},
         {"thscode": "600519.SH", "period": "2025-12-31", "report_type": "annual",
-         "field": "segment_revenue", "value": 146_499_906_480.49, "value_text": "茅台酒",
+         "field": "segment_revenue__产品", "value": 146_499_906_480.49, "value_text": "茅台酒",
          "scope": "consolidated", "status": "verified"},
         {"thscode": "600519.SH", "period": "2025-12-31", "report_type": "annual",
-         "field": "segment_gross_margin", "value": 0.912, "value_text": "酒类",
+         "field": "segment_gross_margin__产品", "value": 0.912, "value_text": "酒类",
          "scope": "consolidated", "status": "verified"},
         {"thscode": "600519.SH", "period": "2025-12-31", "report_type": "annual",
-         "field": "segment_gross_margin", "value": 0.935, "value_text": "茅台酒",
+         "field": "segment_gross_margin__产品", "value": 0.935, "value_text": "茅台酒",
          "scope": "consolidated", "status": "verified"},
     ])
 
     res = run(az.analyze("600519.SH", store=store))
-    names = [s["segment"] for s in res["narratives"]["business_segments"]]
+    dims = res["narratives"]["business_segments"]
+    assert "产品" in dims, f"分部维度应保留，实际 {list(dims)}"
+    rows = dims["产品"]["rows"]
+    names = [x["segment"] for x in rows]
     assert names == ["酒类", "茅台酒"], f"分部被压成了 {names}"
+    # 同一维度内 share 之和应为 1（它们是同一总量的切分）
+    total = sum(x["share"] for x in rows if x["share"])
+    assert abs(total - 1.0) < 0.02, f"份额应归一，实得 {total}"
     assert res["narratives"]["segment_count"] == 2

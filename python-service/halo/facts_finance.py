@@ -242,48 +242,72 @@ def extract_business_segments(pages: ExtractResult) -> List[Dict[str, Any]]:
         # 不锚定表头就会把「销售费用」「研发费用」「经营活动产生的现金流量净额」
         # 一并当成业务分部抽出来 —— 数字看着正常，语义完全错。
         lines = page.text.split("\n")
-        start = None
-        for i, ln in enumerate(lines):
-            if re.search(r"主营业务分(行业|产品|地区)情况", ln):
-                start = i
-            elif start is not None and re.search(
-                r"^(公司业务|说明|注[：:]|其他说明|主营业务分销售模式)", ln
-            ):
-                start = None
-            if start is not None:
-                break
-        if start is None:
+        # 四张表是**同一个总量的四种切分**，必须按表分组：
+        #   主营业务分行业情况   酒类      1687.75 亿
+        #   主营业务分产品情况   茅台酒    1465.00 亿
+        #   主营业务分地区情况   国内      1639.24 亿
+        #   主营业务分销售模式   直销       845.43 亿
+        # 把它们平铺成一张列表，读者会以为这是四个独立业务（加起来 5600 亿），
+        # 实际上每种切分的合计都 ≈ 总营收。dimension 字段告诉下游这是哪一刀。
+        # 找出本页所有表头，逐表处理。四张表是**同一个总量的四种切分**：
+        #   主营业务分行业情况   酒类      1687.75 亿
+        #   主营业务分产品情况   茅台酒    1465.00 亿
+        #   主营业务分地区情况   国内      1639.24 亿
+        #   主营业务分销售模式   直销       845.43 亿
+        # 平铺成一张列表会让读者以为这是四个独立业务（茅台：误加得到 5600 亿），
+        # 实际上每种切分的合计都 ≈ 总营收。dimension 字段标记这是哪一刀。
+        headers = [
+            (m.start(), m.group(1))
+            for m in re.finditer(r"主营业务分(行业|产品|地区|销售模式)情况", page.text)
+        ]
+        if not headers:
             continue
+        lines = page.text.split("\n")
+        # 把字符偏移映射到行号，逐表切段
+        offsets, acc = [], 0
+        for ln in lines:
+            offsets.append(acc)
+            acc += len(ln) + 1
 
-        for line in lines[start + 1:]:
-            if re.match(r"^\s*(公司业务|说明|注[：:])", line):
-                break
-            m = re.match(
-                r"^\s*([^\s|]{2,20}?)\s+((?:[\d,]+\.\d{2})|(?:[\d,]{4,}))\s+"
-                r"((?:[\d,]+\.\d{2})|(?:[\d,]{4,}))\s*(.*)$",
-                line,
-            )
-            if not m:
-                continue
-            name, rev_tok, cost_tok, _rest = m.groups()
-            if any(k in name for k in _SEGMENT_NAME_BLOCKLIST):
-                continue
-            rev, cost = _f(rev_tok), _f(cost_tok)
-            if rev is None or rev <= 0:
-                continue
-            rev *= scale
-            if cost is not None:
-                cost *= scale
-                # 成本不可能远高于收入；越界说明列错位了，丢掉而不是产出负毛利
-                if cost > rev * 3 or cost < 0:
-                    cost = None
-            out.append(_rec("segment_revenue", rev, "CNY", page.page, line, value_text=name))
-            if cost is not None:
-                out.append(_rec("segment_cost", cost, "CNY", page.page, line, value_text=name))
-                out.append(_rec(
-                    "segment_gross_margin", round((rev - cost) / rev, 6), "ratio",
-                    page.page, line, value_text=name,
-                ))
+        def line_of(pos: int) -> int:
+            import bisect
+            return max(0, bisect.bisect_right(offsets, pos) - 1)
+
+        for idx, (pos, dimension) in enumerate(headers):
+            from_line = line_of(pos) + 1
+            to_line = line_of(headers[idx + 1][0]) if idx + 1 < len(headers) else len(lines)
+            for line in lines[from_line:to_line]:
+                if re.match(r"^\s*(公司业务|说明|注[：:]|其他说明)", line):
+                    break
+                m = re.match(
+                    r"^\s*([^\s|]{2,20}?)\s+((?:[\d,]+\.\d{2})|(?:[\d,]{4,}))\s+"
+                    r"((?:[\d,]+\.\d{2})|(?:[\d,]{4,}))\s*(.*)$",
+                    line,
+                )
+                if not m:
+                    continue
+                name, rev_tok, cost_tok, _rest = m.groups()
+                if any(k in name for k in _SEGMENT_NAME_BLOCKLIST):
+                    continue
+                rev, cost = _f(rev_tok), _f(cost_tok)
+                if rev is None or rev <= 0:
+                    continue
+                rev *= scale
+                if cost is not None:
+                    cost *= scale
+                    # 成本不可能远高于收入；越界说明列错位了，丢掉而不是产出负毛利
+                    if cost > rev * 3 or cost < 0:
+                        cost = None
+                out.append(_rec(f"segment_revenue__{dimension}", rev, "CNY",
+                                page.page, line, value_text=name))
+                if cost is not None:
+                    out.append(_rec(f"segment_cost__{dimension}", cost, "CNY",
+                                    page.page, line, value_text=name))
+                    out.append(_rec(
+                        f"segment_gross_margin__{dimension}",
+                        round((rev - cost) / rev, 6), "ratio",
+                        page.page, line, value_text=name,
+                    ))
     return out
 
 
