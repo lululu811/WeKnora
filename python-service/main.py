@@ -1259,6 +1259,102 @@ async def zettaranc_health():
     return {"success": True, "status": "healthy", "module": "zettaranc"}
 
 
+# ===== HALO 年报事实链路 =====
+
+
+class HaloSyncRequest(BaseModel):
+    """抓取并抽取一只股票的年报事实。"""
+
+    thscode: str = Field(..., description="6 位股票代码，如 600519")
+    report_type: str = Field("annual", description="annual / h1 / q1 / q3")
+    force: bool = Field(False, description="忽略缓存强制重跑")
+
+    @field_validator("report_type")
+    @classmethod
+    def _check_report_type(cls, v: str) -> str:
+        allowed = {"annual", "h1", "q1", "q3"}
+        if v not in allowed:
+            raise ValueError(f"report_type 必须是 {sorted(allowed)} 之一")
+        return v
+
+
+class HaloQueryRequest(BaseModel):
+    """读取已落库的年报事实。"""
+
+    thscode: str = Field(..., description="6 位股票代码")
+    period: Optional[str] = Field(None, description="报告期日期，如 2025-12-31")
+    report_type: Optional[str] = Field(None, description="annual / h1 / q1 / q3")
+    fields: Optional[List[str]] = Field(None, description="只要指定字段")
+    scope: Optional[str] = Field(None, description="consolidated / parent")
+    only_verified: bool = Field(True, description="是否只返回可信记录")
+
+
+@app.post("/halo/sync", dependencies=[Depends(require_api_key)])
+async def halo_sync(request: HaloSyncRequest) -> Dict[str, Any]:
+    """抓取巨潮年报 → 解析 → 抽取 → 对账 → 落表。
+
+    耗时以分钟计（下载 1–10 MB 的 PDF 并逐页解析），所以同步重活放在线程池里跑，
+    不占事件循环。
+    """
+    from halo import pipeline
+    from halo.store import FactStore
+
+    try:
+        store = FactStore()
+    except Exception as exc:
+        raise fail(503, f"事实库不可用：{exc}") from exc
+
+    try:
+        result = await pipeline.sync_filing_async(
+            request.thscode,
+            report_type=request.report_type,
+            force=request.force,
+            store=store,
+        )
+    except Exception as exc:
+        # 巨潮无该股票对应披露文件是业务错误（4xx），其余一律算服务端问题（5xx）。
+        from halo.cninfo_source import NoFilingFoundError
+        if isinstance(exc, NoFilingFoundError):
+            raise fail(404, str(exc)) from exc
+        raise fail(503, f"年报抽取失败：{exc}") from exc
+
+    return jsonable_encoder({
+        "thscode": result.thscode,
+        "report_type": result.report_type,
+        "period": result.period,
+        "cached": result.cached,
+        "pages_extracted": result.pages_extracted,
+        "anchors": result.anchors,
+        "written": result.written,
+        "status_summary": result.status_summary,
+        "missing_fields": result.missing_fields,
+        "note": result.note,
+        "records": result.records,
+    })
+
+
+@app.post("/halo/query", dependencies=[Depends(require_api_key)])
+async def halo_query(request: HaloQueryRequest) -> Dict[str, Any]:
+    """读取年报事实。只读 SQLite，秒级返回。"""
+    from halo import pipeline
+    from halo.store import FactStore
+
+    try:
+        store = FactStore()
+    except Exception as exc:
+        raise fail(503, f"事实库不可用：{exc}") from exc
+
+    return jsonable_encoder(pipeline.query_facts(
+        request.thscode,
+        store,
+        period=request.period,
+        report_type=request.report_type,
+        fields=request.fields,
+        scope=request.scope,
+        only_verified=request.only_verified,
+    ))
+
+
 # ===== KLine 与形态图表 API (前端 KLineChart Pro 直连) =====
 
 _ADJUST_VIEWS = {
