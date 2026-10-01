@@ -225,13 +225,31 @@ interface Recorded {
   dashes: number[][]
   strokes: number
   fills: number
+  /** 每次 stroke 时的线宽，用来确认光晕层比主线宽。 */
+  widths: number[]
+  /** 圆角矩形的弧角调用次数（胶囊徽章会用它描底色）。 */
+  arcTos: number
 }
 
 function recordingCtx(): { ctx: CanvasRenderingContext2D; rec: Recorded } {
-  const rec: Recorded = { moveTo: [], lineTo: [], arcs: [], texts: [], dashes: [], strokes: 0, fills: 0 }
+  const rec: Recorded = {
+    moveTo: [], lineTo: [], arcs: [], texts: [], dashes: [],
+    strokes: 0, fills: 0, widths: [], arcTos: 0,
+  }
   const ctx = {
     save() {}, restore() {},
-    beginPath() {}, stroke() { rec.strokes++ }, fill() { rec.fills++ },
+    beginPath() {},
+    stroke(this: { lineWidth: number }) { rec.strokes++; rec.widths.push(this.lineWidth) },
+    fill() { rec.fills++ },
+    arcTo() { rec.arcTos++ },
+    measureText(t: string) { return { width: String(t).length * 6 } },
+    // 画布 API 的其余部分：测试只关心上面记录的那几类调用，
+    // 其余按 no-op 补全，免得实现换个画法就报 "not a function"。
+    closePath() {}, rect() {}, ellipse() {}, clip() {},
+    translate() {}, rotate() {}, scale() {}, setTransform() {}, resetTransform() {},
+    quadraticCurveTo() {}, bezierCurveTo() {},
+    createLinearGradient() { return { addColorStop() {} } },
+    createRadialGradient() { return { addColorStop() {} } },
     moveTo(x: number, y: number) { rec.moveTo.push([x, y]) },
     lineTo(x: number, y: number) { rec.lineTo.push([x, y]) },
     arc(x: number, y: number) { rec.arcs.push([x, y]) },
@@ -269,11 +287,11 @@ test('形态轮廓：顶点连成折线、打点并标字', () => {
   assert.ok(rec.moveTo.some(([x, y]) => x === 10 && y === 988), `折线首点应为 moveTo: ${JSON.stringify(rec.moveTo)}`)
   assert.ok(rec.lineTo.some(([x, y]) => x === 30 && y === 984), '第二个顶点应连到 x=30')
   assert.ok(rec.lineTo.some(([x, y]) => x === 50 && y === 988), '第三个顶点应连到 x=50')
-  // 每个顶点一个圆点
-  assert.equal(rec.arcs.length, 3)
+  // 每个顶点两笔：深色外环 + 彩色实心点（压在 K 线上才分得清）
+  assert.equal(rec.arcs.length, 6, '3 个顶点 x (外环 + 实心)')
   assert.deepEqual(rec.arcs[0], [10, 988])
-  // 顶点标签
-  assert.deepEqual(rec.texts, ['左肩', '头', '右肩'])
+  // 顶点标签，最后再补一个形态名徽章
+  assert.deepEqual(rec.texts, ['左肩', '头', '右肩', '头肩顶'])
 })
 
 test('参考线画成虚线，不是实线', () => {
@@ -292,10 +310,10 @@ test('换算不出坐标的点被跳过，不会画到 (0,0)', () => {
     yAxis: { convertToPixel: (p: number) => 1000 - p },
   }
   drawPatternGeometry(ctx, [mkPattern()], badAxes.xAxis, badAxes.yAxis)
-  // 中间那个顶点被跳过，只剩两个可画的点 -> 只连一段
-  assert.equal(rec.arcs.length, 2, 'NaN 坐标的顶点不应打点')
+  // 中间那个顶点被跳过，只剩两个可画的点 -> 各画两笔
+  assert.equal(rec.arcs.length, 4, 'NaN 坐标的顶点不应打点')
   assert.ok(rec.arcs.every(([x]) => x !== 0), '不能兜底到 0')
-  assert.deepEqual(rec.texts, ['左肩', '右肩'], '被跳过的顶点不画标签')
+  assert.deepEqual(rec.texts, ['左肩', '右肩', '头肩顶'], '被跳过的顶点不画标签')
 })
 
 test('空输入不画任何东西', () => {
@@ -310,4 +328,21 @@ test('只有参考线、没有顶点的形态也能画', () => {
   drawPatternGeometry(ctx, [mkPattern({ points: [] })], fakeAxes.xAxis, fakeAxes.yAxis)
   assert.ok(rec.dashes.length > 0, '颈线仍然要画')
   assert.deepEqual(rec.arcs, [], '没有顶点就不打点')
+})
+
+test('形态线带光晕：同一条线画两遍，底下一遍更宽', () => {
+  const { ctx, rec } = recordingCtx()
+  drawPatternGeometry(ctx, [mkPattern()], fakeAxes.xAxis, fakeAxes.yAxis)
+  // 只画 1px 主线的版本在密集 K 线里会淹掉，必须有一层更宽的半透明底。
+  // 记录里同一线段应出现两次：先宽后窄。
+  const neck = rec.moveTo.filter(([x]) => x === 10)
+  assert.ok(neck.length >= 2, `颈线应画两遍（光晕 + 主线），实际 ${neck.length} 遍`)
+  assert.ok(rec.widths.some((w) => w > 3), `应有比主线更宽的描边，宽度记录: ${rec.widths}`)
+})
+
+test('顶点标签用胶囊徽章，不是裸文字', () => {
+  const { ctx, rec } = recordingCtx()
+  drawPatternGeometry(ctx, [mkPattern()], fakeAxes.xAxis, fakeAxes.yAxis)
+  // 胶囊徽章会先描一个圆角矩形再填色；裸 fillText 在 K 线上读不出来。
+  assert.ok(rec.arcTos > 0, '标签必须走胶囊徽章（深色底 + 描边）')
 })

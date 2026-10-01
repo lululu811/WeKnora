@@ -204,24 +204,44 @@
         >
           九转序列
         </button>
-        <button
-          type="button"
-          class="toolbar__btn feature-btn"
-          :class="{ 'is-active': isPatternsEnabled }"
-          title="形态气泡：在 K 线上标出服务端识别出的形态（阳包阴、乌云压顶、十字星、B1建仓波、S1预警、关键K、暴力K），括号内是本图命中的数量"
-          @click="togglePatterns"
+        <LayerFilterDropdown
+          v-model:selection="bubbleSelection"
+          v-model:enabled="isPatternsEnabled"
+          :open="openLayerPanel === 'bubbles'"
+          @update:open="(v) => (openLayerPanel = v ? 'bubbles' : null)"
+          title="形态气泡"
+          :options="bubbleOptions"
+          empty-text="本图没有识别到形态"
+          hint="按类型勾选。括号里是「勾中/全部」。"
         >
-          形态气泡<span v-if="filteredAnnotations.length > 0" class="feature-count">({{ filteredAnnotations.length }})</span>
-        </button>
-        <button
-          type="button"
-          class="toolbar__btn feature-btn"
-          :class="{ 'is-active': isChartPatternsEnabled }"
-          title="形态轮廓：把服务端识别出的几何形态（头肩顶/双底/三角/楔形/旗形）与艾略特波浪画成轮廓——顶点连成折线，颈线与目标位画成虚线。波浪是自动数浪，只是一种可能的数法，请当作参考而非结论"
-          @click="toggleChartPatterns"
+          <button
+            type="button"
+            class="toolbar__btn feature-btn"
+            :class="{ 'is-active': isPatternsEnabled && bubbleOnCount > 0 }"
+            title="形态气泡：在 K 线上标出识别出的蜡烛形态。点开可以按类型勾选要显示哪几种"
+          >
+            形态气泡<span class="feature-count">({{ bubbleOnCount }}/{{ bubbleOptions.length }})</span>
+          </button>
+        </LayerFilterDropdown>
+        <LayerFilterDropdown
+          v-model:selection="outlineSelection"
+          v-model:enabled="isChartPatternsEnabled"
+          :open="openLayerPanel === 'outline'"
+          @update:open="(v) => (openLayerPanel = v ? 'outline' : null)"
+          title="形态轮廓"
+          :options="outlineOptions"
+          empty-text="本图没有识别到形态"
+          hint="自动数浪只是一种可能的数法，请当作参考而非结论。"
         >
-          形态轮廓<span v-if="chartPatternGeometry.length > 0" class="feature-count">({{ chartPatternGeometry.length }})</span>
-        </button>
+          <button
+            type="button"
+            class="toolbar__btn feature-btn"
+            :class="{ 'is-active': isChartPatternsEnabled && outlineOnCount > 0 }"
+            title="形态轮廓：把几何形态（头肩顶/双底/三角/楔形/旗形）与艾略特波浪画成轮廓——顶点连成折线，颈线与目标位画成虚线。点开可以选要画哪一种"
+          >
+            形态轮廓<span class="feature-count">({{ outlineOnCount }}/{{ outlineOptions.length }})</span>
+          </button>
+        </LayerFilterDropdown>
         <button
           type="button"
           class="toolbar__btn feature-btn"
@@ -357,7 +377,9 @@ import KLineCompareBar from './KLineCompareBar.vue';
 import { registerZettarancIndicators } from './indicators';
 import { MAIN_PRESETS, SUB_PRESETS } from './indicator-meta';
 import { fetchAnnotations, type Annotation, PATTERN_CONFIG } from './annotate-api';
-import { setGlobalOverlayConfig } from './overlay-drawer';
+import { setGlobalOverlayConfig, LOCAL_PATTERN_LABELS, LOCAL_PATTERN_ORDER } from './overlay-drawer';
+import LayerFilterDropdown from './LayerFilterDropdown.vue';
+import { enabledCount, isOptionEnabled, loadSelection, saveSelection, type LayerOption, type LayerSelection } from './layer-selection';
 import { fetchChartPatterns, resolvePatternGeometry, type DrawablePattern } from './chart-patterns';
 import { computeLevels, pickChartLevels } from './levels';
 import { resolveAnchorsForChart, hitTestAnchor, MAX_PERSISTENT_ANCHORS } from './anchor-render';
@@ -447,9 +469,61 @@ const annotations = ref<Annotation[]>([]);
 // 几何形态与波浪（后端识别，前端只负责画）。和标注一样是"增强信息"，
 // 拉不到就是空数组，不影响 K 线本身。
 const chartPatternGeometry = ref<DrawablePattern[]>([]);
-// 形态轮廓开关。默认打开——它比气泡更有信息量（有形状），但画面满时同样要能关。
+// 形态轮廓图层总开关。默认打开——它比气泡更有信息量（有形状），但画面满时同样要能关。
 const isChartPatternsEnabled = ref(true);
-const enabledPatterns = ref<Set<string>>(new Set(Object.keys(PATTERN_CONFIG)));
+
+// 两个图层各自的「按项勾选」。存的是**关掉的那些**（见 layer-selection.ts）：
+// 没被记过的项默认可见，所以以后新增的形态名不会静默消失。
+// 勾选跨切票、跨刷新保留——「不想看旗形」不是针对某一只票的偏好。
+// 两个下拉共用「谁开着」这一个状态：各管各的 visible 会同时展开、同 z-index 压住彼此。
+const openLayerPanel = ref<'bubbles' | 'outline' | null>(null);
+const bubbleSelection = ref<LayerSelection>(loadSelection('bubbles'));
+const outlineSelection = ref<LayerSelection>(loadSelection('outline'));
+watch(bubbleSelection, (v) => { saveSelection('bubbles', v); syncBubbleTypes(v); }, { deep: true });
+watch(outlineSelection, (v) => { saveSelection('outline', v); syncOutline(v); }, { deep: true });
+
+/**
+ * 气泡可勾选的全部类型 = 服务端 4 类 + 本地 7 类。
+ *
+ * 本地那 7 类（十字星/阳包阴…）以前根本不可关——它们硬编码在检测器里，
+ * 工具栏无从得知。只列服务端 4 类的话，用户取消勾选后仍会看到满屏十字星，
+ * 只会以为这个下拉是坏的。
+ */
+const bubbleOptions = computed<LayerOption[]>(() => [
+  ...Object.entries(PATTERN_CONFIG).map(([value, meta]) => ({
+    value,
+    label: meta.label,
+    desc: meta.desc,
+  })),
+  ...LOCAL_PATTERN_ORDER.map((value) => ({
+    value,
+    label: LOCAL_PATTERN_LABELS[value],
+    desc: '本地蜡烛形态（无需服务端标注）',
+  })),
+]);
+
+/** 轮廓可勾选的就是本图实际识别出的形态——不列当前图没有的，免得勾了不生效。 */
+const outlineOptions = computed<LayerOption[]>(() =>
+  chartPatternGeometry.value.map((p) => ({ value: p.name, label: p.name, desc: p.desc })),
+);
+
+const bubbleOnCount = computed(() => enabledCount(bubbleOptions.value, bubbleSelection.value));
+const outlineOnCount = computed(() => enabledCount(outlineOptions.value, outlineSelection.value));
+
+/** 把勾选结果推给绘制层。两个图层各写各的键，互不覆盖。 */
+const syncBubbleTypes = (sel: LayerSelection) => {
+  setGlobalOverlayConfig({ hiddenPatternTypes: sel.disabled });
+  repaintOverlay();
+};
+
+const syncOutline = (sel: LayerSelection) => {
+  setGlobalOverlayConfig({
+    patternGeometry: isChartPatternsEnabled.value
+      ? chartPatternGeometry.value.filter((p) => isOptionEnabled(sel, p.name))
+      : [],
+  });
+  repaintOverlay();
+};
 
 // 股票搜索状态
 const showSearchModal = ref(false);
@@ -486,7 +560,7 @@ const currentStockName = computed(() => {
 });
 
 const filteredAnnotations = computed(() => {
-  return annotations.value.filter((ann) => enabledPatterns.value.has(ann.type));
+  return annotations.value.filter((ann) => isOptionEnabled(bubbleSelection.value, ann.type));
 });
 
 const formatVolume = (vol: number) => {
@@ -554,11 +628,12 @@ const toggleTD9 = () => {
   repaintOverlay();
 };
 
-const togglePatterns = () => {
-  isPatternsEnabled.value = !isPatternsEnabled.value;
-  setGlobalOverlayConfig({ showPatterns: isPatternsEnabled.value });
+// 图层总开关由下拉面板里的「显示本层」驱动（v-model:enabled），这里只负责
+// 把变化推给绘制层。
+watch(isPatternsEnabled, (on) => {
+  setGlobalOverlayConfig({ showPatterns: on });
   repaintOverlay();
-};
+});
 
 // 股票搜索处理
 const handleSearchInput = () => {
@@ -661,7 +736,12 @@ const loadAnnotations = async () => {
     const symbolStr = `${currentTicker.value}.${currentExchange.value}`;
     const res = await fetchAnnotations(symbolStr, 120);
     annotations.value = res.annotations || [];
-    setGlobalOverlayConfig({ backendAnnotations: annotations.value });
+    // 标注全量交给绘制层，按类型过滤统一走 hiddenPatternTypes —— 一条过滤路径，
+    // 不会出现「计数滤了一种、绘制滤了另一种」的分叉。
+    setGlobalOverlayConfig({
+      backendAnnotations: annotations.value,
+      hiddenPatternTypes: bubbleSelection.value.disabled,
+    });
     // 标注也画成水平位，和关键位共用同一批 overlay，必须一起重画。
     redrawOverlays(chartInstance.value);
     repaintOverlay();
@@ -680,19 +760,11 @@ const loadChartPatterns = async () => {
   const res = await fetchChartPatterns(symbolStr, 250);
   const bars = getChartData(chartInstance.value);
   chartPatternGeometry.value = resolvePatternGeometry(res, bars);
-  setGlobalOverlayConfig({
-    patternGeometry: isChartPatternsEnabled.value ? chartPatternGeometry.value : [],
-  });
-  repaintOverlay();
+  // 勾选按**形态名**记，所以换了票、同名形态仍然保持用户的取舍。
+  syncOutline(outlineSelection.value);
 };
 
-const toggleChartPatterns = () => {
-  isChartPatternsEnabled.value = !isChartPatternsEnabled.value;
-  setGlobalOverlayConfig({
-    patternGeometry: isChartPatternsEnabled.value ? chartPatternGeometry.value : [],
-  });
-  repaintOverlay();
-};
+watch(isChartPatternsEnabled, () => syncOutline(outlineSelection.value));
 // 建图（首次）与整体换主题时才走这里。
 //
 // 换标的/换周期**不再**走这里 —— 那两条路径改为就地换数据（swapSymbol），
@@ -1257,6 +1329,8 @@ onMounted(() => {
     showTD9: isTD9Enabled.value,
     showPatterns: isPatternsEnabled.value,
     patternGeometry: isChartPatternsEnabled.value ? chartPatternGeometry.value : [],
+    // 恢复上次的勾选，否则首帧会把用户关掉的类型又画出来一次。
+    hiddenPatternTypes: bubbleSelection.value.disabled,
   });
 
   nextTick(() => {

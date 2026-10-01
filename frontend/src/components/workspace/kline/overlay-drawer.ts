@@ -13,12 +13,34 @@ import { zettarancPalette as PAL } from './palette';
 import { isLlmAnnotation, annotationLabel, type Annotation } from './annotate-api';
 import type { DrawablePattern } from './chart-patterns';
 
+/**
+ * 本地检测出的蜡烛形态：type -> 展示名。
+ *
+ * 检测器只认类型，名字在这里查一次。以前名字是硬编码在 `text: '阳包阴'` 里的，
+ * 于是「有哪些气泡可关」这件事在工具栏那边根本无从得知 —— 只能再抄一份，
+ * 抄完两边慢慢漂移。现在按 type 过滤、按这张表取名字。
+ */
+export const LOCAL_PATTERN_LABELS: Record<string, string> = {
+  yang_bao_yin: '阳包阴',
+  yin_bao_yang: '阴包阳',
+  dark_cloud: '乌云压顶',
+  piercing_line: '曙光初现',
+  doji: '十字星',
+  morning_star: '早晨之星',
+  evening_star: '黄昏之星',
+};
+
+/** 本地形态的展示顺序（检测器里的分支顺序，工具栏下拉沿用）。 */
+export const LOCAL_PATTERN_ORDER: string[] = Object.keys(LOCAL_PATTERN_LABELS);
+
 export interface OverlayConfig {
   showTD9: boolean;
   showPatterns: boolean;
   backendAnnotations: Annotation[];
   /** 几何形态与波浪的轮廓（下标已换算好，见 chart-patterns.ts）。 */
   patternGeometry: DrawablePattern[];
+  /** 被用户关掉的气泡类型（服务端的 4 类 + 本地的 7 类）。空 = 全显示。 */
+  hiddenPatternTypes: string[];
 }
 
 export const globalOverlayConfig: OverlayConfig = {
@@ -26,6 +48,7 @@ export const globalOverlayConfig: OverlayConfig = {
   showPatterns: true,
   backendAnnotations: [],
   patternGeometry: [],
+  hiddenPatternTypes: [],
 };
 
 export function setGlobalOverlayConfig(cfg: Partial<OverlayConfig>) {
@@ -266,7 +289,7 @@ export function detectKLinePatterns(
     if (isRed && !isP1Red && c.close > p1.open && c.open <= p1.close) {
       result[i] = {
         type: 'yang_bao_yin',
-        text: '阳包阴',
+        text: LOCAL_PATTERN_LABELS.yang_bao_yin,
         color: PAL().up,
         bgColor: 'rgba(239, 68, 68, 0.4)',
         position: 'bottom',
@@ -278,7 +301,7 @@ export function detectKLinePatterns(
     if (!isRed && isP1Red && c.close < p1.open && c.open >= p1.close) {
       result[i] = {
         type: 'yin_bao_yang',
-        text: '阴包阳',
+        text: LOCAL_PATTERN_LABELS.yin_bao_yang,
         color: PAL().down,
         bgColor: 'rgba(16, 185, 129, 0.4)',
         position: 'top',
@@ -290,7 +313,7 @@ export function detectKLinePatterns(
     if (!isRed && isP1Red && c.open > p1.high && c.close < (p1.open + p1.close) / 2) {
       result[i] = {
         type: 'dark_cloud',
-        text: '乌云压顶',
+        text: LOCAL_PATTERN_LABELS.dark_cloud,
         color: PAL().patternCloud,
         bgColor: 'rgba(6, 182, 212, 0.4)',
         position: 'top',
@@ -302,7 +325,7 @@ export function detectKLinePatterns(
     if (isRed && !isP1Red && c.open < p1.low && c.close > (p1.open + p1.close) / 2) {
       result[i] = {
         type: 'piercing_line',
-        text: '曙光初现',
+        text: LOCAL_PATTERN_LABELS.piercing_line,
         color: PAL().patternDawn,
         bgColor: 'rgba(244, 63, 94, 0.4)',
         position: 'bottom',
@@ -314,7 +337,7 @@ export function detectKLinePatterns(
     if (Math.abs(c.close - c.open) / range < 0.1 && range / c.open > 0.015) {
       result[i] = {
         type: 'doji',
-        text: '十字星',
+        text: LOCAL_PATTERN_LABELS.doji,
         color: PAL().patternDoji,
         bgColor: 'rgba(56, 189, 248, 0.4)',
         position: isRed ? 'bottom' : 'top',
@@ -326,7 +349,7 @@ export function detectKLinePatterns(
     if (!isP2Red && (p1.high - p1.low) > 0 && Math.abs(p1.close - p1.open) / (p1.high - p1.low) < 0.3 && isRed && c.close > (p2.open + p2.close) / 2) {
       result[i] = {
         type: 'morning_star',
-        text: '早晨之星',
+        text: LOCAL_PATTERN_LABELS.morning_star,
         color: PAL().patternMorningStar,
         bgColor: 'rgba(225, 29, 72, 0.4)',
         position: 'bottom',
@@ -338,7 +361,7 @@ export function detectKLinePatterns(
     if (isP2Red && (p1.high - p1.low) > 0 && Math.abs(p1.close - p1.open) / (p1.high - p1.low) < 0.3 && !isRed && c.close < (p2.open + p2.close) / 2) {
       result[i] = {
         type: 'evening_star',
-        text: '黄昏之星',
+        text: LOCAL_PATTERN_LABELS.evening_star,
         color: PAL().down,
         bgColor: 'rgba(16, 185, 129, 0.4)',
         position: 'top',
@@ -573,18 +596,21 @@ export function drawMainCanvasTongHuaShun(
     backendAnnotations?: Annotation[];
     /** 几何形态与波浪的轮廓（下标已换算好，见 chart-patterns.ts）。 */
     patternGeometry?: DrawablePattern[];
+    /** 被用户关掉的气泡类型。 */
+    hiddenPatternTypes?: string[];
   } = {},
 ) {
-  const { showTD9 = true, showPatterns = true, backendAnnotations = [], patternGeometry = [] } = options;
+  const {
+    showTD9 = true,
+    showPatterns = true,
+    backendAnnotations = [],
+    patternGeometry = [],
+    hiddenPatternTypes = [],
+  } = options;
   if (!kLineDataList || kLineDataList.length === 0) return;
 
   const from = Math.max(0, visibleRange.from);
   const to = Math.min(kLineDataList.length - 1, visibleRange.to);
-
-  // 0. 几何形态与波浪的轮廓画在最底层，避免盖住 K 线本身
-  if (patternGeometry.length > 0) {
-    drawPatternGeometry(ctx, patternGeometry, xAxis, yAxis);
-  }
 
   // 1. 绘制最高价与最低价引导标签
   drawHighLowPriceMarks(ctx, kLineDataList, from, to, xAxis, yAxis);
@@ -606,7 +632,12 @@ export function drawMainCanvasTongHuaShun(
 
   // 3. 绘制形态胶囊徽章 (避让同柱九转标记)
   if (showPatterns) {
-    const patterns = detectKLinePatterns(kLineDataList, backendAnnotations);
+    const detected = detectKLinePatterns(kLineDataList, backendAnnotations);
+    // 过滤必须发生在挑点之前：先挑再过滤的话，被关掉的类型仍然占着间距名额，
+    // 结果是「关掉了 A 类，B 类的气泡反而更稀」。
+    const patterns = hiddenPatternTypes.length > 0
+      ? detected.map((p) => (p && hiddenPatternTypes.includes(p.type) ? null : p))
+      : detected;
     // 先按间距+优先级挑出要画的，再逐个绘制。直接遍历可见区间会把 30 多个
     // 胶囊叠在同一片区域上，K 线被盖住就什么都读不出来了。
     const toDraw = selectPatternIndicesToDraw(patterns, from, to, PATTERN_MIN_GAP_BARS);
@@ -625,6 +656,15 @@ export function drawMainCanvasTongHuaShun(
         drawCapsuleBadge(ctx, pat.text, x, y, pat.color, pat.bgColor, pat.position, candleY, 10);
       }
     }
+  }
+
+  // 4. 几何形态与波浪的轮廓画在**最上层**。
+  //
+  // 第一版画在最底层（避免盖住 K 线），结果是蜡烛把它们压得几乎看不见 ——
+  // 「形态有了但看不清」。形态线本身是半透明带光晕的细线，压在 K 线上不会
+  // 遮住价格读法，反而因为始终可见才起到「说」与「看」对上的作用。
+  if (patternGeometry.length > 0) {
+    drawPatternGeometry(ctx, patternGeometry, xAxis, yAxis);
   }
 }
 
@@ -658,10 +698,98 @@ function patternDirectionColor(direction: DrawablePattern['direction']): string 
   return '#94a3b8';
 }
 
+/**
+ * 画一条**压在 K 线上也读得出来**的形态线。
+ *
+ * 先铺一层更宽的半透明底（halo）再压主线。只画主线的话，红绿 K 线一密，
+ * 1px 的虚线就淹进去了 —— 这正是第一版「形态有了但看不清」的原因。
+ */
+function strokePatternLine(
+  ctx: CanvasRenderingContext2D,
+  ax: number, ay: number, bx: number, by: number,
+  color: string,
+  width: number,
+  dash: number[],
+) {
+  for (const pass of [
+    { w: width + 3, alpha: 0.16 },
+    { w: width, alpha: 0.9 },
+  ]) {
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.globalAlpha = pass.alpha;
+    ctx.lineWidth = pass.w;
+    ctx.lineCap = 'round';
+    ctx.setLineDash(dash);
+    ctx.beginPath();
+    ctx.moveTo(ax, ay);
+    ctx.lineTo(bx, by);
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
 /** 取像素坐标；轴换算不出有限值时返回 null（缩放中途可能拿到 NaN）。 */
 function safePx(axis: any, value: number): number | null {
   const px = axis?.convertToPixel?.(value);
   return Number.isFinite(px) ? px : null;
+}
+
+/** 顶点圆点：外面一圈深色，压在 K 线上不会和红绿蜡烛糊成一片。 */
+function drawVertexDot(ctx: CanvasRenderingContext2D, x: number, y: number, color: string, r = 3.2) {
+  ctx.save();
+  ctx.fillStyle = '#0f172a';
+  ctx.beginPath();
+  ctx.arc(x, y, r + 1.6, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+/**
+ * 胶囊徽章的尺寸（和 drawCapsuleBadge 里那条算法保持一致）。
+ * 避让要在画之前算出矩形，所以这里必须自己量一次。
+ */
+function badgeSize(ctx: CanvasRenderingContext2D, text: string, fontSize: number) {
+  ctx.save();
+  ctx.font = `600 ${fontSize}px -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", sans-serif`;
+  const w = ctx.measureText(text).width + 12;
+  ctx.restore();
+  return { w, h: fontSize + 7 };
+}
+
+type PlacedLabel = { x: number; y: number; w: number; h: number };
+
+/**
+ * 给标签找一个不压住别人的位置。
+ *
+ * 形态一多，顶点标签和形态名就会叠在一起 —— 叠住的标签比不画还难读，
+ * 所以这里逐个记下已占的矩形，撞上了就往上让一行。
+ */
+function placeLabel(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  cx: number,
+  cy: number,
+  fontSize: number,
+  placed: PlacedLabel[],
+): number {
+  const { w, h } = badgeSize(ctx, text, fontSize);
+  let y = cy;
+  for (let guard = 0; guard < 24; guard++) {
+    const left = cx - w / 2;
+    const top = y - h / 2;
+    const hit = placed.find(
+      (r) => !(left + w < r.x || r.x + r.w < left || top + h < r.y || r.y + r.h < top),
+    );
+    if (!hit) break;
+    y = hit.y - h - 3;
+  }
+  placed.push({ x: cx - w / 2, y: y - h / 2, w, h });
+  return y;
 }
 
 export function drawPatternGeometry(
@@ -672,25 +800,20 @@ export function drawPatternGeometry(
 ) {
   if (!patterns || patterns.length === 0) return;
 
+  // 一次绘制内共享的标签占位表：形态之间也要互相避让，不然两个形态名会叠住。
+  const placed: PlacedLabel[] = [];
+
   for (const pat of patterns) {
     const color = patternDirectionColor(pat.direction);
 
-    // 参考线（颈线 / 目标位 / 上下边界）：虚线，不填充
+    // 参考线（颈线 / 目标位 / 上下边界）。长划线：和关键位的短虚线区分开，
+    // 免得两种「虚线水平位」混在一起分不清谁是谁。
     for (const ln of pat.lines) {
       const [a, b] = ln.points;
       const ax = safePx(xAxis, a.index), ay = safePx(yAxis, a.price);
       const bx = safePx(xAxis, b.index), by = safePx(yAxis, b.price);
       if (ax === null || ay === null || bx === null || by === null) continue;
-      ctx.save();
-      ctx.strokeStyle = color;
-      ctx.globalAlpha = 0.55;
-      ctx.lineWidth = 1;
-      ctx.setLineDash([4, 4]);
-      ctx.beginPath();
-      ctx.moveTo(ax, ay);
-      ctx.lineTo(bx, by);
-      ctx.stroke();
-      ctx.restore();
+      strokePatternLine(ctx, ax, ay, bx, by, color, 1.8, [6, 4]);
     }
 
     // 顶点轮廓：折线 + 顶点圆点 + 标签
@@ -702,30 +825,43 @@ export function drawPatternGeometry(
       px.push({ x, y, label: p.label });
     }
 
-    if (px.length >= 2) {
-      ctx.save();
-      ctx.strokeStyle = color;
-      ctx.globalAlpha = 0.9;
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      px.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
-      ctx.stroke();
-      ctx.restore();
+    for (let i = 1; i < px.length; i++) {
+      strokePatternLine(ctx, px[i - 1].x, px[i - 1].y, px[i].x, px[i].y, color, 2.2, []);
+    }
+    for (const p of px) drawVertexDot(ctx, p.x, p.y, color);
+
+    // 顶点标签走胶囊徽章（深色底 + 彩色描边）：直接 fillText 的字在 K 线上
+    // 基本读不出来，这也是第一版看不清的一部分。
+    for (const p of px) {
+      if (!p.label) continue;
+      const ly = placeLabel(ctx, p.label, p.x, p.y - 17, 10, placed);
+      drawCapsuleBadge(ctx, p.label, p.x, ly, color, color, 'top', p.y, 10);
     }
 
-    for (const p of px) {
-      ctx.save();
-      ctx.fillStyle = color;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, 2.5, 0, Math.PI * 2);
-      ctx.fill();
-      if (p.label) {
-        ctx.fillStyle = color;
-        ctx.font = '9px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText(p.label, p.x, p.y - 6);
+    // 形态名：锚在整个形态的左上角，让人一眼知道画的是什么。
+    // 楔形/旗形没有顶点（只有参考线），所以锚点要连同参考线端点一起算。
+    if (pat.name) {
+      // 锚在最左端点**自己的 y** 上（不是全局最高点）。用最高点会让所有形态名
+      // 都挤到图的上沿互相压住，反而更难读。
+      // 候选点先收齐再取最左，避免在闭包里改可选值（TS 收窄会退化成 never）。
+      const candidates: Array<{ x: number; y: number }> = [];
+      for (const p of px) candidates.push({ x: p.x, y: p.y });
+      for (const ln of pat.lines) {
+        for (const pt of ln.points) {
+          const x = safePx(xAxis, pt.index), y = safePx(yAxis, pt.price);
+          if (x !== null && y !== null) candidates.push({ x, y });
+        }
       }
-      ctx.restore();
+      let anchor: { x: number; y: number } | null = null;
+      for (const c of candidates) {
+        if (anchor === null || c.x < anchor.x) anchor = c;
+      }
+      if (anchor !== null) {
+        // 名字放端点右上角，避开端点圆点与顶点标签。
+        const cx = anchor.x + 34;
+        const ny = placeLabel(ctx, pat.name, cx, anchor.y - 14, 10, placed);
+        drawCapsuleBadge(ctx, pat.name, cx, ny, color, color, undefined, undefined, 10);
+      }
     }
   }
 }
