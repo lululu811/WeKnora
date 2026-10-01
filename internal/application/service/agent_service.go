@@ -12,6 +12,7 @@ import (
 	"github.com/Tencent/WeKnora/internal/agent/approval"
 	"github.com/Tencent/WeKnora/internal/agent/skills"
 	"github.com/Tencent/WeKnora/internal/agent/tools"
+	"github.com/Tencent/WeKnora/internal/agent/tools/halo"
 	"github.com/Tencent/WeKnora/internal/agent/tools/hithink_finance"
 	"github.com/Tencent/WeKnora/internal/agent/tools/hithink_finance/analysis"
 	"github.com/Tencent/WeKnora/internal/agent/tools/hithink_finance/financial"
@@ -137,6 +138,8 @@ type agentService struct {
 	hithinkConfig *hithink_finance.Config
 	// Zettaranc tools state (all tools now go through python-service HTTP API)
 	zettarancHTTPClient *zettaranc.HTTPClient
+	// HALO 年报事实链路的 HTTP 客户端（同样走 python-service）。
+	haloHTTPClient *halo.HTTPClient
 }
 
 // NewAgentService creates a new agent service
@@ -1429,6 +1432,22 @@ func (s *agentService) registerTools(
 			}
 			logger.Infof(ctx, "Registered zettaranc tool: %s", toolName)
 
+		// HALO 年报事实链路 — 走 python-service /halo/* 端点
+		//
+		// 与 hithink.finance.* 分开命名而不挂在它下面：HALO 的数据源是巨潮
+		// 年报 PDF 原文（法定披露平台），hithink 只是对账用的参照，两者权威
+		// 性和失败模式都不同，挂在一个命名空间下会让模型以为可以互相顶替。
+		case "halo.filing.sync", "halo.filing.query":
+			if s.haloHTTPClient == nil {
+				s.haloHTTPClient = halo.NewHTTPClient("")
+			}
+			switch toolName {
+			case "halo.filing.sync":
+				toolToRegister = halo.NewSyncTool(s.haloHTTPClient)
+			case "halo.filing.query":
+				toolToRegister = halo.NewQueryTool(s.haloHTTPClient)
+			}
+			logger.Infof(ctx, "Registered halo tool: %s", toolName)
 
 		case tools.ToolShellExec, tools.ToolReadFile, tools.LegacyToolReadSkill, tools.LegacyToolExecuteSkillScript,
 			tools.ToolListSandboxFiles, tools.LegacyToolReadSandboxFile, tools.ToolWriteSandboxFile,
