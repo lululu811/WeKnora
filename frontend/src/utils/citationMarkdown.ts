@@ -41,7 +41,13 @@ export type CitationKnowledgeRef = {
   knowledge_base_id?: string
 }
 
-function parseTagAttributes(attrString: string): Record<string, string> {
+/**
+ * 解析行内标签的属性串（`key="value"` / `key=value`，含实体还原）。
+ *
+ * 导出给 klineAnchors 复用：`<anchor/>` 与 `<kb/>`/`<web/>` 是同一族标签，
+ * 用同一个解析器才不会出现「同一个属性两种解析结果」这种漂移。
+ */
+export function parseTagAttributes(attrString: string): Record<string, string> {
   const attributes: Record<string, string> = {}
   if (!attrString) return attributes
   ATTRIBUTE_REGEX.lastIndex = 0
@@ -53,7 +59,7 @@ function parseTagAttributes(attrString: string): Record<string, string> {
   return attributes
 }
 
-function escapeHtml(text: string): string {
+export function escapeHtml(text: string): string {
   return String(text)
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')

@@ -1,5 +1,4 @@
 import type { KLineData } from 'klinecharts';
-import { inferAShareExchange } from '@/utils/aShareTicker';
 import { zettarancPalette } from './palette';
 
 /**
@@ -577,69 +576,4 @@ export function calcStockHoldingScore(dataList: KLineData[]): StockScoreResult |
     aboveYellow,
     zxBrickItem: brickItem,
   };
-}
-
-// 9. 智能解析文本中所有提及的 A 股代码与名称
-export interface MentionedStock {
-  ticker: string;
-  exchange: string;
-  name: string;
-  thscode: string;
-}
-
-// 常见股名映射字典，支持快速补全股票名称
-export const COMMON_NAME_MAP: Record<string, { name: string; exchange: string }> = {
-  '600487': { name: '亨通光电', exchange: 'SH' },
-  '000833': { name: '粤桂股份', exchange: 'SZ' },
-  '300055': { name: '万邦达', exchange: 'SZ' },
-  '002594': { name: '比亚迪', exchange: 'SZ' },
-  '600519': { name: '贵州茅台', exchange: 'SH' },
-  '000001': { name: '平安银行', exchange: 'SZ' },
-  '000592': { name: '平潭发展', exchange: 'SZ' },
-  '601127': { name: '赛力斯', exchange: 'SH' },
-  '300750': { name: '宁德时代', exchange: 'SZ' },
-  '300059': { name: '东方财富', exchange: 'SZ' },
-  '600036': { name: '招商银行', exchange: 'SH' },
-  '601888': { name: '中国中免', exchange: 'SH' },
-  '601318': { name: '中国平安', exchange: 'SH' },
-  '002475': { name: '立讯精密', exchange: 'SZ' },
-  '002415': { name: '海康威视', exchange: 'SZ' },
-};
-
-export function extractMentionedStocksFromText(text: string): MentionedStock[] {
-  if (!text) return [];
-  const map = new Map<string, MentionedStock>();
-
-  // 1. 匹配带后缀的形式: 000833.SZ / 600519.SH / 830799.BJ
-  const suffixedRegex = /\b(\d{6})\.(SH|SZ|BJ)\b/gi;
-  let match: RegExpExecArray | null;
-  while ((match = suffixedRegex.exec(text)) !== null) {
-    const ticker = match[1];
-    const exchange = match[2].toUpperCase();
-    const thscode = `${ticker}.${exchange}`;
-    const name = COMMON_NAME_MAP[ticker]?.name || ticker;
-    map.set(thscode, { ticker, exchange, name, thscode });
-  }
-
-  // 2. 匹配中文/括号形式: 平潭发展(000592) / 粤桂股份（000833）
-  const nameParenRegex = /([\u4e00-\u9fa5A-Za-z0-9]{2,8})[（(](\d{6})[)）]/g;
-  while ((match = nameParenRegex.exec(text)) !== null) {
-    const name = match[1];
-    const ticker = match[2];
-    const exchange = COMMON_NAME_MAP[ticker]?.exchange || inferAShareExchange(ticker) || 'SH';
-    const thscode = `${ticker}.${exchange}`;
-    map.set(thscode, { ticker, exchange, name, thscode });
-  }
-
-  // 3. 匹配常见股名直接出现: 比如文本中出现 "粤桂股份"、"万邦达"、"比亚迪"
-  for (const [code, info] of Object.entries(COMMON_NAME_MAP)) {
-    if (text.includes(info.name)) {
-      const thscode = `${code}.${info.exchange}`;
-      if (!map.has(thscode)) {
-        map.set(thscode, { ticker: code, exchange: info.exchange, name: info.name, thscode });
-      }
-    }
-  }
-
-  return Array.from(map.values());
 }

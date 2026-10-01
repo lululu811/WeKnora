@@ -14,7 +14,7 @@
  *
  * 真正的触发逻辑在 `useKLineTickerObserver` 里挂 DOM 事件。
  */
-import { inferAShareExchange } from './aShareTicker.ts'
+import { resolveTickerThscode } from './stockMentions'
 
 // 一次扫描同时吃下「带后缀」和「裸 6 位码」。
 //
@@ -28,7 +28,16 @@ import { inferAShareExchange } from './aShareTicker.ts'
 //   (?!\d)      后面不能紧跟数字，否则 8 位日期 20260927 会被取前 6 位
 //   (\.(SH|SZ|BJ)\b)?  可选交易所后缀，大小写不敏感
 const TICKER_RE = /(^|[^\d.])(\d{6})(?!\d)(?:\.(SH|SZ|BJ)\b)?/gi
-const CODE_SPLIT_RE = /(`{3}[\s\S]*?`{3}|`[^`\n]*`)/g
+// 受保护、不做任何改写的片段：
+//  1. 代码块与行内代码 —— 代码示例里的数字不是标的、日期也不是日期。
+//  2. **HTML 标签整体** —— 这一条是后补的，因为踩到了真实的损坏：
+//     日期正则的前导 `(?:^|[^\d])` 会把标签的 `>` 当成"前导字符"一起吃掉，
+//     `见 <b>2026-05-20</b>` 会被改写成 `见 <b<span ...>>2026-05-20</span></b>`，
+//     标签直接被劈开；属性值里的日期同样会被包进 span，把标签写坏
+//     （`<web title="2026-05-20 复盘"/>` 已中招）。
+//     用 `[A-Za-z]` 开头而不是任意字符，是为了不把 `a < b`、`1 < 2` 这类
+//     普通比较误判成标签——那些后面的日期仍然要标。
+const CODE_SPLIT_RE = /(`{3}[\s\S]*?`{3}|`[^`\n]*`|<\/?[A-Za-z][^>]*>)/g
 
 export const KLINE_TICKER_CLASS = 'kline-ticker'
 export const KLINE_TICKER_ATTR = 'data-thscode'
@@ -48,11 +57,12 @@ export function injectKLineTickers(markdown: string): string {
     parts[i] = parts[i].replace(
       TICKER_RE,
       (match, lead: string, ticker: string, suffix?: string) => {
-        const exchange = suffix ? suffix.toUpperCase() : inferAShareExchange(ticker)
-        // 前缀判不出交易所就整段原样返回：宁可这个数字不可点，也不要把它
-        // 绑到一只不相干的票上——那会让 hover 卡片显示出错误的公司名。
-        if (!exchange) return match
-        return `${lead}${wrapTicker(`${ticker}.${exchange}`)}`
+        // 判据在 stockMentions 里，与下方标签行共用同一个解析器：
+        // 前缀判不出交易所就整段原样返回——宁可这个数字不可点，也不要把它
+        // 绑到一只不相干的票上，那会让 hover 卡片显示出错误的公司名。
+        const thscode = resolveTickerThscode(ticker, suffix)
+        if (!thscode) return match
+        return `${lead}${wrapTicker(thscode)}`
       },
     )
   }

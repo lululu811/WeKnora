@@ -110,3 +110,20 @@ test('单次扫描保证 span 内的数字不被二次包裹', () => {
     '<span class="kline-ticker" data-thscode="600499.SH">600499.SH</span>',
   )
 })
+
+// ---------------------------------------------------------------------------
+// 与 klineRangeInjector 同一个缺陷：代码正则会匹配属性值里的数字，
+// 把 span 塞进属性中间。`<kb doc="600519">` 这种引用标签会直接损坏。
+// ---------------------------------------------------------------------------
+
+test('不改写标签属性里的代码', () => {
+  for (const src of ['<kb doc="600519" chunk_id="a"/>', '<web url="https://x?id=600519"/>']) {
+    assert.equal(injectKLineTickers(src), src, src)
+  }
+})
+
+test('标签外面的代码照常标注', () => {
+  const out = injectKLineTickers('见 <b>600519</b> 这只')
+  assert.match(out, /kline-ticker/)
+  assert.match(out, /<b>/)
+})
