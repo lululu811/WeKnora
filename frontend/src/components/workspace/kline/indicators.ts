@@ -22,6 +22,12 @@
  * 10. Z_PCT_RET (区间涨跌幅): 3 日与 21 日**百分比涨跌幅**，副图曲线
  *     （2026-10-01 由 Z_RSL 改名 —— 它算的是涨跌幅；真正的 RSL 百分位排名
  *      在 DuckDB 的 zettaranc_rsl_rank_15 / _rank_105，两者不是同一个东西）
+ *
+ * **四块砖不在这个文件里。** 它不画在 K 线上，是个四项多空状态评分。
+ * 2026-10-01 从此处删除（calcFourBricksDetails 当时零调用方，是死代码），
+ * 计算实现在 python-service/zettaranc/four_bricks.py，agent 通过
+ * zettaranc.four_bricks 工具读取，工作台顶部评分卡用的是另一套
+ * （stock-score.ts 的 calcStockHoldingScore，基于砖型图 + 双线的 5 分制）。
  */
 
 import { registerIndicator, LineType, PolygonType, IndicatorSeries, type KLineData } from 'klinecharts';
@@ -111,68 +117,7 @@ export function calcBBI(dataList: KLineData[]): Array<number | null> {
   });
 }
 
-// 4. 四砖共振得分与多维度砖型结构 (Four Bricks: score from -4 to +4)
-//
-// 注意：四砖评分**不在** config/indicators.yaml 里 —— 它不注册成图表指标，只是
-// KLineWorkspace 顶部的评分卡。它用的 5/10/14 三个周期目前仍是硬编码。
-// 把它收进 indicators.yaml 属于"新增指标条目"，不在本次统一范围内。
-export interface FourBrickItem {
-  score: number; // -4 to +4
-  text: string;
-  bull1: boolean; // 短线: close >= ma5
-  bull2: boolean; // 趋势: ema10 >= ema14
-  bull3: boolean; // 多空: close >= bbi
-  bull4: boolean; // 阴阳: close >= open
-}
-
-export function calcFourBricksDetails(dataList: KLineData[]): FourBrickItem[] {
-  const ma5 = calcSMA(dataList, 5);
-  const ema10 = calcEMA(dataList, 10);
-  const ema14 = calcEMA(dataList, 14);
-  const bbi = calcBBI(dataList);
-  return dataList.map((d, i) => {
-    const close = d?.close ?? 0;
-    const open = d?.open ?? close;
-    const m5 = ma5[i];
-    const e10 = ema10[i];
-    const e14 = ema14[i];
-    const bb = bbi[i];
-
-    const bull1 = m5 !== null ? close >= m5 : true;
-    const bull2 = (e10 !== null && e14 !== null) ? e10 >= e14 : true;
-    const bull3 = bb !== null ? close >= bb : true;
-    const bull4 = close >= open;
-
-    let score = 0;
-    score += bull1 ? 1 : -1;
-    score += bull2 ? 1 : -1;
-    score += bull3 ? 1 : -1;
-    score += bull4 ? 1 : -1;
-
-    let text = '中性震荡';
-    if (score === 4) text = '四砖全红(+4)';
-    else if (score >= 2) text = '多头共振(+' + score + ')';
-    else if (score === -4) text = '四砖翻绿(-4)';
-    else if (score <= -2) text = '空头承压(' + score + ')';
-    else text = '多空博弈(' + (score >= 0 ? '+' : '') + score + ')';
-
-    return {
-      score,
-      text,
-      bull1,
-      bull2,
-      bull3,
-      bull4,
-    };
-  });
-}
-
-function calcFourBricks(dataList: KLineData[]): Array<number | null> {
-  const details = calcFourBricksDetails(dataList);
-  return details.map((d) => d.score);
-}
-
-// 5. 区间涨跌幅 (百分比) —— 2026-10-01 由 calcRSL 改名而来。
+// 4. 区间涨跌幅 (百分比) —— 2026-10-01 由 calcRSL 改名而来。
 // 它算的是 (close[i]-close[i-n])/close[i-n]*100，就是涨跌幅，不是相对强弱排名。
 // 真正的 RSL（滚动窗口百分位排名，值域 [0,100]）在 DuckDB 的
 // zettaranc_rsl_rank_15 / _rank_105，两者是不同指标，此前却共用 RSL 这个名字。
@@ -194,7 +139,7 @@ export function calcPctRet(dataList: KLineData[], period: number): Array<number 
   return result;
 }
 
-// 6. 成交量均线计算 (VOL + MA5 + MA10)
+// 5. 成交量均线计算 (VOL + MA5 + MA10)
 export function calcVOL(dataList: KLineData[]) {
   const [maShort, maLong] = indicatorMeta('Z_VOL').params.map((p) => p.value);
   const result: Array<{ vol: number; ma5: number | null; ma10: number | null }> = [];
@@ -215,7 +160,7 @@ export function calcVOL(dataList: KLineData[]) {
   return result;
 }
 
-// 7. MACD 指标计算 (DIF, DEA, MACD)
+// 6. MACD 指标计算 (DIF, DEA, MACD)
 //
 // 周期全部来自 indicators.yaml 的 Z_MACD (12,26,9)；不传参数时用 yaml 里的默认值。
 // 注意 hist = (dif - dea) * 2 —— DuckDB 侧的 momentum_macd_12_26_9_hist 也是乘过 2 的，
@@ -250,7 +195,7 @@ export function calcMACD(dataList: KLineData[], shortP?: number, longP?: number,
   return result;
 }
 
-// 8. KDJ 指标计算 (K, D, J)
+// 7. KDJ 指标计算 (K, D, J)
 //
 // n / k_smooth / d_smooth 来自 indicators.yaml 的 Z_KDJ (9,3,3)。
 export function calcKDJ(dataList: KLineData[], n?: number) {
