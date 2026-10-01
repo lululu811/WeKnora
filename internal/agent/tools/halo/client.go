@@ -19,10 +19,16 @@ import (
 // HTTPClient 调用 python-service 的 /halo/* 端点。
 type HTTPClient struct {
 	serviceURL string
+	apiKey     string
 	httpClient *http.Client
 }
 
 // NewHTTPClient 创建客户端。serviceURL 为空时读 PYTHON_SERVICE_URL。
+//
+// apiKey 读 WEKNORA_PY_SERVICE_API_KEY，与 python-service 的 require_api_key
+// 同一个变量。/halo/sync 会向巨潮发起请求并落盘，是有外部副作用的端点，
+// 不该像 zettaranc 那几个一样裸露着（那些端点只读本地数据，暴露面不同）。
+// 该变量未设置时 python-service 侧不强制鉴权，这里也就不带头，两边行为一致。
 func NewHTTPClient(serviceURL string) *HTTPClient {
 	if serviceURL == "" {
 		serviceURL = os.Getenv("PYTHON_SERVICE_URL")
@@ -32,6 +38,7 @@ func NewHTTPClient(serviceURL string) *HTTPClient {
 	}
 	return &HTTPClient{
 		serviceURL: serviceURL,
+		apiKey:     os.Getenv("WEKNORA_PY_SERVICE_API_KEY"),
 		httpClient: &http.Client{},
 	}
 }
@@ -76,6 +83,9 @@ func (c *HTTPClient) post(ctx context.Context, path string, body any, timeout ti
 		return fmt.Errorf("创建请求失败：%v", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	if c.apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
