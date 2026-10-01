@@ -31,6 +31,7 @@ from typing import Any, Callable, Dict, List, Optional, Protocol
 from .cninfo_source import CninfoSource, LocalFiling, NoFilingFoundError
 from .extractor import Fact, extract_pages as extract_rule_pages, merge_channels
 from .facts import extract_facts
+from .facts_finance import extract_finance_facts
 from .pdf_extract import ExtractResult, extract_pages, find_anchors
 from .store import (
     REPORT_ANNUAL,
@@ -324,7 +325,15 @@ def sync_filing(
     # 的字段表里没有，也不该往里塞。它们来自年报的证监会固定章节（是非题），
     # 确定性更强，单独抽完直接落表，供评分内核的「事实」层与风险锚点使用。
     governance_records = []
-    for r in extract_facts(pages)["facts"]:
+    for r in extract_facts(pages)["facts"] + extract_finance_facts(pages)["facts"]:
+        r["thscode"] = code
+        r["period"] = period
+        r["report_type"] = report_type
+        governance_records.append(r)
+    # 主营构成（分部收入/成本/毛利率）走独立通道：它们的 field 名带
+    # segment_ 前缀且 value_text 是业务名，落表后由 analyze 聚合成 narratives。
+    finance_extra = extract_finance_facts(pages)["segments"]
+    for r in finance_extra:
         r["thscode"] = code
         r["period"] = period
         r["report_type"] = report_type

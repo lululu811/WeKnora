@@ -57,6 +57,12 @@ AI_DIMENSIONS = (
                       ("ocf_to_profit", "percent"), ("pe_percentile", "percent"))),
 )
 
+#: 纯数值输入字段：它们服务于六维计算与对账，不是「事实」也不是叙事。
+_NUMERIC_INPUT_FIELDS = frozenset({
+    "fixed_assets", "construction_in_progress", "inventory",
+    "intangible_assets", "goodwill", "total_assets", "employees_total",
+})
+
 #: 事实字段里天然属于「风险」语义的两个：内控非标、董监高被罚。
 _RISK_FACT_FIELDS = ("internal_control_nonstandard", "executive_penalty",
                      "regulatory_penalty_3y")
@@ -309,6 +315,40 @@ def render_markdown(result: Dict[str, Any]) -> str:
     return "\n".join(L)
 
 
+def build_narratives(segment_rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """文本/表格类素材，独立于数值锚点。
+
+    为什么要分开：``anchors`` 里装的是「ROE=0.3253」这种**数**，AI 按数值
+    参与推理；这里装的是「哪个业务占多少收入、毛利多少」这种**结构化描述**，
+    AI 按叙述与表格来读。混在一起 AI 没法区分哪个能算、哪个只能读。
+
+    主营构成（分部收入 + 毛利率）是产业链定位最可靠的输入 —— 真实营收结构
+    带上毛利率，比「经营范围里有没有『制造』两个字」这种关键词匹配强得多。
+    """
+    segments: Dict[str, Dict[str, float]] = {}
+    for row in segment_rows:
+        name = row.get("value_text")
+        field = row.get("field", "")
+        if not name or not field.startswith("segment_"):
+            continue
+        slot = segments.setdefault(name, {})
+        if field == "segment_revenue":
+            slot["revenue"] = row.get("value")
+        elif field == "segment_cost":
+            slot["cost"] = row.get("value")
+        elif field == "segment_gross_margin":
+            slot["gross_margin"] = row.get("value")
+
+    ordered = sorted(segments.items(), key=lambda kv: -(kv[1].get("revenue") or 0))
+    return {
+        "business_segments": [
+            {"segment": name, **vals} for name, vals in ordered
+        ],
+        "segment_count": len(ordered),
+        "has_business_breakdown": bool(ordered),
+    }
+
+
 async def analyze(
     thscode: str,
     *,
@@ -333,9 +373,16 @@ async def analyze(
     rows = store.query(
         thscode, period=period, report_type=report_type, scope=scope, only_verified=True
     )
+    # 按 field 去重只适用于**标量**字段（估值锚点取一条即可）。
+    # 分部数据是 (field, 业务名) 组合，同一 field 下有多行，去重会把
+    # 茅台的 7 个业务压成 1 个 —— 所以单独收集。
     facts: Dict[str, Dict[str, Any]] = {}
+    segment_rows: List[Dict[str, Any]] = []
     for r in rows:
-        facts.setdefault(r["field"], r)
+        if r["field"].startswith("segment_"):
+            segment_rows.append(r)
+        else:
+            facts.setdefault(r["field"], r)
 
     financial = await _fetch_financials(thscode, period)
 
@@ -437,12 +484,11 @@ async def analyze(
             {"field": k, "value": v.get("value"), "value_text": v.get("value_text"),
              "unit": v.get("unit"), "source_page": v.get("source_page"),
              "raw_text": v.get("raw_text")}
-            for k, v in facts.items() if k not in (
-                "fixed_assets", "construction_in_progress", "inventory",
-                "intangible_assets", "goodwill", "total_assets", "employees_total",
-            )
+            for k, v in facts.items() if k not in _NUMERIC_INPUT_FIELDS
+            and not k.startswith("segment_")
         ],
         "environment_disclosure": env_disclosure,
+        "narratives": build_narratives(segment_rows),
         "ai_slots": build_ai_slots(facts, financial, ind),
     }
     if fact_records:

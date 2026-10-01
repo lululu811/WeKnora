@@ -86,7 +86,11 @@ CREATE TABLE IF NOT EXISTS halo_filing_facts (
     confidence   REAL,
     verified_by  TEXT,
     verified_at  TEXT,
-    PRIMARY KEY (thscode, period, report_type, field, scope)
+    -- value_text 参与主键：标量字段（固定资产/员工数）每股一条，它的
+    -- value_text 为空；分部字段（segment_revenue）则「一个 field 多条」，
+    -- 按业务名区分。不把它放进主键，upsert 会让同 field 的各业务互相覆盖
+    -- —— 实测茅台 7 个业务分部被压成 1 个「直销」。
+    PRIMARY KEY (thscode, period, report_type, field, scope, value_text)
 );
 CREATE INDEX IF NOT EXISTS idx_facts_code_period
     ON halo_filing_facts (thscode, period);
@@ -133,8 +137,30 @@ class FactStore:
                 # WAL：写入方（本模块）与读取方（评分查询）可以并发，
                 # 不再互相拿全局锁。
                 conn.execute("PRAGMA journal_mode=WAL")
+                # 旧版表的主键不含 value_text，CREATE TABLE IF NOT EXISTS 不会
+                # 改它，于是 upsert 继续按旧键覆盖分部行。事实表全部可由
+                # halo.filing.sync 重新生成，重建的成本远低于带着静默覆盖
+                # 继续跑。
+                if self._needs_rebuild(conn):
+                    conn.execute("DROP TABLE IF EXISTS halo_filing_facts")
                 conn.executescript(_SCHEMA)
             self._initialized = True
+
+    @staticmethod
+    def _needs_rebuild(conn: sqlite3.Connection) -> bool:
+        try:
+            row = conn.execute(
+                "SELECT sql FROM sqlite_master WHERE type='table' "
+                "AND name='halo_filing_facts'"
+            ).fetchone()
+        except sqlite3.Error:
+            return False
+        if row is None:
+            return False
+        ddl = (row[0] or "").lower()
+        if "value_text" in ddl:
+            return False
+        return True
 
     def upsert(self, records: Iterable[Dict[str, Any]]) -> int:
         """写入/覆盖事实记录，返回受影响行数。
@@ -173,7 +199,7 @@ class FactStore:
                      unit, scope, source_page, raw_text, extract_by, status,
                      confidence, verified_by, verified_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT (thscode, period, report_type, field, scope) DO UPDATE SET
+                ON CONFLICT (thscode, period, report_type, field, scope, value_text) DO UPDATE SET
                     value       = excluded.value,
                     value_text  = excluded.value_text,
                     unit        = excluded.unit,
