@@ -1,9 +1,10 @@
-package repository
+package repository_test
 
 import (
 	"context"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -13,35 +14,42 @@ import (
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 
+	"github.com/Tencent/WeKnora/internal/application/repository"
 	"github.com/Tencent/WeKnora/internal/types"
 	"github.com/Tencent/WeKnora/internal/types/interfaces"
 )
 
-// stockWatchTestDDL 直接读**真正会跑的**那些迁移，而不是在这里抄一份
-// CREATE TABLE。
+// watchlistTestDDL 拼出 watchlist 家族**全部**的 up 迁移。
 //
-// 抄一份的代价是它会在某次改迁移时静默失联：测试继续绿，生产的表却已经
-// 和 GORM 的字段约定对不上了（最典型的是 NOT NULL 却没有 DEFAULT 的列，
-// 插入时才炸）。同目录的 system_model_catalog_test.go 用的也是这个做法。
-//
-// 000034 建表、000035 加 state/note 与事件表：**改 stock_watches 的迁移时，
-// 这份列表和 stock_watch_pool_sqlite_test.go 里的那份都要跟着改**。两份是
-// 两个测试包（repository / repository_test）无法共享同一个 helper 的结果，
-// 而不是两种口径 —— 它们读的是同一批文件。
-func stockWatchTestDDL(t *testing.T) string {
+// 用通配符扫 `*stock_watch*.up.sql`，而不是手写文件名列表。理由是
+// stock_watch_events 被本目录多个测试共用：**只要有人给它加一列**（例如 000037 加了
+// eval_date），每一个手写列表都要跟着改，漏一个就表现为 sibling 测试以
+// "table stock_watch_events has no column named ..." 失败 —— 这件事已经真实发生过两次。
+// 通配符让"新增一条家族迁移"自动生效；文件名里的 6 位补零序号保证拼接顺序即执行顺序。
+func watchlistTestDDL(t *testing.T) string {
 	t.Helper()
+	paths, err := filepath.Glob(filepath.Join("..", "..", "..", "migrations", "sqlite", "*stock_watch*.up.sql"))
+	require.NoError(t, err)
+	require.NotEmpty(t, paths, "watchlist 家族的迁移文件必须存在")
+	sort.Strings(paths)
 	var ddl strings.Builder
-	for _, name := range []string{
-		"000034_stock_watches.up.sql",
-		"000035_stock_watch_pool_state.up.sql",
-	} {
-		path := filepath.Join("..", "..", "..", "migrations", "sqlite", name)
+	for _, path := range paths {
 		raw, err := os.ReadFile(path)
 		require.NoError(t, err, "迁移文件必须存在：%s", path)
 		ddl.Write(raw)
 		ddl.WriteString("\n")
 	}
 	return ddl.String()
+}
+
+// stockWatchTestDDL 读**真正会跑的**那些迁移，而不是在这里抄一份 CREATE TABLE。
+//
+// 抄一份的代价是它会在某次改迁移时静默失联：测试继续绿，生产的表却已经和 GORM 的
+// 字段约定对不上了（最典型的是 NOT NULL 却没有 DEFAULT 的列，插入时才炸）。
+// 同目录的 system_model_catalog_test.go 用的也是这个做法。
+func stockWatchTestDDL(t *testing.T) string {
+	t.Helper()
+	return watchlistTestDDL(t)
 }
 
 func setupStockWatchTestDB(t *testing.T) *gorm.DB {
@@ -57,7 +65,7 @@ func setupStockWatchTestDB(t *testing.T) *gorm.DB {
 
 func TestStockWatchRepositoryAddListRemove(t *testing.T) {
 	db := setupStockWatchTestDB(t)
-	repo := NewStockWatchRepository(db)
+	repo := repository.NewStockWatchRepository(db)
 	ctx := context.Background()
 
 	const user = "user-1"
@@ -102,7 +110,7 @@ func TestStockWatchRepositoryAddListRemove(t *testing.T) {
 
 func TestStockWatchRepositoryOrderAndTenantScope(t *testing.T) {
 	db := setupStockWatchTestDB(t)
-	repo := NewStockWatchRepository(db)
+	repo := repository.NewStockWatchRepository(db)
 	ctx := context.Background()
 
 	const user = "user-1"
@@ -144,7 +152,7 @@ func TestStockWatchRepositoryOrderAndTenantScope(t *testing.T) {
 
 func TestStockWatchRepositoryUpdatePatchesOnlyTheTargetRow(t *testing.T) {
 	db := setupStockWatchTestDB(t)
-	repo := NewStockWatchRepository(db)
+	repo := repository.NewStockWatchRepository(db)
 	ctx := context.Background()
 
 	const user = "user-1"

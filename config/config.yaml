@@ -114,3 +114,12 @@ extract:
 tenant:
   # Enable cross-tenant access (can be enabled for intranet environments)
   enable_cross_tenant_access: false
+
+# Tracking-pool ("个股追踪") condition notifier.
+# The daily job reports the *conditions the user authored* — it has no scoring
+# and no recommendation. Optional: with no webhook the trigger events are still
+# recorded on the page; only the push is skipped.
+stock_watch:
+  # Feishu custom-bot webhook URL for condition alerts. Also settable via
+  # WEKNORA_FEISHU_ALERT_WEBHOOK (env wins). Empty disables pushing.
+  feishu_alert_webhook: ""

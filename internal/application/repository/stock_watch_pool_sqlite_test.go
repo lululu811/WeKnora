@@ -1,13 +1,12 @@
 // 外部测试包（repository_test）而不是 repository：这一组断言里有一条要盯住
 // **服务**对非法状态值的拒绝，而 service 包本身 import 了 repository
 // （agent_service.go），放在 package repository 里就成了 import cycle。
-// 同目录的 stock_watch_sqlite_test.go 是内部测试包，两者可以并存。
+// 三个 watchlist 仓储测试同住这个外测包，于是可以共用一份迁移拼接 helper
+// （watchlistTestDDL）。
 package repository_test
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -22,25 +21,13 @@ import (
 	"github.com/Tencent/WeKnora/internal/types/interfaces"
 )
 
-// stockWatchPoolTestDDL 读**真正会跑的**那两条迁移，而不是在这里抄一份 DDL。
+// stockWatchPoolTestDDL 读**真正会跑的**那些迁移，而不是在这里抄一份 DDL。
 //
-// 同目录的 stock_watch_sqlite_test.go 用的是同一套做法，只是它只需要 000034。
-// 这里要把 000035 也读进来，因为"默认状态是 observing"这条断言的全部意义就在于
-// 验证**迁移里的 DEFAULT**：抄一份 DDL 的测试只能证明抄的那份是对的。
+// "默认状态是 observing"这条断言的全部意义就在于验证**迁移里的 DEFAULT**：抄一份
+// DDL 的测试只能证明抄的那份是对的。家族内新增迁移会自动被 watchlistTestDDL 扫到。
 func stockWatchPoolTestDDL(t *testing.T) string {
 	t.Helper()
-	var ddl strings.Builder
-	for _, name := range []string{
-		"000034_stock_watches.up.sql",
-		"000035_stock_watch_pool_state.up.sql",
-	} {
-		path := filepath.Join("..", "..", "..", "migrations", "sqlite", name)
-		raw, err := os.ReadFile(path)
-		require.NoError(t, err, "迁移文件必须存在：%s", path)
-		ddl.Write(raw)
-		ddl.WriteString("\n")
-	}
-	return ddl.String()
+	return watchlistTestDDL(t)
 }
 
 func setupStockWatchPoolTestDB(t *testing.T) *gorm.DB {

@@ -40,6 +40,21 @@ type Config struct {
 	// against window.location.origin — fine for typical single-origin
 	// deployments. Sourced from FRONTEND_BASE_URL env at startup.
 	FrontendBaseURL string `yaml:"frontend_base_url" json:"frontend_base_url"`
+	// StockWatch configures the tracking-pool condition notifier. Optional;
+	// with no webhook the feature still records triggers, it just does not push.
+	StockWatch *StockWatchConfig `yaml:"stock_watch" json:"stock_watch"`
+}
+
+// StockWatchConfig configures the tracking-pool ("个股追踪") condition notifier.
+type StockWatchConfig struct {
+	// FeishuAlertWebhook is a Feishu custom-bot webhook URL. Empty disables
+	// pushing: the condition_triggered events are still written (the page is the
+	// primary surface), no message is sent, and the skipped attempt is recorded
+	// in stock_watch_notifications so the absence is auditable.
+	//
+	// Sourced from WEKNORA_FEISHU_ALERT_WEBHOOK at startup (read explicitly —
+	// viper.AutomaticEnv has no WEKNORA_ prefix binding for nested fields).
+	FeishuAlertWebhook string `yaml:"feishu_alert_webhook" json:"feishu_alert_webhook"`
 }
 
 // AgentConfig represents the global agent settings.
@@ -595,6 +610,7 @@ func LoadConfig() (*Config, error) {
 	applyKnowledgeBaseEnvOverrides(&cfg)
 	applyAuthAndTenantDefaults(&cfg)
 	applyAuditDefaults(&cfg)
+	applyStockWatchEnvOverrides(&cfg)
 
 	if err := ValidateConfig(&cfg); err != nil {
 		return nil, err
@@ -1015,6 +1031,23 @@ func applyAuthAndTenantDefaults(cfg *Config) {
 				value,
 			)
 		}
+	}
+}
+
+// applyStockWatchEnvOverrides wires the condition notifier's webhook.
+//
+// It must be explicit: viper.AutomaticEnv has no SetEnvPrefix, so a
+// WEKNORA_-prefixed env var is never bound to a nested struct field. Without
+// this, WEKNORA_FEISHU_ALERT_WEBHOOK would be documented and silently ignored.
+//
+// An empty value is meaningful (it disables pushing), so "set but empty" and
+// "unset" are deliberately the same: no webhook.
+func applyStockWatchEnvOverrides(cfg *Config) {
+	if cfg.StockWatch == nil {
+		cfg.StockWatch = &StockWatchConfig{}
+	}
+	if value := strings.TrimSpace(os.Getenv("WEKNORA_FEISHU_ALERT_WEBHOOK")); value != "" {
+		cfg.StockWatch.FeishuAlertWebhook = value
 	}
 }
 

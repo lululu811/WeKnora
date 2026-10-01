@@ -45,5 +45,13 @@ func RegisterStockWatchRoutes(r *gin.RouterGroup, h *handler.StockWatchHandler, 
 		watch.POST("", g.Viewer(), h.AddStockWatch)
 		watch.PUT("/:thscode", g.Viewer(), h.UpdateStockWatch)
 		watch.DELETE("/:thscode", g.Viewer(), h.RemoveStockWatch)
+
+		// Conditions live under the symbol they watch: a condition is
+		// meaningless without its symbol, and the URL says so. These are
+		// strictly deeper than /:thscode, so Gin has no static-vs-parameter
+		// ambiguity to resolve (the "/events" note above applies a fortiori).
+		watch.GET("/:thscode/conditions", g.Viewer(), h.ListStockWatchConditions)
+		watch.POST("/:thscode/conditions", g.Viewer(), h.AddStockWatchCondition)
+		watch.DELETE("/:thscode/conditions/:id", g.Viewer(), h.RemoveStockWatchCondition)
 	}
 }

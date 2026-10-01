@@ -22,10 +22,18 @@ import (
 // user's symbols" path.
 type StockWatchHandler struct {
 	service interfaces.StockWatchService
+	// conditions is the user-authored numeric-condition surface. It is a
+	// separate service because authoring a condition (validation, idempotency)
+	// shares nothing with tracking a symbol, but it is the same handler so the
+	// auth scoping rule and the error mapping are stated once.
+	conditions interfaces.StockWatchConditionService
 }
 
-func NewStockWatchHandler(svc interfaces.StockWatchService) *StockWatchHandler {
-	return &StockWatchHandler{service: svc}
+func NewStockWatchHandler(
+	svc interfaces.StockWatchService,
+	conditions interfaces.StockWatchConditionService,
+) *StockWatchHandler {
+	return &StockWatchHandler{service: svc, conditions: conditions}
 }
 
 // watchContext resolves the (userID, tenantID) pair to scope all queries to.
@@ -58,6 +66,11 @@ func mapStockWatchError(c *gin.Context, err error) bool {
 		stderrors.Is(err, service.ErrStockWatchEmptyCode),
 		stderrors.Is(err, service.ErrStockWatchInvalidState),
 		stderrors.Is(err, service.ErrStockWatchNoteTooLong),
+		// 条件：字段/方向不在白名单、阈值不是有限数、id 为空，都是调用方输入问题。
+		stderrors.Is(err, service.ErrStockWatchConditionInvalidField),
+		stderrors.Is(err, service.ErrStockWatchConditionInvalidOp),
+		stderrors.Is(err, service.ErrStockWatchConditionInvalidValue),
+		stderrors.Is(err, service.ErrStockWatchConditionInvalidID),
 		// 域错误：状态机不认这一步。它与"值不存在"同属调用方输入问题，同样 400。
 		stderrors.Is(err, types.ErrStockWatchIllegalTransition):
 		c.Error(apperrors.NewBadRequestError(err.Error()))

@@ -11,7 +11,7 @@
             {{ t('watchlist.updatedAt', { time: lastUpdated }) }}
           </span>
           <t-button variant="text" theme="default" size="small" :loading="quotesLoading"
-            @click="refreshQuotes()">
+            @click="refreshAll()">
             <template #icon><t-icon name="refresh" /></template>
             {{ t('watchlist.refresh') }}
           </t-button>
@@ -59,7 +59,17 @@
       </template>
 
       <template #name="{ row }">
-        <span class="wl-name">{{ row.quote?.name || row.name || '—' }}</span>
+        <div class="wl-name-cell">
+          <span class="wl-name">{{ row.quote?.name || row.name || '—' }}</span>
+          <!-- 「今日触发」只认事件流。条件行上的 last_satisfied 只说明"此刻满不满足"，
+               分不清"今天刚跨过"和"早就一直满足"；事件是跨过那一刻留下的、
+               之后任何一轮评估都覆盖不掉的证据。note 就是机器写下的原因。 -->
+          <span v-if="todayTriggerNotes(row).length" class="wl-fired"
+            :title="todayTriggerNotes(row).join('\n')">
+            <t-icon name="notification-filled" size="12px" />
+            {{ t('watchlist.triggeredToday') }}
+          </span>
+        </div>
       </template>
 
       <!-- 状态徽标本身就是操作入口：点它才展开「合法下一步」。
@@ -119,6 +129,9 @@
 
       <template #actions="{ row, rowIndex }">
         <div class="wl-actions">
+          <t-button variant="text" size="small" @click="openConditions(row)">
+            {{ t('watchlist.cond') }}
+          </t-button>
           <t-button variant="text" size="small" :disabled="rowIndex === 0" @click="pinRow(row)">
             {{ t('watchlist.pin') }}
           </t-button>
@@ -128,6 +141,43 @@
         </div>
       </template>
     </t-table>
+
+    <!-- 条件面板。用 dialog 而不是 popover：里面有两个 t-select，下拉渲染到 body，
+         挂在 popover 里会被"点击外部"判成关闭，选中值的一瞬间面板就没了。 -->
+    <t-dialog v-model:visible="condDialogVisible" :header="condDialogTitle" :footer="false" width="480px"
+      :close-on-overlay-click="false" dialog-class-name="wl-cond-dialog" @close="closeConditions">
+      <div class="wl-cond">
+        <p class="wl-cond__hint">{{ t('watchlist.condHint') }}</p>
+
+        <t-loading v-if="condLoading" size="small" class="wl-cond__loading" />
+
+        <ul v-else-if="conditions.length" class="wl-cond__list">
+          <li v-for="c in conditions" :key="c.id" class="wl-cond-chip"
+            :class="`wl-cond-chip--${conditionState(c)}`" :title="conditionEvalTitle(c)">
+            <span class="wl-cond-chip__expr">{{ conditionExpr(c) }}</span>
+            <span class="wl-cond-chip__state">{{ conditionStateLabel(c) }}</span>
+            <button type="button" class="wl-cond-chip__del" :title="t('watchlist.condDelete')"
+              :aria-label="`${t('watchlist.condDelete')}: ${conditionExpr(c)}`" @click="deleteCondition(c)">
+              <t-icon name="close" size="14px" />
+            </button>
+          </li>
+        </ul>
+        <p v-else class="wl-cond__empty">{{ t('watchlist.condEmpty') }}</p>
+
+        <div class="wl-cond-add">
+          <t-select class="wl-cond-add__field" :value="condField" :options="fieldOptions"
+            :aria-label="t('watchlist.condField')" @change="setCondField" />
+          <t-select class="wl-cond-add__op" :value="condOp" :options="opOptions"
+            :aria-label="t('watchlist.condOp')" :title="t('watchlist.condOp')" @change="setCondOp" />
+          <t-input-number :value="condValue" class="wl-cond-add__value" :placeholder="t('watchlist.condValue')"
+            :aria-label="t('watchlist.condValue')" @change="setCondValue" />
+          <t-button theme="primary" size="small" :loading="condSubmitting" :disabled="!canSubmitCondition"
+            @click="submitCondition">
+            {{ t('watchlist.condAdd') }}
+          </t-button>
+        </div>
+      </div>
+    </t-dialog>
   </main>
 </template>
 
@@ -137,15 +187,23 @@ import { useI18n } from 'vue-i18n'
 import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
 import EmptyState from '@/components/EmptyState.vue'
 import {
+  addCondition,
   addWatchItem,
   fetchQuotes,
+  listConditions,
+  listEvents,
   listWatchlist,
+  removeCondition,
   removeWatchItem,
   searchSymbols,
   updateWatchItem,
   WATCH_STATE_TRANSITIONS,
+  type ConditionField,
+  type ConditionOp,
   type Quote,
   type SymbolSuggestion,
+  type WatchCondition,
+  type WatchEvent,
   type WatchItem,
   type WatchState,
 } from '@/api/watchlist'
@@ -190,6 +248,76 @@ const newestDate = computed(() => {
   return newest
 })
 
+/**
+ * 活动流。整条流一次拉回来，只在本地筛出「条件触发」那一种 kind 用于徽标 ——
+ * 按 kind 分别请求只会把同一次查询拆成两次。
+ */
+const events = ref<WatchEvent[]>([])
+
+/**
+ * 今日触发的 note，按 thscode 归集。
+ *
+ * "今日" = 行情里最新的交易日（newestDate），不是浏览器当前日期 —— 周末、
+ * 节假日、本地行情还没更新时，页面上所有人的"最新"都该是同一个交易日。
+ * 拿不到行情（newestDate 为空）就一条都不标：宁可不说，也不能猜。
+ */
+const todayTriggerNotesByCode = computed<Record<string, string[]>>(() => {
+  const day = newestDate.value
+  const grouped: Record<string, string[]> = {}
+  if (!day) return grouped
+  for (const event of events.value) {
+    if (event.kind !== 'condition_triggered') continue
+    // 比的是**判定所属交易日**，不是 created_at：created_at 是落库那一刻（D+1 早上），
+    // 而它报告的交易日是 D。拿 created_at 比会让这个徽章在真实运行里永远不亮。
+    if (!event.eval_date || event.eval_date !== day) continue
+    if (!event.note) continue
+    if (!grouped[event.thscode]) grouped[event.thscode] = []
+    grouped[event.thscode].push(event.note)
+  }
+  return grouped
+})
+
+function todayTriggerNotes(row: WatchRow): string[] {
+  return todayTriggerNotesByCode.value[row.thscode] ?? []
+}
+
+/** 条件面板当前对着哪一行（只存代码 + 展示名，避免行情刷新后握着过期对象）。 */
+const condThscode = ref('')
+const condLabel = ref('')
+const condDialogVisible = ref(false)
+const conditions = ref<WatchCondition[]>([])
+const condLoading = ref(false)
+const condSubmitting = ref(false)
+const condField = ref<ConditionField>('price')
+const condOp = ref<ConditionOp>('above')
+/** undefined（而非 null）表示"还没填"：与 t-input-number 的 modelValue 类型对齐，
+ *  清空输入框不会悄悄变成一个 0。 */
+const condValue = ref<number | undefined>(undefined)
+
+const condDialogTitle = computed(() =>
+  condLabel.value
+    ? `${t('watchlist.condPanelTitle')} · ${condLabel.value}`
+    : t('watchlist.condPanelTitle'),
+)
+
+/** 字段下拉的文案。value 走的是契约里的机器名，label 才是给人看的。 */
+const fieldOptions = computed(() => [
+  { value: 'price', label: t('watchlist.condFieldPrice') },
+  { value: 'pct_change', label: t('watchlist.condFieldPct') },
+  { value: 'volume_ratio', label: t('watchlist.condFieldVolumeRatio') },
+  { value: 'close_vs_ma20', label: t('watchlist.condFieldMa20') },
+])
+
+/** 比较方向直接用 `>` / `<` 两个符号，不做翻译：它是数学记号，五个语种里
+ *  都对同一个人说同一件事，翻译成「大于/高于」反而会让人去找符号在哪。 */
+const opOptions = computed(() => [
+  { value: 'above', label: '>' },
+  { value: 'below', label: '<' },
+])
+
+/** 数值允许为负（涨跌幅 -3.2 是合法条件），所以只挡 null/NaN，不挡 0 与负数。 */
+const canSubmitCondition = computed(() => num(condValue.value) !== null)
+
 const columns = computed(() => [
   { colKey: 'thscode', title: t('watchlist.columns.code'), width: 148 },
   { colKey: 'name', title: t('watchlist.columns.name'), minWidth: 140 },
@@ -199,7 +327,7 @@ const columns = computed(() => [
   { colKey: 'change', title: t('watchlist.columns.change'), width: 170, align: 'right' as const },
   { colKey: 'turnover', title: t('watchlist.columns.turnover'), width: 110, align: 'right' as const },
   { colKey: 'date', title: t('watchlist.columns.date'), width: 128, align: 'center' as const },
-  { colKey: 'actions', title: t('watchlist.columns.actions'), width: 132, align: 'right' as const },
+  { colKey: 'actions', title: t('watchlist.columns.actions'), width: 190, align: 'right' as const },
 ])
 
 /** 徽标文案。`triggered` 只能被买点触发写入，前端只读不提供入口。 */
@@ -329,6 +457,156 @@ function isStale(row: WatchRow): boolean {
   return Boolean(date && newestDate.value && date !== newestDate.value)
 }
 
+/**
+ * 条件的三态。**`null` 是"还没判定过"，不是"不满足"** —— 把两者折叠成
+ * 一个灰色状态，就是把「尚无法判定」误报成「已确认不满足」，而这两句话让
+ * 人做的决定完全不同：前者是"再等等"，后者是"这事没发生"。
+ */
+function conditionState(c: WatchCondition): 'met' | 'unmet' | 'unknown' {
+  if (c.last_satisfied === null) return 'unknown'
+  return c.last_satisfied ? 'met' : 'unmet'
+}
+
+function conditionStateLabel(c: WatchCondition): string {
+  switch (conditionState(c)) {
+    case 'met':
+      return t('watchlist.condStateMet')
+    case 'unmet':
+      return t('watchlist.condStateUnmet')
+    default:
+      return t('watchlist.condStateUnknown')
+  }
+}
+
+/** 字段的展示名。认不出的字段原样露出，理由同 stateLabel。 */
+function conditionFieldLabel(field: ConditionField): string {
+  switch (field) {
+    case 'price':
+      return t('watchlist.condFieldPrice')
+    case 'pct_change':
+      return t('watchlist.condFieldPct')
+    case 'volume_ratio':
+      return t('watchlist.condFieldVolumeRatio')
+    case 'close_vs_ma20':
+      return t('watchlist.condFieldMa20')
+    default:
+      return field
+  }
+}
+
+/** 条件的可读表达式，例如「价格 > 1235.00」。 */
+function conditionExpr(c: WatchCondition): string {
+  const value = num(c.value)
+  const shown = value === null ? '—' : value.toFixed(2)
+  return `${conditionFieldLabel(c.field)} ${c.op === 'above' ? '>' : '<'} ${shown}`
+}
+
+/**
+ * 悬浮提示补上"上次判定是哪天"：只看「尚无法判定」分不出是刚添加还没跑过，
+ * 还是这只票的历史数据一直不够 —— 后者是本地数据问题，值得用户去查。
+ */
+function conditionEvalTitle(c: WatchCondition): string {
+  return c.last_eval_date
+    ? t('watchlist.condEvalAt', { date: c.last_eval_date })
+    : t('watchlist.condNeverEval')
+}
+
+function setCondField(value: unknown) {
+  condField.value = value as ConditionField
+}
+
+function setCondOp(value: unknown) {
+  condOp.value = value as ConditionOp
+}
+
+/**
+ * t-input-number 的 change 值是 `number | string`（清空时是 `''`）。收敛成
+ * 「合法数字或 undefined」：清空必须回到"未填写"，而 0 和负数都是合法条件值
+ * （涨跌幅 -3.2 就是），不能当空处理。
+ */
+function setCondValue(value: unknown) {
+  if (value === null || value === undefined || value === '') {
+    condValue.value = undefined
+    return
+  }
+  const parsed = typeof value === 'number' ? value : Number(value)
+  condValue.value = num(parsed) ?? undefined
+}
+
+function openConditions(row: WatchRow) {
+  condThscode.value = row.thscode
+  condLabel.value = displayName(row)
+  condField.value = 'price'
+  condOp.value = 'above'
+  condValue.value = undefined
+  conditions.value = []
+  condDialogVisible.value = true
+  void loadConditions(row.thscode)
+}
+
+function closeConditions() {
+  condThscode.value = ''
+  condLabel.value = ''
+  conditions.value = []
+}
+
+async function loadConditions(thscode: string) {
+  condLoading.value = true
+  try {
+    const res = await listConditions(thscode)
+    // 请求在飞的时候用户可能已经翻到另一行：迟到的响应只能丢掉，
+    // 否则面板会显示上一条标的的条件。
+    if (condThscode.value !== thscode) return
+    conditions.value = res.data ?? []
+  } catch (error: any) {
+    MessagePlugin.error(error?.message || t('watchlist.loadFailed'))
+  } finally {
+    if (condThscode.value === thscode) condLoading.value = false
+  }
+}
+
+async function submitCondition() {
+  const value = num(condValue.value)
+  const thscode = condThscode.value
+  if (value === null || !thscode || condSubmitting.value) return
+  condSubmitting.value = true
+  try {
+    const res = await addCondition(thscode, { field: condField.value, op: condOp.value, value })
+    // created=false：同一条条件已经在了（双击「添加」会走到这里）。报成
+    // 「已添加」会让用户以为自己多加了一条。
+    MessagePlugin.success(res.created ? t('watchlist.condAdded') : t('watchlist.condExists'))
+    condValue.value = undefined
+    await loadConditions(thscode)
+  } catch (error: any) {
+    MessagePlugin.error(error?.message || t('watchlist.loadFailed'))
+  } finally {
+    condSubmitting.value = false
+  }
+}
+
+async function deleteCondition(c: WatchCondition) {
+  const thscode = condThscode.value
+  if (!thscode) return
+  try {
+    await removeCondition(thscode, c.id)
+    MessagePlugin.success(t('watchlist.condDeleted'))
+    await loadConditions(thscode)
+  } catch (error: any) {
+    MessagePlugin.error(error?.message || t('watchlist.loadFailed'))
+  }
+}
+
+/** 拉活动流。它只服务于「今日触发」徽标：失败就静默不标，为一个附加提示
+ *  弹错误框只会打断主线行情。 */
+async function loadEvents() {
+  try {
+    const res = await listEvents({ limit: 200 })
+    events.value = res.data ?? []
+  } catch {
+    events.value = []
+  }
+}
+
 async function loadItems() {
   loading.value = true
   try {
@@ -360,9 +638,14 @@ async function refreshQuotes(silent = false) {
   }
 }
 
+/** 手动刷新：行情和活动流一起补齐（「今日触发」徽标也依赖后者）。 */
+async function refreshAll() {
+  await Promise.all([refreshQuotes(), loadEvents()])
+}
+
 async function reloadAll() {
   await loadItems()
-  await refreshQuotes()
+  await refreshAll()
 }
 
 function handleKeywordChange() {
@@ -470,7 +753,12 @@ async function pinRow(row: WatchRow) {
  * 只靠定时器会出现"切回来还是十分钟前的价"。
  */
 function handleVisibility() {
-  if (document.visibilityState === 'visible') void refreshQuotes(true)
+  if (document.visibilityState === 'visible') {
+    void refreshQuotes(true)
+    // 活动流也补一次：触发只在新交易日发生一次，页面恰好开着的时候
+    // 不能等下一次手动刷新才看到「今日触发」。
+    void loadEvents()
+  }
 }
 
 onMounted(async () => {
@@ -631,7 +919,11 @@ onUnmounted(() => {
 }
 
 .wl-name {
+  min-width: 0;
+  overflow: hidden;
   color: var(--td-text-color-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .wl-num {
@@ -781,5 +1073,141 @@ onUnmounted(() => {
   display: flex;
   justify-content: flex-end;
   gap: 4px;
+}
+
+.wl-name-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* 「今日触发」：这一天真的跨过了一个用户自己设的条件 —— 这张表上唯一会
+   导致"被通知"的事实，给它最强的视觉重量，并让 note（为什么触发）可悬浮查看。 */
+.wl-fired {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 7px;
+  border: 1px solid color-mix(in srgb, var(--td-warning-color) 55%, transparent);
+  border-radius: var(--app-radius-pill);
+  background: color-mix(in srgb, var(--td-warning-color) 14%, transparent);
+  color: var(--td-warning-color);
+  font-size: var(--app-text-xs);
+  line-height: 17px;
+  white-space: nowrap;
+  cursor: help;
+}
+
+.wl-cond {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.wl-cond__hint {
+  margin: 0;
+  color: var(--td-text-color-secondary);
+  font-size: var(--app-text-sm);
+  line-height: 20px;
+}
+
+.wl-cond__loading {
+  display: flex;
+  justify-content: center;
+  padding: 16px 0;
+}
+
+.wl-cond__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.wl-cond__empty {
+  margin: 0;
+  color: var(--td-text-color-placeholder);
+  font-size: var(--app-text-sm);
+}
+
+/* 三种判定状态不只靠颜色区分：已满足是实色描边、未满足是灰描边、尚无法判定
+   是虚线。色觉障碍下也要能一眼看懂 —— 而且"虚线 = 还不知道"比任何配色都直观。 */
+.wl-cond-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 4px 3px 9px;
+  border: 1px solid var(--td-component-stroke);
+  border-radius: var(--app-radius-pill);
+  background: var(--td-bg-color-secondarycontainer);
+  color: var(--td-text-color-primary);
+  font-size: var(--app-text-sm);
+  line-height: 18px;
+  white-space: nowrap;
+
+  &__expr {
+    font-family: monospace;
+  }
+
+  &__state {
+    color: var(--td-text-color-secondary);
+    font-size: var(--app-text-xs);
+  }
+
+  &__del {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--td-text-color-placeholder);
+    cursor: pointer;
+
+    &:hover {
+      background: var(--td-error-color-1);
+      color: var(--td-error-color);
+    }
+  }
+
+  &--met {
+    border-color: color-mix(in srgb, var(--td-brand-color) 45%, transparent);
+    background: color-mix(in srgb, var(--td-brand-color) 10%, transparent);
+
+    .wl-cond-chip__state {
+      color: var(--td-brand-color);
+    }
+  }
+
+  &--unknown {
+    border-style: dashed;
+    color: var(--td-text-color-secondary);
+  }
+}
+
+.wl-cond-add {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.wl-cond-add__field {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.wl-cond-add__op {
+  flex: 0 0 64px;
+}
+
+.wl-cond-add__value {
+  flex: 0 0 96px;
 }
 </style>

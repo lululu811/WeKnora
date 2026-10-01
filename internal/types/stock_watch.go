@@ -138,12 +138,19 @@ var ErrStockWatchIllegalTransition = errors.New("illegal watch state transition"
 
 // Event kinds for stock_watch_events. The column is generic on purpose: an
 // event is a fact that happened, and "a buy point fired" must be recordable
-// later without a schema change. `added` / `state_changed` / `note_changed`
-// are the only writers today.
+// later without a schema change. `added` / `state_changed` / `note_changed` /
+// `condition_triggered` are the only writers today.
+//
+// condition_triggered is the one machine-written kind: a user-authored numeric
+// condition crossed its threshold. It deliberately does NOT move the pool row's
+// `state` — `triggered` stays reserved for the human to mark by hand, because a
+// notifier reporting a reading is not the same thing as a person deciding to
+// act on it.
 const (
-	StockWatchEventAdded        = "added"
-	StockWatchEventStateChanged = "state_changed"
-	StockWatchEventNoteChanged  = "note_changed"
+	StockWatchEventAdded              = "added"
+	StockWatchEventStateChanged       = "state_changed"
+	StockWatchEventNoteChanged        = "note_changed"
+	StockWatchEventConditionTriggered = "condition_triggered"
 )
 
 // Event feed bounds. The default is what the pool page shows without asking;
@@ -170,14 +177,23 @@ const (
 // Deliberately absent: position size, cost, P&L. See StockWatch for why a
 // nullable float would be a correctness trap for any split-adjusted holding.
 type StockWatchEvent struct {
-	ID        uint64    `json:"id"         gorm:"primaryKey;autoIncrement"`
-	UserID    string    `json:"user_id"    gorm:"type:varchar(36)"`
-	TenantID  uint64    `json:"tenant_id"`
-	Kind      string    `json:"kind"       gorm:"type:varchar(32)"`
-	THSCode   string    `json:"thscode"    gorm:"column:thscode;type:varchar(16)"`
-	FromState string    `json:"from_state" gorm:"type:varchar(16)"`
-	ToState   string    `json:"to_state"   gorm:"type:varchar(16)"`
-	Note      string    `json:"note"       gorm:"type:varchar(200)"`
+	ID        uint64 `json:"id"         gorm:"primaryKey;autoIncrement"`
+	UserID    string `json:"user_id"    gorm:"type:varchar(36)"`
+	TenantID  uint64 `json:"tenant_id"`
+	Kind      string `json:"kind"       gorm:"type:varchar(32)"`
+	THSCode   string `json:"thscode"    gorm:"column:thscode;type:varchar(16)"`
+	FromState string `json:"from_state" gorm:"type:varchar(16)"`
+	ToState   string `json:"to_state"   gorm:"type:varchar(16)"`
+	Note      string `json:"note"       gorm:"type:varchar(200)"`
+	// EvalDate is the trading day an evaluation event belongs to.
+	//
+	// CreatedAt is insert time, which is NOT the day the event is about: the
+	// condition job runs at 08:30 on D+1 and reports D's close. Anything asking
+	// "was this triggered on the latest trading day" must compare against this
+	// field — comparing against CreatedAt is off by one trading day by
+	// construction (the 「今日触发」 badge could never light up because of it).
+	// NULL for state/note events, which are not about a trading day.
+	EvalDate  *DateOnly `json:"eval_date"  gorm:"type:date"`
 	CreatedAt time.Time `json:"created_at" gorm:"autoCreateTime"`
 }
 

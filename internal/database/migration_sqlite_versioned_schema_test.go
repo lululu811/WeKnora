@@ -37,6 +37,8 @@ var versionedSQLiteTables = []string{
 	"tenant_user_env_vars",
 	"stock_watches",
 	"stock_watch_events",
+	"stock_watch_conditions",
+	"stock_watch_notifications",
 }
 
 // versionedSQLiteColumns maps each existing table to the columns that the
@@ -69,10 +71,11 @@ var versionedSQLiteColumns = map[string][]string{
 	"tenant_user_env_vars": {
 		"principal_type", "principal_id", "sandbox_config_id", "skill_id", "name", "value",
 	}, // 000028
-	"stock_watches": {"state", "note"}, // 000035
+	"stock_watches":      {"state", "note"}, // 000035
+	"stock_watch_events": {"eval_date"},     // 000037
 }
 
-const expectedSQLiteMigrationVersion = 35
+const expectedSQLiteMigrationVersion = 37
 
 func TestSQLiteMigrationsCreateVersionedSchema(t *testing.T) {
 	repoRoot := sqliteRepoRoot(t)

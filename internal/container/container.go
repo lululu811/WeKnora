@@ -37,6 +37,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/Tencent/WeKnora/internal/agent/approval"
+	"github.com/Tencent/WeKnora/internal/alertnotify"
 	"github.com/Tencent/WeKnora/internal/application/repository"
 	dorisRepo "github.com/Tencent/WeKnora/internal/application/repository/retriever/doris"
 	elasticsearchRepoV7 "github.com/Tencent/WeKnora/internal/application/repository/retriever/elasticsearch/v7"
@@ -92,6 +93,7 @@ import (
 	"github.com/Tencent/WeKnora/internal/models/embedding"
 	"github.com/Tencent/WeKnora/internal/models/limiter" // register built-in vendors
 	"github.com/Tencent/WeKnora/internal/models/utils/ollama"
+	"github.com/Tencent/WeKnora/internal/quoteclient"
 	"github.com/Tencent/WeKnora/internal/router"
 	"github.com/Tencent/WeKnora/internal/sandbox"
 	"github.com/Tencent/WeKnora/internal/storageallowlist"
@@ -191,6 +193,8 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(repository.NewUserResourceFavoriteRepository))
 	must(container.Provide(repository.NewStockWatchRepository))
 	must(container.Provide(repository.NewStockWatchEventsRepository))
+	must(container.Provide(repository.NewStockWatchConditionRepository))
+	must(container.Provide(repository.NewStockWatchNotificationRepository))
 	must(container.Provide(service.NewWebSearchStateService))
 	must(container.Provide(repository.NewDataSourceRepository))
 	must(container.Provide(repository.NewSyncLogRepository))
@@ -285,6 +289,7 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(service.NewCustomAgentService))
 	must(container.Provide(service.NewUserResourceFavoriteService))
 	must(container.Provide(service.NewStockWatchService))
+	must(container.Provide(service.NewStockWatchConditionService))
 	must(container.Provide(service.NewWikiPageService))
 	must(container.Provide(service.NewWikiIngestService, dig.Name("wikiIngest")))
 	must(container.Provide(service.NewWikiLintService))
@@ -492,6 +497,15 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(service.NewHousekeepingService))
 	must(container.Invoke(startHousekeepingService))
 	logger.Debugf(ctx, "[Container] Knowledge housekeeping runner registered")
+
+	// Daily condition notifier: the quote client and the Feishu webhook are the
+	// job's two outside-the-DB dependencies, so they are bound to the interfaces
+	// the job declares rather than to their concrete types.
+	must(container.Provide(quoteclient.NewClient, dig.As(new(service.QuoteFetcher))))
+	must(container.Provide(alertnotify.NewFeishuNotifier, dig.As(new(service.AlertNotifier))))
+	must(container.Provide(service.NewStockWatchConditionJob))
+	must(container.Invoke(startStockWatchConditionJob))
+	logger.Debugf(ctx, "[Container] Stock watch condition notifier registered")
 	must(container.Provide(chatpipeline.NewEventManager))
 	must(container.Invoke(chatpipeline.NewPluginSearch))
 	must(container.Invoke(chatpipeline.NewPluginRerank))
@@ -1972,6 +1986,31 @@ func startHousekeepingService(svc *service.HousekeepingService, cleaner interfac
 	}
 	cleaner.RegisterWithName("KnowledgeHousekeeping", func() error {
 		svc.StopWithin(cleanupStepTimeout)
+		return nil
+	})
+}
+
+// startStockWatchConditionJob starts the daily condition-evaluation cron and
+// registers cleanup. Best-effort: a startup error is logged but does NOT abort
+// the container — the watchlist page and everything else stay usable.
+//
+// The job's own failures are worse than "not started", so they are contained at
+// the run level (RunOnce returns an error which the cron callback logs); this
+// function only owns the lifecycle.
+func startStockWatchConditionJob(job *service.StockWatchConditionJob, cleaner interfaces.ResourceCleaner) {
+	if job == nil {
+		return
+	}
+	if cleaner == nil {
+		logger.Warnf(context.Background(),
+			"[Container] stock watch condition job start failed: resource cleaner missing")
+		return
+	}
+	if err := job.Start(context.Background()); err != nil {
+		logger.Warnf(context.Background(), "[Container] stock watch condition job start failed: %v", err)
+	}
+	cleaner.RegisterWithName("StockWatchConditionJob", func() error {
+		job.StopWithin(cleanupStepTimeout)
 		return nil
 	})
 }
