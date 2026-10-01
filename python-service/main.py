@@ -1626,6 +1626,14 @@ def _iso_date(d: Any) -> Optional[str]:
     return None
 
 
+def _mean_of(rows: List[Dict[str, Any]], field: str) -> Optional[float]:
+    """一段 K 线的某列均值。任一行为 None 就整体返回 None —— 不跳过、不用部分凑。"""
+    vals = [r.get(field) for r in rows]
+    if not vals or any(v is None for v in vals):
+        return None
+    return sum(float(v) for v in vals) / len(vals)
+
+
 @app.get("/api/quotes")
 @app.get("/quotes")
 async def get_quotes(
@@ -1650,6 +1658,12 @@ async def get_quotes(
 
     涨跌幅在只有一根 K 线时是 **null 而不是 0**：新股上市首日没有"前一天"，
     报 0% 是在编一个不存在的读数。
+
+    另外附 `ma5 / ma20 / vol_ma5 / volume_ratio`：这四个是由同一份 OHLCV
+    直接算出的**读数**（不是判断，更不是建议），目的是让调用方在同一个响应里
+    拿到「价格 / 涨跌幅 / 量比 / 离 MA20 多远」，从而只发一次请求。历史不足时
+    同样是 null（例：只有 10 根 K 线 → `ma20 = null`），绝不用已有部分凑一个数。
+    `volume_ratio` 的均量基准取**前 5 根（不含今日）**，否则放量当天会被自己抬高。
     """
     from datasources import registry
 
@@ -1689,7 +1703,10 @@ async def get_quotes(
             FROM v_daily_qfq
             WHERE thscode = s.thscode
             ORDER BY date DESC
-            LIMIT 2
+            -- 61 根而不是 2 根：调用方除了最新价与前收盘，还需要 5/20 日均线与
+            -- 5 日均量来算「量比」和「是否站上 MA20」。上界是硬的（每票 ≤61 行，
+            -- 200 票也只有 ~1.2 万行），不是无节制地拉历史。
+            LIMIT 61
         ) q ON TRUE
         ORDER BY s.thscode, q.date
     """
@@ -1725,6 +1742,18 @@ async def get_quotes(
         if close is not None and prev_close:
             change = close - prev_close
             change_pct = change / prev_close * 100
+        # 均线与量比：全部从同一份 OHLCV 直接算出，不含任何「观点」——
+        # 它们存在的意义是让调用方（自选页 / 用户自定义条件判定）不必再发一次请求。
+        # 历史不足就返回 null：只有 10 根就说 ma20 = null，绝不拿已有部分凑一个数。
+        ma5 = _mean_of(series[-5:], "close") if len(series) >= 5 else None
+        ma20 = _mean_of(series[-20:], "close") if len(series) >= 20 else None
+        # 量比的基准取**前 5 根（不含今日）**：把今天算进均量会自己抬高自己，
+        # 放量当天反而看不出放量。
+        vol_ma5 = _mean_of(series[-6:-1], "volume") if len(series) >= 6 else None
+        volume = latest.get("volume")
+        volume_ratio = None
+        if volume is not None and vol_ma5:
+            volume_ratio = volume / vol_ma5
         meta = names.get(code) or {}
         data[code] = {
             "thscode": code,
@@ -1738,8 +1767,12 @@ async def get_quotes(
             "prev_close": prev_close,
             "change": change,
             "change_pct": change_pct,
-            "volume": latest.get("volume"),
+            "volume": volume,
             "turnover": latest.get("turnover"),
+            "ma5": ma5,
+            "ma20": ma20,
+            "vol_ma5": vol_ma5,
+            "volume_ratio": volume_ratio,
         }
 
     return {
