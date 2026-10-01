@@ -13,12 +13,16 @@
           :key="st.thscode"
           type="button"
           class="stock-chip"
+          :class="{ 'stock-chip--active': st.thscode === activeThscode }"
+          :aria-pressed="st.thscode === activeThscode"
           @click="handleClickStock(st)"
-          :title="`点击在右侧工作台查看 ${st.name} (${st.thscode}) 的知行战法K线与砖型图`"
+          :title="st.thscode === activeThscode
+            ? `右侧工作台正在显示 ${st.name} (${st.thscode})`
+            : `点击在右侧工作台查看 ${st.name} (${st.thscode}) 的知行战法K线与砖型图`"
         >
           <span class="stock-chip__name">{{ st.name }}</span>
           <span class="stock-chip__code">{{ st.thscode }}</span>
-          <span class="stock-chip__action">K线诊断 →</span>
+          <span class="stock-chip__action">{{ st.thscode === activeThscode ? '正在查看' : 'K线诊断 →' }}</span>
         </button>
       </div>
     </div>
@@ -26,12 +30,23 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
-import { extractMentionedStocksFromText, type MentionedStock } from '@/components/workspace/kline/stock-score';
+import { computed, ref } from 'vue';
+import { useAgentWorkspace } from '@/composables/useAgentWorkspace';
+import { extractMentionedStocks, type MentionedStock } from '@/utils/stockMentions';
 
 const props = defineProps<{
   session: any;
 }>();
+
+// 右侧工作台当前显示的标的。取不到 provider（如本组件被单独复用/测试挂载）时
+// 退化成空串，所有 chip 都不高亮 —— 缺状态不该被渲染成「都在看」。
+const activeThscode = (() => {
+  try {
+    return useAgentWorkspace().activeThscode
+  } catch {
+    return ref('')
+  }
+})();
 
 const emit = defineEmits<{
   (e: 'select-stock', stock: MentionedStock, allStocks: MentionedStock[]): void;
@@ -44,7 +59,7 @@ const rawContent = computed(() => {
 });
 
 const mentionedStocks = computed<MentionedStock[]>(() => {
-  return extractMentionedStocksFromText(rawContent.value);
+  return extractMentionedStocks(rawContent.value);
 });
 
 const handleClickStock = (stock: MentionedStock) => {
@@ -152,6 +167,25 @@ const handleClickStock = (stock: MentionedStock) => {
 
   &:active {
     transform: translateY(0);
+  }
+
+  // 右侧图位正在显示这只票时的态。让「正文里提到哪只」和「图上画着哪只」可对照，
+  // 这是聊天与 K 线之间最便宜的一层双向绑定。
+  &--active {
+    // 全部走令牌，不写死颜色：品牌色透明叠加用 color-mix（深色模式会跟着变），
+    // 这也是样式守卫（styleGuard.test.mjs）要求的形式——它只允许绕过令牌的
+    // 写法计数下降，新代码不该抬高基线。
+    border-color: var(--td-brand-color);
+    background: color-mix(in srgb, var(--td-brand-color) 12%, transparent);
+    box-shadow: 0 0 0 1px var(--td-brand-color) inset;
+
+    .stock-chip__code {
+      color: var(--td-brand-color);
+    }
+
+    &:hover {
+      transform: none;
+    }
   }
 
   .stock-chip__name {

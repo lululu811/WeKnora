@@ -1,5 +1,5 @@
 <template>
-  <div class="kline-workspace" :class="{ 'is-dark': isDark, 'hide-drawing-bar': !isDrawingBarVisible }">
+  <div class="kline-workspace" :class="{ 'is-dark': isDark }">
     <!-- 1. 顶部股票池候选条 (Picks Bar) -->
     <div class="kline-workspace__picks-bar" v-if="workspace.picks.value.length > 0">
       <div class="picks-bar__label">
@@ -213,20 +213,27 @@
         >
           形态气泡<span v-if="filteredAnnotations.length > 0" class="feature-count">({{ filteredAnnotations.length }})</span>
         </button>
+        <button
+          type="button"
+          class="toolbar__btn feature-btn"
+          :class="{ 'is-active': isLevelsEnabled }"
+          title="关键位：在现价上下标出最近的两个支撑与两个阻力（枢轴点 / 斐波那契 / 摆动高低点 / 整数关口，重合的合并）。觉得画面太满时可以关掉"
+          @click="toggleLevels"
+        >
+          关键位
+        </button>
+        <button
+          type="button"
+          class="toolbar__btn feature-btn"
+          :class="{ 'is-active': isAnchorsEnabled }"
+          :title="`回答标记：把这条回答里模型标记的时段与价位画在图上，编号与正文里的 ①②③ 一致（最多常驻 ${MAX_PERSISTENT_ANCHORS} 个）`"
+          @click="toggleAnchors"
+        >
+          回答标记<span v-if="workspace.anchors.value.length > 0" class="feature-count">({{ workspace.anchors.value.length }})</span>
+        </button>
       </div>
 
       <div class="toolbar__spacer" />
-
-      <!-- 画线侧栏切换 -->
-      <button
-        type="button"
-        class="toolbar__btn"
-        :class="{ 'is-active': isDrawingBarVisible }"
-        title="显示/隐藏左侧画线工具栏（斐波那契、波浪、ABCD 等约 35 个画线工具）"
-        @click="toggleDrawingBar"
-      >
-        画线
-      </button>
 
       <!-- 折叠工作台：收成右侧窄边而不是销毁，当前股票/指标/周期全部保留。
            面板再打开时仍是原来那只股票，不用重新选；这正是它取代原来那个
@@ -240,6 +247,10 @@
         <t-icon :name="workspace.isCollapsed.value ? 'chevron-left' : 'chevron-right'" size="16px" />
       </button>
     </div>
+
+    <!-- 4b. 多标的对比条。只在意一组多只票时出现，默认收起成一行摘要。
+         点击某一行即切换主图到该标的——它同时是「对比」和「切票」两个入口。 -->
+    <KLineCompareBar @select="handleCompareSelect" />
 
     <!-- 5. KLineChart Canvas 容器 (占用主要高度，无任何挤压)
          外包一层 chart-wrap 作为相对定位上下文：空状态必须只盖住图表区域，
@@ -311,19 +322,37 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
+import { ref, shallowRef, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { KLineChartPro } from '@klinecharts/pro';
-import '@klinecharts/pro/dist/klinecharts-pro.css';
+import type { Chart } from 'klinecharts';
 import { useAgentWorkspace } from '@/composables/useAgentWorkspace';
 import { useTheme } from '@/composables/useTheme';
-import { ZettarancDatafeed, type Adjust } from './datafeed';
+import type { Adjust, ZettarancDatafeed } from './datafeed';
+import {
+  createCoreChart,
+  destroyChart,
+  swapSymbol,
+  clearAllOverlays,
+  drawPriceLevel,
+  drawRangeBand,
+  scrollToTimestamp as chartScrollToTimestamp,
+  getChartData,
+  drawAnchorFocus,
+  clearAnchorFocus,
+  anchorCanvasBoxes,
+  swapIndicators,
+} from './core-chart';
 import { setZettarancPalette } from './palette';
 import { getKlineChartTheme } from './theme';
+import KLineCompareBar from './KLineCompareBar.vue';
 import { registerZettarancIndicators } from './indicators';
 import { MAIN_PRESETS, SUB_PRESETS } from './indicator-meta';
 import { fetchAnnotations, type Annotation, PATTERN_CONFIG } from './annotate-api';
 import { setGlobalOverlayConfig } from './overlay-drawer';
+import { computeLevels, pickChartLevels } from './levels';
+import { resolveAnchorsForChart, hitTestAnchor, MAX_PERSISTENT_ANCHORS } from './anchor-render';
+import { ActionType } from 'klinecharts';
+import { computeAnchorStats, formatAnchorStats } from './anchor-stats';
 import { calcDEMA, calcLongBBI, calcBBI, calcZXBrick } from './stock-score';
 import type { Period, SymbolInfo, KLineData } from './types';
 
@@ -344,7 +373,14 @@ const noDataSymbol = ref('');
 // 两者触发的是完全不同的问题，合并成一个状态就没法给出正确的下一步指引。
 // null 表示当前没有错误。
 const loadError = ref<{ symbol: string; message: string } | null>(null);
-const chartInstance = ref<KLineChartPro | null>(null);
+// 底层 klinecharts Chart 实例（非 Pro 包装）。切换标的/周期时就地复用这个实例。
+//
+// 用 shallowRef 而不是 ref：ref 会对值做深层响应式代理，Chart 与 ZettarancDatafeed
+// 都是带原型方法与内部状态的普通对象，被 Proxy 包一层后方法调用时 this 指向代理、
+// 私有字段访问与 instanceof 判断都会出问题。
+const chartInstance = shallowRef<Chart | null>(null);
+// createCoreChart 内部建好的 datafeed，就地换数据时复用它（保住 404/非JSON/code!=0 三态区分）。
+const datafeedRef = shallowRef<ZettarancDatafeed | null>(null);
 let resizeObserver: ResizeObserver | null = null;
 
 // 跟随平台主题。此前这里写死 true（"专业深色交易终端风"），结果是 K线面板与
@@ -354,28 +390,17 @@ let resizeObserver: ResizeObserver | null = null;
 // 开关只会制造"两边不同步"的第二真相源。
 const { effectiveTheme } = useTheme();
 const isDark = computed(() => effectiveTheme.value === 'dark');
-// 左侧画线栏。默认关闭。
-//
-// 库的实例只暴露 setTheme/setStyles/setPeriod 等 setter，没有运行时的
-// drawingBarVisible 开关，也没有 resize 方法——要么重建整个图表（会丢缩放
-// 位置并重新取数），要么用 CSS 隐藏后让内部 ResizeObserver 重排。这里选后者：
-// 切换后派发一次 window resize，库内部的 observer 会重新量算画布尺寸，
-// 否则容器变宽了但 canvas 仍按旧宽度绘制，右侧会留白。
-const isDrawingBarVisible = ref(false);
-
-const toggleDrawingBar = () => {
-  isDrawingBarVisible.value = !isDrawingBarVisible.value;
-  // 等 DOM class 应用后再触发，避免量到切换前的尺寸。
-  nextTick(() => {
-    window.dispatchEvent(new Event('resize'));
-  });
-};
 const adjust = ref<Adjust>('forward');
 const periodIdx = ref(0);
 
 // 神奇九转与形态气泡开关
 const isTD9Enabled = ref(true);
 const isPatternsEnabled = ref(true);
+// 关键位（支撑/阻力）开关。默认打开，但必须能一键关掉——图上已经有形态气泡，
+// 再加一组横线在某些行情下会糊住 K 线，用户需要能自己让画面回到干净状态。
+const isLevelsEnabled = ref(true);
+// 正文锚点开关。与关键位同理：锚点是常驻的，用户要能一键清空画面。
+const isAnchorsEnabled = ref(true);
 
 // 主图模式 / 副图模式：全部来自 config/indicators.yaml 的 views 段
 // （经由生成的 indicator-meta.ts 读入），代码里不再出现任何指标名字符串。
@@ -476,14 +501,25 @@ const getSubIndicators = () => {
   return preset ? [...preset.indicators] : [];
 };
 
+// 换指标：就地增删，不重建图表。此前每次切指标都整图重建，用户刚缩放好的
+// 区间和刚画的标注会被清零。
 const setMainMode = (mode: MainIndicatorMode) => {
+  if (mode === mainMode.value) return;
   mainMode.value = mode;
-  initChart();
+  swapIndicators(chartInstance.value, getMainIndicators(), getSubIndicators());
 };
 
 const switchSubMode = (mode: SubIndicatorMode) => {
+  if (mode === subMode.value) return;
   subMode.value = mode;
-  initChart();
+  swapIndicators(chartInstance.value, getMainIndicators(), getSubIndicators());
+};
+
+const toggleLevels = () => {
+  isLevelsEnabled.value = !isLevelsEnabled.value;
+  // 关键位是 overlay（不是 canvas 自绘），开关后要重画一次：
+  // 关掉时把已有的线清掉，打开时按当前数据重新算。
+  redrawOverlays(chartInstance.value);
 };
 
 const toggleTD9 = () => {
@@ -581,6 +617,11 @@ const handleDataLoaded = (dataList: KLineData[]) => {
     whiteVal,
     yellowVal,
   };
+
+  // 数据到位后重画水平位。关键位是从这批 K 线算出来的，必须在数据进来之后
+  // 才有意义——换标的时 swapSymbol 会先清空 overlay，若不等数据到达就画，
+  // 算出来的会是上一只票的价位。
+  redrawOverlays(chartInstance.value);
 };
 
 // 加载形态标注
@@ -591,18 +632,23 @@ const loadAnnotations = async () => {
     const res = await fetchAnnotations(symbolStr, 120);
     annotations.value = res.annotations || [];
     setGlobalOverlayConfig({ backendAnnotations: annotations.value });
+    // 标注也画成水平位，和关键位共用同一批 overlay，必须一起重画。
+    redrawOverlays(chartInstance.value);
     window.dispatchEvent(new Event('resize'));
   } catch (err) {
     annotations.value = [];
   }
 };
-
-// 初始化并渲染 KLineChart Pro
+// 建图（首次）与整体换主题时才走这里。
+//
+// 换标的/换周期**不再**走这里 —— 那两条路径改为就地换数据（swapSymbol），
+// 以保住用户的缩放级别、十字光标位置和已画标注。此前任何一项变化都整图重建，
+// 等于每次切票都把用户的研究状态清零。
 const initChart = () => {
   if (!chartContainer.value) return;
 
   if (chartInstance.value) {
-    chartContainer.value.innerHTML = '';
+    destroyChart(chartInstance.value, chartContainer.value);
     chartInstance.value = null;
   }
 
@@ -616,26 +662,13 @@ const initChart = () => {
     type: 'stock',
   };
 
-  const datafeed = new ZettarancDatafeed({
-    adjust: adjust.value,
-    onDataLoaded: handleDataLoaded,
-    onNoData: (symbol) => {
-      noDataSymbol.value = `${symbol.ticker}.${symbol.exchange}`;
-      loadError.value = null;
-    },
-    onError: (symbol, message) => {
-      loadError.value = { symbol: `${symbol.ticker}.${symbol.exchange}`, message };
-      noDataSymbol.value = '';
-    },
-  });
-
   setZettarancPalette(isDark.value);
 
-  chartInstance.value = new KLineChartPro({
+  const handle = createCoreChart({
     container: chartContainer.value,
     symbol,
     period: PERIODS[periodIdx.value],
-    datafeed,
+    adjust: adjust.value,
     // 画布**固定深色**，不跟随平台主题。这是"浅色外壳 + 深色画布"的关键。
     //
     // 为什么不让画布跟着变浅：Z_MAIN 的第一条线是 `#FFFFFF` 的"白线"(DEMA 10)，
@@ -645,16 +678,33 @@ const initChart = () => {
     // 对比度本来就比浅底高，改浅反而更难读。
     //
     // 外壳（工具栏、候选池条、行情条、底部快捷条）由 .is-dark 这个 CSS class
-    // 画布跟随平台主题。切调色板必须发生在建实例之前：自定义指标是在
-    // chartInstance 构建期间注册的，它们把 PAL.* 抄进 styles 配置，事后改
-    // PAL 不会回溯已注册的指标。
+    // 跟随平台主题。切调色板必须发生在建实例之前：自定义指标是在建实例期间
+    // 注册的，它们把 PAL.* 抄进 styles 配置，事后改 PAL 不会回溯已注册的指标。
     styles: getKlineChartTheme(isDark.value),
     mainIndicators: getMainIndicators(),
     subIndicators: getSubIndicators(),
-    periods: PERIODS,
-    drawingBarVisible: true,
-    theme: isDark.value ? 'dark' : 'light',
+    onDataLoaded: handleDataLoaded,
+    onNoData: () => {
+      noDataSymbol.value = `${currentTicker.value}.${currentExchange.value}`;
+      loadError.value = null;
+    },
+    onError: (message) => {
+      loadError.value = { symbol: `${currentTicker.value}.${currentExchange.value}`, message };
+      noDataSymbol.value = '';
+    },
   });
+
+  chartInstance.value = handle.chart;
+  datafeedRef.value = handle.datafeed;
+};
+
+// 对比条点击某一行 -> 切主图过去。
+// 复用 setActiveThscode 而不是自己改 activeIndex：那里已经处理了
+// 「picks 里没有这个代码就先插进去」的分支，与正文 ticker 点击走的是同一条路径。
+const handleCompareSelect = (thscode: string) => {
+  // 用户显式选了对比条里的某一行 -> 本轮不再自动切图。
+  workspace.markUserPick(thscode);
+  workspace.setActiveThscode(thscode);
 };
 
 // 键盘快捷键监听
@@ -732,27 +782,342 @@ const handleActionAsk = (type: 'valuation' | 'strategy' | 'report') => {
   workspace.sendToChat(prompt);
 };
 
-// 监听标的切换重新初始化
-watch([currentTicker, currentExchange, adjust, periodIdx], () => {
-  nextTick(() => {
-    initChart();
-    loadAnnotations();
-  });
-});
-
-watch(isDark, () => {
-  nextTick(() => {
-    initChart();
-  });
-});
-
-// 平台主题切换 → 重建图表。
+// 换标的 / 换复权 / 换周期：就地换数据，不重建实例。
 //
-// 画布跟随平台主题后，CSS 不够用了：KLineChart 的 styles（画布底、网格、坐标轴、
-// tooltip）和自定义指标线色都得重新算。库的实例只暴露 setTheme/setStyles，没有
-// "重算已注册指标配色" 的接口，所以整体重建最不容易漏。
+// 三个来源合成一个 watch，因为它们对图表的影响是同一种——换一批 K 线。分开写会
+// 在快速连点时互相打架（一次切票 + 一次切周期触发两次换数据）。标的与复权变化
+// 还需要重新拉标注（标注跟着标的价格走）。
+watch([currentTicker, currentExchange, adjust, periodIdx], async () => {
+  if (!chartInstance.value || !datafeedRef.value) {
+    // 还没建图（首帧）就整体建一次。
+    nextTick(() => {
+      initChart();
+      loadAnnotations();
+    });
+    return;
+  }
+  await nextTick();
+  const symbol: SymbolInfo = {
+    exchange: currentExchange.value,
+    market: 'stocks',
+    name: currentStockName.value,
+    shortName: currentStockName.value,
+    ticker: currentTicker.value,
+    priceCurrency: 'cny',
+    type: 'stock',
+  };
+  try {
+    await swapSymbol(chartInstance.value, datafeedRef.value, symbol, PERIODS[periodIdx.value]);
+    await loadAnnotations();
+  } catch (err) {
+    loadError.value = {
+      symbol: `${currentTicker.value}.${currentExchange.value}`,
+      message: err instanceof Error ? err.message : String(err),
+    };
+  }
+});
+
+// 平台主题切换 → 就地换 styles，不重建。
+//
+// 重建的理由是「自定义指标在建实例时把 PAL.* 抄进了 styles 配置，改调色板不会
+// 回溯已注册指标」。但 setZettarancPalette 是可变的全局单例，而指标 draw 时
+// 通过 PAL() 实时读取（见 palette.ts 的 `PAL()` 调用模式），所以切主题时先换
+// 调色板再 setStyles 即可让已注册指标跟着变色。重建反而会丢用户的缩放与标注。
+watch(isDark, () => {
+  setZettarancPalette(isDark.value);
+  chartInstance.value?.setStyles(getKlineChartTheme(isDark.value));
+});
+
+// 正文日期 → 图上区间。这是「聊天 → 图表」第二条通道。
+//
+// 降级链条是刻意收紧的，原则是**宁可少画，不可画错**：
+//   1. 完整日期（from/to）→ 直接滚过去，按该区间的价格上下沿画带；
+//   2. 只有 md（缺年份的「5月20日」）→ 在已加载数据里找当年最近的一根；
+//   3. 换算不出任何一根 → 什么都不做（不滚、不画），由正文标记自身的 title 兜底。
+// 绝不猜年份：「5月20日」在一段 2024 年的分析里可能指完全不同的两段行情。
+const resolveTimestamp = (value: number | undefined, md: string | undefined): number | null => {
+  const bars = getChartData(chartInstance.value);
+  if (bars.length === 0) return null;
+  if (value !== undefined) return value;
+  if (!md) return null;
+  const [mm, dd] = md.split('-');
+  if (!mm || !dd) return null;
+  // 优先落在与当前数据末根同一年，避免跨年错配。
+  const lastYear = new Date(bars[bars.length - 1].timestamp).getUTCFullYear();
+  let best: number | null = null;
+  for (const bar of bars) {
+    const d = new Date(bar.timestamp);
+    if (d.getUTCMonth() + 1 !== Number(mm) || d.getUTCDate() !== Number(dd)) continue;
+    if (d.getUTCFullYear() !== lastYear) continue;
+    if (best === null) best = bar.timestamp;
+  }
+  return best;
+};
+
+/** 区间带上的日期文字。两端同一根时不写成「A ~ A」。 */
+const formatFocusLabel = (from: number, to: number): string => {
+  const fmt = (ts: number) => {
+    const d = new Date(ts);
+    const y = d.getUTCFullYear();
+    const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(d.getUTCDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+  const a = fmt(from);
+  const b = fmt(to);
+  return a === b ? a : `${a} ~ ${b}`;
+};
+
+const handleChartFocus = (range: { from?: number; to?: number; md?: string }) => {
+  const chart = chartInstance.value;
+  if (!chart) return;
+  // 先回到"干净的关键位 + 标注"状态，再叠区间带/单点位——否则会把上一次
+  // 聚焦留下的带子留在图上，与新的区间叠成两条。
+  redrawOverlays(chart);
+
+  const from = resolveTimestamp(range.from, range.md);
+  const to = resolveTimestamp(range.to, undefined);
+  if (from === null) return;
+
+  if (to !== null && to > from) {
+    chartScrollToTimestamp(chart, from);
+    // 区间带的上下沿取该段真实价格包络，不是日期对应的单一收盘价——
+    // 否则带子可能整个落在 K 线实体之外，看上去像空画一块。
+    const bars = getChartData(chart)
+    const inRange = bars.filter((b) => b.timestamp >= from && b.timestamp <= to)
+    if (inRange.length > 0) {
+      drawRangeBand(
+        chart,
+        'focus_range',
+        // 左右边界跟着日期走，上下沿取该段真实价格包络——两个维度都要给，
+        // 否则带子会横贯整个时间轴，表达的就成了「这个价位区间」而不是「这段时间」。
+        from,
+        to,
+        Math.min(...inRange.map((b) => b.low)),
+        Math.max(...inRange.map((b) => b.high)),
+        // 带子上写日期，与正文里那串日期是同一份数据——联动的可读性主要靠
+        // 「左边写的是哪段、右边画的就是哪段」这个对应关系能被一眼看出来。
+        formatFocusLabel(from, to),
+      )
+    }
+    return
+  }
+
+  // 单点：标一根水平位，再把图滚过去。
+  const bar = getChartData(chart).find((b) => b.timestamp === from)
+  if (bar) {
+    drawPriceLevel(chart, 'focus_level', bar.close)
+    chartScrollToTimestamp(chart, from)
+  }
+};
+
+/**
+ * 支撑/阻力位。来自本地按后端同一套公式算出的关键位（见 levels.ts）。
+ *
+ * **每侧只画一条：最近的那个支撑、最近的那个阻力。**
+ *
+ * 这个数字是压出来的，不是拍的。实测五粮液：现价 70.06 时，关键位是
+ * 68.87 / 70.00 / 70.79 / 72.45 —— 四个价位挤在 3.6 个价格单位里。每侧两条
+ * 会在十几个像素内叠成一条看不清的色带（第一版就是这样，用户反馈「密密麻麻」）。
+ *
+ * 而且每侧第二条的价值本来就低：可操作的是**最近**的支撑与阻力，再往外的那条
+ * 既不改变决策，也不比第一条更准。支撑与阻力分属两个列表、彼此不参与合并，
+ * 所以只能靠减少条数来解决聚集。
+ *
+ * 重合的位仍然合并（70.00 那条同时是整数关口、枢轴点 PP 和两个摆动低点）。
+ */
+const LEVELS_PER_SIDE = 1;
+
+/**
+ * 画到图上时的价位合并容差（占现价的比例）。
+ *
+ * 比 `pickChartLevels` 的默认值（0.5%）宽得多，因为这是**画线**不是**列清单**：
+ * 现价落在关键位密集区时（实测五粮液：69.33 / 70.00 / 70.79 / 71.53 挤在 2.2 个
+ * 价位里），0.5% 的容差会留下 4 条线加 4 个价格标签，在十几个像素里叠成一条
+ * 看不清的色带。1.5% 把这一簇收成一条代表线——一簇价位画一条，比画四条重叠线
+ * 更能说明「这里是一个支撑/阻力区」。
+ */
+const LEVEL_MERGE_TOLERANCE = 0.015;
+
+const drawLevels = (chart: Chart | null) => {
+  if (!chart || !isLevelsEnabled.value) return;
+  const bars = getChartData(chart);
+  const computed = computeLevels(bars);
+  if (!computed) return;
+  for (const level of pickChartLevels(computed, LEVELS_PER_SIDE, LEVEL_MERGE_TOLERANCE)) {
+    drawPriceLevel(chart, `lv_${level.side}_${level.price.toFixed(2)}`, level.price);
+  }
+};
+
+/**
+ * 正文锚点在图上的常驻呈现。
+ *
+ * 与「关键位」是两种东西，刻意分开：
+ *  - 关键位是**算法从 K 线算出来的**支撑阻力，与对话无关；
+ *  - 锚点是**模型在这条回答里主张的**时段与价位，带它的原话标签。
+ * 两者都会画水平线，所以视觉上必须能分辨——锚点带编号圆徽章，关键位不带。
+ *
+ * 上限与截断在 `anchor-render.ts` 里（纯函数，有单测）；这里只管画。
+ */
+const drawAnchors = (chart: Chart | null) => {
+  if (!chart || !isAnchorsEnabled.value) return;
+  const renderable = resolveAnchorsForChart(workspace.anchors.value, getChartData(chart));
+  for (const anchor of renderable) {
+    if (!anchor.resolvable) continue;
+    if (anchor.kind === 'level' && anchor.value !== undefined) {
+      drawPriceLevel(chart, `anchor_lv_${anchor.index}`, anchor.value, anchor.index);
+      continue;
+    }
+    if (
+      anchor.kind === 'range' &&
+      anchor.startIndex !== undefined &&
+      anchor.endIndex !== undefined &&
+      anchor.low !== undefined &&
+      anchor.high !== undefined
+    ) {
+      drawRangeBand(
+        chart,
+        `anchor_rg_${anchor.index}`,
+        anchor.startIndex,
+        anchor.endIndex,
+        anchor.low,
+        anchor.high,
+        anchor.label,
+        anchor.index,
+      );
+    }
+  }
+};
+
+/**
+ * hover 某个时段锚点：框外压暗 + 框内叠统计。
+ *
+ * 只在 hover 期间存在（离开即撤）——常驻压暗会把整张图长期灰掉一半，
+ * 是最毁观感的做法；而它要起的作用是「瞬间把注意力拉过去」，瞬时态就够了。
+ *
+ * 价格锚点（水平线）不做压暗：一条横贯全图的线没有"框外"可言，
+ * 压暗整张图来表达"看这条线"是反效果。
+ */
+const applyAnchorHover = (chart: Chart | null) => {
+  if (!chart) return;
+  clearAnchorFocus(chart);
+  const idx = workspace.hoveredAnchorIndex.value;
+  if (idx === null || !isAnchorsEnabled.value) return;
+  const bars = getChartData(chart);
+  const anchor = resolveAnchorsForChart(workspace.anchors.value, bars).find((a) => a.index === idx);
+  if (!anchor || !anchor.resolvable) return;
+  if (
+    anchor.kind !== 'range' ||
+    anchor.startIndex === undefined ||
+    anchor.endIndex === undefined ||
+    anchor.low === undefined ||
+    anchor.high === undefined
+  ) {
+    return;
+  }
+  const stats = computeAnchorStats(bars, anchor.startIndex, anchor.endIndex);
+  drawAnchorFocus(
+    chart,
+    anchor.startIndex,
+    anchor.endIndex,
+    anchor.low,
+    anchor.high,
+    formatAnchorStats(stats),
+  );
+};
+
+/**
+ * 光标在图上移动时，判断它是否落在某个锚点上。
+ *
+ * 命中几何每帧重算（可见区间、缩放都会变），但只在有锚点时才算——
+ * 没有锚点就没有反向联动的对象，省掉 convertToPixel 的开销。
+ */
+const applyChartHoverHit = (data: { dataIndex?: number; y?: number } | null | undefined) => {
+  const chart = chartInstance.value;
+  if (!chart || !isAnchorsEnabled.value) return;
+  const anchors = resolveAnchorsForChart(workspace.anchors.value, getChartData(chart));
+  const boxes = anchorCanvasBoxes(chart, anchors);
+  const index = hitTestAnchor(boxes, data?.dataIndex ?? NaN, data?.y ?? NaN);
+  if (index !== workspace.hoveredAnchorIndex.value) {
+    workspace.setHoveredAnchor(index);
+  }
+};
+
+const handleChartMouseLeave = () => {
+  workspace.setHoveredAnchor(null);
+};
+
+const toggleAnchors = () => {
+  isAnchorsEnabled.value = !isAnchorsEnabled.value;
+  redrawOverlays(chartInstance.value);
+};
+
+/**
+ * 点击正文锚点 -> 图滚过去。
+ *
+ * 用锚点自己算好的区间，而不是重新按日期找——两边用同一份换算结果，
+ * 才不会出现「框画在这儿、滚到那儿」的错位。
+ */
+const handleAnchorFocus = (index: number) => {
+  const chart = chartInstance.value;
+  if (!chart) return;
+  const anchor = resolveAnchorsForChart(workspace.anchors.value, getChartData(chart)).find(
+    (a) => a.index === index,
+  );
+  if (!anchor || !anchor.resolvable) return;
+  if (anchor.kind !== 'range' || anchor.startIndex === undefined) return;
+  const data = getChartData(chart);
+  const ts = data[anchor.startIndex]?.timestamp;
+  if (typeof ts === 'number') chartScrollToTimestamp(chart, ts);
+};
+
+/**
+ * 重画全部水平位。
+ *
+ * 这是唯一的入口：`handleChartFocus` 与数据加载都调它，避免"某个路径忘了清"
+ * 这类只在特定操作顺序下出现的残留。
+ *
+ * 注意这里**不画服务端形态标注**。那些标注是按日期锚定的形态（早晨之星、
+ * 关键K…），已经由 overlay-drawer 画成 K 线上的胶囊徽章；把它们同时画成
+ * 横向价格线是错的——一条横线表达的是「这个价位有意义」，而一个日期上的形态
+ * 跟水平价位没有任何关系。之前那版就是这么画的，等于把同一批数据画了两遍，
+ * 还是错的那种画法。
+ */
+const redrawOverlays = (chart: Chart | null) => {
+  if (!chart) return;
+  clearAllOverlays(chart);
+  drawLevels(chart);
+  drawAnchors(chart);
+  // 聚焦层也归这里管：redraw 会把它一起清掉，所以必须紧接着按当前 hover 复原，
+  // 否则「hover 时恰好发生一次数据刷新」会把压暗弄丢。
+  applyAnchorHover(chart);
+};
+
+// 锚点集合变化（切回答/回答完成）就重画。整组替换而不是累积——见工作台里的说明。
+watch(() => workspace.anchors.value, () => {
+  nextTick(() => redrawOverlays(chartInstance.value));
+});
+
+// hover 态只管聚焦层，不走整张重画——压暗要跟手，重建全部 overlay 会顿。
+watch(() => workspace.hoveredAnchorIndex.value, () => {
+  applyAnchorHover(chartInstance.value);
+});
 
 onMounted(() => {
+  workspace.registerChartFocus(handleChartFocus);
+  workspace.registerAnchorFocus(handleAnchorFocus);
+  // 反向联动：图上 hover 锚点 -> 走同一个 hoveredAnchorIndex，正文据此高亮。
+  //
+  // 用 crosshair 事件自己算命中，而不是库的 overlay figure 事件——后者在这套
+  // 配置下实测不触发（lock 并非原因），排障要钻进库内部的命中判定。
+  // crosshair 稳定给出 dataIndex 与画布 y，判定逻辑是纯函数、有单测。
+  chartInstance.value?.subscribeAction(ActionType.OnCrosshairChange, (data) => {
+    applyChartHoverHit(data);
+  });
+  // crosshair 在鼠标移出图区时不一定补一次事件，这里兜底清空——
+  // 否则压暗会一直挂着，用户以为图坏了。
+  chartContainer.value?.addEventListener('mouseleave', handleChartMouseLeave);
+
   setGlobalOverlayConfig({
     showTD9: isTD9Enabled.value,
     showPatterns: isPatternsEnabled.value,
@@ -763,10 +1128,12 @@ onMounted(() => {
     loadAnnotations();
   });
 
-  // 监听容器尺寸自适应变化（拖动分栏滑块时自动调用图表 resize）
+  // 容器尺寸自适应（拖动分栏滑块时）。核心 Chart 有真正的 resize()，
+  // 不必再靠派发 window resize 让 Pro 内部的 observer 兜底——那条路径在
+  // 绕过 Pro 之后已经不存在了。
   if (chartContainer.value) {
     resizeObserver = new ResizeObserver(() => {
-      window.dispatchEvent(new Event('resize'));
+      chartInstance.value?.resize();
     });
     resizeObserver.observe(chartContainer.value);
   }
@@ -775,15 +1142,17 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  workspace.registerChartFocus(null);
+  workspace.registerAnchorFocus(null);
+  chartContainer.value?.removeEventListener('mouseleave', handleChartMouseLeave);
   window.removeEventListener('keydown', handleKeyDown);
   if (resizeObserver) {
     resizeObserver.disconnect();
     resizeObserver = null;
   }
-  if (chartInstance.value && chartContainer.value) {
-    chartContainer.value.innerHTML = '';
-    chartInstance.value = null;
-  }
+  destroyChart(chartInstance.value, chartContainer.value);
+  chartInstance.value = null;
+  datafeedRef.value = null;
 });
 </script>
 
@@ -804,40 +1173,16 @@ onUnmounted(() => {
     color: #e5e7eb;
   }
 
-  /* 隐藏 @klinecharts/pro 自带的重复 period 顶部栏，使用统一专业控制条 */
-  :deep(.klinecharts-pro-period-bar) {
-    display: none !important;
-  }
+  /* 画布底色：以前来自 @klinecharts/pro 的 CSS 变量（core 的 Styles 里没有
+     background 字段，canvas 同样是透明 clearRect 绘制，底色全靠容器透出来）。
+     绕过 Pro 后改由这里提供，值与 theme.ts 的 bgColor/surfaceColor 保持一致：
+     浅色是暖米 #FAF7F0 而不是纯白（纯白大面积长时间看刺眼）。 */
+  .kline-workspace__chart {
+    background: #FAF7F0;
 
-  /* 确保 pro 组件填满剩余空间，避免 80vh 引起的垂直压缩或溢出 */
-  :deep(.klinecharts-pro) {
-    height: 100% !important;
-  }
-
-  /* 画布底色由 @klinecharts/pro 的 CSS 变量控制，不在它的 Styles 类型里——
-     getKlineChartTheme() 配的 grid / candle / crosshair 全都管不到它，canvas 又是
-     clearRect 透明绘制的，所以真正露出来的是这里这个变量的值。浅色下不覆盖就是
-     纯白 #ffffff，画布再怎么调也是白的（2026-09-27 实测：像素值 #FFFFFF）。
-     这里连同文字/边框色一起换成暖米体系，浅色下才不会和暖底打架。 */
-  :deep(.klinecharts-pro) {
-    --klinecharts-pro-background-color: #FAF7F0;
-    --klinecharts-pro-popover-background-color: #FFFDF8;
-    --klinecharts-pro-text-color: #2A2520;
-    --klinecharts-pro-text-second-color: #6B6259;
-    --klinecharts-pro-border-color: #DDD5C6;
-  }
-
-  :deep(.klinecharts-pro-content) {
-    height: 100% !important;
-  }
-
-  /* 画线工具栏显示/隐藏控制 */
-  &.hide-drawing-bar {
-    :deep(.klinecharts-pro-drawing-bar) {
-      display: none !important;
-    }
-    :deep(.klinecharts-pro-widget) {
-      width: 100% !important;
+    :root[theme-mode="dark"] &,
+    .is-dark & {
+      background: #11141a;
     }
   }
 

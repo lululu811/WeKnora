@@ -1,3 +1,14 @@
+/**
+ * 标注的来源。
+ *
+ * `algorithm` = 后端形态识别算出来的（B1/S1/关键K/暴力K），有确定的判据。
+ * `llm`       = 模型在回答里主张的位（「1400 是关键支撑」这类）。
+ *
+ * 两者会画在同一张 K 线上，但**必须长得不一样**：一条是数据，一条是观点。
+ * 混成同一种墨迹，用户就无从判断哪条可以当依据。
+ */
+export type AnnotationSource = 'algorithm' | 'llm';
+
 export interface Annotation {
   type: string;
   date: string;
@@ -5,6 +16,26 @@ export interface Annotation {
   text: string;
   confidence: number;
   metadata: Record<string, any>;
+  /**
+   * 缺省视为 `algorithm`：这个字段是后加的，历史响应里没有它。
+   * 不设默认值会让所有旧数据在渲染时被判成未知来源而静默不画。
+   */
+  source?: AnnotationSource;
+}
+
+/** 该标注是否来自模型主张（而非算法识别）。 */
+export function isLlmAnnotation(ann: Annotation): boolean {
+  return ann.source === 'llm';
+}
+
+/**
+ * 画在 K 线上的短标签。
+ *
+ * 模型主张的位加一个前缀标记，因为**颜色之外还需要一个不依赖色觉的区分**——
+ * 深色画布上金色与琥珀色很接近，红绿色觉障碍用户更分不出。
+ */
+export function annotationLabel(ann: Annotation): string {
+  return isLlmAnnotation(ann) ? `观点·${ann.text}` : ann.text;
 }
 
 export interface AnnotationResponse {

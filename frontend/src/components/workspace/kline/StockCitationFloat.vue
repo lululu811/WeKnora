@@ -202,7 +202,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
-import type { KLineData } from 'klinecharts';
+import { fetchKline, computeChange, KlineFetchError } from './kline-cache';
 import {
   calcStockHoldingScore,
   calcDataQuality,
@@ -299,38 +299,25 @@ function fmtYi(v: number): string {
 }
 
 /**
- * 悬浮是高频交互，同一只票反复 hover 很常见，但旧实现每次都重打两个请求，
- * 且**没有 symbol 守卫**——慢响应会把当前 hover 的另一只票的数据覆盖掉。
- * 这里用 requestSeq 做版本号：只有最后一次请求的结果允许写进 state。
+ * 悬浮是高频交互，同一只票反复 hover 很常见，且**必须有 symbol 守卫**——
+ * 慢响应会把当前 hover 的另一只票的数据覆盖掉。这里用 requestSeq 做版本号：
+ * 只有最后一次请求的结果允许写进 state。
+ *
+ * 行情本身不再自带缓存：统一走 `fetchKline`（见 kline-cache.ts）。那份缓存按
+ * (symbol, period, adjust, limit) 索引并且做在途去重，因此 hover 卡片、顶部
+ * 对比条、K 线工作台三处对同一只票只会产生一次网络请求——此前它们各有一份
+ * 互不可见的缓存，hover 完再点开工作台仍要重新拉一次。
  */
 let requestSeq = 0;
 
-/** 按代码缓存，避免同一只票重复打网络。TTL 取 60s，够覆盖一次来回的连续 hover。 */
-const CACHE_TTL = 60_000;
-const klineCache = new Map<string, { at: number; rows: KLineData[] }>();
+/** 名称缓存：与行情无关的另一类资源，且只有这张卡片在用，留在本地。 */
 const nameCache = new Map<string, string>();
 
-/** 单次请求超时。挂死会让转圈永久停住。 */
-const REQUEST_TIMEOUT = 8000;
-
-async function fetchJsonWithTimeout(
-  url: string,
-  controller: AbortController,
-): Promise<any> {
-  const timer = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
-  try {
-    const r = await fetch(url, { signal: controller.signal });
-    // 必须先判 HTTP 状态再解析：网关 502/服务未就绪 503 也可能带 JSON 响应体，
-    // 直接 r.json() 会把故障当成正常响应，落到下面「查不到该标的的行情数据」，
-    // 于是服务挂掉被显示成"这只票没数据"。抛出去让 catch 报真实原因。
-    if (!r.ok) {
-      throw new Error(`HTTP ${r.status}`);
-    }
-    return await r.json();
-  } finally {
-    window.clearTimeout(timer);
-  }
-}
+/**
+ * 画像请求的超时。行情那份超时已经搬进 kline-cache（跟着它自己的 AbortController
+ * 走），这里只服务 `/api/stock-profile`——两条链路各有各的超时，不能共用一个常数。
+ */
+const PROFILE_TIMEOUT = 8000;
 
 const stockName = computed(() => {
   if (props.name) return props.name;
@@ -388,7 +375,7 @@ const loadProfile = async (symbolStr: string, seq: number) => {
 
   // 独立 controller：画像超时不能连带 abort 掉 K 线请求
   const ctl = new AbortController();
-  const timer = window.setTimeout(() => ctl.abort(), REQUEST_TIMEOUT);
+  const timer = window.setTimeout(() => ctl.abort(), PROFILE_TIMEOUT);
   try {
     const r = await fetch(`/api/stock-profile?symbol=${encodeURIComponent(symbolStr)}`, {
       signal: ctl.signal,
@@ -450,48 +437,18 @@ const loadStockData = async (symbolStr: string) => {
   if (!props.name && nameCache.has(ticker)) resolvedName.value = nameCache.get(ticker) as string;
 
   try {
-    const cached = klineCache.get(symbolStr);
-    let dataList: KLineData[] | null = null;
-
-    if (cached && Date.now() - cached.at < CACHE_TTL) {
-      dataList = cached.rows;
-    } else {
-      const res = await fetchJsonWithTimeout(
-        `/api/kline?symbol=${encodeURIComponent(symbolStr)}&period=day&limit=300`,
-        controller,
-      );
-      if (res?.code === 0 && Array.isArray(res.data) && res.data.length > 0) {
-        dataList = res.data.map((r: any) => ({
-          timestamp: r.ts * 1000,
-          open: r.open,
-          high: r.high,
-          low: r.low,
-          close: r.close,
-          volume: r.volume,
-          turnover: r.turnover,
-        }));
-        klineCache.set(symbolStr, { at: Date.now(), rows: dataList as KLineData[] });
-      }
-    }
+    // 共享缓存：与对比条、工作台复用同一次请求。limit 取 300 是因为卡片只需要
+    // 近一年多的数据来算评分；工作台要 5000 根，两者 key 不同、互不干扰。
+    const dataList = await fetchKline({ symbol: symbolStr, period: 'day', limit: 300 });
 
     if (isStale()) return;
 
-    if (!dataList) {
-      // 走到这里说明请求成功且 code===0，只是答案里没有 K 线——
-      // 这才是"这只票本地没数据"。请求失败的情况在上面已经抛出并由 catch 处理。
+    const change = computeChange(dataList);
+    if (!change) {
       loadError.value = '查不到该标的的行情数据';
       return;
     }
-
-    const last = dataList[dataList.length - 1];
-    // 只有两根以上才谈涨跌幅。旧实现只有一根时 prev = last，
-    // pctChange 恒为 0，又因为 0 >= 0 套上红色 is-up，界面显示成「+0.00%」——
-    // 一个看起来很确定、实际是"没有数据"的数字。
-    const prev = dataList.length > 1 ? dataList[dataList.length - 2] : null;
-    const pctChange = prev && prev.close > 0
-      ? Number((((last.close - prev.close) / prev.close) * 100).toFixed(2))
-      : null;
-    quote.value = { close: last.close, pctChange };
+    quote.value = { close: change.close, pctChange: change.pctChange };
 
     dataQualitySnapshot.value = calcDataQuality(dataList);
 
@@ -503,15 +460,16 @@ const loadStockData = async (symbolStr: string) => {
       // 不能退化成一张「什么都没说」的空白卡片。
       insufficient.value = true;
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
     if (isStale()) return;
-    // 带上网关/服务端的真实原因，而不是一律"查询失败"：
-    // 502、503、超时、网络中断是完全不同的排查方向。
-    const reason = err?.message ? `：${err.message}` : '';
-    if (err?.name === 'AbortError') {
-      loadError.value = '行情查询超时';
+    // 两类失败指向完全不同的排查方向，必须分开说：
+    //   no-data  = 本地没有这只票的行情（多半是模型编的代码），用户换一只就行；
+    //   transient = 链路/服务故障（502、超时、非 JSON），数据本身可能是好的。
+    // 混成一句「查询失败」会让服务挂掉被误读成"这只票没数据"。
+    if (err instanceof KlineFetchError) {
+      loadError.value = err.kind === 'no-data' ? '查不到该标的的行情数据' : `行情查询失败：${err.message}`;
     } else {
-      loadError.value = `行情查询失败${reason}`;
+      loadError.value = `行情查询失败${err instanceof Error && err.message ? `：${err.message}` : ''}`;
     }
     console.warn('[StockCitationFloat] failed to load stock kline data:', err);
   } finally {

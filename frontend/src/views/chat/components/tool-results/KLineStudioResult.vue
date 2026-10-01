@@ -44,7 +44,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { KlineStudioData } from '@/types/tool-results'
 import { useChatKLinePanel } from '@/composables/useChatKLinePanel'
@@ -105,24 +105,6 @@ const count = computed(() => {
 const openInPanel = (idx: number) => {
   if (!panel || !hasPick.value) return
   panel.open(pickList.value, idx)
-}
-
-// 卡片挂载时如果当前面板里已经是同一组 picks，仅切换 active；
-// 否则（首次出现或 picks 变化）自动打开右侧栏。
-onMounted(() => {
-  if (!panel || !hasPick.value) return
-  if (panel.visible.value && samePicks(panel.picks.value, pickList.value)) {
-    return
-  }
-  panel.open(pickList.value, 0)
-})
-
-const samePicks = (a: Array<{ ticker: string; exchange: string }>, b: Array<{ ticker: string; exchange: string }>) => {
-  if (a.length !== b.length) return false
-  for (let i = 0; i < a.length; i++) {
-    if (a[i].ticker !== b[i].ticker || a[i].exchange !== b[i].exchange) return false
-  }
-  return true
 }
 </script>
 

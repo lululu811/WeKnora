@@ -10,7 +10,7 @@
 
 import type { KLineData } from './types';
 import { zettarancPalette as PAL } from './palette';
-import type { Annotation } from './annotate-api';
+import { isLlmAnnotation, annotationLabel, type Annotation } from './annotate-api';
 
 export interface OverlayConfig {
   showTD9: boolean;
@@ -91,21 +91,95 @@ export interface KLinePatternItem {
   color: string;
   bgColor: string;
   position: 'top' | 'bottom';
+  /**
+   * 是否来自服务端标注（B1/S1/关键K/暴力K）。
+   *
+   * 本地检测器在 2440 根里能产出 671 个形态（光 doji 就 181 个），而服务端
+   * 只给 5 个。绘制时必须能区分两者——服务端的那些是**信号**（聊天里引用的
+   * 就是它们），本地的绝大多数是噪声，需要按间距裁剪。
+   */
+  fromBackend?: boolean;
 }
 
+/**
+ * 两个形态胶囊之间至少隔多少根 K 线。
+ *
+ * 10 是实测出来的：五粮液 120 根可见区间里原有 36 个胶囊（完全糊住），
+ * 间距 5 -> 16 个、8 -> 12 个、10 -> 9 个、15 -> 7 个。取 10 能在「保留足够
+ * 提示」与「看得清 K 线」之间站住，且服务端的 5 个标注始终保留。
+ */
+const PATTERN_MIN_GAP_BARS = 10;
+
 let cachedPatterns: Array<KLinePatternItem | null> = [];
-let cachedPatternsLength = 0;
-let cachedAnnLength = 0;
+let cachedKey = '';
+
+/**
+ * 缓存键必须覆盖**内容**，不能只比长度。
+ *
+ * 这个 memo 是为了避免每次重绘都跑一遍 O(n) 的形态检测，但最早的实现只比
+ * `dataList.length` 与标注条数，于是「切到另一只 K 线根数相同的票」会直接命中
+ * 上一只票的结果——用户看到的是别的股票的标注，而且不报错。更隐蔽的是
+ * 「同一只票、标注条数相同但日期不同」（换周期、重新拉标注）也会命中。
+ *
+ * 这里取三个维度：K 线的根数与首尾时间戳、标注的日期与来源。
+ * 首尾时间戳足以区分不同标的/不同周期，标注签名足以区分同一份 K 线上的
+ * 不同标注集合。代价是每次调用多做一次 O(标注数) 的字符串拼接，与
+ * O(K线数) 的检测相比可以忽略。
+ */
+function patternsCacheKey(dataList: KLineData[], backendAnnotations: Annotation[]): string {
+  const first = dataList.length > 0 ? dataList[0].timestamp : 0;
+  const last = dataList.length > 0 ? dataList[dataList.length - 1].timestamp : 0;
+  const annSig = backendAnnotations
+    .map((a) => `${a.date}:${a.type}:${a.source ?? ''}`)
+    .join(',');
+  return `${dataList.length}|${first}|${last}|${annSig}`;
+}
+
+/**
+ * 从可见区间里挑出**真正要画**的形态下标。
+ *
+ * 为什么必须挑：本地检测器对 2440 根能产出 671 个形态，按截图那样 100 多根的
+ * 可见区间里就有 36 个胶囊——它们互相叠在一起，把 K 线整个盖住，什么都读不出来。
+ * 实测：加 10 根最小间距后降到 9 个，可读性恢复。
+ *
+ * 优先级是明确的，不是按时间顺序先到先得：
+ *  1. **服务端标注全部保留**。它们是聊天里引用到的那些位，也是唯一经过确认的
+ *     信号；为了排版把它们挤掉，等于把功能做没了。
+ *  2. 本地检测按时间顺序，与已占位者距离小于 `minGap` 的直接丢弃。
+ *
+ * 返回排序后的下标数组。
+ */
+export function selectPatternIndicesToDraw(
+  patterns: Array<KLinePatternItem | null>,
+  from: number,
+  to: number,
+  minGap: number,
+): number[] {
+  const kept: number[] = [];
+  const inWindow: number[] = [];
+  for (let i = from; i <= to; i++) {
+    if (patterns[i]) inWindow.push(i);
+  }
+  // 第一轮：服务端标注无条件占位
+  for (const i of inWindow) {
+    if (patterns[i]?.fromBackend) kept.push(i);
+  }
+  // 第二轮：本地检测按间距让位
+  const gap = Math.max(0, minGap);
+  for (const i of inWindow) {
+    if (patterns[i]?.fromBackend) continue;
+    if (kept.some((k) => Math.abs(k - i) < gap)) continue;
+    kept.push(i);
+  }
+  return kept.sort((a, b) => a - b);
+}
 
 export function detectKLinePatterns(
   dataList: KLineData[],
   backendAnnotations: Annotation[] = [],
 ): Array<KLinePatternItem | null> {
-  if (
-    cachedPatternsLength === dataList.length &&
-    cachedAnnLength === backendAnnotations.length &&
-    cachedPatterns.length > 0
-  ) {
+  const key = patternsCacheKey(dataList, backendAnnotations);
+  if (key === cachedKey && cachedPatterns.length > 0) {
     return cachedPatterns;
   }
 
@@ -148,12 +222,23 @@ export function detectKLinePatterns(
           bgColor = 'rgba(168, 85, 247, 0.45)';
           pos = 'bottom';
         }
+
+        // 模型主张的位与算法识别用**同一套颜色 + 不同形状**。
+        //
+        // 不用"换一种颜色"来区分：深色画布上可选色本来就少，金色/琥珀/橙色
+        // 挤在一起分不清，红绿色觉障碍的用户更看不出差别。改用实心 vs 描边
+        // 这个不依赖色觉的维度，加上标签前缀，三重区分。
+        if (isLlmAnnotation(ann)) {
+          bgColor = 'transparent';
+        }
+
         result[i] = {
           type: ann.type,
-          text: ann.text,
+          text: annotationLabel(ann),
           color,
           bgColor,
           position: pos,
+          fromBackend: true,
         };
       }
     }
@@ -259,8 +344,7 @@ export function detectKLinePatterns(
   }
 
   cachedPatterns = result;
-  cachedPatternsLength = dataList.length;
-  cachedAnnLength = backendAnnotations.length;
+  cachedKey = key;
   return result;
 }
 
@@ -512,7 +596,10 @@ export function drawMainCanvasTongHuaShun(
   // 3. 绘制形态胶囊徽章 (避让同柱九转标记)
   if (showPatterns) {
     const patterns = detectKLinePatterns(kLineDataList, backendAnnotations);
-    for (let i = from; i <= to; i++) {
+    // 先按间距+优先级挑出要画的，再逐个绘制。直接遍历可见区间会把 30 多个
+    // 胶囊叠在同一片区域上，K 线被盖住就什么都读不出来了。
+    const toDraw = selectPatternIndicesToDraw(patterns, from, to, PATTERN_MIN_GAP_BARS);
+    for (const i of toDraw) {
       const pat = patterns[i];
       if (pat) {
         const x = xAxis.convertToPixel(i);
