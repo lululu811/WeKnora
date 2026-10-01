@@ -85,27 +85,13 @@ function ensureTemplates(): void {
           attrs: { x: left, y: top, width, height },
           styles: { style: 'fill', color: 'rgba(201, 146, 8, 0.14)' },
         },
+        // 用一圈细实线边框代替原来的上下两条虚线：两条横线叠在价格线上会
+        // 进一步加剧"横线太多"的观感，边框只勾出范围、不额外制造横线。
         {
-          type: 'line',
+          type: 'rect',
           ignoreEvent: true,
-          attrs: {
-            coordinates: [
-              { x: left, y: top },
-              { x: left + width, y: top },
-            ],
-          },
-          styles: { style: 'dashed', size: 1, color: 'rgba(201, 146, 8, 0.85)', dashedValue: [4, 4] },
-        },
-        {
-          type: 'line',
-          ignoreEvent: true,
-          attrs: {
-            coordinates: [
-              { x: left, y: top + height },
-              { x: left + width, y: top + height },
-            ],
-          },
-          styles: { style: 'dashed', size: 1, color: 'rgba(201, 146, 8, 0.85)', dashedValue: [4, 4] },
+          attrs: { x: left, y: top, width, height },
+          styles: { style: 'stroke', color: 'rgba(201, 146, 8, 0.5)', size: 1 },
         },
       ]
       // 编号徽章画在框内左上角。它是「正文里那个 ①」和「图上这块」的对应载体，

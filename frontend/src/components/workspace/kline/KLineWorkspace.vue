@@ -351,7 +351,7 @@ import { fetchAnnotations, type Annotation, PATTERN_CONFIG } from './annotate-ap
 import { setGlobalOverlayConfig } from './overlay-drawer';
 import { computeLevels, pickChartLevels } from './levels';
 import { resolveAnchorsForChart, hitTestAnchor, MAX_PERSISTENT_ANCHORS } from './anchor-render';
-import { ActionType } from 'klinecharts';
+import { ActionType, type Coordinate } from 'klinecharts';
 import { computeAnchorStats, formatAnchorStats } from './anchor-stats';
 import { calcDEMA, calcLongBBI, calcBBI, calcZXBrick } from './stock-score';
 import type { Period, SymbolInfo, KLineData } from './types';
@@ -939,14 +939,93 @@ const LEVELS_PER_SIDE = 1;
  */
 const LEVEL_MERGE_TOLERANCE = 0.015;
 
-const drawLevels = (chart: Chart | null) => {
-  if (!chart || !isLevelsEnabled.value) return;
+/**
+ * 两条价位线在屏幕上挨得比这个还近，就当成同一条合并掉。
+ *
+ * 判定用像素而不是百分比：用户看到的是像素。实测 7.85 与 7.98 相差 1.6%，
+ * 百分比容差放它们过去，而屏幕上只差 5px——看着就是一条渲染故障的双虚线。
+ */
+const LEVEL_MERGE_PIXELS = 10;
+
+/**
+ * 收集所有水平价位 —— **关键位与锚点价位合并后再画**。
+ *
+ * 之前两者各画各的，于是同一个价位会出现两条线：实测天顺风能 002531.SZ，
+ * 关键位算出 8.00（整数关口）、锚点说 7.98（强支撑共振），相差 0.25%，
+ * 在图上叠成一条看着像渲染故障的「双虚线」。用户的原话是「支撑线太乱」。
+ *
+ * 合并规则：
+ *  - 价位相差在容差内视为同一条线，只画一次；
+ *  - **代表价取锚点的那个数**——用户读的是模型说的 7.98，不是算法算的 8.00；
+ *  - 锚点带来的编号徽章与标签优先保留（那是联动的可见部分）。
+ */
+interface LevelCandidate {
+  price: number;
+  badge?: number;
+  label?: string;
+  sources: string[];
+}
+
+const collectLevelCandidates = (chart: Chart): LevelCandidate[] => {
   const bars = getChartData(chart);
-  const computed = computeLevels(bars);
-  if (!computed) return;
-  for (const level of pickChartLevels(computed, LEVELS_PER_SIDE, LEVEL_MERGE_TOLERANCE)) {
-    drawPriceLevel(chart, `lv_${level.side}_${level.price.toFixed(2)}`, level.price);
+  const out: LevelCandidate[] = [];
+
+  if (isLevelsEnabled.value) {
+    const computed = computeLevels(bars);
+    if (computed) {
+      for (const lv of pickChartLevels(computed, LEVELS_PER_SIDE, LEVEL_MERGE_TOLERANCE)) {
+        out.push({ price: lv.price, sources: lv.sources });
+      }
+    }
   }
+
+  if (isAnchorsEnabled.value) {
+    for (const a of resolveAnchorsForChart(workspace.anchors.value, bars)) {
+      if (!a.resolvable || a.kind !== 'level' || a.value === undefined) continue;
+      out.push({ price: a.value, badge: a.index, label: a.label, sources: [] });
+    }
+  }
+
+  // 按**屏幕像素距离**合并，而不是按百分比。
+  //
+  // 百分比容差与要解决的问题不匹配：实测 7.85（Pivot_PP）与 7.98（锚点）相差
+  // 1.6%，刚好越过 1.5% 的容差没被合并，而在屏幕上它们只差约 5px——看着就是
+  // 一条渲染出错的"双虚线"。反过来，对一只 100 元的票，2% 就是 2 元，那可能是
+  // 两个真的不同的价位。用户看到的是像素，判定就该用像素。
+  const yOf = (price: number): number | null => {
+    try {
+      const pts = chart.convertToPixel([{ dataIndex: 0, value: price }], { paneId: 'candle_pane' }) as Array<Partial<Coordinate>>;
+      return pts[0]?.y ?? null;
+    } catch {
+      return null;
+    }
+  };
+
+  const sorted = [...out].sort((a, b) => b.price - a.price);
+  const merged: LevelCandidate[] = [];
+  const mergedY: number[] = [];
+  for (const c of sorted) {
+    const y = yOf(c.price);
+    const hitIdx = y === null ? -1 : mergedY.findIndex((my) => Math.abs(my - y) <= LEVEL_MERGE_PIXELS);
+    if (hitIdx < 0) {
+      merged.push({ ...c, sources: [...c.sources] });
+      mergedY.push(y ?? Number.NaN);
+      continue;
+    }
+    const hit = merged[hitIdx];
+    hit.sources.push(...c.sources);
+    if (c.badge !== undefined) {
+      if (hit.badge === undefined) {
+        // 锚点接管这条线：价与标签都以它为准（用户读的是模型说的数）。
+        hit.badge = c.badge;
+        hit.label = c.label;
+        hit.price = c.price;
+      } else if (c.label && hit.label !== c.label) {
+        hit.label = `${hit.label} · ${c.label}`;
+      }
+    }
+  }
+  return merged;
 };
 
 /**
@@ -964,10 +1043,9 @@ const drawAnchors = (chart: Chart | null) => {
   const renderable = resolveAnchorsForChart(workspace.anchors.value, getChartData(chart));
   for (const anchor of renderable) {
     if (!anchor.resolvable) continue;
-    if (anchor.kind === 'level' && anchor.value !== undefined) {
-      drawPriceLevel(chart, `anchor_lv_${anchor.index}`, anchor.value, anchor.index);
-      continue;
-    }
+    // 价位锚点不在这里画——它要跟关键位合并成一条线（见 collectLevelCandidates），
+    // 否则同一个价位会画出两条重叠的线。
+    if (anchor.kind === 'level') continue;
     if (
       anchor.kind === 'range' &&
       anchor.startIndex !== undefined &&
@@ -1086,8 +1164,11 @@ const handleAnchorFocus = (index: number) => {
 const redrawOverlays = (chart: Chart | null) => {
   if (!chart) return;
   clearAllOverlays(chart);
-  drawLevels(chart);
+  // 顺序：先画区间框（面积大、在下层），再把合并后的价位线叠上去。
   drawAnchors(chart);
+  for (const level of collectLevelCandidates(chart)) {
+    drawPriceLevel(chart, `lvl_${level.price.toFixed(2)}`, level.price, level.badge);
+  }
   // 聚焦层也归这里管：redraw 会把它一起清掉，所以必须紧接着按当前 hover 复原，
   // 否则「hover 时恰好发生一次数据刷新」会把压暗弄丢。
   applyAnchorHover(chart);
