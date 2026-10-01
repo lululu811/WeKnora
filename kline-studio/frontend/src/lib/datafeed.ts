@@ -108,12 +108,15 @@ export class ZettarancDatafeed {
         volume: r.volume,
         turnover: r.turnover,
         // Zettaranc 专属指标（注入到 KLineData，供自定义指标使用）
+        // 列名与 a-stock/scripts/add_zettaranc_columns.py 的 NEW_COLUMNS 一致。
+        // RSL 两列 2026-10-01 由 *_short_3 / *_long_21 改名为
+        // *_rank_15 / *_rank_105 —— 它是滚动窗口百分位排名，不是涨跌幅。
         zg_white: ind.zettaranc_zg_white_10 || null,
         dg_yellow: ind.zettaranc_dg_yellow_14 || null,
         bbi: ind.zettaranc_bbi || null,
         brick: ind.zettaranc_brick_value || null,
-        rsl_short: ind.zettaranc_rsl_short_3 || null,
-        rsl_long: ind.zettaranc_rsl_long_21 || null,
+        rsl_short: ind.zettaranc_rsl_rank_15 || null,
+        rsl_long: ind.zettaranc_rsl_rank_105 || null,
       } as KLineData;
     });
   }

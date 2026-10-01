@@ -35,12 +35,17 @@ const CATEGORY_COLUMNS: Record<string, string[]> = {
     'volatility_atr_14',
   ],
   zettaranc: [
-    'zettaranc_zg_white_10',   // 白线（EMA10）
-    'zettaranc_dg_yellow_14',  // 黄线（EMA14）
-    'zettaranc_bbi',           // BBI（牵牛绳）
-    'zettaranc_brick_value',   // 砖形图
-    'zettaranc_rsl_short_3',   // 短期 RSL
-    'zettaranc_rsl_long_21',   // 长期 RSL
+    // 注释此前把白线写成「EMA10」、黄线写成「EMA14」——两处都与产出方
+    // add_zettaranc_columns.py 的实际公式不符：白线是 DEMA（双重 EMA），
+    // 黄线是四条均线的均值而不是单条 EMA。照注释理解会算错对照基准。
+    'zettaranc_zg_white_10',      // 白线 = DEMA = EMA(EMA(C,10),10)，价格量纲
+    'zettaranc_dg_yellow_14',     // 黄线 = (MA14+MA28+MA57+MA114)/4，价格量纲
+    'zettaranc_bbi',              // 牵牛绳 = (MA3+MA6+MA12+MA24)/4，价格量纲
+    'zettaranc_brick_value',      // 知行 ZX 砖型，通达信口径，值域 >= 0
+    // RSL 是**滚动窗口百分位排名**，不是 % 涨跌幅。列名已把窗口长度写进去
+    // （原 *_short_3 / *_long_21 里的 3/21 是 pct_change 回看天数，误导）。
+    'zettaranc_rsl_rank_15',      // 3 日涨幅在 15 窗口内的百分位，值域 [0,100]
+    'zettaranc_rsl_rank_105',     // 21 日涨幅在 105 窗口内的百分位，值域 [0,100]
   ],
   candles: [
     // 常用 K 线形态
