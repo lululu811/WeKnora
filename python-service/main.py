@@ -1180,6 +1180,44 @@ async def zettaranc_analyze(request: AnalyzeRequest) -> Dict[str, Any]:
     return {"success": True, "result": result}
 
 
+class FourBricksRequest(BaseModel):
+    thscode: str
+    days: int = 120
+
+
+@app.post("/zettaranc/four-bricks")
+async def zettaranc_four_bricks(request: FourBricksRequest) -> Dict[str, Any]:
+    """四块砖 — 短线/趋势/多空/阴阳 四项多空状态。
+
+    2026-10-01 新增。此前这四项只在工作台前端算（indicators.ts 的
+    calcFourBricksDetails），服务端取不到，所以 agent_system_prompt 要求 agent
+    对"四块砖什么状态"一律回答"算不出来，请去看 K 线工作台"。现在两边共用
+    zettaranc/four_bricks.py 一份实现。
+
+    返回**只有数值状态，没有战法解释**："红2 = 黄金买点"这类解读属于知识库，
+    不在这里生成第二套说法。
+    """
+    from datasources import registry
+    from zettaranc import analyze_four_bricks, fetch_market_data
+
+    thscode = _require_thscode(request.thscode)
+    market_src = registry.get("market")
+    if market_src is None:
+        raise fail(503, "market 数据源未就绪")
+
+    try:
+        rows = await fetch_market_data(market_src, thscode, request.days)
+    except ValueError as exc:
+        raise fail(404, str(exc)) from exc
+    except Exception as exc:
+        raise fail(503, f"数据加载失败：{exc}") from exc
+
+    return {
+        "success": True,
+        "result": {"thscode": thscode, **analyze_four_bricks(rows)},
+    }
+
+
 @app.post("/zettaranc/scan")
 async def zettaranc_scan(request: ScanRequest) -> Dict[str, Any]:
     """技术信号扫描 — 30+ 种买卖形态"""
@@ -1684,10 +1722,10 @@ async def get_indicators(
 
     sql = """
         SELECT date, zettaranc_zg_white_10, zettaranc_dg_yellow_14, zettaranc_bbi,
-               zettaranc_brick_value, zettaranc_rsl_short_3, zettaranc_rsl_long_21
+               zettaranc_brick_value, zettaranc_rsl_rank_15, zettaranc_rsl_rank_105
         FROM (
             SELECT date, zettaranc_zg_white_10, zettaranc_dg_yellow_14, zettaranc_bbi,
-                   zettaranc_brick_value, zettaranc_rsl_short_3, zettaranc_rsl_long_21
+                   zettaranc_brick_value, zettaranc_rsl_rank_15, zettaranc_rsl_rank_105
             FROM v_indicators_daily
             WHERE thscode = ?
             ORDER BY date DESC

@@ -499,3 +499,71 @@ class TestScreenProvenance:
             assert any("截止" in w for w in body["warnings"]), (
                 f"数据已陈旧 {lag} 天却没有任何提示：{body['warnings']}"
             )
+
+class TestFourBricks:
+    """四块砖端点（2026-10-01 新增）。
+
+    此前四块砖只在工作台前端算得出，服务端取不到，于是 agent 被要求对
+    "XX 现在四块砖什么状态"一律回答"算不出来"。这里守住新端点：它必须
+    返回**真实数值**，而不是又一个空壳。
+    """
+
+    def test_returns_a_real_reading(self, client):
+        status, body = client.post("/zettaranc/four-bricks",
+                                    {"thscode": LIQUID_CODE, "days": 120})
+        assert status == 200, body
+        r = body["result"]
+        assert r["insufficient"] is False
+        assert r["thscode"] == LIQUID_CODE
+        # 四项布尔 + 总分 + 红砖数，缺一不可
+        for k in ("bull1", "bull2", "bull3", "bull4"):
+            assert isinstance(r[k], bool), f"{k} 不是布尔"
+        assert -4 <= r["score"] <= 4
+        assert r["bull_count"] == sum(1 for k in ("bull1", "bull2", "bull3", "bull4")
+                                      if r[k])
+        # score 必须等于四项之和，否则"四砖全红(+4)"这类标签会自相矛盾
+        expected = sum(1 if r[k] else -1
+                       for k in ("bull1", "bull2", "bull3", "bull4"))
+        assert r["score"] == expected, (
+            f"score={r['score']} 与四项之和 {expected} 不一致 —— "
+            "标签会和分数打架"
+        )
+
+    def test_reports_the_periods_it_used(self, client):
+        """周期必须报出来：换周期会让历史读数不可比，而调用方无从得知。"""
+        status, body = client.post("/zettaranc/four-bricks",
+                                    {"thscode": LIQUID_CODE, "days": 120})
+        assert status == 200, body
+        p = body["result"]["periods"]
+        assert p["short"] == 5
+        assert p["trend"] == [10, 14]
+        assert p["bbi"] == [3, 6, 12, 24]
+
+    def test_refuses_to_invent_trading_advice(self, client):
+        """数值状态可以有，战法解释不行 —— 那是知识库的事，两套说法必然漂移。
+
+        只查 `text`（状态标签）。`note` 里出现"买点"是在**劝阻**生成它，
+        那是正确的用法，不该被这条测试当成违规。
+        """
+        status, body = client.post("/zettaranc/four-bricks",
+                                    {"thscode": LIQUID_CODE, "days": 120})
+        assert status == 200, body
+        r = body["result"]
+        for banned in ("买入", "卖出", "买点", "卖点", "建议", "止损"):
+            assert banned not in r.get("text", ""), (
+                f"状态标签里出现了战法建议 {banned!r} —— 解释应来自知识库"
+            )
+
+    def test_says_so_when_bars_are_insufficient(self, client):
+        """历史不够时必须明说缺多少，不能返回一个看起来正常的读数。"""
+        status, body = client.post("/zettaranc/four-bricks",
+                                    {"thscode": THIN_CODE, "days": 2})
+        assert status == 200, body
+        r = body["result"]
+        if r["insufficient"]:
+            assert r["actual_bars"] < r["required_bars"]
+            assert "根 K 线" in r["note"]
+
+    def test_rejects_a_malformed_symbol(self, client):
+        status, _ = client.post("/zettaranc/four-bricks", {"thscode": "not-a-code"})
+        assert status in (400, 404, 422)

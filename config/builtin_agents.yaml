@@ -343,6 +343,7 @@ builtin_agents:
         # 真实回测落地后加回这一行即可，无需重写工具本身。
         - "zettaranc.analyze"
         - "zettaranc.screener"
+        - "zettaranc.four_bricks"
 
       web_search_enabled: true
       web_search_max_results: 10

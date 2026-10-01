@@ -1417,7 +1417,7 @@ func (s *agentService) registerTools(
 		//
 		// backtest.go and NewBacktestTool are kept: they are a documented stub, and
 		// real backtesting will re-add one line here when it lands.
-		case "zettaranc.analyze", "zettaranc.screener":
+		case "zettaranc.analyze", "zettaranc.screener", "zettaranc.four_bricks":
 			// Lazy-initialize the HTTP client on first use
 			if s.zettarancHTTPClient == nil {
 				s.zettarancHTTPClient = zettaranc.NewHTTPClient("")
@@ -1427,6 +1427,8 @@ func (s *agentService) registerTools(
 				toolToRegister = zettaranc.NewAnalyzeTool(s.zettarancHTTPClient)
 			case "zettaranc.screener":
 				toolToRegister = zettaranc.NewScreenerTool(s.zettarancHTTPClient)
+			case "zettaranc.four_bricks":
+				toolToRegister = zettaranc.NewFourBricksTool(s.zettarancHTTPClient)
 			}
 			logger.Infof(ctx, "Registered zettaranc tool: %s", toolName)
 

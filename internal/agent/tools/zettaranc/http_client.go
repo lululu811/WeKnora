@@ -42,6 +42,55 @@ type AnalyzeResponse struct {
 	Data map[string]interface{} `json:"-"`
 }
 
+// FourBricks calls the python-service /zettaranc/four-bricks endpoint.
+//
+// 新增于 2026-10-01。四块砖此前只在工作台前端算得出，服务端取不到，
+// 所以 agent_system_prompt 命令 agent 对"四块砖什么状态"一律回答"算不出来"。
+// 端点落地后这条限制可以撤销。
+func (c *HTTPClient) FourBricks(ctx context.Context, thscode string, days int) (map[string]interface{}, error) {
+	reqBody := AnalyzeRequest{Thscode: thscode, Days: days}
+	body, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("请求序列化失败：%v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, c.timeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		c.serviceURL+"/zettaranc/four-bricks", bytes.NewBuffer(body))
+	if err != nil {
+		return nil, fmt.Errorf("创建请求失败：%v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("四块砖服务不可用：%v。请检查 python-service 是否运行", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("读取响应失败：%v", err)
+	}
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, fmt.Errorf("股票未找到：%s", string(respBody))
+	}
+	if resp.StatusCode == http.StatusServiceUnavailable {
+		return nil, fmt.Errorf("数据不可用：%s", string(respBody))
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("四块砖计算失败（HTTP %d）：%s", resp.StatusCode, string(respBody))
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return nil, fmt.Errorf("结果解析失败：%v", err)
+	}
+	return result, nil
+}
+
 // Analyze calls the python-service /zettaranc/analyze endpoint.
 func (c *HTTPClient) Analyze(ctx context.Context, thscode string, days int) (map[string]interface{}, error) {
 	reqBody := AnalyzeRequest{
