@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { resolvePatternGeometry } from './chart-patterns.ts'
+import { resolvePatternGeometry, resolveCandleMarks } from './chart-patterns.ts'
 import type { RawChartPatternResponse } from './chart-patterns.ts'
 import type { LevelBar } from './levels.ts'
 
@@ -182,4 +182,62 @@ test('空响应与空 K 线都返回空数组，不抛错', () => {
   assert.deepEqual(resolvePatternGeometry(null, BARS), [])
   assert.deepEqual(resolvePatternGeometry({}, BARS), [])
   assert.deepEqual(resolvePatternGeometry({ chart_pattern: { patterns: [{ name: 'A', points: [{ date: iso(1), price: 1 }] }] } }, []), [])
+})
+
+// ---------------------------------------------------------------------------
+// 蜡烛形态标记
+//
+// 与几何形态不同：蜡烛形态是**单根 K 线**上的判定，日期错一根就是完全错的一个
+// 结论。所以"对不上就丢"这条在这里比几何形态更硬 —— 绝不能兜底到最近一根。
+// ---------------------------------------------------------------------------
+
+test('蜡烛标记按日期换算成下标', () => {
+  const raw: RawChartPatternResponse = {
+    candlesticks: [
+      { date: iso(2), type: 'cdl_hammer', name: '锤子线', direction: 'bullish', strength: 100 },
+      { date: iso(7), type: 'cdl_doji', name: '十字星', direction: 'bearish', strength: 100 },
+    ],
+  }
+  const out = resolveCandleMarks(raw, BARS)
+  assert.deepEqual(out.map((c) => [c.index, c.type, c.direction]), [
+    [2, 'cdl_hammer', 'bullish'],
+    [7, 'cdl_doji', 'bearish'],
+  ])
+})
+
+test('日期不在已加载 K 线里的蜡烛标记被丢弃，不兜底到最近一根', () => {
+  const raw: RawChartPatternResponse = {
+    candlesticks: [
+      { date: '2019-01-01', type: 'cdl_hammer', name: '锤子线', direction: 'bullish' },
+      { date: iso(4), type: 'cdl_doji', name: '十字星', direction: 'neutral' },
+    ],
+  }
+  const out = resolveCandleMarks(raw, BARS)
+  assert.deepEqual(out.map((c) => c.index), [4])
+})
+
+test('同一根同一类型去重（后端重复给时不画两遍）', () => {
+  const raw: RawChartPatternResponse = {
+    candlesticks: [
+      { date: iso(3), type: 'cdl_doji', name: '十字星', direction: 'neutral' },
+      { date: iso(3), type: 'cdl_doji', name: '十字星', direction: 'neutral' },
+      { date: iso(3), type: 'cdl_hammer', name: '锤子线', direction: 'bullish' },
+    ],
+  }
+  const out = resolveCandleMarks(raw, BARS)
+  assert.equal(out.length, 2, '同一根上的不同类型都要留，同类型只留一个')
+})
+
+test('缺 type 的条目被丢弃', () => {
+  const raw: RawChartPatternResponse = { candlesticks: [{ date: iso(1), name: '无名' }] }
+  assert.deepEqual(resolveCandleMarks(raw, BARS), [])
+})
+
+test('空响应与空 K 线返回空数组', () => {
+  assert.deepEqual(resolveCandleMarks(null, BARS), [])
+  assert.deepEqual(resolveCandleMarks({}, BARS), [])
+  assert.deepEqual(
+    resolveCandleMarks({ candlesticks: [{ date: iso(1), type: 'x', name: 'x' }] }, []),
+    [],
+  )
 })

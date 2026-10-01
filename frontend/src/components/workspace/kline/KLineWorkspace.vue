@@ -205,14 +205,16 @@
           九转序列
         </button>
         <LayerFilterDropdown
-          v-model:selection="bubbleSelection"
+          :selection="bubbleSelection"
+          @toggle="(v) => (bubbleSelection = toggleOption(bubbleSelection, v))"
+          @set-all="(all) => (bubbleSelection = all ? selectAllOptions() : clearAllOptions(bubbleOptions))"
           v-model:enabled="isPatternsEnabled"
           :open="openLayerPanel === 'bubbles'"
           @update:open="(v) => (openLayerPanel = v ? 'bubbles' : null)"
           title="形态气泡"
           :options="bubbleOptions"
           empty-text="本图没有识别到形态"
-          hint="按类型勾选。括号里是「勾中/全部」。"
+          hint="按类型勾选。战法标注来自 Z 哥战法，蜡烛形态来自 TA-Lib。括号里是「勾中/全部」。"
         >
           <button
             type="button"
@@ -224,7 +226,9 @@
           </button>
         </LayerFilterDropdown>
         <LayerFilterDropdown
-          v-model:selection="outlineSelection"
+          :selection="outlineSelection"
+          @toggle="(v) => (outlineSelection = toggleOption(outlineSelection, v))"
+          @set-all="(all) => (outlineSelection = all ? selectAllOptions() : clearAllOptions(outlineOptions))"
           v-model:enabled="isChartPatternsEnabled"
           :open="openLayerPanel === 'outline'"
           @update:open="(v) => (openLayerPanel = v ? 'outline' : null)"
@@ -377,10 +381,10 @@ import KLineCompareBar from './KLineCompareBar.vue';
 import { registerZettarancIndicators } from './indicators';
 import { MAIN_PRESETS, SUB_PRESETS } from './indicator-meta';
 import { fetchAnnotations, type Annotation, PATTERN_CONFIG } from './annotate-api';
-import { setGlobalOverlayConfig, LOCAL_PATTERN_LABELS, LOCAL_PATTERN_ORDER } from './overlay-drawer';
+import { setGlobalOverlayConfig } from './overlay-drawer';
 import LayerFilterDropdown from './LayerFilterDropdown.vue';
-import { enabledCount, isOptionEnabled, loadSelection, saveSelection, type LayerOption, type LayerSelection } from './layer-selection';
-import { fetchChartPatterns, resolvePatternGeometry, type DrawablePattern } from './chart-patterns';
+import { clearAllOptions, enabledCount, isOptionEnabled, loadSelection, saveSelection, selectAllOptions, toggleOption, type LayerOption, type LayerSelection } from './layer-selection';
+import { fetchChartPatterns, resolvePatternGeometry, resolveCandleMarks, type DrawableCandle, type DrawablePattern } from './chart-patterns';
 import { computeLevels, pickChartLevels } from './levels';
 import { resolveAnchorsForChart, hitTestAnchor, MAX_PERSISTENT_ANCHORS } from './anchor-render';
 import { ActionType, type Coordinate } from 'klinecharts';
@@ -469,6 +473,9 @@ const annotations = ref<Annotation[]>([]);
 // 几何形态与波浪（后端识别，前端只负责画）。和标注一样是"增强信息"，
 // 拉不到就是空数组，不影响 K 线本身。
 const chartPatternGeometry = ref<DrawablePattern[]>([]);
+// 蜡烛形态：后端 TA-Lib 识别的信号（下标已换算）+ 它的形态目录（下拉选项来源）。
+const candleMarks = ref<DrawableCandle[]>([]);
+const candleCatalog = ref<Array<{ key: string; name: string; desc?: string }>>([]);
 // 形态轮廓图层总开关。默认打开——它比气泡更有信息量（有形状），但画面满时同样要能关。
 const isChartPatternsEnabled = ref(true);
 
@@ -483,22 +490,24 @@ watch(bubbleSelection, (v) => { saveSelection('bubbles', v); syncBubbleTypes(v);
 watch(outlineSelection, (v) => { saveSelection('outline', v); syncOutline(v); }, { deep: true });
 
 /**
- * 气泡可勾选的全部类型 = 服务端 4 类 + 本地 7 类。
+ * 气泡可勾选的全部类型 = 战法标注 4 类 + 蜡烛形态若干类，**分两组**。
  *
- * 本地那 7 类（十字星/阳包阴…）以前根本不可关——它们硬编码在检测器里，
- * 工具栏无从得知。只列服务端 4 类的话，用户取消勾选后仍会看到满屏十字星，
- * 只会以为这个下拉是坏的。
+ * 蜡烛那些类以前根本不可关——它们硬编码在前端的检测器里，工具栏无从得知。
+ * 现在既然后端识别（TA-Lib），类型清单也跟着从**后端目录**来（`candle_catalog`）：
+ * 前端自己抄一份的话，后端点新增一种、前端不知道，用户就永远勾不到它。
  */
 const bubbleOptions = computed<LayerOption[]>(() => [
   ...Object.entries(PATTERN_CONFIG).map(([value, meta]) => ({
     value,
     label: meta.label,
     desc: meta.desc,
+    group: '战法标注',
   })),
-  ...LOCAL_PATTERN_ORDER.map((value) => ({
-    value,
-    label: LOCAL_PATTERN_LABELS[value],
-    desc: '本地蜡烛形态（无需服务端标注）',
+  ...candleCatalog.value.map((c) => ({
+    value: c.key,
+    label: c.name,
+    desc: c.desc,
+    group: '蜡烛形态',
   })),
 ]);
 
@@ -760,6 +769,18 @@ const loadChartPatterns = async () => {
   const res = await fetchChartPatterns(symbolStr, 250);
   const bars = getChartData(chartInstance.value);
   chartPatternGeometry.value = resolvePatternGeometry(res, bars);
+  candleMarks.value = resolveCandleMarks(res, bars);
+  // 目录由后端给，且**只在拿到时覆盖**：拉失败时保留上一次的目录，
+  // 否则一次网络抖动就会把下拉清空，用户会以为是自己点坏了。
+  if (res?.candle_catalog?.length) {
+    candleCatalog.value = res.candle_catalog
+      .filter((c): c is { key: string; name: string; desc?: string } => Boolean(c?.key && c?.name))
+      .map((c) => ({ key: c.key, name: c.name, desc: c.desc }));
+  }
+  setGlobalOverlayConfig({
+    candleMarks: candleMarks.value,
+    hiddenPatternTypes: bubbleSelection.value.disabled,
+  });
   // 勾选按**形态名**记，所以换了票、同名形态仍然保持用户的取舍。
   syncOutline(outlineSelection.value);
 };
@@ -1329,6 +1350,7 @@ onMounted(() => {
     showTD9: isTD9Enabled.value,
     showPatterns: isPatternsEnabled.value,
     patternGeometry: isChartPatternsEnabled.value ? chartPatternGeometry.value : [],
+    candleMarks: candleMarks.value,
     // 恢复上次的勾选，否则首帧会把用户关掉的类型又画出来一次。
     hiddenPatternTypes: bubbleSelection.value.disabled,
   });

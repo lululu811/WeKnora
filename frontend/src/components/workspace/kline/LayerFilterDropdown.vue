@@ -37,27 +37,32 @@
           {{ emptyText }}
         </div>
 
-        <ul v-else class="kline-layer-panel__list" :class="{ 'is-muted': !enabled }">
-          <li v-for="opt in options" :key="opt.value">
-            <button
-              type="button"
-              class="kline-layer-option"
-              :class="{ active: isOptionEnabled(selection, opt.value) }"
-              role="checkbox"
-              :aria-checked="isOptionEnabled(selection, opt.value)"
-              :title="opt.desc || opt.label"
-              @click.stop="onToggle(opt.value)"
-            >
-              <span class="kline-layer-option__box" aria-hidden="true">
-                <t-icon v-if="isOptionEnabled(selection, opt.value)" name="check" size="12px" />
-              </span>
-              <span class="kline-layer-option__label">{{ opt.label }}</span>
-              <span v-if="typeof opt.count === 'number'" class="kline-layer-option__count">
-                {{ opt.count }}
-              </span>
-            </button>
-          </li>
-        </ul>
+        <div v-else class="kline-layer-panel__list" :class="{ 'is-muted': !enabled }">
+          <section v-for="grp in groups" :key="grp.name" class="kline-layer-group">
+            <div v-if="grp.name" class="kline-layer-group__head">{{ grp.name }}</div>
+            <ul class="kline-layer-group__list">
+              <li v-for="opt in grp.options" :key="opt.value">
+                <button
+                  type="button"
+                  class="kline-layer-option"
+                  :class="{ active: isOptionEnabled(selection, opt.value) }"
+                  role="checkbox"
+                  :aria-checked="isOptionEnabled(selection, opt.value)"
+                  :title="opt.desc || opt.label"
+                  @click.stop="onToggle(opt.value)"
+                >
+                  <span class="kline-layer-option__box" aria-hidden="true">
+                    <t-icon v-if="isOptionEnabled(selection, opt.value)" name="check" size="12px" />
+                  </span>
+                  <span class="kline-layer-option__label">{{ opt.label }}</span>
+                  <span v-if="typeof opt.count === 'number'" class="kline-layer-option__count">
+                    {{ opt.count }}
+                  </span>
+                </button>
+              </li>
+            </ul>
+          </section>
+        </div>
 
         <div class="kline-layer-panel__hint">{{ hint }}</div>
       </div>
@@ -73,12 +78,9 @@
 import { computed, watch } from 'vue'
 
 import {
-  clearAllOptions,
   enabledCount,
   isAllSelected,
   isOptionEnabled,
-  selectAllOptions,
-  toggleOption,
   type LayerOption,
   type LayerSelection,
 } from './layer-selection'
@@ -110,14 +112,41 @@ const props = withDefaults(
   { emptyText: '暂无可选项', hint: '' },
 )
 
+/**
+ * 这里刻意**不**用 `update:selection` 直接回传算好的新状态。
+ *
+ * 算新状态必须基于"当前选择"，而组件拿到的是 **prop**：prop 要等父组件重渲染
+ * 才会更新。连续两次点击（或"全不选"紧跟一次勾选）之间 prop 还没刷新，两次都
+ * 从同一个旧快照起算 —— 后一次会把前一次覆盖掉，表现为"点了 23 次只生效 2 次"。
+ *
+ * 改成回传**意图**，由持有 ref 的父组件计算：ref 是同步的，不存在陈旧快照。
+ */
 const emit = defineEmits<{
-  'update:selection': [value: LayerSelection]
+  toggle: [value: string]
+  setAll: [value: boolean]
   'update:enabled': [value: boolean]
   'update:open': [value: boolean]
 }>()
 
 const ariaLabel = computed(() => props.title)
 const allSelected = computed(() => isAllSelected(props.options, props.selection))
+
+/** 按 group 归并，保持 options 的原始顺序；没有 group 的归入「其他」。 */
+const groups = computed(() => {
+  const out: Array<{ name: string; options: LayerOption[] }> = []
+  const index = new Map<string, { name: string; options: LayerOption[] }>()
+  for (const opt of props.options) {
+    const name = opt.group || ''
+    let bucket = index.get(name)
+    if (!bucket) {
+      bucket = { name, options: [] }
+      index.set(name, bucket)
+      out.push(bucket)
+    }
+    bucket.options.push(opt)
+  }
+  return out
+})
 const onCount = computed(() => enabledCount(props.options, props.selection))
 
 // 面板收起时若「一项都没勾」，把按钮的激活态交回父组件判断；
@@ -129,11 +158,11 @@ function onVisibleChange(v: boolean) {
 }
 
 function onToggle(value: string) {
-  emit('update:selection', toggleOption(props.selection, value))
+  emit('toggle', value)
 }
 
 function toggleAll() {
-  emit('update:selection', allSelected.value ? clearAllOptions(props.options) : selectAllOptions())
+  emit('setAll', !allSelected.value)
 }
 
 // 切换标的导致可选项整批换掉时，面板若还开着，内容会当着用户的面跳变。
@@ -148,8 +177,8 @@ watch(
 
 <style scoped lang="less">
 .kline-layer-panel {
-  min-width: 168px;
-  max-width: 260px;
+  min-width: 190px;
+  max-width: 280px;
   padding: 6px 0 0;
   font-size: var(--app-text-sm);
 }
@@ -186,6 +215,18 @@ watch(
   &:hover {
     background: rgba(59, 130, 246, 0.12);
   }
+}
+
+.kline-layer-group__head {
+  padding: 6px 10px 2px;
+  font-weight: 600;
+  opacity: 0.55;
+}
+
+.kline-layer-group__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
 }
 
 .kline-layer-panel__list {

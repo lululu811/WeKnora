@@ -43,6 +43,23 @@ export interface RawPattern {
   lines?: RawPatternLine[]
 }
 
+/** 后端返回的形态目录项（下拉用）。 */
+export interface RawCandleCatalogItem {
+  key?: string
+  name?: string
+  desc?: string
+}
+
+/** 后端返回的单条蜡烛形态信号。 */
+export interface RawCandleSignal {
+  date?: string
+  type?: string
+  name?: string
+  direction?: string
+  strength?: number
+  desc?: string
+}
+
 export interface RawChartPatternResponse {
   code?: number
   symbol?: string
@@ -51,6 +68,10 @@ export interface RawChartPatternResponse {
     summary?: Record<string, unknown>
   } | null
   waves?: RawPattern | null
+  candlesticks?: RawCandleSignal[]
+  candle_summary?: Record<string, unknown> | null
+  /** 形态目录：下拉的选项来源。 */
+  candle_catalog?: RawCandleCatalogItem[]
 }
 
 /** 图上一个可画的点：下标 + 价格 + 标签。 */
@@ -154,6 +175,52 @@ export function resolvePatternGeometry(
   const wave = convert(raw.waves, 'wave')
   if (wave) out.push(wave)
   return out
+}
+
+/** 图上的一根蜡烛形态标记。 */
+export interface DrawableCandle {
+  index: number
+  type: string
+  name: string
+  direction: 'bullish' | 'bearish' | 'neutral'
+  desc: string
+}
+
+/**
+ * 把后端的蜡烛形态序列换算成图上可画的标记。
+ *
+ * 和几何形态同口径：日期对不上已加载 K 线的**直接丢**，不兜底到"最近的一根" ——
+ * 那会把标记画到错误的 K 线上，而蜡烛形态是**单根 K 线**的判定，错一根就完全错了。
+ */
+export function resolveCandleMarks(
+  raw: RawChartPatternResponse | null | undefined,
+  bars: readonly LevelBar[],
+): DrawableCandle[] {
+  if (!raw || bars.length === 0) return []
+  const dateIndex = buildDateIndex(bars)
+
+  const out: DrawableCandle[] = []
+  for (const c of raw.candlesticks || []) {
+    const iso = typeof c?.date === 'string' ? c.date : ''
+    const idx = iso ? dateIndex.get(iso) : undefined
+    if (idx === undefined) continue
+    if (typeof c?.type !== 'string' || !c.type) continue
+    out.push({
+      index: idx,
+      type: c.type,
+      name: String(c.name || c.type),
+      direction: normalizeDirection(c.direction),
+      desc: String(c.desc || ''),
+    })
+  }
+  // 同一根上可能命中多个形态，按 (下标, 类型) 去重，避免后端重复给时画两遍。
+  const seen = new Set<string>()
+  return out.filter((c) => {
+    const k = `${c.index}:${c.type}`
+    if (seen.has(k)) return false
+    seen.add(k)
+    return true
+  })
 }
 
 /** 拉取形态数据。失败时返回 null（形态是增强信息，缺了不该让图表报错）。 */

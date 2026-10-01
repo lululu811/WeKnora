@@ -1828,6 +1828,13 @@ async def get_chart_pattern(
     **rows[0] 是最新一根**，所以这里**不能**像 annotate 那样先 reverse。
     """
     from datasources import registry
+    from zettaranc.candles import (
+        CANDLE_PATTERNS,
+        build_candle_sql,
+        detect_candle_series,
+        summarize_candles,
+        validate_indicator_columns,
+    )
     from zettaranc.data_loader import MARKET_FIELDS, normalize_row
     from zettaranc.pattern import analyze_chart_pattern
     from zettaranc.waves import detect_elliott_waves
@@ -1880,6 +1887,32 @@ async def get_chart_pattern(
     except Exception as exc:  # pragma: no cover - 防御性
         insufficient.append(f"waves: {exc}")
 
+    # ---- 蜡烛形态 ----
+    #
+    # 走**独立查询**而不是把 24 个 cdl 列塞进 data_loader 的共享字段表：
+    # /zettaranc/analyze 不需要这些列，塞进去等于让每次分析多传 24 列。
+    candlesticks: List[Dict[str, Any]] = []
+    candle_summary: Dict[str, Any] = {}
+    indicators_src = registry.get("indicators")
+    if indicators_src is None:
+        insufficient.append("candlesticks: indicators 数据源未就绪")
+    else:
+        try:
+            candle_rows = await indicators_src.execute(build_candle_sql(), [thscode, fetch_limit])
+        except Exception as exc:
+            candle_rows = []
+            insufficient.append(f"candlesticks: 查询失败 {exc}")
+
+        # 值域校验：这些列里混着 12 个被污染的（触发率 45%~72%、值域几十万种浮点），
+        # 静默采信会在大部分 K 线上画出假形态。宁可少画，也不要画错的。
+        bad_cols = validate_indicator_columns(candle_rows)
+        if bad_cols:
+            logger.warning("蜡烛形态列值域异常 thscode=%s: %s", thscode, bad_cols[:5])
+            insufficient.append(f"candlesticks: {len(bad_cols)} 列值域异常，已跳过")
+
+        candlesticks = detect_candle_series(candle_rows)
+        candle_summary = summarize_candles(candlesticks)
+
     return {
         "code": 0,
         "symbol": thscode,
@@ -1887,6 +1920,13 @@ async def get_chart_pattern(
         "data_source": "duckdb",
         "chart_pattern": chart_pattern,
         "waves": waves,
+        "candlesticks": candlesticks,
+        "candle_summary": candle_summary,
+        # 形态**目录**：前端下拉要用，放在这里是为了让它只有一份真相源。
+        # 前端自己抄一份的话，后端点新增一种、前端不知道，用户就永远勾不到它。
+        "candle_catalog": [
+            {"key": p["key"], "name": p["name"], "desc": p["desc"]} for p in CANDLE_PATTERNS
+        ],
         "insufficient_data": insufficient,
     }
 

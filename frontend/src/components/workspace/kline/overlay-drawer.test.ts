@@ -9,11 +9,10 @@ import type { KLineData } from './types.ts'
 const DAY = 86400000
 
 /**
- * 一串**不会触发本地形态识别**的日线：全红、实体占比高、逐根抬高。
+ * 一串规整的日线：全红、实体占比高、逐根抬高。
  *
- * 必须这样造数据，否则本地检测器（阳包阴/十字星/早晨之星…）会把数组先填满，
- * 测试就分不清某个位置上的形态到底来自后端标注还是本地检测——而那正是
- * 这个文件要守住的东西。
+ * 这个文件守的是**摆放**（谁占位、谁让位），不关心形态怎么识别 —— 识别要么来自
+ * 后端标注，要么来自后端的蜡烛形态序列，两者都由测试显式喂进来。
  */
 function neutralSeries(n: number, startIso: string): KLineData[] {
   const start = Date.parse(`${startIso}T00:00:00Z`)
@@ -46,11 +45,6 @@ function ann(onDate: string, extra: Partial<Annotation> = {}): Annotation {
 function filledIndexes(list: Array<unknown | null>): number[] {
   return list.map((p, i) => (p ? i : -1)).filter((i) => i >= 0)
 }
-
-test('中性数据本身不触发任何本地形态（测试前提的自检）', () => {
-  const found = detectKLinePatterns(neutralSeries(12, '2026-01-05'), [])
-  assert.deepEqual(filledIndexes(found), [], '这串数据应当干净，否则下面的断言没有意义')
-})
 
 test('算法标注渲染为实心，标签保持原文', () => {
   const start = '2026-01-05'
@@ -147,7 +141,7 @@ test('同一份输入重复调用结果一致（缓存不能改变答案）', ()
 // ---------------------------------------------------------------------------
 // selectPatternIndicesToDraw：形态胶囊的间距裁剪。
 //
-// 起因：本地检测器对 2440 根产出 671 个形态，100 多根的可见区间里就有 36 个
+// 起因：形态信号对 2440 根产出 600+ 个，100 多根的可见区间里就有 36 个
 // 胶囊叠在一起，K 线被完全盖住。实测加 10 根间距后降到 9 个。
 // ---------------------------------------------------------------------------
 
@@ -155,7 +149,7 @@ function pat(type: string, fromBackend = false): KLinePatternItem {
   return { type, text: type, color: '#fff', bgColor: 'rgba(0,0,0,.4)', position: 'top', fromBackend }
 }
 
-test('间距裁剪：相邻的本地形态只保留第一个', () => {
+test('间距裁剪：相邻的非服务端形态只保留第一个', () => {
   const patterns: Array<KLinePatternItem | null> = new Array(30).fill(null)
   patterns[5] = pat('doji')
   patterns[6] = pat('doji')
@@ -174,12 +168,12 @@ test('间距裁剪：服务端标注永远保留，即使彼此很近', () => {
   assert.deepEqual(kept, [10, 11, 12])
 })
 
-test('间距裁剪：本地形态要给服务端标注让位', () => {
+test('间距裁剪：非服务端形态要给服务端标注让位', () => {
   const patterns: Array<KLinePatternItem | null> = new Array(30).fill(null)
   patterns[9] = pat('doji')          // 本地，距后端标注 2 根
   patterns[11] = pat('key_k', true)  // 后端
   const kept = selectPatternIndicesToDraw(patterns, 0, 29, 10)
-  assert.deepEqual(kept, [11], '本地形态应被挤掉，后端标注留下')
+  assert.deepEqual(kept, [11], '非服务端形态应被挤掉，后端标注留下')
 })
 
 test('间距裁剪：只在可见区间内挑选', () => {

@@ -11,27 +11,7 @@
 import type { KLineData } from './types';
 import { zettarancPalette as PAL } from './palette';
 import { isLlmAnnotation, annotationLabel, type Annotation } from './annotate-api';
-import type { DrawablePattern } from './chart-patterns';
-
-/**
- * 本地检测出的蜡烛形态：type -> 展示名。
- *
- * 检测器只认类型，名字在这里查一次。以前名字是硬编码在 `text: '阳包阴'` 里的，
- * 于是「有哪些气泡可关」这件事在工具栏那边根本无从得知 —— 只能再抄一份，
- * 抄完两边慢慢漂移。现在按 type 过滤、按这张表取名字。
- */
-export const LOCAL_PATTERN_LABELS: Record<string, string> = {
-  yang_bao_yin: '阳包阴',
-  yin_bao_yang: '阴包阳',
-  dark_cloud: '乌云压顶',
-  piercing_line: '曙光初现',
-  doji: '十字星',
-  morning_star: '早晨之星',
-  evening_star: '黄昏之星',
-};
-
-/** 本地形态的展示顺序（检测器里的分支顺序，工具栏下拉沿用）。 */
-export const LOCAL_PATTERN_ORDER: string[] = Object.keys(LOCAL_PATTERN_LABELS);
+import type { DrawableCandle, DrawablePattern } from './chart-patterns';
 
 export interface OverlayConfig {
   showTD9: boolean;
@@ -39,8 +19,15 @@ export interface OverlayConfig {
   backendAnnotations: Annotation[];
   /** 几何形态与波浪的轮廓（下标已换算好，见 chart-patterns.ts）。 */
   patternGeometry: DrawablePattern[];
-  /** 被用户关掉的气泡类型（服务端的 4 类 + 本地的 7 类）。空 = 全显示。 */
+  /** 被用户关掉的气泡类型（战法标注 4 类 + 蜡烛形态若干类）。空 = 全显示。 */
   hiddenPatternTypes: string[];
+  /**
+   * 蜡烛形态标记（后端 TA-Lib 识别，下标已换算好）。
+   *
+   * 与 `patternGeometry` 分开：那是"画形状"（折线/虚线），这是"打标记"
+   * （K 线上方的胶囊），用同一套间距避让和用户勾选逻辑。
+   */
+  candleMarks: DrawableCandle[];
 }
 
 export const globalOverlayConfig: OverlayConfig = {
@@ -49,6 +36,7 @@ export const globalOverlayConfig: OverlayConfig = {
   backendAnnotations: [],
   patternGeometry: [],
   hiddenPatternTypes: [],
+  candleMarks: [],
 };
 
 export function setGlobalOverlayConfig(cfg: Partial<OverlayConfig>) {
@@ -153,13 +141,20 @@ let cachedKey = '';
  * 不同标注集合。代价是每次调用多做一次 O(标注数) 的字符串拼接，与
  * O(K线数) 的检测相比可以忽略。
  */
-function patternsCacheKey(dataList: KLineData[], backendAnnotations: Annotation[]): string {
+function patternsCacheKey(
+  dataList: KLineData[],
+  backendAnnotations: Annotation[],
+  candleMarks: readonly DrawableCandle[],
+): string {
   const first = dataList.length > 0 ? dataList[0].timestamp : 0;
   const last = dataList.length > 0 ? dataList[dataList.length - 1].timestamp : 0;
   const annSig = backendAnnotations
     .map((a) => `${a.date}:${a.type}:${a.source ?? ''}`)
     .join(',');
-  return `${dataList.length}|${first}|${last}|${annSig}`;
+  // 蜡烛标记也必须进键：它是异步到的，不进键的话第一次（空）的结果会被缓存住，
+  // 后面拿到真数据也不再重算 —— 表现为"气泡永远不出来"。
+  const candleSig = candleMarks.map((c) => `${c.index}:${c.type}`).join(',');
+  return `${dataList.length}|${first}|${last}|${annSig}|${candleSig}`;
 }
 
 /**
@@ -204,8 +199,9 @@ export function selectPatternIndicesToDraw(
 export function detectKLinePatterns(
   dataList: KLineData[],
   backendAnnotations: Annotation[] = [],
+  candleMarks: readonly DrawableCandle[] = [],
 ): Array<KLinePatternItem | null> {
-  const key = patternsCacheKey(dataList, backendAnnotations);
+  const key = patternsCacheKey(dataList, backendAnnotations, candleMarks);
   if (key === cachedKey && cachedPatterns.length > 0) {
     return cachedPatterns;
   }
@@ -272,102 +268,30 @@ export function detectKLinePatterns(
   }
 
   // 本地高性能检测经典 K 线组合形态
-  for (let i = 2; i < dataList.length; i++) {
-    if (result[i]) continue; // 优先保留模型已识别的形态
-
-    const c = dataList[i];
-    const p1 = dataList[i - 1];
-    const p2 = dataList[i - 2];
-    const range = c.high - c.low;
-    if (range <= 0) continue;
-
-    const isRed = c.close >= c.open;
-    const isP1Red = p1.close >= p1.open;
-    const isP2Red = p2.close >= p2.open;
-
-    // 1. 阳包阴 (多头强势吞没)
-    if (isRed && !isP1Red && c.close > p1.open && c.open <= p1.close) {
-      result[i] = {
-        type: 'yang_bao_yin',
-        text: LOCAL_PATTERN_LABELS.yang_bao_yin,
-        color: PAL().up,
-        bgColor: 'rgba(239, 68, 68, 0.4)',
-        position: 'bottom',
-      };
-      continue;
-    }
-
-    // 2. 阴包阳 (空头吞没防守)
-    if (!isRed && isP1Red && c.close < p1.open && c.open >= p1.close) {
-      result[i] = {
-        type: 'yin_bao_yang',
-        text: LOCAL_PATTERN_LABELS.yin_bao_yang,
-        color: PAL().down,
-        bgColor: 'rgba(16, 185, 129, 0.4)',
-        position: 'top',
-      };
-      continue;
-    }
-
-    // 3. 乌云压顶 (高位空头压制)
-    if (!isRed && isP1Red && c.open > p1.high && c.close < (p1.open + p1.close) / 2) {
-      result[i] = {
-        type: 'dark_cloud',
-        text: LOCAL_PATTERN_LABELS.dark_cloud,
-        color: PAL().patternCloud,
-        bgColor: 'rgba(6, 182, 212, 0.4)',
-        position: 'top',
-      };
-      continue;
-    }
-
-    // 4. 曙光初现 (低位多头反攻)
-    if (isRed && !isP1Red && c.open < p1.low && c.close > (p1.open + p1.close) / 2) {
-      result[i] = {
-        type: 'piercing_line',
-        text: LOCAL_PATTERN_LABELS.piercing_line,
-        color: PAL().patternDawn,
-        bgColor: 'rgba(244, 63, 94, 0.4)',
-        position: 'bottom',
-      };
-      continue;
-    }
-
-    // 5. 十字星 (关键转折点)
-    if (Math.abs(c.close - c.open) / range < 0.1 && range / c.open > 0.015) {
-      result[i] = {
-        type: 'doji',
-        text: LOCAL_PATTERN_LABELS.doji,
-        color: PAL().patternDoji,
-        bgColor: 'rgba(56, 189, 248, 0.4)',
-        position: isRed ? 'bottom' : 'top',
-      };
-      continue;
-    }
-
-    // 6. 早晨之星 (经典见底反转 3-K线组合)
-    if (!isP2Red && (p1.high - p1.low) > 0 && Math.abs(p1.close - p1.open) / (p1.high - p1.low) < 0.3 && isRed && c.close > (p2.open + p2.close) / 2) {
-      result[i] = {
-        type: 'morning_star',
-        text: LOCAL_PATTERN_LABELS.morning_star,
-        color: PAL().patternMorningStar,
-        bgColor: 'rgba(225, 29, 72, 0.4)',
-        position: 'bottom',
-      };
-      continue;
-    }
-
-    // 7. 黄昏之星 (经典见顶回落 3-K线组合)
-    if (isP2Red && (p1.high - p1.low) > 0 && Math.abs(p1.close - p1.open) / (p1.high - p1.low) < 0.3 && !isRed && c.close < (p2.open + p2.close) / 2) {
-      result[i] = {
-        type: 'evening_star',
-        text: LOCAL_PATTERN_LABELS.evening_star,
-        color: PAL().down,
-        bgColor: 'rgba(16, 185, 129, 0.4)',
-        position: 'top',
-      };
-      continue;
-    }
+  // 蜡烛形态：由后端用 TA-Lib 识别（`candles_cdl_*` 列），这里只负责摆放。
+  //
+  // 这里**原来有一套手写的检测**（阳包阴/十字星/早晨之星…）。已删除，因为
+  // 两套代码检测同一件事是最糟的状态：判定标准不同，同一根 K 线在两边可能
+  // 结论相反，用户看到的是随机的。现在统一走 TA-Lib。
+  for (const mark of candleMarks) {
+    if (mark.index < 0 || mark.index >= dataList.length) continue;
+    // 一根 K 线上只放一个胶囊：叠三个谁也读不出来，后到的不覆盖先到的。
+    if (result[mark.index]) continue;
+    const bar = dataList[mark.index];
+    const isBull = mark.direction === 'bullish';
+    const isBear = mark.direction === 'bearish';
+    result[mark.index] = {
+      type: mark.type,
+      text: mark.name,
+      color: isBull ? PAL().up : isBear ? PAL().down : PAL().patternDoji,
+      bgColor: isBull
+        ? 'rgba(239, 68, 68, 0.4)'
+        : isBear
+          ? 'rgba(16, 185, 129, 0.4)'
+          : 'rgba(56, 189, 248, 0.35)',
+      // 阳线标在下方、阴线标在上方，尽量不压住实体。
+      position: bar.close >= bar.open ? 'bottom' : 'top',
+    };
   }
 
   cachedPatterns = result;
@@ -598,6 +522,8 @@ export function drawMainCanvasTongHuaShun(
     patternGeometry?: DrawablePattern[];
     /** 被用户关掉的气泡类型。 */
     hiddenPatternTypes?: string[];
+    /** 蜡烛形态标记（后端识别）。 */
+    candleMarks?: DrawableCandle[];
   } = {},
 ) {
   const {
@@ -606,6 +532,7 @@ export function drawMainCanvasTongHuaShun(
     backendAnnotations = [],
     patternGeometry = [],
     hiddenPatternTypes = [],
+    candleMarks = [],
   } = options;
   if (!kLineDataList || kLineDataList.length === 0) return;
 
@@ -632,7 +559,7 @@ export function drawMainCanvasTongHuaShun(
 
   // 3. 绘制形态胶囊徽章 (避让同柱九转标记)
   if (showPatterns) {
-    const detected = detectKLinePatterns(kLineDataList, backendAnnotations);
+    const detected = detectKLinePatterns(kLineDataList, backendAnnotations, candleMarks);
     // 过滤必须发生在挑点之前：先挑再过滤的话，被关掉的类型仍然占着间距名额，
     // 结果是「关掉了 A 类，B 类的气泡反而更稀」。
     const patterns = hiddenPatternTypes.length > 0

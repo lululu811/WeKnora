@@ -30,6 +30,13 @@ export interface LayerOption {
   desc?: string
   /** 该项在当前图上实际的命中数量（可选，用于置灰或提示）。 */
   count?: number
+  /**
+   * 分组名（可选）。留空归入不分组的那一组。
+   *
+   * 气泡那边两类来源混在一起（战法标注 4 类 + 蜡烛形态 24 类），
+   * 平铺成 28 行没法看，必须分组。
+   */
+  group?: string
 }
 
 export interface LayerSelection {
