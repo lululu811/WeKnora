@@ -21,7 +21,6 @@ import (
 	"github.com/Tencent/WeKnora/internal/agent/tools/hithink_finance/pattern"
 	"github.com/Tencent/WeKnora/internal/agent/tools/hithink_finance/query"
 	"github.com/Tencent/WeKnora/internal/agent/tools/hithink_finance/special"
-	"github.com/Tencent/WeKnora/internal/agent/tools/kline_studio"
 	"github.com/Tencent/WeKnora/internal/agent/tools/zettaranc"
 	"github.com/Tencent/WeKnora/internal/application/repository"
 	"github.com/Tencent/WeKnora/internal/browserskill"
@@ -138,8 +137,6 @@ type agentService struct {
 	hithinkConfig *hithink_finance.Config
 	// Zettaranc tools state (all tools now go through python-service HTTP API)
 	zettarancHTTPClient *zettaranc.HTTPClient
-	// Kline-studio tools state (push picks to kline-studio backend, return view URL)
-	klineStudioConfig *kline_studio.Config
 }
 
 // NewAgentService creates a new agent service
@@ -1432,12 +1429,6 @@ func (s *agentService) registerTools(
 			}
 			logger.Infof(ctx, "Registered zettaranc tool: %s", toolName)
 
-		case "kline_studio.show":
-			if s.klineStudioConfig == nil {
-				s.klineStudioConfig = kline_studio.DefaultConfig()
-			}
-			toolToRegister = kline_studio.NewShowTool(s.klineStudioConfig)
-			logger.Infof(ctx, "Registered kline_studio tool: %s", toolName)
 
 		case tools.ToolShellExec, tools.ToolReadFile, tools.LegacyToolReadSkill, tools.LegacyToolExecuteSkillScript,
 			tools.ToolListSandboxFiles, tools.LegacyToolReadSandboxFile, tools.ToolWriteSandboxFile,

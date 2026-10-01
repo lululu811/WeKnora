@@ -30,11 +30,6 @@ WORKDIR /frontend
 ARG NPM_REGISTRY=
 ARG NODE_MAX_OLD_SPACE_SIZE=4096
 
-# kline-studio 在 docker-compose 里以独立服务运行，浏览器从 host 访问它的
-# 端口（默认 4000）作为 iframe src。
-ARG VITE_KLINE_STUDIO_BASE_URL=http://localhost:4000
-ENV VITE_KLINE_STUDIO_BASE_URL=${VITE_KLINE_STUDIO_BASE_URL}
-
 ENV VITE_IS_DOCKER=true
 # Vite production builds of this SPA routinely exceed Node's default heap.
 ENV NODE_OPTIONS="--max-old-space-size=${NODE_MAX_OLD_SPACE_SIZE}"

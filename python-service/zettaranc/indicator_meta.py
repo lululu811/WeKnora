@@ -663,17 +663,6 @@ INDICATOR_META: Dict[str, Any] = {
       "detectedBy": "internal/indicators/conformance_test.go",
       "description": "Z_MACD / Z_KDJ / Z_VOL 声明 storage.backend: duckdb 并列出了 momentum_macd_12_26_9_* / momentum_kdj_9_3_* / volume 这些列，但工作台 从未读过它们 —— indicators.ts 的 calcMACD(:218) / calcKDJ(:251) / calcVOL(:193) 全都从同一份 OHLCV 在浏览器里重算了一遍。 GET /api/indicators 端点（python-service/main.py:1668）至今**零调用方**。 后果：同一个指标在两个地方各有一份实现，任何一侧的公式修正都不会传导到 另一侧，conformance 测试也只比 Go reference 与 TS，够不到 DuckDB 那一列。",
       "resolution": "让 /api/kline 一次返回 OHLCV + 这些预计算列，前端改为读列； 或把 Z_MACD/Z_KDJ/Z_VOL 的 storage 改成 frontend 并承认前端是唯一实现。 两者选其一，但不能维持\"声明走列、实际本地算\"的现状。"
-    },
-    {
-      "id": "brick_formula_duplicated_in_two_frontends",
-      "indicator": "ZX_BRICK",
-      "stacks": [
-        "frontend",
-        "kline_studio"
-      ],
-      "detectedBy": "manual review 2026-10-01",
-      "description": "知行 ZX 砖型图有**两份**前端实现：WeKnora 工作台的 frontend/.../stock-score.ts:166 calcZXBrick，和 kline-studio 的 kline-studio/frontend/src/lib/。2026-10-01 修 a-stock 回填脚本时， 砖型公式重写为通达信口径并与前者逐字验证一致（抽样 [92.74, 94.25, 104.25] 两侧完全相同），但 kline-studio 那份**没有**对应的验证，也没有 Go reference —— 它是通达信口径的唯一未被交叉验证的实现。",
-      "resolution": "把 kline-studio 的实现纳入 conformance 测试（同一份 fixture、同一份 Go reference），或直接复用工作台的实现删掉重复。"
     }
   ]
 }

@@ -33,7 +33,7 @@ export type DisplayType =
     | 'read_skill'
     | 'mcp_discovery'
     | 'mcp_call'
-    | 'kline_studio';
+    | 'kline_picks';
 
 // Search result item
 export interface SearchResultItem {
@@ -446,18 +446,23 @@ export interface ReadSkillData {
     skill_dir?: string;
 }
 
-// kline_studio.show picks card (WeKnora → kline-studio deep-link).
-// Returned by the `kline_studio.show` agent tool; rendered as an interactive
-// ticker chip list with an "Open in kline-studio" button that launches the
-// deep-link URL produced by the tool.
+// K 线候选卡：列出一批 ticker，点「在面板中打开」把它们灌进 chat 右侧的
+// K 线工作台（KLineWorkspace.vue）。
+//
+// 由 `zettaranc.screener` 返回。display_type 从 'kline_studio' 改为
+// 'kline_picks'（2026-10-01，kline-studio 独立服务已下线）——旧名指向一个
+// 已删除的服务，读起来会让人以为要点开新标签页。
+//
+// `url` 字段随之废弃：它曾由 kline_studio.show 填成指向 localhost:4000 的
+// 深链。那个工具已删除，没有工具再产出 url；保留字段会让"新标签页打开"
+// 按钮成为一个永不出现的死分支。
 export interface KlineStudioPick {
     ticker: string;
     exchange: string;
 }
 
 export interface KlineStudioData {
-    display_type?: 'kline_studio';
-    url?: string;
+    display_type?: 'kline_picks';
     count?: number;
     tickers?: KlineStudioPick[];
 }

@@ -46,7 +46,7 @@ Local dev loop: `make dev-start` (docker-compose.dev.yml infra) → `make dev-ap
 - `internal/` — all server code: `handler` → `application/service` → `application/repository`, plus `agent`, `models`, `stream`, `mcp`, `container` (dig DI), `router`, `middleware`, `types`
 - `migrations/versioned/` — `golang-migrate`, sequential numeric filenames, per-DB subdirs (sqlite/mysql/paradedb)
 - `config/` — `config.yaml`, `builtin_models.yaml` (+ `models.json` overlay)
-- `cli/`, `client/`, `frontend/`, `docreader/`, `python-service/`, `miniprogram/`, `kline-studio/`, `packages/` — separate modules (see above)
+- `cli/`, `client/`, `frontend/`, `docreader/`, `python-service/`, `miniprogram/`, `packages/` — separate modules (see above)
 - `scripts/` — repo utilities, `scripts/git-hooks/`, `scripts/model-catalog/`
 - `deploy/`, `docker/`, `helm/` — container and chart packaging
 - `testdata/`, `third_party/`, `licenses/` — fixtures, vendored code, third-party notices

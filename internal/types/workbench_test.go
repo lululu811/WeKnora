@@ -55,7 +55,7 @@ func TestListWorkbenchesIsStableAndImmutable(t *testing.T) {
 func TestFilterToolsByWorkbench(t *testing.T) {
 	t.Run("workbench without an allowlist is a pass-through", func(t *testing.T) {
 		// finance ships with AllowedTools == nil by design.
-		agentTools := []string{"kb_search", "kline_studio.show"}
+		agentTools := []string{"kb_search", "zettaranc.screener"}
 		assert.Equal(t, agentTools, FilterToolsByWorkbench(agentTools, "finance"))
 	})
 

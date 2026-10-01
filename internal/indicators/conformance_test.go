@@ -952,14 +952,6 @@ func TestKnownGapsAreStillTrue(t *testing.T) {
 					g.ID, frontendCalcMACD, frontendCalcKDJ)
 			}
 
-		case "brick_formula_duplicated_in_two_frontends":
-			// 缺口成立的条件：kline-studio 仍在，且它有自己的砖型实现。
-			// 两处都消失才算修好。
-			ksPath := filepath.Join(root, "kline-studio/frontend/src/lib/zettaranc-indicators.ts")
-			if _, err := os.Stat(ksPath); os.IsNotExist(err) {
-				t.Errorf("known_gaps[%s] 已不成立：kline-studio 已不存在。"+
-					"请删掉这条 known_gaps 条目。", g.ID)
-			}
 
 		default:
 			t.Errorf("known_gaps 里有条目 %q，但本测试没有为它写断言 —— "+

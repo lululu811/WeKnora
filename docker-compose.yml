@@ -11,8 +11,6 @@ services:
         VITE_FRONTEND_COMMIT: ${VITE_FRONTEND_COMMIT:-unknown}
         NPM_REGISTRY: ${NPM_REGISTRY:-}
         NODE_MAX_OLD_SPACE_SIZE: ${NODE_MAX_OLD_SPACE_SIZE:-4096}
-        # kline-studio 浏览器侧的访问地址。容器编排下默认映射到 host:4000。
-        VITE_KLINE_STUDIO_BASE_URL: ${VITE_KLINE_STUDIO_BASE_URL:-http://localhost:4000}
     container_name: WeKnora-frontend
     ports:
       - "${FRONTEND_PORT:-80}:80"
@@ -155,11 +153,6 @@ services:
       # ========== Zettaranc Finance Tools (now via python-service HTTP API) ==========
       # PYTHON_SERVICE_URL: endpoint of the python-service container (analyze/screener/backtest tools)
       - PYTHON_SERVICE_URL=${PYTHON_SERVICE_URL:-http://python-service:50052}
-      # ========== K 线复盘终端 (kline-studio) ==========
-      # kline_studio.show tool 的 picks POST 目标。容器内走服务名解析。
-      - KLINE_STUDIO_API_URL=${KLINE_STUDIO_API_URL:-http://kline-studio:4000}
-      # 工具返回给 LLM/前端的深链 URL。容器内视角。
-      - KLINE_STUDIO_BASE_URL=${KLINE_STUDIO_BASE_URL:-http://kline-studio:4000}
       - ZETTARANC_DATA_MODE=${ZETTARANC_DATA_MODE:-jnb}
       # ========== Langfuse (optional observability) ==========
       # Enabled automatically when LANGFUSE_PUBLIC_KEY + LANGFUSE_SECRET_KEY are set.
@@ -409,42 +402,6 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
-  # kline-studio: A 股 K 线复盘终端（Fastify backend + 内嵌 serve Vite dist）。
-  # WeKnora app 通过 KLINE_STUDIO_API_URL=http://kline-studio:4000 推送 picks；
-  # 浏览器侧通过 host 上的 ${KLINE_STUDIO_PORT:-4000} 端口访问 SPA。
-  kline-studio:
-    image: wechatopenai/weknora-kline-studio:${WEKNORA_VERSION:-latest}
-    build:
-      context: ./kline-studio
-      dockerfile: Dockerfile
-      args:
-        NPM_REGISTRY: ${NPM_REGISTRY:-}
-    container_name: WeKnora-kline-studio
-    ports:
-      - "${KLINE_STUDIO_PORT:-4000}:4000"
-    volumes:
-      # 持久化 picks.json、缓存等运行时数据
-      - kline-studio-data:/app/data
-      # hithink-finance DuckDB（market + indicators）：与 app 容器共用同一份本地数据。
-      # 与 app 服务 mount 路径一致，避免在容器内重映射。
-      - /Users/chenlei/.hithink-finance:/root/.hithink-finance:ro
-    environment:
-      - TZ=${TZ:-Asia/Shanghai}
-      - NODE_ENV=production
-      - KLINE_STUDIO_PORT=4000
-      - KLINE_STUDIO_HOST=0.0.0.0
-      # dev 模式下 Vite 默认 5173；容器内由 backend serve dist，无需 CORS，
-      # 仍保留白名单以便任何嵌入场景。
-      - KLINE_STUDIO_CORS_ORIGINS=${KLINE_STUDIO_CORS_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173,http://localhost,http://localhost:80,http://localhost:8080}
-    healthcheck:
-      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:4000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
-      interval: 15s
-      timeout: 3s
-      retries: 5
-      start_period: 15s
-    networks:
-      - WeKnora-network
-    restart: unless-stopped
 
   # Sandbox 镜像：仅用于 build/pull，非常驻。Docker 沙箱默认关闭，需
   # WEKNORA_SANDBOX_DOCKER_ENABLED=true 并挂载 docker.sock 后，app 才会按会话创建容器。
@@ -1148,4 +1105,3 @@ volumes:
   langfuse_clickhouse_logs:
   langfuse_minio_data:
   searxng_config:
-  kline-studio-data:

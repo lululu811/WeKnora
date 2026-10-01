@@ -75,7 +75,7 @@
     />
 
     <KLineStudioResult
-      v-else-if="displayType === 'kline_studio'"
+      v-else-if="displayType === 'kline_picks'"
       :data="toolData as KlineStudioData"
     />
 

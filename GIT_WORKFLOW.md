@@ -18,7 +18,7 @@
 
 一句话铁则：**`main` 永远等于 `upstream/main`；一切改动只存在于 `mine`。**
 
-当前分支的子目录名、包名、提交信息沿用历史命名（如 `zettaranc`、`hithink_finance`、`kline-studio`）即可，与分支名无关。
+当前分支的子目录名、包名、提交信息沿用历史命名（如 `zettaranc`、`hithink_finance`）即可，与分支名无关。
 
 ---
 

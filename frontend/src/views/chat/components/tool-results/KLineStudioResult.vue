@@ -17,17 +17,6 @@
           <t-icon name="chart" size="12px" />
           <span>{{ t('chat.klineStudio.openInPanel') }}</span>
         </button>
-        <a
-          v-if="url"
-          :href="url"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="kline-studio-open"
-          :title="t('chat.klineStudio.openNewTab')"
-          @click="trackOpen"
-        >
-          {{ t('chat.klineStudio.openNewTab') }} ↗
-        </a>
       </div>
     </div>
 
@@ -68,11 +57,6 @@ const { t } = useI18n()
 const panel = useChatKLinePanel()
 
 const record = computed(() => (props.data || {}) as Record<string, unknown>)
-
-const url = computed(() => {
-  const value = record.value.url
-  return typeof value === 'string' && value.trim() ? value.trim() : ''
-})
 
 const pickList = computed(() => {
   const value = record.value.tickers
@@ -121,10 +105,6 @@ const count = computed(() => {
 const openInPanel = (idx: number) => {
   if (!panel || !hasPick.value) return
   panel.open(pickList.value, idx)
-}
-
-const trackOpen = () => {
-  console.debug('[kline_studio] opening deep-link:', url.value)
 }
 
 // 卡片挂载时如果当前面板里已经是同一组 picks，仅切换 active；
@@ -203,24 +183,6 @@ const samePicks = (a: Array<{ ticker: string; exchange: string }>, b: Array<{ ti
 
   &:hover {
     background: var(--td-brand-color-active, #003fa8);
-  }
-}
-
-.kline-studio-open {
-  display: inline-block;
-  padding: 4px 10px;
-  border: 1px solid var(--td-component-stroke, #e7e7e7);
-  border-radius: 4px;
-  background: transparent;
-  color: var(--td-text-color-secondary, #666);
-  font-size: 12px;
-  cursor: pointer;
-  text-decoration: none;
-  transition: background 0.15s ease, color 0.15s ease;
-
-  &:hover {
-    background: var(--td-bg-color-secondarycontainer, #f3f3f3);
-    color: var(--td-brand-color, #0052d9);
   }
 }
 

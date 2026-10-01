@@ -39,7 +39,7 @@ func TestRegisteredToolNamesCoversEveryNamingConvention(t *testing.T) {
 			"hithink.finance.discover",
 			"hithink.finance.market.price.snapshot",
 			"zettaranc.screener",
-			"kline_studio.show",
+			"zettaranc.four_bricks",
 		} {
 			assert.True(t, got[name], "subpackage tool %q must be in the registered set", name)
 		}

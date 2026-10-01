@@ -1210,8 +1210,10 @@ const resolveToolDisplayType = (event: any): DisplayType | undefined => {
   if (event?.tool_name === 'read_skill' && event?.success !== false) {
     return 'read_skill'
   }
-  if ((event?.tool_name === 'kline_studio.show' || event?.tool_name === 'zettaranc.screener') && event?.success !== false) {
-    return 'kline_studio'
+  // 2026-10-01：kline_studio.show 随独立服务一起下线，只剩 screener。
+  // display_type 相应从 'kline_studio' 改为 'kline_picks'（见 tool-results.ts）。
+  if (event?.tool_name === 'zettaranc.screener' && event?.success !== false) {
+    return 'kline_picks'
   }
   return undefined
 };

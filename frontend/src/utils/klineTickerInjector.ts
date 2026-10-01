@@ -1,7 +1,7 @@
 /**
  * klineTickerInjector — 在 markdown 进入 marked 之前，把形如 `600519.SH` 的
  * A 股 ticker 文本包成 `<span class="kline-ticker" data-thscode="...">`，
- * 让前端可以挂 hover/click 事件触发 kline-studio 抽屉。
+ * 让前端可以挂 hover/click 事件打开 chat 右侧的 K 线工作台。
  *
  * 设计原则：
  *  - 6 位数字 + `.SH`/`.SZ`/`.BJ` 是无歧义形式，一律识别。

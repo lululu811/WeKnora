@@ -16,7 +16,7 @@ import (
 // tools — search_knowledge, read_document, query_knowledge_graph,
 // list_documents, data_analysis, database_query, browserskill — are declared
 // as files in the `tools` package *root*, while the family tools
-// (hithink.finance.*, zettaranc.*, kline_studio.*) sit two or three
+// (hithink.finance.*, zettaranc.*) sit two or three
 // directories down. A `*/*.go` glob therefore sees neither, and the
 // resulting "registered tool set" was missing the majority of the tools,
 // which turned the allowlist check into 25 false positives on production

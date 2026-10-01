@@ -474,8 +474,16 @@ known_gaps:
 # 工作台读同一份实现。搬后与前端原实现做过 260 根 bar 逐点比对，零差异。
 # 战法**解释**（红2=黄金买点）刻意留在知识库，没有进计算层。
 #
-# 下面两条是**当前仍然成立**的失真。TestKnownGapsAreStillTrue 会在任一条
-# 被修好时报警提醒删除 —— 写在这里是为了说明"这个失败是已知的、该由谁去修"，
+# brick_formula_duplicated_in_two_frontends 已于 2026-10-01 消失并移出本清单：
+# 知行 ZX 砖型图曾有两份前端实现（工作台的 stock-score.ts calcZXBrick 与
+# kline-studio 独立服务的那份）。删除前逐条核对了 kline-studio 侧的全部
+# 21 个数值阈值与 4 个检测器（B1/关键K/S1/暴力K），确认它是
+# python-service/zettaranc/annotator.py 的一份忠实翻译、没有任何独有规则，
+# 且 a-stock/strategies 零依赖它 —— 随该服务一并删除。工作台那份由
+# conformance_test.go 的 refZXBrick 交叉验证，保持不变。
+#
+# 下面一条是**当前仍然成立**的失真。TestKnownGapsAreStillTrue 会在它被
+# 修好时报警提醒删除 —— 写在这里是为了说明"这个失败是已知的、该由谁去修"，
 # 不是为了让测试变绿。
 
   - id: frontend_recomputes_declared_duckdb_indicators
@@ -495,17 +503,3 @@ known_gaps:
       或把 Z_MACD/Z_KDJ/Z_VOL 的 storage 改成 frontend 并承认前端是唯一实现。
       两者选其一，但不能维持"声明走列、实际本地算"的现状。
 
-  - id: brick_formula_duplicated_in_two_frontends
-    indicator: ZX_BRICK
-    stacks: [frontend, kline_studio]
-    detected_by: manual review 2026-10-01
-    description: >-
-      知行 ZX 砖型图有**两份**前端实现：WeKnora 工作台的
-      frontend/.../stock-score.ts:166 calcZXBrick，和 kline-studio 的
-      kline-studio/frontend/src/lib/。2026-10-01 修 a-stock 回填脚本时，
-      砖型公式重写为通达信口径并与前者逐字验证一致（抽样 [92.74, 94.25, 104.25]
-      两侧完全相同），但 kline-studio 那份**没有**对应的验证，也没有 Go reference
-      —— 它是通达信口径的唯一未被交叉验证的实现。
-    resolution: >-
-      把 kline-studio 的实现纳入 conformance 测试（同一份 fixture、同一份 Go
-      reference），或直接复用工作台的实现删掉重复。
