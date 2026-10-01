@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -16,18 +17,31 @@ import (
 	"github.com/Tencent/WeKnora/internal/types/interfaces"
 )
 
-// stockWatchTestDDL 直接读**真正会跑的**那条迁移，而不是在这里抄一份
+// stockWatchTestDDL 直接读**真正会跑的**那些迁移，而不是在这里抄一份
 // CREATE TABLE。
 //
 // 抄一份的代价是它会在某次改迁移时静默失联：测试继续绿，生产的表却已经
 // 和 GORM 的字段约定对不上了（最典型的是 NOT NULL 却没有 DEFAULT 的列，
 // 插入时才炸）。同目录的 system_model_catalog_test.go 用的也是这个做法。
+//
+// 000034 建表、000035 加 state/note 与事件表：**改 stock_watches 的迁移时，
+// 这份列表和 stock_watch_pool_sqlite_test.go 里的那份都要跟着改**。两份是
+// 两个测试包（repository / repository_test）无法共享同一个 helper 的结果，
+// 而不是两种口径 —— 它们读的是同一批文件。
 func stockWatchTestDDL(t *testing.T) string {
 	t.Helper()
-	path := filepath.Join("..", "..", "..", "migrations", "sqlite", "000034_stock_watches.up.sql")
-	raw, err := os.ReadFile(path)
-	require.NoError(t, err, "迁移文件必须存在：%s", path)
-	return string(raw)
+	var ddl strings.Builder
+	for _, name := range []string{
+		"000034_stock_watches.up.sql",
+		"000035_stock_watch_pool_state.up.sql",
+	} {
+		path := filepath.Join("..", "..", "..", "migrations", "sqlite", name)
+		raw, err := os.ReadFile(path)
+		require.NoError(t, err, "迁移文件必须存在：%s", path)
+		ddl.Write(raw)
+		ddl.WriteString("\n")
+	}
+	return ddl.String()
 }
 
 func setupStockWatchTestDB(t *testing.T) *gorm.DB {

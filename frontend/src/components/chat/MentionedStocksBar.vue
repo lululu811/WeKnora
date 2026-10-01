@@ -8,22 +8,38 @@
       </div>
 
       <div class="stocks-bar__list">
-        <button
-          v-for="st in mentionedStocks"
-          :key="st.thscode"
-          type="button"
-          class="stock-chip"
-          :class="{ 'stock-chip--active': st.thscode === activeThscode }"
-          :aria-pressed="st.thscode === activeThscode"
-          @click="handleClickStock(st)"
-          :title="st.thscode === activeThscode
-            ? `右侧工作台正在显示 ${st.name} (${st.thscode})`
-            : `点击在右侧工作台查看 ${st.name} (${st.thscode}) 的知行战法K线与砖型图`"
-        >
-          <span class="stock-chip__name">{{ st.name }}</span>
-          <span class="stock-chip__code">{{ st.thscode }}</span>
-          <span class="stock-chip__action">{{ st.thscode === activeThscode ? '正在查看' : 'K线诊断 →' }}</span>
-        </button>
+        <!-- 每个标的是一组：左边原有的「看 K 线」chip，右边「进池」。
+             不能把「进池」嵌进 chip 里 —— chip 本身已经是 <button>，按钮里套按钮
+             是无效 HTML，浏览器会按自己的心情拆分它。 -->
+        <div v-for="st in mentionedStocks" :key="st.thscode" class="stocks-bar__item">
+          <button
+            type="button"
+            class="stock-chip"
+            :class="{ 'stock-chip--active': st.thscode === activeThscode }"
+            :aria-pressed="st.thscode === activeThscode"
+            @click="handleClickStock(st)"
+            :title="st.thscode === activeThscode
+              ? `右侧工作台正在显示 ${st.name} (${st.thscode})`
+              : `点击在右侧工作台查看 ${st.name} (${st.thscode}) 的知行战法K线与砖型图`"
+          >
+            <span class="stock-chip__name">{{ st.name }}</span>
+            <span class="stock-chip__code">{{ st.thscode }}</span>
+            <span class="stock-chip__action">{{ st.thscode === activeThscode ? '正在查看' : 'K线诊断 →' }}</span>
+          </button>
+
+          <!-- 进池 = 加入个股追踪。chip 上已经有 thscode/name/exchange，直接调用
+               已存在的添加接口，不再造一个选择器。 -->
+          <button
+            type="button"
+            class="stock-chip__pool"
+            :class="{ 'is-added': pooledCodes.has(st.thscode) }"
+            :disabled="pooledCodes.has(st.thscode)"
+            :title="pooledCodes.has(st.thscode) ? t('watchlist.inPool') : t('watchlist.addToPool')"
+            @click="handleAddToPool(st)"
+          >
+            {{ pooledCodes.has(st.thscode) ? t('watchlist.inPool') : t('watchlist.addToPool') }}
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -31,12 +47,17 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
+import { MessagePlugin } from 'tdesign-vue-next';
 import { useAgentWorkspace } from '@/composables/useAgentWorkspace';
 import { extractMentionedStocks, type MentionedStock } from '@/utils/stockMentions';
+import { addWatchItem } from '@/api/watchlist';
 
 const props = defineProps<{
   session: any;
 }>();
+
+const { t } = useI18n();
 
 // 右侧工作台当前显示的标的。取不到 provider（如本组件被单独复用/测试挂载）时
 // 退化成空串，所有 chip 都不高亮 —— 缺状态不该被渲染成「都在看」。
@@ -64,6 +85,32 @@ const mentionedStocks = computed<MentionedStock[]>(() => {
 
 const handleClickStock = (stock: MentionedStock) => {
   emit('select-stock', stock, mentionedStocks.value);
+};
+
+/**
+ * 本次会话里已经进过池的标的。
+ *
+ * 只是**本地的即时反馈**，不是权威名单 —— 真正的判定在服务端（重复添加是
+ * upsert，返回 created=false）。所以这里不预取整个池子：为一次「进池」把
+ * 追踪列表整份拉下来，比多按一次按钮贵得多。
+ */
+const pooledCodes = ref<Set<string>>(new Set());
+
+const handleAddToPool = async (stock: MentionedStock) => {
+  if (pooledCodes.value.has(stock.thscode)) return;
+  try {
+    const res = await addWatchItem({
+      thscode: stock.thscode,
+      name: stock.name,
+      exchange: stock.exchange,
+    });
+    // created=false 说明它本来就在池子里（服务端顺手刷新了名称）——照实说，
+    // 而不是让用户以为自己刚做了一件没发生过的事。
+    MessagePlugin.success(res.created ? t('watchlist.added') : t('watchlist.alreadyWatched'));
+    pooledCodes.value = new Set(pooledCodes.value).add(stock.thscode);
+  } catch (error: any) {
+    MessagePlugin.error(error?.message || t('watchlist.loadFailed'));
+  }
 };
 </script>
 
@@ -132,6 +179,37 @@ const handleClickStock = (stock: MentionedStock) => {
   flex-wrap: wrap;
   gap: 8px;
   flex: 1;
+}
+
+/* chip 与「进池」紧挨着成组：它们说的是同一只票，拆成两个独立间距会让
+   「进池」看起来像在说别的标的。 */
+.stocks-bar__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.stock-chip__pool {
+  padding: 4px 8px;
+  border: 1px solid var(--td-component-stroke);
+  border-radius: var(--app-radius-sm);
+  background: transparent;
+  color: var(--td-text-color-secondary);
+  font-size: var(--app-text-xs);
+  line-height: 1.4;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color var(--app-motion-fast) ease, color var(--app-motion-fast) ease;
+
+  &:hover:not(:disabled) {
+    border-color: var(--td-brand-color);
+    color: var(--td-brand-color);
+  }
+
+  &:disabled {
+    cursor: default;
+    opacity: 0.6;
+  }
 }
 
 .stock-chip {

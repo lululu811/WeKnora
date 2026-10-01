@@ -3,6 +3,7 @@ package handler
 import (
 	stderrors "errors"
 	"net/http"
+	"strconv"
 
 	"github.com/Tencent/WeKnora/internal/application/service"
 	apperrors "github.com/Tencent/WeKnora/internal/errors"
@@ -54,7 +55,11 @@ func watchContext(c *gin.Context) (string, uint64, bool) {
 func mapStockWatchError(c *gin.Context, err error) bool {
 	switch {
 	case stderrors.Is(err, service.ErrStockWatchInvalidCode),
-		stderrors.Is(err, service.ErrStockWatchEmptyCode):
+		stderrors.Is(err, service.ErrStockWatchEmptyCode),
+		stderrors.Is(err, service.ErrStockWatchInvalidState),
+		stderrors.Is(err, service.ErrStockWatchNoteTooLong),
+		// 域错误：状态机不认这一步。它与"值不存在"同属调用方输入问题，同样 400。
+		stderrors.Is(err, types.ErrStockWatchIllegalTransition):
 		c.Error(apperrors.NewBadRequestError(err.Error()))
 	case stderrors.Is(err, service.ErrStockWatchLimitReached):
 		c.Error(apperrors.NewConflictError(err.Error()))
@@ -161,6 +166,44 @@ func (h *StockWatchHandler) RemoveStockWatch(c *gin.Context) {
 type UpdateStockWatchRequest struct {
 	Name      *string `json:"name"`
 	SortOrder *int    `json:"sort_order"`
+	// State is the pool's manual state machine; only the values in
+	// types.StockWatchState* are accepted, and only a legal move from the
+	// row's current state (同一个事务里校验).
+	State *string `json:"state"`
+	// Note is the user's reason for tracking the symbol; "" clears it.
+	Note *string `json:"note"`
+}
+
+// ListStockWatchEvents godoc
+// @Summary      Read my pool's event history
+// @Description  Lists the append-only event log of the calling user's tracking pool, newest first
+// @Tags         User
+// @Param        thscode  query  string  false  "Narrow to one symbol, e.g. 600519.SH"
+// @Param        limit    query  int     false  "Max rows (default 50, max 200)"
+// @Success      200      {object}  map[string]interface{}
+// @Router       /watchlist/events [get]
+func (h *StockWatchHandler) ListStockWatchEvents(c *gin.Context) {
+	ctx := c.Request.Context()
+	userID, tenantID, ok := watchContext(c)
+	if !ok {
+		return
+	}
+	// limit 解析失败就退回默认值而不是 400：历史条数是展示细节，为它把整页
+	// 活动流打成错误得不偿失。
+	limit, _ := strconv.Atoi(c.Query("limit"))
+	list, err := h.service.ListEvents(ctx, userID, tenantID, c.Query("thscode"), limit)
+	if err != nil {
+		if mapStockWatchError(c, err) {
+			return
+		}
+		logger.ErrorWithFields(ctx, err, nil)
+		c.Error(apperrors.NewInternalServerError(err.Error()))
+		return
+	}
+	if list == nil {
+		list = []*types.StockWatchEvent{}
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": list})
 }
 
 // UpdateStockWatch godoc
@@ -182,13 +225,15 @@ func (h *StockWatchHandler) UpdateStockWatch(c *gin.Context) {
 		c.Error(apperrors.NewBadRequestError("invalid request body").WithDetails(err.Error()))
 		return
 	}
-	if req.Name == nil && req.SortOrder == nil {
-		c.Error(apperrors.NewBadRequestError("nothing to update: pass name or sort_order"))
+	if req.Name == nil && req.SortOrder == nil && req.State == nil && req.Note == nil {
+		c.Error(apperrors.NewBadRequestError("nothing to update: pass name, sort_order, state or note"))
 		return
 	}
 	row, err := h.service.Update(ctx, userID, tenantID, c.Param("thscode"), interfaces.StockWatchPatch{
 		Name:      req.Name,
 		SortOrder: req.SortOrder,
+		State:     req.State,
+		Note:      req.Note,
 	})
 	if err != nil {
 		if mapStockWatchError(c, err) {

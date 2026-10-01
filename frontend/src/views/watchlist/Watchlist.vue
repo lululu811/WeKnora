@@ -62,6 +62,32 @@
         <span class="wl-name">{{ row.quote?.name || row.name || '—' }}</span>
       </template>
 
+      <!-- 状态徽标本身就是操作入口：点它才展开「合法下一步」。
+           不画灰掉的非法项 —— 一个永远点不动的按钮只能教会用户怀疑这个页面。 -->
+      <template #state="{ row }">
+        <t-dropdown :options="stateOptions(row)" trigger="click" placement="bottom-left" attach="body"
+          @click="changeState(row, $event)">
+          <button type="button" class="wl-state" :class="`wl-state--${row.state}`"
+            :title="t('watchlist.changeState')">
+            <span class="wl-state__dot"></span>
+            {{ stateLabel(row.state) }}
+          </button>
+        </t-dropdown>
+      </template>
+
+      <!-- 备注就地编辑：点开、回车或失焦即存。放一个常驻输入框会让整张表看起来
+           像一份还没填完的表单，也会把"滚动时误触保存"变成常态。 -->
+      <template #note="{ row }">
+        <div class="wl-note">
+          <t-input v-if="editingNote === row.thscode" v-model="noteDraft" class="wl-note__input" size="small"
+            :placeholder="t('watchlist.notePlaceholder')" @enter="saveNote(row)" @blur="saveNote(row)" />
+          <button v-else type="button" class="wl-note__view" :class="{ 'is-empty': !row.note }"
+            :title="t('watchlist.noteEdit')" @click="startEditNote(row)">
+            {{ row.note || t('watchlist.notePlaceholder') }}
+          </button>
+        </div>
+      </template>
+
       <template #close="{ row }">
         <span v-if="num(row.quote?.close) !== null" class="wl-num"
           :class="changeClass(row)">{{ formatPrice(row.quote?.close) }}</span>
@@ -117,9 +143,11 @@ import {
   removeWatchItem,
   searchSymbols,
   updateWatchItem,
+  WATCH_STATE_TRANSITIONS,
   type Quote,
   type SymbolSuggestion,
   type WatchItem,
+  type WatchState,
 } from '@/api/watchlist'
 
 const { t } = useI18n()
@@ -165,12 +193,89 @@ const newestDate = computed(() => {
 const columns = computed(() => [
   { colKey: 'thscode', title: t('watchlist.columns.code'), width: 148 },
   { colKey: 'name', title: t('watchlist.columns.name'), minWidth: 140 },
+  { colKey: 'state', title: t('watchlist.columns.state'), width: 112 },
+  { colKey: 'note', title: t('watchlist.columns.note'), minWidth: 150 },
   { colKey: 'close', title: t('watchlist.columns.price'), width: 110, align: 'right' as const },
   { colKey: 'change', title: t('watchlist.columns.change'), width: 170, align: 'right' as const },
   { colKey: 'turnover', title: t('watchlist.columns.turnover'), width: 110, align: 'right' as const },
   { colKey: 'date', title: t('watchlist.columns.date'), width: 128, align: 'center' as const },
   { colKey: 'actions', title: t('watchlist.columns.actions'), width: 132, align: 'right' as const },
 ])
+
+/** 徽标文案。`triggered` 只能被买点触发写入，前端只读不提供入口。 */
+function stateLabel(state: string): string {
+  switch (state) {
+    case 'observing':
+      return t('watchlist.stateObserving')
+    case 'triggered':
+      return t('watchlist.stateTriggered')
+    case 'holding':
+      return t('watchlist.stateHolding')
+    case 'dropped':
+      return t('watchlist.stateDropped')
+    default:
+      // 认不出的值原样显示：编一个漂亮的名字会让"服务端多了个状态、前端还没跟上"
+      // 这件事彻底隐形。
+      return state
+  }
+}
+
+/**
+ * 当前状态能去的下一步，只有这些。
+ *
+ * 「回到观察中」在列表里叫「标回观察中」——同一个状态，在徽标上是位置（观察中），
+ * 在菜单里是动作（标回）——菜单项读起来必须是一个能做决定的操作。
+ */
+function stateOptions(row: WatchRow) {
+  const next = WATCH_STATE_TRANSITIONS[row.state] ?? []
+  return next.map((state) => ({
+    value: state,
+    content: state === 'observing' ? t('watchlist.markObserving') : stateLabel(state),
+  }))
+}
+
+async function changeState(row: WatchRow, data: unknown) {
+  const next = (data as { value?: string })?.value
+  if (!next || next === row.state) return
+  try {
+    await updateWatchItem(row.thscode, { state: next as WatchState })
+    MessagePlugin.success(t('watchlist.stateSaved'))
+    await loadItems()
+  } catch (error: any) {
+    MessagePlugin.error(error?.message || t('watchlist.loadFailed'))
+  }
+}
+
+/** 正在就地编辑备注的那一行的 thscode；'' 表示没有在编辑。 */
+const editingNote = ref('')
+const noteDraft = ref('')
+let noteSaving = false
+
+function startEditNote(row: WatchRow) {
+  editingNote.value = row.thscode
+  noteDraft.value = row.note || ''
+}
+
+/**
+ * 保存备注。回车和失焦都会走到这里，所以入口先做幂等判断：回车已经把编辑态
+ * 关掉了，随后 input 卸载触发的 blur 必须安静地什么也不做，否则会打两次请求。
+ */
+async function saveNote(row: WatchRow) {
+  if (editingNote.value !== row.thscode || noteSaving) return
+  const next = noteDraft.value.trim()
+  editingNote.value = ''
+  if (next === (row.note || '')) return
+  noteSaving = true
+  try {
+    await updateWatchItem(row.thscode, { note: next })
+    MessagePlugin.success(t('watchlist.noteSaved'))
+    await loadItems()
+  } catch (error: any) {
+    MessagePlugin.error(error?.message || t('watchlist.loadFailed'))
+  } finally {
+    noteSaving = false
+  }
+}
 
 /** 缺数据一律返回 null：0 是"真的等于零"，不能拿它顶替"查不到"。 */
 function num(v: number | null | undefined): number | null {
@@ -583,6 +688,93 @@ onUnmounted(() => {
 
 .wl-muted {
   color: var(--td-text-color-placeholder);
+}
+
+/* 状态徽标。颜色只区分「要不要多看一眼」，不做涨跌语义 —— 这里的绿意是
+   「已放弃」，跟行情列的红涨绿跌不是一回事，所以不复用那对色值。 */
+.wl-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 9px;
+  border: 1px solid var(--td-component-stroke);
+  border-radius: var(--app-radius-pill);
+  background: var(--td-bg-color-secondarycontainer);
+  color: var(--td-text-color-primary);
+  font-size: var(--app-text-xs);
+  line-height: 18px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color var(--app-motion-fast) ease, background var(--app-motion-fast) ease;
+
+  &:hover {
+    border-color: var(--td-brand-color);
+  }
+
+  .wl-state__dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+    opacity: 0.75;
+  }
+
+  &.wl-state--observing {
+    color: var(--td-text-color-secondary);
+  }
+
+  /* 已触发买点：需要用户处理，给最强的视觉重量。 */
+  &.wl-state--triggered {
+    border-color: color-mix(in srgb, var(--td-warning-color) 55%, transparent);
+    background: color-mix(in srgb, var(--td-warning-color) 14%, transparent);
+    color: var(--td-warning-color);
+  }
+
+  &.wl-state--holding {
+    border-color: color-mix(in srgb, var(--td-brand-color) 45%, transparent);
+    background: color-mix(in srgb, var(--td-brand-color) 10%, transparent);
+    color: var(--td-brand-color);
+  }
+
+  &.wl-state--dropped {
+    color: var(--td-text-color-placeholder);
+  }
+}
+
+.wl-note {
+  display: flex;
+  align-items: center;
+  min-height: 24px;
+}
+
+/* 未编辑态是一个"长得像文本的按钮"：整格可点，键盘也能到。 */
+.wl-note__view {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  padding: 2px 6px;
+  border: 1px dashed transparent;
+  border-radius: var(--app-radius-xs);
+  background: transparent;
+  color: var(--td-text-color-primary);
+  font: inherit;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: text;
+
+  &:hover {
+    border-color: var(--td-component-stroke);
+  }
+
+  &.is-empty {
+    color: var(--td-text-color-placeholder);
+  }
+}
+
+.wl-note__input {
+  width: 100%;
 }
 
 .wl-actions {
