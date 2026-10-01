@@ -1437,7 +1437,7 @@ func (s *agentService) registerTools(
 		// 与 hithink.finance.* 分开命名而不挂在它下面：HALO 的数据源是巨潮
 		// 年报 PDF 原文（法定披露平台），hithink 只是对账用的参照，两者权威
 		// 性和失败模式都不同，挂在一个命名空间下会让模型以为可以互相顶替。
-		case "halo.filing.sync", "halo.filing.query":
+		case "halo.filing.sync", "halo.filing.query", "halo.analyze":
 			if s.haloHTTPClient == nil {
 				s.haloHTTPClient = halo.NewHTTPClient("")
 			}
@@ -1446,6 +1446,8 @@ func (s *agentService) registerTools(
 				toolToRegister = halo.NewSyncTool(s.haloHTTPClient)
 			case "halo.filing.query":
 				toolToRegister = halo.NewQueryTool(s.haloHTTPClient)
+			case "halo.analyze":
+				toolToRegister = halo.NewScoreTool(s.haloHTTPClient)
 			}
 			logger.Infof(ctx, "Registered halo tool: %s", toolName)
 

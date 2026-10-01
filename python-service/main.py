@@ -1333,6 +1333,43 @@ async def halo_sync(request: HaloSyncRequest) -> Dict[str, Any]:
     })
 
 
+class HaloScoreRequest(BaseModel):
+    """对一只股票出评分结果。"""
+
+    thscode: str = Field(..., description="6 位股票代码，如 600519")
+    period: Optional[str] = Field(None, description="报告期日期，默认取最新已落库期次")
+    report_type: str = Field("annual", description="annual / h1 / q1 / q3")
+    scope: str = Field("consolidated", description="consolidated / parent")
+
+
+@app.post("/halo/score", dependencies=[Depends(require_api_key)])
+async def halo_score(request: HaloScoreRequest) -> Dict[str, Any]:
+    """评分：Python 算完能量化的部分，并返回 7 个定性维度的待判槽位。
+
+    七个定性维度（护城河/滞胀/ESG/管理层/资金面/估值/风险）由调用方判分，
+    本端点只负责把每项的**量化锚点**算好一起返回，避免判分时凭印象。
+
+    综合分不由本端点给出：各维度分收齐后调
+    ``verify_comprehensive`` 复算校验（容差 0.05 + 评级同档）。
+    """
+    from halo import analyze as halo_analyze
+    from halo.store import FactStore
+
+    try:
+        store = FactStore()
+    except Exception as exc:
+        raise fail(503, f"事实库不可用：{exc}") from exc
+
+    result = await halo_analyze.analyze(
+        request.thscode,
+        store=store,
+        period=request.period,
+        report_type=request.report_type,
+        scope=request.scope,
+    )
+    return jsonable_encoder(result)
+
+
 @app.post("/halo/query", dependencies=[Depends(require_api_key)])
 async def halo_query(request: HaloQueryRequest) -> Dict[str, Any]:
     """读取年报事实。只读 SQLite，秒级返回。"""

@@ -30,6 +30,7 @@ from typing import Any, Callable, Dict, List, Optional, Protocol
 
 from .cninfo_source import CninfoSource, LocalFiling, NoFilingFoundError
 from .extractor import Fact, extract_pages as extract_rule_pages, merge_channels
+from .facts import extract_facts
 from .pdf_extract import ExtractResult, extract_pages, find_anchors
 from .store import (
     REPORT_ANNUAL,
@@ -63,6 +64,33 @@ _PERIOD_SUFFIX = {
     REPORT_Q1: "03-31",
     REPORT_Q3: "09-30",
 }
+
+
+def normalize_thscode(code: str) -> str:
+    """把 6 位代码补成 hithink 的带后缀形式（600519 -> 600519.SH）。
+
+    三处用的格式本来就不一致，而**格式不一致的后果是静默的**：
+
+    * 巨潮检索与年报 PDF 只认 6 位；
+    * DuckDB（financials / market）一律用带后缀的 ``600519.SH``；
+    * 事实库的 thscode 若存成 6 位，对账时按 ``600519.SH`` 去 join 就会
+      查不到参照，**不报错**，只是把每条记录都判成「对不了」——看起来像
+      「这只股票没数据」，实际是格式错了。
+
+    统一成带后缀存储，对账、评分、查询三处才不会各查各的。
+    """
+    c = (code or "").strip().upper()
+    if "." in c:
+        return c
+    if not c.isdigit() or len(c) != 6:
+        return c
+    if c[0] in ("6", "9"):
+        return f"{c}.SH"     # 沪市主板 / 科创板(688) / B股
+    if c[0] in ("0", "2", "3"):
+        return f"{c}.SZ"     # 深市主板 / 创业板(300)
+    if c[0] in ("4", "8"):
+        return f"{c}.BJ"     # 北交所
+    return c
 
 
 def period_of(year: int, report_type: str) -> str:
@@ -237,10 +265,12 @@ def sync_filing(
     """抓取 → 解析 → 抽取 → 合并 → 对账 → 落表。**同步**，请用 ``sync_filing_async``。"""
     source = source or CninfoSource()
     dest_dir = dest_dir or default_dest_dir()
+    bare_code = code            # 巨潮只认 6 位
+    code = normalize_thscode(code)
 
     # 先定位再决定要不要下载：只有真的没有缓存时才付出下载+解析的代价。
     filing: LocalFiling = source.fetch_filing_pdf(
-        code, dest_dir, report_type=report_type, year=year
+        bare_code, dest_dir, report_type=report_type, year=year
     )
     if filing.year is None:
         # 标题里没有年份就无法确定报告期，编一个会让 period 错到别的年份去。
@@ -289,6 +319,17 @@ def sync_filing(
         r["thscode"] = code
         r["period"] = period
         r["report_type"] = report_type
+
+    # 治理诚信与 ESG 事实走**独立通道**：它们不是资产负债表科目，规则抽取
+    # 的字段表里没有，也不该往里塞。它们来自年报的证监会固定章节（是非题），
+    # 确定性更强，单独抽完直接落表，供评分内核的「事实」层与风险锚点使用。
+    governance_records = []
+    for r in extract_facts(pages)["facts"]:
+        r["thscode"] = code
+        r["period"] = period
+        r["report_type"] = report_type
+        governance_records.append(r)
+    records = records + governance_records
 
     records = await_run(
         _maybe_reconcile(records, code, period, report_type, reconciler)

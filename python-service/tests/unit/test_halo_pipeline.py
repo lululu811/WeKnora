@@ -207,3 +207,24 @@ def test_real_moutai_parent_scope_not_mislabeled_as_consolidated():
                 f"母公司表（p59-60）不该标成 {f.scope}"
             )
 
+
+
+# --------------------------------------------------------------------------
+# thscode 格式统一
+# --------------------------------------------------------------------------
+
+
+def test_thscode_normalization():
+    """巨潮认 6 位、DuckDB 认带后缀，事实库必须存后者。
+
+    格式不一致的后果是**静默**的：存 6 位后，对账按 600519.SH 去 join 查不
+    到参照，不报错，只把每条都判成「对不了」，看起来像「这只股票没数据」。
+    """
+    assert pipeline.normalize_thscode("600519") == "600519.SH"
+    assert pipeline.normalize_thscode("600519.SH") == "600519.SH"
+    assert pipeline.normalize_thscode("688981") == "688981.SH"   # 科创板归沪
+    assert pipeline.normalize_thscode("000001") == "000001.SZ"
+    assert pipeline.normalize_thscode("300888") == "300888.SZ"   # 创业板归深
+    assert pipeline.normalize_thscode("830799") == "830799.BJ"   # 北交所
+    assert pipeline.normalize_thscode("") == ""
+    assert pipeline.normalize_thscode("ABC") == "ABC"           # 非股票代码原样返回
