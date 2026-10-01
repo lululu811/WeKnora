@@ -7762,10 +7762,43 @@ export default {
       description: '다른 키워드나 파일 유형으로 시도해 보세요'
     }
   },
+  watchlist: {
+    title: '종목 추적',
+    subtitle: '관심 종목의 최신 가격과 등락률 (로컬 시세 DB, 전방 수정주가)',
+    add: '추가',
+    addPlaceholder: '코드 또는 이름 입력 (예: 600519 / 茅台)',
+    refresh: '새로고침',
+    updatedAt: '{time} 갱신',
+    empty: '아직 등록한 종목이 없습니다',
+    emptyHint: '위 입력란에 코드나 이름을 입력하고 후보에서 선택하세요',
+    missingHint: '로컬 시세 DB에 데이터가 없는 종목: {codes}',
+    noData: '데이터 없음',
+    added: '관심 종목에 추가했습니다',
+    alreadyWatched: '이미 등록된 종목입니다 (이름을 갱신했습니다)',
+    symbolNotFound: '"{q}"와 일치하는 종목을 찾지 못했습니다',
+    removed: '관심 종목에서 제거했습니다',
+    pin: '맨 위로',
+    pinned: '맨 위로 이동했습니다',
+    remove: '제거',
+    removeConfirmTitle: '관심 종목에서 제거',
+    removeConfirmBody: '"{name}"을(를) 관심 종목에서 제거할까요?',
+    cancel: '취소',
+    loadFailed: '작업에 실패했습니다. 잠시 후 다시 시도해 주세요',
+    columns: {
+      code: '코드',
+      name: '이름',
+      price: '현재가',
+      change: '등락',
+      turnover: '거래대금',
+      date: '최근 거래일',
+      actions: '작업'
+    }
+  },
   menu: {
     sessionInProgress: '대화 진행 중',
     knowledgeBase: '지식베이스',
     agents: '에이전트',
+    watchlist: '종목 추적',
     artifacts: '산출물',
     organizations: '공유 공간',
     newChat: '새 대화',

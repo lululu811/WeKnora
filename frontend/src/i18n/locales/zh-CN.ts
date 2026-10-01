@@ -7765,10 +7765,43 @@ export default {
       description: '换个关键词或文件类型试试'
     }
   },
+  watchlist: {
+    title: '个股追踪',
+    subtitle: '关注标的的最新价与涨跌，数据来自本地行情库（前复权）',
+    add: '添加',
+    addPlaceholder: '输入代码或名称，如 600519 / 茅台',
+    refresh: '刷新',
+    updatedAt: '更新于 {time}',
+    empty: '还没有关注任何标的',
+    emptyHint: '在上方输入代码或名称，从候选里选一只加入',
+    missingHint: '本地行情库中没有这些标的的数据：{codes}',
+    noData: '无数据',
+    added: '已加入自选',
+    alreadyWatched: '已在自选中，已刷新名称',
+    symbolNotFound: '没有找到与「{q}」匹配的标的',
+    removed: '已移出自选',
+    pin: '置顶',
+    pinned: '已置顶',
+    remove: '移出',
+    removeConfirmTitle: '移出自选',
+    removeConfirmBody: '确认把「{name}」移出自选？',
+    cancel: '取消',
+    loadFailed: '操作失败，请稍后再试',
+    columns: {
+      code: '代码',
+      name: '名称',
+      price: '最新价',
+      change: '涨跌',
+      turnover: '成交额',
+      date: '最新交易日',
+      actions: '操作'
+    }
+  },
   menu: {
     sessionInProgress: '会话进行中',
     knowledgeBase: '知识库',
     agents: '智能体',
+    watchlist: '个股追踪',
     artifacts: '产物',
     organizations: '共享空间',
     newChat: '新对话',

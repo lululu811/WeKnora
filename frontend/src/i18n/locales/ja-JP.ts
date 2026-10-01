@@ -329,10 +329,43 @@ export default {
       description: '別のキーワードや種類をお試しください'
     }
   },
+  watchlist: {
+    title: '個別銘柄ウォッチ',
+    subtitle: 'フォロー中の銘柄の最新価格と騰落率（ローカル相場DB・前復権）',
+    add: '追加',
+    addPlaceholder: 'コードまたは名称（例: 600519 / 茅台）',
+    refresh: '更新',
+    updatedAt: '{time} 更新',
+    empty: 'まだ銘柄を登録していません',
+    emptyHint: '上の入力欄にコードまたは名称を入れて、候補から選んでください',
+    missingHint: 'ローカル相場DBにデータがない銘柄: {codes}',
+    noData: 'データなし',
+    added: 'ウォッチリストに追加しました',
+    alreadyWatched: 'すでに登録済みです（名称を更新しました）',
+    symbolNotFound: '「{q}」に一致する銘柄が見つかりません',
+    removed: 'ウォッチリストから削除しました',
+    pin: '先頭へ',
+    pinned: '先頭に移動しました',
+    remove: '削除',
+    removeConfirmTitle: 'ウォッチリストから削除',
+    removeConfirmBody: '「{name}」をウォッチリストから削除しますか？',
+    cancel: 'キャンセル',
+    loadFailed: '操作に失敗しました。しばらくしてから再試行してください',
+    columns: {
+      code: 'コード',
+      name: '名称',
+      price: '現在値',
+      change: '騰落',
+      turnover: '売買代金',
+      date: '直近取引日',
+      actions: '操作'
+    }
+  },
   menu: {
     sessionInProgress: '会話中',
     knowledgeBase: 'ナレッジベース',
     agents: 'エージェント',
+    watchlist: '銘柄ウォッチ',
     artifacts: '成果物',
     organizations: '共有スペース',
     newChat: '新しいチャット',

@@ -156,6 +156,12 @@ export default defineConfig({
         target: process.env.VITE_PY_SERVICE_TARGET || 'http://localhost:50052',
         changeOrigin: true,
       },
+      // 自选页的批量行情快照，与 /api/kline 同一类：只读行情，浏览器直连
+      // python-service（生产环境对应 nginx.conf 里那条直通正则的白名单）。
+      '/api/quotes': {
+        target: process.env.VITE_PY_SERVICE_TARGET || 'http://localhost:50052',
+        changeOrigin: true,
+      },
       '/api': {
         target: DEV_PROXY_TARGET,
         changeOrigin: true,

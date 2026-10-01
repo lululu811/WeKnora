@@ -41,6 +41,9 @@ DUCKDB_DATABASES = ["market", "financials", "fund", "special", "futures", "index
 MAX_QUERY_ROWS = 100_000
 DEFAULT_QUERY_LIMIT = 1_000
 MAX_SCREEN_SYMBOLS = 20_000
+# /api/quotes 一次最多查多少只。自选列表的规模量级（几十到几百），上限只是
+# 为了防止一次请求把 DuckDB 拖成批量扫描。
+MAX_QUOTE_SYMBOLS = 200
 
 # 只读白名单：/query/ 只接受单条 SELECT
 _READONLY_STATEMENT = re.compile(
@@ -1531,6 +1534,139 @@ async def get_kline(
             }
             for r in rows
         ],
+    }
+
+
+def _iso_date(d: Any) -> Optional[str]:
+    """DuckDB 的 DATE 归一成 YYYY-MM-DD。取不到就返回 None，不猜、不补。"""
+    if isinstance(d, datetime.date):
+        return d.isoformat()
+    if isinstance(d, str):
+        return d[:10]
+    return None
+
+
+@app.get("/api/quotes")
+@app.get("/quotes")
+async def get_quotes(
+    symbols: str = Query(
+        ..., description="逗号分隔的 thscode 列表，如 600519.SH,000001.SZ（最多 200 只）"
+    ),
+):
+    """批量行情快照 —— 取多只标的最新收盘价、前收盘价与涨跌幅。
+
+    为什么需要它：自选列表按行渲染，逐行调 `/api/kline` 就是 N 次往返，而
+    这个页面要回答的问题只有一个 —— "我盯的这些票今天什么状态"。一次请求
+    取每只票的最后两根 K 线（最新 = 现价，倒数第二 = 前收盘）恰好够用。
+
+    为什么返回 map 而不是数组：调用方按 thscode 逐行取用，数组会逼它在前端
+    再建一次索引。
+
+    `missing` / `invalid` 是**显式**字段而不是悄悄省略：
+      * missing  = 格式合法但本地库里没有（未上市/退市/改代码）
+      * invalid  = 连格式都不对（调用方的 bug）
+    两者都不能被抹成 0 或空行 —— 0 在金融语义里是"真的等于零"，用它冒充
+    缺失比留空危险得多（同一约定见 stock-profile 的字段约定）。
+
+    涨跌幅在只有一根 K 线时是 **null 而不是 0**：新股上市首日没有"前一天"，
+    报 0% 是在编一个不存在的读数。
+    """
+    from datasources import registry
+
+    market_src = registry.get("market")
+    if market_src is None:
+        raise fail(503, "market 数据源未就绪")
+
+    requested: List[str] = []
+    invalid: List[str] = []
+    for token in symbols.split(","):
+        raw = token.strip()
+        if not raw:
+            continue
+        code = raw.upper()
+        if not _THSCODE.match(code):
+            invalid.append(raw)
+        elif code not in requested:
+            requested.append(code)
+
+    if len(requested) > MAX_QUOTE_SYMBOLS:
+        raise fail(422, f"一次最多查询 {MAX_QUOTE_SYMBOLS} 只标的，收到 {len(requested)} 只")
+
+    if not requested:
+        return {"code": 0, "data": {}, "missing": [], "invalid": invalid}
+
+    # VALUES 的每一行必须带括号：`VALUES ?` 是语法错误（DuckDB 的 parser 在
+    # 这里就报 "syntax error at or near ?"），`VALUES (?)` 才是合法的行构造。
+    placeholders = ",".join("(?)" for _ in requested)
+    # 每只标的两根 K 线走 LATERAL 子查询，而不是"先取全市场最大交易日再筛"：
+    # 后者要在全表上算一次 max(date)，且会把停牌超过窗口的票判成无数据。
+    sql = f"""
+        SELECT s.thscode AS thscode, q.date AS date, q.open AS open, q.high AS high,
+               q.low AS low, q.close AS close, q.volume AS volume, q.turnover AS turnover
+        FROM (VALUES {placeholders}) AS s(thscode)
+        JOIN LATERAL (
+            SELECT date, open, high, low, close, volume, turnover
+            FROM v_daily_qfq
+            WHERE thscode = s.thscode
+            ORDER BY date DESC
+            LIMIT 2
+        ) q ON TRUE
+        ORDER BY s.thscode, q.date
+    """
+    name_placeholders = ",".join("?" for _ in requested)
+    try:
+        rows = await market_src.execute(sql, requested)
+        # 名称只做展示，但和价格查询共用同一个 try：两条查询打的是同一个
+        # DuckDB，"名称挂了但价格还在"这种半边可用状态没有维护价值，
+        # 而且两处失败应该长得一样（同一个 503），不能一个 503 一个 500。
+        name_rows = await market_src.execute(
+            f"SELECT thscode, name, exchange FROM v_symbol WHERE thscode IN ({name_placeholders})",
+            requested,
+        )
+    except Exception as exc:
+        logger.warning("批量行情查询失败: %s", exc)
+        raise fail(503, f"查询行情失败: {exc}") from exc
+
+    names = {r["thscode"]: r for r in name_rows}
+
+    # 每个 thscode 最多两行，按日期升序：[-1] 最新，[-2] 前收盘。
+    bars: Dict[str, List[Dict[str, Any]]] = {}
+    for r in rows:
+        bars.setdefault(r["thscode"], []).append(r)
+
+    data: Dict[str, Dict[str, Any]] = {}
+    for code, series in bars.items():
+        latest = series[-1]
+        prev = series[-2] if len(series) > 1 else None
+        close = latest.get("close")
+        prev_close = prev.get("close") if prev else None
+        change = None
+        change_pct = None
+        if close is not None and prev_close:
+            change = close - prev_close
+            change_pct = change / prev_close * 100
+        meta = names.get(code) or {}
+        data[code] = {
+            "thscode": code,
+            "name": meta.get("name") or "",
+            "exchange": meta.get("exchange") or "",
+            "date": _iso_date(latest.get("date")),
+            "open": latest.get("open"),
+            "high": latest.get("high"),
+            "low": latest.get("low"),
+            "close": close,
+            "prev_close": prev_close,
+            "change": change,
+            "change_pct": change_pct,
+            "volume": latest.get("volume"),
+            "turnover": latest.get("turnover"),
+        }
+
+    return {
+        "code": 0,
+        "data": data,
+        "missing": [c for c in requested if c not in data],
+        "invalid": invalid,
     }
 
 

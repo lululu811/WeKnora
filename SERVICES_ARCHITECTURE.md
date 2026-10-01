@@ -158,6 +158,16 @@ WeKnora 的 `internal/` 虽然包罗万象，但本质上是一个**模块化单
   - 综合诊断：买卖点判断 + 综合评分
 - **选股策略** — 基于技术指标和量化条件的筛选
 
+**浏览器直连的只读行情接口**（不经主服务器，nginx 用一条正则白名单转发）：
+
+`/api/kline`、`/api/annotate`、`/api/indicators`、`/api/symbols/*`、`/api/stock-profile`、`/api/quotes`
+
+这些路径**没有鉴权**，因为它们只转发只读行情、且不含任何用户数据；新增路径必须
+同步加进 `frontend/nginx.conf` 的那条正则，否则会落进通用 `/api/` 规则、被主服务器
+的鉴权拦掉（表现为 401，而 python-service 根本没收到请求）。
+`/api/quotes` 是自选页的批量快照：一次请求取每只票的最后两根 K 线（最新价 + 前收盘），
+避免按行 fan-out。
+
 **调用关系：**
 
 ```
@@ -168,6 +178,8 @@ WeKnora 的 `internal/` 虽然包罗万象，但本质上是一个**模块化单
   hithink-finance-fund                ├── /screen       (选股)
   hithink-finance-index               └── /zettaranc/analyze  (综合分析)
   hithink-finance-valuation
+浏览器 ──HTTP GET──▶ python-service:50052
+                                      └── /api/kline | /api/quotes | /api/symbols/* …
 ```
 
 **为什么不内置到主服务器？**
@@ -176,6 +188,23 @@ WeKnora 的 `internal/` 虽然包罗万象，但本质上是一个**模块化单
 - **数据本地性** — 数据存储在本地 DuckDB 文件中（`~/.hithink-finance/`），与主服务器的 PostgreSQL 完全独立
 - **独立迭代** — 金融分析逻辑更新频繁，独立服务可以不依赖主服务器发版
 - **资源隔离** — 大量数值计算不会影响主服务器的 API 响应性能
+
+### 3.1 新功能该放哪一层（个股追踪 / 自选清单）
+
+判据是**数据是谁的、可不可写、要不要鉴权**，不是"哪个语言写着顺手"：
+
+| 面 | 持有者 | 可写 | 鉴权 |
+|---|---|---|---|
+| `/api/kline` `/api/quotes` 等行情读数 | python-service | 只读 | 无（nginx 白名单直通） |
+| `/api/v1/**`（含 `/watchlist`） | 主服务器 Go | 读写 | 有（租户 + 角色） |
+
+- **用户自己的可写状态**（自选清单、持仓台账…）→ **主服务器 Go**。python-service
+  没有 user/tenant 概念，DuckDB 是只读挂载，个人状态落在那儿等于凭空造一套身份 +
+  鉴权 + 迁移。
+- **只读行情计算**（价格、指标、形态、批量快照）→ **python-service**，浏览器直连。
+- 参考实现：`internal/types/stock_watch.go`（表 `stock_watches`，复合主键
+  `(user_id, tenant_id, thscode)`）+ `internal/handler/stock_watch.go`
+  + `frontend/src/views/watchlist/Watchlist.vue`（侧栏「个股追踪」菜单 → `/platform/watchlist`）。
 
 ---
 
