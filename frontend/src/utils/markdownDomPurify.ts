@@ -101,6 +101,14 @@ export const markdownDomPurifyConfig = {
     'display', 'pointer-events', 'cursor', 'data-emit', 'direction',
     // K 线 ticker chip 属性（见 utils/klineTickerInjector.ts）。
     'data-thscode', 'data-kline-bound',
+    // K 线日期区间标记属性（见 utils/klineRangeInjector.ts）。少任何一个都会让
+    // 正文里的日期变成死链接——标记还在、图不动，且没有任何报错。
+    'data-kline-from', 'data-kline-to', 'data-kline-md',
+    // K 线锚点属性（见 utils/klineAnchors.ts）。锚点由模型输出的 <anchor/> 生成，
+    // 承载「这一段/这一位」的语义与正文-图上的共享编号。漏一个就会让锚点
+    // 变成死标记：看着在、点了没反应，且没有任何报错。
+    'data-anchor-index', 'data-anchor-kind', 'data-anchor-valid',
+    'data-anchor-from', 'data-anchor-to', 'data-anchor-value', 'data-anchor-label',
     'mathvariant', 'encoding', 'aria-hidden',
   ],
   USE_PROFILES: { html: true, svg: true, mathMl: true },
