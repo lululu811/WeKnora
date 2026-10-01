@@ -1373,6 +1373,80 @@ async def halo_score(request: HaloScoreRequest) -> Dict[str, Any]:
     return jsonable_encoder(result)
 
 
+class HaloVerifyRequest(BaseModel):
+    """综合分复算校验。"""
+
+    thscode: str = Field(..., description="6 位股票代码")
+    period: Optional[str] = Field(None, description="报告期，默认取最新已落库期次")
+    report_type: str = Field("annual", description="annual / h1 / q1 / q3")
+    scores: Dict[str, float] = Field(
+        ...,
+        description="七个定性维度的分数（0-10）：moat/stag/esg/management/"
+                    "shareholder/valuation/risk。HALO 与成长性由服务端从事实库"
+                    "重算，**不接受传入值** —— 数据层不让模型覆写。",
+    )
+    declared_total: Optional[float] = Field(None, description="你声明的综合分")
+    declared_rating: Optional[str] = Field(None, description="你声明的评级")
+
+
+@app.post("/halo/verify", dependencies=[Depends(require_api_key)])
+async def halo_verify(request: HaloVerifyRequest) -> Dict[str, Any]:
+    """把七个定性维度的分与事实库重算的 HALO/成长性合成，复算并校验综合分。
+
+    服务端只接受**定性维度**的分数；HALO 六维与成长性一律从事实库重算。
+    理由与评分内核一致：让模型做算术会漏掉风险的负向项，而权重是确定的。
+    """
+    from halo import analyze as halo_analyze
+    from halo.scoring import verify_comprehensive
+    from halo.store import FactStore
+
+    allowed = {"moat", "stag", "esg", "management", "shareholder", "valuation", "risk"}
+    extra = sorted(set(request.scores) - allowed)
+    if extra:
+        raise fail(422, f"不接受这些维度：{extra}；只接受 {sorted(allowed)}")
+    missing = sorted(allowed - set(request.scores))
+    if missing:
+        raise fail(422, f"缺少维度分数：{missing}。缺一维就无法复算综合分。")
+
+    try:
+        store = FactStore()
+    except Exception as exc:
+        raise fail(503, f"事实库不可用：{exc}") from exc
+
+    result = await halo_analyze.analyze(
+        request.thscode, store=store, period=request.period,
+        report_type=request.report_type,
+    )
+    halo = result.get("halo") or {}
+    if not halo.get("ok"):
+        raise fail(422, halo.get("reason") or "HALO 不可计算，综合分无法复算")
+    growth = result.get("growth") or {}
+    if not growth or not growth.get("score") and not growth.get("total"):
+        raise fail(422, "成长性不可计算，综合分无法复算")
+
+    scores: Dict[str, float] = {
+        "halo": float(halo["score"]),
+        "growth": float(growth["score"]),
+    }
+    for k, v in request.scores.items():
+        scores[k] = float(v)
+
+    verdict = verify_comprehensive(
+        request.declared_total, scores, declared_rating=request.declared_rating,
+    )
+    return jsonable_encoder({
+        "thscode": result.get("thscode"),
+        "period": result.get("period"),
+        "server_recomputed": {
+            "halo": {"score": halo["score"], "rating": halo["rating"]},
+            "growth": {"score": growth["score"], "rating": growth["rating"]},
+        },
+        "accepted_ai_scores": scores,
+        "verdict": verdict,
+        "ok": bool(verdict.get("ok")),
+    })
+
+
 @app.post("/halo/query", dependencies=[Depends(require_api_key)])
 async def halo_query(request: HaloQueryRequest) -> Dict[str, Any]:
     """读取年报事实。只读 SQLite，秒级返回。"""

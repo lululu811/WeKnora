@@ -349,3 +349,53 @@ builtin_agents:
       web_search_max_results: 10
       reflection_enabled: false
       multi_turn_enabled: true
+
+  - id: "builtin-halo"
+    avatar: ""
+    is_builtin: true
+    i18n:
+      default:
+        name: "HALO"
+        description: "A 股基本面可信分析，11 维框架，数据层由 Python 锁定"
+      zh-CN:
+        name: "HALO"
+        description: "A 股基本面可信分析，11 维框架，数据层由 Python 锁定"
+      zh-TW:
+        name: "HALO"
+        description: "A 股基本面可信分析，11 維框架，數據層由 Python 鎖定"
+    config:
+      agent_mode: "smart-reasoning"
+      agent_type: "custom"
+      system_prompt_id: "halo"
+      temperature: 0.3
+      max_completion_tokens: 0
+      # 数据层是确定性计算（下载+解析单份年报约 1-3 分钟），给足迭代预算，
+      # 否则 sync 还没回来就停了，会被当成超时。
+      max_iterations: 60
+      kb_selection_mode: "selected"
+      retrieve_kb_only_when_mentioned: false
+      allowed_tools:
+        # HALO 链路：同步年报 → 取评分与锚点 → 复算校验
+        - "halo.filing.sync"
+        - "halo.filing.query"
+        - "halo.analyze"
+        - "halo.verify"
+
+        # 行情与估值：判断「现在贵不贵」「价格处在什么位置」需要
+        - "hithink.finance.market.price.snapshot"
+        - "hithink.finance.market.price.historical"
+        - "hithink.finance.financial.valuation.snapshot"
+        - "hithink.finance.financial.statement.income"
+        - "hittink.finance.financial.statement.balance"
+        - "hithink.finance.financial.statement.cashflow"
+        - "hithink.finance.financial.indicator.detail"
+        - "hithink.finance.index.sector.constituents"
+        - "hithink.finance.index.sector.daily"
+        - "hithink.finance.analysis.trend"
+        - "hithink.finance.analysis.levels"
+        - "hithink.finance.query.sql"
+
+      web_search_enabled: true
+      web_search_max_results: 8
+      reflection_enabled: false
+      multi_turn_enabled: true

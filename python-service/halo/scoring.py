@@ -462,9 +462,12 @@ def verify_comprehensive(
         return {"ok": False, "recalc": recalc, "issues": ["无法复算"]}
 
     issues: List[str] = []
+    notes: List[str] = []
     diff = None
     if declared_total is None:
-        issues.append("未提供综合分")
+        # 「只想拿复算值」是合法用法（agent 还没决定自己的分），不算问题。
+        # 记成 note 而不是 issue，否则 ok=false 会让调用方以为复算本身失败了。
+        notes.append("未提供声明综合分，本次只返回复算值，未做数值校验")
     else:
         diff = round(float(declared_total) - recalc["total"], 4)
         if abs(diff) > tolerance:
@@ -482,6 +485,9 @@ def verify_comprehensive(
                 f"评级跨档：声明「{declared_rating}」，复算分 {recalc['total']:.4f} "
                 f"应属「{recalc['rating']}」"
             )
+    elif declared_total is None:
+        notes.append("未提供声明评级，未做档位校验")
+
     return {
         "ok": not issues,
         "recalc": recalc,
@@ -489,4 +495,6 @@ def verify_comprehensive(
         "rating_match": rating_ok,
         "tolerance": tolerance,
         "issues": issues,
+        "notes": notes,
+        "checked": declared_total is not None or declared_rating is not None,
     }

@@ -64,6 +64,72 @@ Local dev loop: `make dev-start` (docker-compose.dev.yml infra) → `make dev-ap
 - Config: Viper reads `config/config.yaml` with `${ENV}` substitution. `.env.example` (sections A–J)
   is the canonical env reference — add new env vars there.
 
+## Financial data subsystems
+
+Two locally-maintained stacks sit on top of the RAG core. Both are forked/private; treat their
+invariants as load-bearing.
+
+### `hithink_finance` — Go tools over a read-only local DuckDB
+
+`internal/agent/tools/hithink_finance/**` are thin, parameterised SQL over
+`~/.hithink-finance/*.duckdb` (7 databases: market / financials / special / index / indicators /
+fund / futures). Registration is an allowlist switch in `agent_service.go`; a tool that is not on an
+agent's `allowed_tools` is neither in the model's tool schema nor callable.
+
+Two traps that have already cost real debugging:
+
+- **`period` is not the report period.** In `v_balance_sheet` / `v_income_statement` /
+  `v_cash_flow_statement` it holds the *statement basis* (`annual` / `quarterly`, ~177k identical
+  rows). The actual period is `fiscal_year` + `fiscal_period` (`Q1`–`Q4`, `FY`); order by
+  `period_end_ms`. `report_date_ms` is corrupted by sync (many periods share one timestamp).
+  The shared ordering lives in `financial/period.go` with regression tests — do not re-inline
+  `ORDER BY period` in a new query.
+- **`v_financial_indicators_detail.report` is `YYYY-N`** (`2026-2`), not `YYYY-QN`; `FY` must be
+  mapped to `-4` in SQL or the join silently returns nothing.
+
+`testdata/schema.json` is a schema snapshot gated by `schema_contract_test.go`, which scans tool
+source for backtick SQL and validates every referenced table/column. Run it after touching any
+hardcoded SQL; it catches drift without needing a live DuckDB.
+
+### `halo` — annual-report fact pipeline (python-service/halo/)
+
+Fills the gap the local databases have: fixed assets, CIP, inventory, intangibles, goodwill,
+headcount, audit opinion, penalties, emissions — none of which exist locally. Source of truth is the
+**cninfo** (巨潮资讯网) filing PDF; the local hithink data is only a cross-check ruler, never a
+substitute.
+
+```
+cninfo (限速) → PDF → pypdf → 锚点定位 → 规则抽取 → 对账 → SQLite 事实库
+                                                                          ↓
+                              行业分类 → HALO 六维 → 成长性 → 7 个定性槽位 → 复算校验
+```
+
+Design invariants, each backed by a regression test:
+
+- **Python owns every number.** `AI` fills the seven qualitative dimensions (moat / stag / ESG /
+  management / shareholder / valuation / risk) and nothing else. `halo.analyze` returns
+  *quantitative anchors* for them; `halo.verify` recomputes the composite. LLM arithmetic is a
+  bug source — the risk term enters as `(10 − risk) × 0.10`, and getting its sign wrong silently
+  rescales the whole score.
+- **Missing ≠ zero.** `halo.ok=false` with a reason, or a `⚠️ 缺失` marker. Never substitute
+  another caliber. Headcount is annual-report-only, so **HALO is legitimately uncomputable on
+  interim reports** — say so rather than extrapolating.
+- **Read the table's unit.** The segment-revenue table is 元 for some issuers and 百万元 for
+  others; a missing `单位：` declaration means *skip the page*, not a 1e6 error.
+- **Reconciliation is a filter, not a judge.** `status` is `verified` (two channels agree, or the
+  extractor's own fields reconcile against DuckDB), `disputed` (refuted — never promoted by
+  "the extractor is usually right"), or `pending`. `verified_by` records which of the two produced
+  it.
+- **`analyze()` always returns the same shape**, including on the very common
+  "no filing synced yet" path, or callers crash with `KeyError` instead of reading
+  "no data yet".
+
+External HTTP: cninfo is rate-limited (`HALO_CNINFO_MIN_INTERVAL`, default 0.5s) because it
+blocks IPs — a community-measured threshold is 300 requests / 5 minutes. Note that
+`datacenter-web.eastmoney.com` and `push2his.eastmoney.com` sit behind **different WAFs**: one
+being banned does not take the other down, which is why a client that only talks to `push2` can
+fail wholesale while its `datacenter-web` calls keep working.
+
 ## Testing instructions
 
 - Root module: `make test` (`go test -v ./...`); single package with
