@@ -18,6 +18,11 @@ from typing import Any, Dict, List, Optional
 from . import scoring
 from .facts import extract_facts
 from .industry import classify
+from .industry_map import (
+    get_anomaly_narratives,
+    get_concept_tags,
+    get_industry_map,
+)
 from .pdf_extract import ExtractResult
 from .reconcile import get_financials_source
 from .pipeline import normalize_thscode
@@ -315,6 +320,15 @@ def render_markdown(result: Dict[str, Any]) -> str:
     return "\n".join(L)
 
 
+def _local_source(name: str) -> Any:
+    """取本地 DuckDB 库的 executor；未就绪返回 None（由调用方按缺失处理）。"""
+    try:
+        from datasources import registry
+    except Exception:  # noqa: BLE001 —— 单测环境没有 datasources
+        return None
+    return registry.get(name)
+
+
 def build_narratives(segment_rows: List[Dict[str, Any]]) -> Dict[str, Any]:
     """文本/表格类素材，独立于数值锚点。
 
@@ -363,11 +377,38 @@ async def analyze(
     if period is None:
         period = store.latest_period(thscode, report_type)
     if period is None:
+        # 早返回也要带**完整结构**。缺键会让调用方（agent / 前端）在
+        # KeyError 上崩掉，而不是拿到一个「暂无数据」的正常响应 ——
+        # 「这股票没同步过年报」是最常见的正常情况之一，不该是异常路径。
         return {
             "thscode": thscode,
+            "period": None,
+            "report_type": report_type,
+            "scope": scope,
             "ok": False,
             "reason": f"{thscode} 没有已落库的年报事实。先调用 halo.filing.sync。",
             "missing": ["filing_facts"],
+            "asset_type": None,
+            "asset_type_basis": "no_filing_facts",
+            "asset_type_signals": {},
+            "asset_type_disagreement": False,
+            "halo": {"ok": False, "reason": "无年报事实，HALO 不可计算"},
+            "growth": None,
+            "facts": [],
+            "environment_disclosure": False,
+            "narratives": {
+                "business_segments": [],
+                "segment_count": 0,
+                "has_business_breakdown": False,
+                "industry_map": {"level1": None, "level2": None, "memberships": [],
+                                "basis": "not_found", "as_of_note": "无年报事实"},
+                "concepts": [],
+                "anomalies": [],
+            },
+            "ai_slots": [],
+            "markdown": f"# {thscode} HALO 分析\n\n"
+                        f"**⚠️ 无数据**：{thscode} 尚无已落库的年报事实，"
+                        f"请先调用 halo.filing.sync。\n",
         }
 
     rows = store.query(
@@ -385,6 +426,13 @@ async def analyze(
             facts.setdefault(r["field"], r)
 
     financial = await _fetch_financials(thscode, period)
+
+    # --- 行业归属（本地 index 库）---
+    # 与财务比例分类互为交叉验证：财务比例说「重不重」，行业库说「属于哪行」。
+    # 两者不一致本身就是信号（比如一家做实业的公司被归进软件行业）。
+    ind_map = await get_industry_map(_local_source("index"), thscode)
+    concept_tags = await get_concept_tags(_local_source("index"), thscode)
+    anomalies = await get_anomaly_narratives(_local_source("special"), thscode, limit=5)
 
     # --- 行业分类 ---
     ind = classify(
@@ -488,7 +536,16 @@ async def analyze(
             and not k.startswith("segment_")
         ],
         "environment_disclosure": env_disclosure,
-        "narratives": build_narratives(segment_rows),
+        "narratives": {
+            **build_narratives(segment_rows),
+            "industry_map": ind_map,
+            "concepts": concept_tags,
+            "anomalies": anomalies,
+            "anomaly_coverage_note": (
+                "异动归因为事件驱动，实测仅覆盖 1484/5571 只股票（约 27%）；"
+                "无记录表示近期无异动事件，不表示基本面信息缺失。"
+            ),
+        },
         "ai_slots": build_ai_slots(facts, financial, ind),
     }
     if fact_records:
