@@ -26,15 +26,7 @@ func (t *BalanceSheetTool) Name() string {
 }
 
 func (t *BalanceSheetTool) Description() string {
-	return `获取资产负债表。返回 period, assets_total(总资产), total_current_assets(流动资产),
-non_current_nets_total(非流动资产净额), total_debt(总债务), holder_equity_total(股东权益),
-cash(货币资金), accounts_receivable(应收账款) 等。
-
-配合 financial.indicator.detail 里的 assets_debt_ratio（资产负债率）、
-current_ratio（流动比率）一起看，能判断偿债能力与财务健康度。
-
-注意：报告期字段是 period（形如 2026Q2）。数据区间 2017Q3–2026Q2。
-使用示例：thscode="600519.SH", periods=4`
+	return balanceSheetDesc
 }
 
 func (t *BalanceSheetTool) Parameters() json.RawMessage {
@@ -80,16 +72,7 @@ func (t *BalanceSheetTool) Execute(ctx context.Context, args json.RawMessage) (*
 		params.Periods = 20
 	}
 
-	query := `
-		SELECT period, fiscal_year, fiscal_period, currency,
-		       total_current_assets, non_current_nets_total, assets_total,
-		       total_debt, holder_equity_total, cash, accounts_receivable
-		FROM v_balance_sheet
-		WHERE thscode = ?
-		ORDER BY period DESC
-		LIMIT ?
-	`
-	results, err := hithink_finance.QueryDuckDBParams(ctx, t.config, "financials", query, params.Thscode, params.Periods)
+	results, err := hithink_finance.QueryDuckDBParams(ctx, t.config, "financials", balanceSheetQuery, params.Thscode, params.Periods)
 	if err != nil {
 		return &types.ToolResult{Success: false, Error: hithink_finance.FriendlyQueryError(err, toolName)}, nil
 	}
