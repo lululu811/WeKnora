@@ -102,10 +102,27 @@ def four_bricks(rows: List[dict]) -> List[Dict]:
     opens = [float(r.get("open") or c) for r, c in
              ((r, float(r.get("close") or 0.0)) for r in rows)]
 
-    ma5 = sma(closes, PERIOD_SHORT)
-    e10 = ema(closes, PERIOD_TREND_A)
-    e14 = ema(closes, PERIOD_TREND_B)
-    bb = bbi(closes)
+    # ⚠️ **均线必须按 oldest-first 算。**
+    #
+    # rows 是 newest-first（data_loader 的 ORDER BY date DESC，rows[0] 是最新
+    # 一根），而 SMA/EMA/BBI 都是"回看"型：MA5[i] 需要 i..i+4 根。
+    # 直接在 newest-first 序列上算，第 0 根拿到的是"它自己和后面 4 根**更旧的**"，
+    # 也就是"截至 5 天前的均值"—— 结果整个均线序列错位，最新那根必然是 None。
+    #
+    # 2026-10-01 首版直接按 rows 顺序算，且端到端验证用的是上涨的 601398.SH：
+    # 两种顺序在涨势里恰好都偏多，零差异，缺陷被掩盖。是 test_four_bricks.py
+    # 里"持续下跌应得 -4"这条用例抓出来的 —— 那种票上错位的均线给出的
+    # 是多头读数，与肉眼相反。
+    closes_old_first = list(reversed(closes))
+    ma5 = sma(closes_old_first, PERIOD_SHORT)
+    e10 = ema(closes_old_first, PERIOD_TREND_A)
+    e14 = ema(closes_old_first, PERIOD_TREND_B)
+    bb = bbi(closes_old_first)
+    # 算完翻回 newest-first，与 rows 对齐
+    ma5.reverse()
+    e10.reverse()
+    e14.reverse()
+    bb.reverse()
 
     out: List[Dict] = []
     for i in range(len(rows)):
