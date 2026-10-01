@@ -1869,6 +1869,7 @@ async def get_chart_pattern(
         validate_indicator_columns,
     )
     from zettaranc.data_loader import MARKET_FIELDS, normalize_row
+    from zettaranc.divergence import build_divergence_sql, detect_divergence
     from zettaranc.pattern import analyze_chart_pattern
     from zettaranc.waves import detect_elliott_waves
 
@@ -1926,6 +1927,7 @@ async def get_chart_pattern(
     # /zettaranc/analyze 不需要这些列，塞进去等于让每次分析多传 24 列。
     candlesticks: List[Dict[str, Any]] = []
     candle_summary: Dict[str, Any] = {}
+    divergences: List[Dict[str, Any]] = []
     indicators_src = registry.get("indicators")
     if indicators_src is None:
         insufficient.append("candlesticks: indicators 数据源未就绪")
@@ -1946,6 +1948,19 @@ async def get_chart_pattern(
         candlesticks = detect_candle_series(candle_rows)
         candle_summary = summarize_candles(candlesticks)
 
+        # ---- 指标背离 ----
+        #
+        # 与蜡烛形态共用同一个指标数据源，但**另发一条查询**：两者需要的列毫无交集
+        # （那边是 cdl_*，这边是 dif/rsi14），塞进一条 SELECT 只会让两边互相牵连。
+        try:
+            div_rows = await indicators_src.execute(
+                build_divergence_sql(), [thscode, fetch_limit]
+            )
+            divergences = detect_divergence(rows, div_rows)
+        except Exception as exc:
+            divergences = []
+            insufficient.append(f"divergences: {exc}")
+
     return {
         "code": 0,
         "symbol": thscode,
@@ -1955,6 +1970,7 @@ async def get_chart_pattern(
         "waves": waves,
         "candlesticks": candlesticks,
         "candle_summary": candle_summary,
+        "divergences": divergences,
         # 形态**目录**：前端下拉要用，放在这里是为了让它只有一份真相源。
         # 前端自己抄一份的话，后端点新增一种、前端不知道，用户就永远勾不到它。
         "candle_catalog": [

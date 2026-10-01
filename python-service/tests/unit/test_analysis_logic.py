@@ -615,3 +615,174 @@ class TestDrawableCoordinates:
         pole = next(l for l in found["lines"] if l["label"] == "旗杆")
         span = abs(pole["points"][0]["index"] - pole["points"][1]["index"])
         assert span <= FLAG_POLE_MAX, f"旗杆跨度 {span} 超过上限 {FLAG_POLE_MAX}"
+
+
+# ---------------------------------------------------------------------------
+# 补充几何形态：三重顶底 / 矩形整理 / 岛形反转
+# ---------------------------------------------------------------------------
+
+class TestTripleTopBottom:
+
+    def test_三个等高顶判为三重顶(self):
+        from zettaranc.pattern import detect_triple_top_bottom
+        rows = newest_first(zigzag(
+            peaks=[(10, 15.0), (30, 15.0), (50, 15.0)],
+            troughs=[(4, 12.0), (20, 12.0), (40, 12.0), (56, 12.0)],
+            n=60,
+        ))
+        found = detect_triple_top_bottom(rows)
+        assert found is not None, "三个等高顶应判为三重顶"
+        assert found["name"] == "三重顶" and found["direction"] == "bearish"
+        assert [p["label"] for p in found["points"]] == ["顶1", "顶2", "顶3"]
+        idx = [p["index"] for p in found["points"]]
+        assert idx == sorted(idx, reverse=True), f"顶点应按时间顺序（老->新）递减：{idx}"
+        assert {ln["label"] for ln in found["lines"]} == {"颈线", "目标"}
+
+    def test_三个等高底判为三重底(self):
+        from zettaranc.pattern import detect_triple_top_bottom
+        rows = newest_first(zigzag(
+            peaks=[(4, 18.0), (20, 18.0), (40, 18.0), (56, 18.0)],
+            troughs=[(10, 15.0), (30, 15.0), (50, 15.0)],
+            n=60,
+        ))
+        found = detect_triple_top_bottom(rows)
+        assert found is not None and found["name"] == "三重底"
+        assert found["direction"] == "bullish"
+
+    def test_逐级抬高的顶不算三重顶(self):
+        """那是上升三角形/上升趋势，容差必须挡得住。"""
+        from zettaranc.pattern import detect_triple_top_bottom
+        rows = newest_first(zigzag(
+            peaks=[(10, 12.0), (30, 15.0), (50, 18.0)],
+            troughs=[(4, 10.0), (20, 13.0), (40, 16.0), (56, 16.0)],
+            n=60,
+        ))
+        found = detect_triple_top_bottom(rows)
+        assert found is None or found["name"] != "三重顶", f"逐级抬高不该判三重顶：{found}"
+
+    def test_两点不足时不误判(self):
+        from zettaranc.pattern import detect_triple_top_bottom
+        rows = newest_first([10.0 + (i % 5) for i in range(20)], n=20)
+        assert detect_triple_top_bottom(rows) is None
+
+
+class TestRectangle:
+
+    @staticmethod
+    def _box(n=40, lower=10.0, upper=11.5):
+        """在 [lower, upper] 之间来回震荡的行。
+
+        带宽刻意取 15%：检测器的上限是 18%，取 20% 会被自己挡掉 ——
+        那种"测试数据本身就违反被测约束"的用例只会浪费一次排查。
+        """
+        rows = []
+        for i in range(n):
+            # 方波：上沿/下沿各碰一半
+            high = upper if i % 4 in (0, 1) else upper - 0.3
+            low = lower if i % 4 in (2, 3) else lower + 0.3
+            close = (high + low) / 2
+            rows.append({"date": f"2026-01-{i + 1:02d}", "open": close,
+                         "high": high, "low": low, "close": close, "vol": 1000.0})
+        return rows
+
+    def test_上下沿反复被碰判为矩形(self):
+        from zettaranc.pattern import detect_rectangle
+        rows = self._box()
+        rows.reverse()   # rows[0] 最新
+        found = detect_rectangle(rows)
+        assert found is not None and found["name"] == "矩形整理"
+        labels = {ln["label"] for ln in found["lines"]}
+        assert labels == {"箱体上沿", "箱体下沿"}
+
+    def test_箱体不预判方向(self):
+        from zettaranc.pattern import detect_rectangle
+        rows = self._box()
+        rows.reverse()
+        assert detect_rectangle(rows)["direction"] == "neutral", "没突破就不该站边"
+
+    def test_突破后给出方向(self):
+        from zettaranc.pattern import detect_rectangle
+        rows = self._box()
+        rows.reverse()
+        rows[0]["close"] = 12.5   # 向上突破上沿
+        found = detect_rectangle(rows)
+        assert found is not None
+        assert found["direction"] == "bullish"
+        assert "突破" in found["desc"]
+
+    def test_单边趋势不算矩形(self):
+        from zettaranc.pattern import detect_rectangle
+        rows = newest_first([10.0 + i * 0.5 for i in range(40)], n=40)
+        assert detect_rectangle(rows) is None, "单边上涨的振幅远超上限，不该判箱体"
+
+    def test_只碰过一次的通道不算矩形(self):
+        """V 形往返：上下沿各只碰到一次，是一条通道而不是箱体。"""
+        from zettaranc.pattern import detect_rectangle
+        closes = [10.0] + [10.0 + i * 0.15 for i in range(1, 20)] + [12.85 - i * 0.15 for i in range(1, 20)]
+        rows = newest_first(closes, n=len(closes))
+        assert detect_rectangle(rows) is None
+
+
+class TestIslandReversal:
+
+    @staticmethod
+    def _bar(date, high, low):
+        return {"date": date, "open": low, "high": high, "low": low, "close": high, "vol": 1000.0}
+
+    def test_上跳后下跳判为顶部岛形(self):
+        from zettaranc.pattern import detect_island_reversal
+        # 行序：最新在前。时间顺序 = 反转后再反转
+        chrono = [
+            self._bar("d0", 10.0, 9.5),    # 缺口中枢之下
+            self._bar("d1", 10.0, 9.5),
+            self._bar("d2", 12.0, 11.5),   # 向上跳空（low 11.5 > 前一根 high 10.0）
+            self._bar("d3", 12.5, 12.0),   # 岛
+            self._bar("d4", 13.0, 12.5),   # 岛
+            self._bar("d5", 10.5, 10.0),   # 向下跳空（high 10.5 < 前一根 low 12.5）
+            self._bar("d6", 10.5, 10.0),
+        ]
+        rows = list(reversed(chrono))
+        found = detect_island_reversal(rows)
+        assert found is not None, "上下两个反向缺口夹出的孤立区间应判为岛形"
+        assert found["name"] == "顶部岛形反转"
+        assert found["direction"] == "bearish"
+
+    def test_下跳后上跳判为底部岛形(self):
+        from zettaranc.pattern import detect_island_reversal
+        chrono = [
+            self._bar("d0", 10.5, 10.0),
+            self._bar("d1", 10.5, 10.0),
+            self._bar("d2", 9.0, 8.5),     # 向下跳空
+            self._bar("d3", 8.5, 8.0),     # 岛
+            self._bar("d4", 8.0, 7.5),
+            self._bar("d5", 9.5, 9.0),     # 向上跳空
+            self._bar("d6", 9.5, 9.0),
+        ]
+        rows = list(reversed(chrono))
+        found = detect_island_reversal(rows)
+        assert found is not None and found["name"] == "底部岛形反转"
+        assert found["direction"] == "bullish"
+
+    def test_只有一个缺口不算岛形(self):
+        from zettaranc.pattern import detect_island_reversal
+        chrono = [
+            self._bar("d0", 10.0, 9.5),
+            self._bar("d1", 12.0, 11.5),   # 向上跳空
+            self._bar("d2", 12.5, 12.0),
+            self._bar("d3", 13.0, 12.5),   # 之后一路走高，没有反向缺口
+            self._bar("d4", 13.5, 13.0),
+        ]
+        rows = list(reversed(chrono))
+        assert detect_island_reversal(rows) is None, "单一缺口是普通跳空，不是反转"
+
+    def test_两个同向缺口不算岛形(self):
+        from zettaranc.pattern import detect_island_reversal
+        chrono = [
+            self._bar("d0", 10.0, 9.5),
+            self._bar("d1", 12.0, 11.5),   # 上跳
+            self._bar("d2", 12.5, 12.0),
+            self._bar("d3", 14.0, 13.5),   # 再上跳（同向 = 持续缺口）
+            self._bar("d4", 14.5, 14.0),
+        ]
+        rows = list(reversed(chrono))
+        assert detect_island_reversal(rows) is None

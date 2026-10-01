@@ -69,6 +69,8 @@ export interface RawChartPatternResponse {
   } | null
   waves?: RawPattern | null
   candlesticks?: RawCandleSignal[]
+  /** 指标背离（与形态同形状：带 points 与 lines，可直接画）。 */
+  divergences?: RawPattern[]
   candle_summary?: Record<string, unknown> | null
   /** 形态目录：下拉的选项来源。 */
   candle_catalog?: RawCandleCatalogItem[]
@@ -89,8 +91,8 @@ export interface DrawableLine {
 export interface DrawablePattern {
   name: string
   direction: 'bullish' | 'bearish' | 'neutral'
-  /** 几何形态还是波浪 —— 两者在图上的画法一致，但标注措辞不同。 */
-  kind: 'geometry' | 'wave'
+  /** 几何形态 / 波浪 / 指标背离 —— 画法一致，标注措辞不同。 */
+  kind: 'geometry' | 'wave' | 'divergence'
   confidence: number
   desc: string
   points: DrawablePoint[]
@@ -174,6 +176,12 @@ export function resolvePatternGeometry(
   }
   const wave = convert(raw.waves, 'wave')
   if (wave) out.push(wave)
+  // 背离与几何形态同形状（两点 + 一条连线），所以走同一套换算与绘制，
+  // 不需要为它写新的画法。差别只在 kind，供 UI 决定措辞。
+  for (const d of raw.divergences || []) {
+    const converted = convert(d, 'divergence')
+    if (converted) out.push(converted)
+  }
   return out
 }
 

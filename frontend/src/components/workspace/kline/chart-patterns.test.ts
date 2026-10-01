@@ -241,3 +241,50 @@ test('空响应与空 K 线返回空数组', () => {
     [],
   )
 })
+
+// ---------------------------------------------------------------------------
+// 指标背离走的是和几何形态**完全相同**的绘制路径（两点 + 一条连线），
+// 所以这里只验证它没被漏掉、且 kind 标对 —— 换算细节已由上面的用例覆盖。
+// ---------------------------------------------------------------------------
+
+test('背离与几何形态一并输出，kind 标为 divergence', () => {
+  const raw: RawChartPatternResponse = {
+    divergences: [
+      {
+        name: 'MACD底背离',
+        direction: 'bullish',
+        confidence: 0.6,
+        desc: '价格新低而 MACD 抬升',
+        points: [
+          { date: iso(2), price: 12, label: '前低' },
+          { date: iso(6), price: 10, label: '后低' },
+        ],
+        lines: [
+          {
+            label: '背离',
+            points: [
+              { date: iso(2), price: 12 },
+              { date: iso(6), price: 10 },
+            ],
+          },
+        ],
+      },
+    ],
+  }
+  const out = resolvePatternGeometry(raw, BARS)
+  assert.equal(out.length, 1)
+  assert.equal(out[0].kind, 'divergence')
+  assert.equal(out[0].name, 'MACD底背离')
+  assert.deepEqual(out[0].points.map((p) => p.index), [2, 6])
+  assert.equal(out[0].lines.length, 1)
+})
+
+test('背离、几何形态、波浪三者可以同时存在', () => {
+  const raw: RawChartPatternResponse = {
+    chart_pattern: { patterns: [{ name: '双顶', points: [{ date: iso(1), price: 10 }] }] },
+    waves: { name: '驱动浪', points: [{ date: iso(2), price: 11 }] },
+    divergences: [{ name: 'RSI顶背离', points: [{ date: iso(3), price: 12 }] }],
+  }
+  const out = resolvePatternGeometry(raw, BARS)
+  assert.deepEqual(out.map((p) => p.kind).sort(), ['divergence', 'geometry', 'wave'])
+})

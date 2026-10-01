@@ -495,9 +495,12 @@ def analyze_chart_pattern(rows: List[Dict]) -> Dict:
     for detector in (
         detect_head_and_shoulders,
         detect_double_top_bottom,
+        detect_triple_top_bottom,
         detect_triangle,
         detect_wedge,
         detect_flag,
+        detect_rectangle,
+        detect_island_reversal,
     ):
         found = detector(rows)
         if found is not None:
@@ -524,3 +527,217 @@ def analyze_chart_pattern(rows: List[Dict]) -> Dict:
             "verdict": verdict,
         },
     }
+
+
+# ---------------------------------------------------------------------------
+# 补充几何形态（三重顶底 / 矩形整理 / 岛形反转）
+#
+# 与上面几个检测器同一套约定：rows[0] 最新、返回 points（离散顶点）+ lines
+# （参考线，统一两端点形状），前端一种画法通吃。
+# ---------------------------------------------------------------------------
+
+# 三个极值之间的容差。比双顶（PEAK_TOLERANCE=0.05）严一点：三次都落在同一个
+# 价位附近本身就是更强的约束，放宽了会把"震荡上行"也判成三重顶。
+TRIPLE_TOLERANCE = 0.035
+
+# 矩形：上下沿的间距必须落在区间内，否则不是箱体
+RECTANGLE_MIN_HEIGHT = 0.03
+RECTANGLE_MAX_HEIGHT = 0.18
+# 上下沿各自至少被触碰这么多次（否则只是一条趋势线，不是矩形）
+RECTANGLE_MIN_TOUCHES = 2
+RECTANGLE_TOUCH_TOLERANCE = 0.015
+
+
+def detect_triple_top_bottom(rows: List[Dict]) -> Optional[Dict]:
+    """
+    三重顶 / 三重底：三个大致等高的极值 + 两次回调。
+
+    双顶的推广。要求三次极值的相对偏差都在 TRIPLE_TOLERANCE 之内 ——
+    逐对比较会漏掉"1、2 接近但 3 明显高"的情况，而那恰恰是上升三角形。
+    """
+    if len(rows) < 4 * SWING_WINDOW:
+        return None
+
+    highs, lows = find_swings(rows, SWING_WINDOW)
+
+    if len(highs) >= 3:
+        # highs 升序，开头 = 最近。取最近三个，按时间顺序（老 -> 新）重排。
+        idx = [highs[2], highs[1], highs[0]]
+        peaks = [nz(rows[i]["high"]) for i in idx]
+        avg = sum(peaks) / 3
+        if avg > 0 and all(abs(p - avg) / avg < TRIPLE_TOLERANCE for p in peaks):
+            neckline = min(nz(rows[i]["low"]) for i in idx[1:2] + [idx[0]])
+            target = neckline - (avg - neckline)
+            return {
+                "name": "三重顶",
+                "type": "reversal",
+                "direction": "bearish",
+                "confidence": 0.7,
+                "points": [_point(rows, idx[k], peaks[k], f"顶{k + 1}") for k in range(3)],
+                "lines": [
+                    _line(rows, idx[0], neckline, idx[2], neckline, "颈线"),
+                    _line(rows, idx[0], target, idx[2], target, "目标"),
+                ],
+                "key_levels": {"peak1": peaks[0], "peak2": peaks[1], "peak3": peaks[2],
+                               "neckline": neckline, "target": target},
+                "desc": f"三重顶：{peaks[0]:.2f} / {peaks[1]:.2f} / {peaks[2]:.2f}，颈线={neckline:.2f}",
+            }
+
+    if len(lows) >= 3:
+        idx = [lows[2], lows[1], lows[0]]
+        troughs = [nz(rows[i]["low"]) for i in idx]
+        avg = sum(troughs) / 3
+        if avg > 0 and all(abs(p - avg) / avg < TRIPLE_TOLERANCE for p in troughs):
+            neckline = max(nz(rows[i]["high"]) for i in idx[1:2] + [idx[0]])
+            target = neckline + (avg - neckline)
+            return {
+                "name": "三重底",
+                "type": "reversal",
+                "direction": "bullish",
+                "confidence": 0.7,
+                "points": [_point(rows, idx[k], troughs[k], f"底{k + 1}") for k in range(3)],
+                "lines": [
+                    _line(rows, idx[0], neckline, idx[2], neckline, "颈线"),
+                    _line(rows, idx[0], target, idx[2], target, "目标"),
+                ],
+                "key_levels": {"bottom1": troughs[0], "bottom2": troughs[1], "bottom3": troughs[2],
+                               "neckline": neckline, "target": target},
+                "desc": f"三重底：{troughs[0]:.2f} / {troughs[1]:.2f} / {troughs[2]:.2f}，颈线={neckline:.2f}",
+            }
+
+    return None
+
+
+def detect_rectangle(rows: List[Dict]) -> Optional[Dict]:
+    """
+    矩形整理（箱体）：上下沿各自被反复触碰，中间的走势没有方向。
+
+    判据分两条，缺一不可：
+      1. 上下沿间距落在 [3%, 18%]。太窄是横线，太宽是趋势；
+      2. 上下沿**各自**至少被碰到 RECTANGLE_MIN_TOUCHES 次。
+    只算极值点不行 —— 只碰过一次的上下沿是一条通道，不是箱体，画出来会误导。
+    """
+    n = min_int(40, len(rows))
+    if n < 20:
+        return None
+
+    segment = rows[:n]
+    highs = [nz(r["high"]) for r in segment]
+    lows = [nz(r["low"]) for r in segment]
+    upper, lower = max(highs), min(lows)
+    if lower <= 0:
+        return None
+    height = (upper - lower) / lower
+    if not (RECTANGLE_MIN_HEIGHT <= height <= RECTANGLE_MAX_HEIGHT):
+        return None
+
+    up_band = upper * (1 - RECTANGLE_TOUCH_TOLERANCE)
+    low_band = lower * (1 + RECTANGLE_TOUCH_TOLERANCE)
+    touches_up = sum(1 for h in highs if h >= up_band)
+    touches_low = sum(1 for l in lows if l <= low_band)
+    if touches_up < RECTANGLE_MIN_TOUCHES or touches_low < RECTANGLE_MIN_TOUCHES:
+        return None
+
+    # 箱体本身不预判方向：突破方向未知，所以给 neutral，别替用户站边。
+    latest = nz(rows[0]["close"])
+    if latest > upper * (1 + RECTANGLE_TOUCH_TOLERANCE):
+        direction, verdict = "bullish", "已向上突破"
+    elif latest < lower * (1 - RECTANGLE_TOUCH_TOLERANCE):
+        direction, verdict = "bearish", "已向下突破"
+    else:
+        direction, verdict = "neutral", "仍在箱体内"
+
+    return {
+        "name": "矩形整理",
+        "type": "continuation",
+        "direction": direction,
+        "confidence": 0.55,
+        "points": [],
+        "lines": [
+            _line(rows, n - 1, upper, 0, upper, "箱体上沿"),
+            _line(rows, n - 1, lower, 0, lower, "箱体下沿"),
+        ],
+        "key_levels": {"upper": upper, "lower": lower, "height_pct": round2(height * 100)},
+        "desc": (
+            f"近 {n} 根在 {lower:.2f}~{upper:.2f} 之间横向整理"
+            f"（振幅{height * 100:.1f}%，上沿碰到{touches_up}次、下沿{touches_low}次），{verdict}"
+        ),
+    }
+
+
+def detect_island_reversal(rows: List[Dict], max_island: int = 10) -> Optional[Dict]:
+    """
+    岛形反转：跳空离开，再反向跳空回来，中间那段孤立成岛。
+
+    必须**两个缺口方向相反**且中间夹着不超过 max_island 根 —— 只有一个缺口是
+    普通跳空，两个同向缺口是持续性缺口，都不是反转。
+
+    实现上先转成**时间顺序**再判。第一版直接在倒序下标上推理，把顶部岛和底部岛
+    判反了：倒序里"更老"是更大的下标，肉眼推演时极易把方向搞反，而这两种情形
+    的判据恰好互为镜像 —— 写反了不会报错，只会给出完全相反的方向。
+    """
+    n = min_int(40, len(rows))
+    if n < 6:
+        return None
+
+    chrono = list(reversed(rows[:n]))   # chrono[0] = 最老
+    m = len(chrono)
+    # rows 下标 = n - 1 - chrono 下标
+    to_rows_index = lambda ci: n - 1 - ci
+
+    for a in range(1, m - 2):
+        for b in range(a, min(a + max_island, m - 1)):
+            before, first = chrono[a - 1], chrono[a]
+            last, after = chrono[b], chrono[b + 1]
+
+            # 顶部岛形：向上跳空进来，向下跳空出去
+            if nz(first["low"]) > nz(before["high"]) and nz(after["high"]) < nz(last["low"]):
+                island_bars = b - a + 1
+                island_high = max(nz(r["high"]) for r in chrono[a:b + 1])
+                return {
+                    "name": "顶部岛形反转",
+                    "type": "reversal",
+                    "direction": "bearish",
+                    "confidence": 0.6,
+                    "points": [
+                        _point(rows, to_rows_index(a), nz(first["low"]), "上跳缺口"),
+                        _point(rows, to_rows_index(a + (island_bars - 1)), island_high, "岛"),
+                        _point(rows, to_rows_index(b + 1), nz(after["high"]), "下跳缺口"),
+                    ],
+                    "lines": [
+                        _line(rows, to_rows_index(b + 1), nz(after["high"]),
+                              to_rows_index(a), nz(first["low"]), "缺口区"),
+                    ],
+                    "key_levels": {"island_high": island_high, "island_bars": island_bars},
+                    "desc": (
+                        f"向上跳空后 {island_bars} 根又向下跳空，顶部岛形"
+                        f"（岛高{island_high:.2f}，上跳缺口{first['date']}，下跳缺口{after['date']}）"
+                    ),
+                }
+
+            # 底部岛形：向下跳空进来，向上跳空出去
+            if nz(first["high"]) < nz(before["low"]) and nz(after["low"]) > nz(last["high"]):
+                island_bars = b - a + 1
+                island_low = min(nz(r["low"]) for r in chrono[a:b + 1])
+                return {
+                    "name": "底部岛形反转",
+                    "type": "reversal",
+                    "direction": "bullish",
+                    "confidence": 0.6,
+                    "points": [
+                        _point(rows, to_rows_index(a), nz(first["high"]), "下跳缺口"),
+                        _point(rows, to_rows_index(a + (island_bars - 1)), island_low, "岛"),
+                        _point(rows, to_rows_index(b + 1), nz(after["low"]), "上跳缺口"),
+                    ],
+                    "lines": [
+                        _line(rows, to_rows_index(b + 1), nz(after["low"]),
+                              to_rows_index(a), nz(first["high"]), "缺口区"),
+                    ],
+                    "key_levels": {"island_low": island_low, "island_bars": island_bars},
+                    "desc": (
+                        f"向下跳空后 {island_bars} 根又向上跳空，底部岛形"
+                        f"（岛低{island_low:.2f}，下跳缺口{first['date']}，上跳缺口{after['date']}）"
+                    ),
+                }
+
+    return None
