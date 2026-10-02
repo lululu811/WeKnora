@@ -106,16 +106,21 @@
         </div>
         <div class="strip-ctl">
           <span class="strip-ctl__label">复权</span>
+          <!-- 板块/指数只有不复权裸行情（index.duckdb 里没有 *_qfq/_hfq），三个档位
+               当前是等价的。置灰 + 写明口径，而不是让按钮点得动却没反应。 -->
           <button
             v-for="opt in ADJUST_OPTIONS"
             :key="opt.value"
             type="button"
             class="strip-ctl__btn"
             :class="{ 'is-active': adjust === opt.value }"
+            :disabled="isBoard"
+            :title="isBoard ? '板块/指数为不复权口径：本地只有裸行情，没有复权数据' : undefined"
             @click="adjust = opt.value"
           >
             {{ opt.label }}
           </button>
+          <span v-if="isBoard" class="strip-ctl__note">板块不复权</span>
         </div>
       </div>
     </div>
@@ -140,14 +145,19 @@
         </div>
         <div class="search-modal__results">
           <div v-if="isSearching" class="search-loading">正在搜索...</div>
-          <div v-else-if="searchResults.length === 0 && searchQuery" class="search-empty">未匹配到相关个股</div>
+          <div v-else-if="searchResults.length === 0 && searchQuery" class="search-empty">未匹配到相关标的</div>
           <div
             v-for="item in searchResults"
             :key="`${item.ticker}-${item.exchange}`"
             class="search-item"
             @click="selectSymbol(item)"
           >
-            <span class="search-item__name">{{ item.name }}</span>
+            <!-- 板块与个股在列表里长得一样（都是 6 位数字 + 后缀），必须标出来：
+                 两者的图上能力不同（板块无复权、无形态），不标就得点进去才发现。 -->
+            <span class="search-item__main">
+              <span class="search-item__name">{{ item.name }}</span>
+              <span v-if="isBoardExchange(item.exchange)" class="search-item__tag">板块</span>
+            </span>
             <span class="search-item__code">{{ item.ticker }}.{{ item.exchange }}</span>
           </div>
         </div>
@@ -213,14 +223,17 @@
           @update:open="(v) => (openLayerPanel = v ? 'bubbles' : null)"
           title="形态气泡"
           :options="bubbleOptions"
-          empty-text="本图没有识别到形态"
+          :empty-text="isBoard ? '板块不提供形态识别' : '本图没有识别到形态'"
           hint="按类型勾选。战法标注来自 Z 哥战法，蜡烛形态来自 TA-Lib。括号里是「勾中/全部」。"
         >
           <button
             type="button"
             class="toolbar__btn feature-btn"
             :class="{ 'is-active': isPatternsEnabled && bubbleOnCount > 0 }"
-            title="形态气泡：在 K 线上标出识别出的蜡烛形态。点开可以按类型勾选要显示哪几种"
+            :disabled="isBoard"
+            :title="isBoard
+              ? '板块不提供形态识别：形态来自只对个股落库的 candle/指标列，本地没有板块级形态数据'
+              : '形态气泡：在 K 线上标出识别出的蜡烛形态。点开可以按类型勾选要显示哪几种'"
           >
             形态气泡<span class="feature-count">({{ bubbleOnCount }}/{{ bubbleOptions.length }})</span>
           </button>
@@ -234,18 +247,24 @@
           @update:open="(v) => (openLayerPanel = v ? 'outline' : null)"
           title="形态轮廓"
           :options="outlineOptions"
-          empty-text="本图没有识别到形态"
+          :empty-text="isBoard ? '板块不提供形态识别' : '本图没有识别到形态'"
           hint="自动数浪只是一种可能的数法，请当作参考而非结论。"
         >
           <button
             type="button"
             class="toolbar__btn feature-btn"
             :class="{ 'is-active': isChartPatternsEnabled && outlineOnCount > 0 }"
-            title="形态轮廓：把几何形态（头肩顶/双底/三角/楔形/旗形）与艾略特波浪画成轮廓——顶点连成折线，颈线与目标位画成虚线。点开可以选要画哪一种"
+            :disabled="isBoard"
+            :title="isBoard
+              ? '板块不提供形态识别：几何形态与波浪依赖只对个股落库的指标列，本地没有板块级形态数据'
+              : '形态轮廓：把几何形态（头肩顶/双底/三角/楔形/旗形）与艾略特波浪画成轮廓——顶点连成折线，颈线与目标位画成虚线。点开可以选要画哪一种'"
           >
             形态轮廓<span class="feature-count">({{ outlineOnCount }}/{{ outlineOptions.length }})</span>
           </button>
         </LayerFilterDropdown>
+        <!-- 只有一句说明，不隐藏按钮：用户需要知道"这个功能存在，但对板块当前不可用"，
+             而不是让它凭空消失（消失会被当成 bug 或被误读成"识别失败"）。 -->
+        <span v-if="isBoard" class="feature-note">板块不提供形态识别</span>
         <button
           type="button"
           class="toolbar__btn feature-btn"
@@ -307,13 +326,19 @@
 
       <!-- 5c. 取数失败状态
            必须和上面的"本地无此票数据"分开：那是**代码/数据**的问题，
-           这里是**链路/服务**的问题（网关 502、服务未就绪、网络不通）。
+           这里是**取不到数据**的问题。再往下还要按 kind 分两类，因为下一步
+           动作相反：4xx 是服务端明确拒绝（换标的），5xx/网络才是查链路。
            曾经两者被合并成同一句提示，代理层一挂就显示成"本地无此票行情"，
            让人以为是数据没同步，排查方向整个跑偏。 -->
       <div v-else-if="loadError" class="kline-workspace__empty is-error">
         <div class="empty__icon">⚠️</div>
         <p class="empty__title">{{ loadError.symbol }} 行情查询失败</p>
-        <p class="empty__hint">
+        <p v-if="loadError.kind === 'request'" class="empty__hint">
+          {{ loadError.message }}<br />
+          服务端<b>明确拒绝</b>了这次请求（标的类型或参数不被支持），所以<b>重试不会有不同结果</b>。<br />
+          这不是数据缺失，也不是取数链路故障——请改用支持的标的或去掉不支持的参数。
+        </p>
+        <p v-else class="empty__hint">
           {{ loadError.message }}<br />
           这是<b>取数链路</b>的问题，不是这只票没有行情数据——数据可能完好。<br />
           可稍后重试；若持续失败，请检查 python-service 容器与 nginx 代理。
@@ -360,7 +385,8 @@ import { useI18n } from 'vue-i18n';
 import type { Chart } from 'klinecharts';
 import { useAgentWorkspace } from '@/composables/useAgentWorkspace';
 import { useTheme } from '@/composables/useTheme';
-import type { Adjust, ZettarancDatafeed } from './datafeed';
+import { isBoardExchange } from '@/utils/aShareTicker';
+import type { Adjust, KLineErrorKind, ZettarancDatafeed } from './datafeed';
 import {
   createCoreChart,
   destroyChart,
@@ -405,10 +431,14 @@ const chartContainer = ref<HTMLDivElement | null>(null);
 // 换到有数据的票时空状态会残留。
 const noDataSymbol = ref('');
 
-// 取数失败（网络/网关/服务端故障）时的错误态。必须与 noDataSymbol 分开存：
+// 取数失败时的错误态。必须与 noDataSymbol 分开存：
 // 两者触发的是完全不同的问题，合并成一个状态就没法给出正确的下一步指引。
 // null 表示当前没有错误。
-const loadError = ref<{ symbol: string; message: string } | null>(null);
+//
+// `kind` 决定提示里的"下一步"：`request`（4xx，服务端明确拒绝）要劝人换标的，
+// `chain`（网络/5xx/非 JSON）要劝人查容器与代理。合并成一句话时，422 这类
+// 带原因的拒绝会被渲染成"取数链路的问题"，把排查方向带偏。
+const loadError = ref<{ symbol: string; message: string; kind: KLineErrorKind } | null>(null);
 // 底层 klinecharts Chart 实例（非 Pro 包装）。切换标的/周期时就地复用这个实例。
 //
 // 用 shallowRef 而不是 ref：ref 会对值做深层响应式代理，Chart 与 ZettarancDatafeed
@@ -577,6 +607,11 @@ const currentStockName = computed(() => {
   const p = workspace.activePick.value;
   return p?.name || currentTicker.value;
 });
+
+// 板块/指数（同花顺 .TI）不是个股：后端按后缀把它路由到 index 库，只有不复权
+// 裸行情，也没有指标与形态存列。图上能画的（蜡烛 + 前端自算的 MA/MACD/KDJ/VOL/九转）
+// 照常，不能画的要**说明原因**而不是留空——空图层会被读成"识别失败"。
+const isBoard = computed(() => isBoardExchange(currentExchange.value));
 
 const filteredAnnotations = computed(() => {
   return annotations.value.filter((ann) => isOptionEnabled(bubbleSelection.value, ann.type));
@@ -751,6 +786,16 @@ const handleDataLoaded = (dataList: KLineData[]) => {
 // 加载形态标注
 const loadAnnotations = async () => {
   if (!currentTicker.value || !currentExchange.value) return;
+  // 板块没有标注可拉：后端 /api/annotate 只服务个股（形态依赖只对个股落库的
+  // candle/指标列），传板块会拿到 422。这里直接不发请求——发出的结果是图上
+  // 多一条"查询失败"，而真实结论是"板块不提供形态识别"。
+  if (isBoard.value) {
+    annotations.value = [];
+    setGlobalOverlayConfig({ backendAnnotations: [], hiddenPatternTypes: bubbleSelection.value.disabled });
+    redrawOverlays(chartInstance.value);
+    repaintOverlay();
+    return;
+  }
   try {
     const symbolStr = `${currentTicker.value}.${currentExchange.value}`;
     const res = await fetchAnnotations(symbolStr, 120);
@@ -775,6 +820,20 @@ const loadAnnotations = async () => {
 // 换标的时若不等数据到达就换算，形态会落到上一只票的坐标上。
 const loadChartPatterns = async () => {
   if (!currentTicker.value || !currentExchange.value) return;
+  // 同 loadAnnotations：板块没有几何形态/波浪数据（后端 422），不发请求，
+  // 清空图层并让界面说明"板块不提供形态识别"。
+  if (isBoard.value) {
+    chartPatternGeometry.value = [];
+    candleMarks.value = [];
+    setGlobalOverlayConfig({
+      candleMarks: [],
+      hiddenPatternTypes: bubbleSelection.value.disabled,
+    });
+    activePatternNames.value = [];
+    syncOutline(outlineSelection.value);
+    repaintOverlay();
+    return;
+  }
   const symbolStr = `${currentTicker.value}.${currentExchange.value}`;
   const res = await fetchChartPatterns(symbolStr, 250);
   const bars = getChartData(chartInstance.value);
@@ -812,12 +871,12 @@ const initChart = () => {
 
   const symbol: SymbolInfo = {
     exchange: currentExchange.value,
-    market: 'stocks',
+    market: isBoard.value ? 'boards' : 'stocks',
     name: currentStockName.value,
     shortName: currentStockName.value,
     ticker: currentTicker.value,
     priceCurrency: 'cny',
-    type: 'stock',
+    type: isBoard.value ? 'board' : 'stock',
   };
 
   setZettarancPalette(isDark.value);
@@ -846,8 +905,8 @@ const initChart = () => {
       noDataSymbol.value = `${currentTicker.value}.${currentExchange.value}`;
       loadError.value = null;
     },
-    onError: (message) => {
-      loadError.value = { symbol: `${currentTicker.value}.${currentExchange.value}`, message };
+    onError: (message, kind) => {
+      loadError.value = { symbol: `${currentTicker.value}.${currentExchange.value}`, message, kind };
       noDataSymbol.value = '';
     },
   });
@@ -945,6 +1004,15 @@ const handleActionAsk = (type: 'valuation' | 'strategy' | 'report') => {
 // 三个来源合成一个 watch，因为它们对图表的影响是同一种——换一批 K 线。分开写会
 // 在快速连点时互相打架（一次切票 + 一次切周期触发两次换数据）。标的与复权变化
 // 还需要重新拉标注（标注跟着标的价格走）。
+//
+// 板块/指数没有复权档位（index.duckdb 只有裸 OHLCV）。切到板块时把口径归到
+// `none`，让请求与界面上"板块为不复权"的标注一致——后端三档等价、不会报错，
+// 但发 forward 会让日志与缓存键看起来像"这是一只可复权的个股"。
+// 切回个股时不擅自改回 forward：那会覆盖用户自己的选择。
+watch(isBoard, (board) => {
+  if (board) adjust.value = 'none';
+});
+
 watch([currentTicker, currentExchange, adjust, periodIdx], async () => {
   if (!chartInstance.value || !datafeedRef.value) {
     // 还没建图（首帧）就整体建一次。
@@ -957,20 +1025,26 @@ watch([currentTicker, currentExchange, adjust, periodIdx], async () => {
   await nextTick();
   const symbol: SymbolInfo = {
     exchange: currentExchange.value,
-    market: 'stocks',
+    market: isBoard.value ? 'boards' : 'stocks',
     name: currentStockName.value,
     shortName: currentStockName.value,
     ticker: currentTicker.value,
     priceCurrency: 'cny',
-    type: 'stock',
+    type: isBoard.value ? 'board' : 'stock',
   };
   try {
+    // 复权档位要显式推给 datafeed：它只在构造时读过一次 adjust，
+    // `swapSymbol` 不会带过去（此前点复权按钮只换了高亮，请求仍按旧的档位发）。
+    datafeedRef.value.setAdjust(adjust.value);
     await swapSymbol(chartInstance.value, datafeedRef.value, symbol, PERIODS[periodIdx.value]);
     await loadAnnotations();
   } catch (err) {
     loadError.value = {
       symbol: `${currentTicker.value}.${currentExchange.value}`,
       message: err instanceof Error ? err.message : String(err),
+      // swapSymbol 内部的失败是本地换数据/绘图异常，不是服务端拒绝，
+      // 按链路类处理（可重试）。
+      kind: 'chain',
     };
   }
 });
@@ -1639,6 +1713,29 @@ onUnmounted(() => {
       border-color: var(--td-brand-color);
       color: #ffffff;
     }
+
+    // 板块/指数：档位不可选（本地只有不复权裸行情）。禁用态要看得出来是"不可用"
+    // 而不是"当前没选中"——悬停也会高亮会把后者演出来。
+    &:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+
+      &:hover {
+        border-color: var(--td-component-stroke);
+      }
+
+      &.is-active {
+        opacity: 0.75;
+      }
+    }
+  }
+
+  // 「板块不复权」这类基于标的能力的一句话说明，紧跟在被约束的控件后面。
+  .strip-ctl__note {
+    margin-left: 4px;
+    font-size: var(--app-text-2xs);
+    color: var(--td-text-color-placeholder);
+    white-space: nowrap;
   }
 
   .quote-strip__left {
@@ -1845,6 +1942,15 @@ onUnmounted(() => {
       background: rgba(59, 130, 246, 0.15);
     }
 
+    // 名称 + 可选的「板块」标签。用 space-between 排的是这一组与右侧代码，
+    // 所以标签要和名称同在一组里，否则三个叶子节点会被平均分开。
+    .search-item__main {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+    }
+
     .search-item__name {
       font-weight: 500;
     }
@@ -1853,6 +1959,15 @@ onUnmounted(() => {
       font-family: monospace;
       color: var(--td-text-color-placeholder);
       font-size: var(--app-text-xs);
+    }
+
+    .search-item__tag {
+      flex-shrink: 0;
+      padding: 1px 5px;
+      border-radius: var(--app-radius-xs);
+      background: var(--td-bg-color-secondarycontainer);
+      color: var(--td-text-color-secondary);
+      font-size: var(--app-text-2xs);
     }
   }
 }
@@ -1948,6 +2063,12 @@ onUnmounted(() => {
 
     &.feature-btn {
       font-weight: 500;
+
+      &:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+
       &.is-active {
         background: rgba(59, 130, 246, 0.2);
         border-color: rgba(59, 130, 246, 0.6);
@@ -1961,6 +2082,14 @@ onUnmounted(() => {
         font-family: monospace;
       }
     }
+  }
+
+  // 板块不支持某项能力时的一句话说明（如「板块不提供形态识别」）。
+  // 用文字而不是把按钮藏起来：藏起来会被读成"这里出错了"。
+  .feature-note {
+    font-size: var(--app-text-2xs);
+    color: var(--td-text-color-placeholder);
+    white-space: nowrap;
   }
 
   .toolbar__spacer {

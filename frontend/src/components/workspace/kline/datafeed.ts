@@ -1,3 +1,6 @@
+// 相对路径而不是 `@/utils/...`：这个模块要被 node:test 直接加载（见 datafeed.test.ts），
+// 而 `@` 别名只在打包器里成立 —— kline 目录下的 .ts 全部走相对导入。
+import { isBoardExchange } from '../../../utils/aShareTicker';
 import type { DatafeedSubscribeCallback, KLineData, Period, SymbolInfo } from './types';
 
 export type Adjust = 'none' | 'forward' | 'backward';
@@ -12,19 +15,27 @@ export interface ZettarancDatafeedOptions {
    */
   onNoData?: (symbol: SymbolInfo) => void;
   /**
-   * **请求本身失败**时触发（网络中断 / 网关 5xx / 响应不是合法 JSON）。
+   * **请求本身失败**时触发（网络中断 / 网关 5xx / 响应不是合法 JSON / 服务端明确拒绝）。
    *
    * 与 onNoData 严格区分，两者含义完全相反：
    * - onNoData = 服务端明确回答"这只票本地没有行情"，提示用户换代码或补数据；
-   * - onError  = 根本没问到服务端，代码可能是好的，是链路或服务端出了问题。
+   * - onError  = 没拿到数据，原因是链路/服务端问题**或**服务端拒绝了这个请求。
    *
    * 为什么必须分开：旧实现把 fetch 失败 `.catch(() => ({ code: -1, data: [] }))`
    * 吞成空数组，于是走 onNoData。nginx 502、DuckDB 被锁、容器重启换 IP——
    * 这些故障统统显示成"本地无该标的行情数据"，而数据其实好好地躺在库里。
    * 这个假象会把排查方向整个带偏（去查代码表/数据同步，而不是查代理层）。
+   *
+   * `kind` 再细一层，因为"链路坏了"和"服务端说这个标的不适用"要给完全相反的
+   * 下一步指引：前者让人去查容器/代理，后者让人别再试同一个标的。
+   * - `request` = 4xx：请求到达了服务端，服务端明确拒绝（格式/标的类型不支持等）；
+   * - `chain`   = 网络失败、非 JSON 响应、5xx、HTTP 200 但 `code !== 0`。
    */
-  onError?: (symbol: SymbolInfo, message: string) => void;
+  onError?: (symbol: SymbolInfo, message: string, kind: KLineErrorKind) => void;
 }
+
+/** 取数失败的类别，见 `ZettarancDatafeedOptions.onError`。 */
+export type KLineErrorKind = 'chain' | 'request';
 
 /**
  * 从服务端的错误响应体里挖出可读信息。
@@ -59,7 +70,7 @@ export class ZettarancDatafeed {
   private adjust: Adjust;
   private onDataLoaded?: (data: KLineData[]) => void;
   private onNoData?: (symbol: SymbolInfo) => void;
-  private onError?: (symbol: SymbolInfo, message: string) => void;
+  private onError?: (symbol: SymbolInfo, message: string, kind: KLineErrorKind) => void;
 
   constructor(opts: ZettarancDatafeedOptions = {}) {
     this.adjust = opts.adjust ?? 'forward';
@@ -78,15 +89,24 @@ export class ZettarancDatafeed {
     if (!res.ok) return [];
     const json = await res.json();
     const rows = json.data || [];
-    return rows.map((s: any) => ({
-      exchange: s.exchange ?? 'SH',
-      market: 'stocks',
-      name: s.name ?? s.ticker,
-      shortName: s.name ?? s.ticker,
-      ticker: s.ticker,
-      priceCurrency: 'cny',
-      type: 'stock',
-    }));
+    return rows.map((s: { ticker: string; exchange?: string; name?: string }): SymbolInfo => {
+      // 搜索结果是两类标的的混合：个股来自 market.v_symbol，板块/指数来自
+      // index.v_index_universe（后端 union，见 python-service 的 search_symbols）。
+      // 不能写死 `market:'stocks'` / `type:'stock'` —— 板块会被标成个股，
+      // 下游就分不清该不该置灰复权选择器、该不该跳过形态端点。
+      const exchange = s.exchange ?? 'SH';
+      const board = isBoardExchange(exchange);
+      const name = s.name ?? s.ticker;
+      return {
+        exchange,
+        market: board ? 'boards' : 'stocks',
+        name,
+        shortName: name,
+        ticker: s.ticker,
+        priceCurrency: 'cny',
+        type: board ? 'board' : 'stock',
+      };
+    });
   }
 
   async getHistoryKLineData(
@@ -106,7 +126,7 @@ export class ZettarancDatafeed {
         `/api/kline?symbol=${encodeURIComponent(symbolStr)}&adjust=${this.adjust}&period=${periodParam}&limit=5000`,
       );
     } catch (err) {
-      this.onError?.(symbol, describeNetworkError(err));
+      this.onError?.(symbol, describeNetworkError(err), 'chain');
       return [];
     }
 
@@ -116,26 +136,30 @@ export class ZettarancDatafeed {
     try {
       body = await resp.json();
     } catch {
-      this.onError?.(symbol, `行情服务返回了非 JSON 响应（HTTP ${resp.status}）`);
+      this.onError?.(symbol, `行情服务返回了非 JSON 响应（HTTP ${resp.status}）`, 'chain');
       return [];
     }
 
-    // 3) HTTP 层错误。只有 404 表示"服务端确认这只票没有行情"，
-    //    其余（400 参数非法 / 500 / 502 网关 / 503 数据源未就绪）都是故障，
-    //    绝不能报成"本地无此标的行情"。
+    // 3) HTTP 层错误。只有 404 表示"服务端确认这只票没有行情"。
+    //    4xx 与 5xx 必须分开报：4xx 是服务端**明确拒绝**了这次请求（格式非法、
+    //    该标的不支持此接口），请求已经到达服务端，所以不是链路问题；5xx 与
+    //    网络失败才是链路问题。曾经一律归为"链路问题"，把 422 这种带原因的
+    //    拒绝也渲染成"行情查询失败 / 取数链路的问题"，排查方向整个跑偏。
     if (!resp.ok) {
       if (resp.status === 404) {
         this.onNoData?.(symbol);
       } else {
         const detail = extractErrorMessage(body);
-        this.onError?.(symbol, detail || `行情服务返回 HTTP ${resp.status}`);
+        const kind: KLineErrorKind = resp.status >= 500 ? 'chain' : 'request';
+        this.onError?.(symbol, detail || `行情服务返回 HTTP ${resp.status}`, kind);
       }
       return [];
     }
 
-    // 4) 业务层错误（HTTP 200 但 code !== 0）。
+    // 4) 业务层错误（HTTP 200 但 code !== 0）。请求通了、服务端自己失败了，
+    //    归类为链路/服务端问题，而不是"该标的没有数据"。
     if (body?.code !== 0) {
-      this.onError?.(symbol, extractErrorMessage(body) || `行情服务返回 code=${body?.code}`);
+      this.onError?.(symbol, extractErrorMessage(body) || `行情服务返回 code=${body?.code}`, 'chain');
       return [];
     }
 

@@ -11,6 +11,7 @@
 // 把清单也塞进 python-service 是行不通的：那边没有 user/tenant 概念，DuckDB
 // 还是只读挂载，个人可写状态落到那里等于凭空造一套身份 + 鉴权 + 迁移。
 import { get, post, put, del } from '@/utils/request'
+import { isBoardExchange } from '@/utils/aShareTicker'
 
 /** 追踪池的一行（服务端 scoped 到当前 (user, tenant)）。 */
 export interface WatchItem {
@@ -256,10 +257,15 @@ export function fetchQuotes(thscodes: string[]) {
   return get<QuotesResponse>(`/api/quotes?symbols=${encodeURIComponent(thscodes.join(','))}`)
 }
 
-export function searchSymbols(q: string, limit = 20) {
-  return get<{ code: number; data: SymbolSuggestion[] }>(
+export async function searchSymbols(q: string, limit = 20) {
+  const res = await get<{ code: number; data: SymbolSuggestion[] }>(
     `/api/symbols/search?q=${encodeURIComponent(q)}&limit=${limit}`,
   )
+  // `/api/symbols/search` 现在也返回板块/指数（`.TI`，来自 index.v_index_universe），
+  // 但跟踪池是按个股设计的：行情快照 `/api/quotes` 明确把板块列进 `unsupported`，
+  // 阈值判定也只在个股指标上跑。放进池子只会得到一行永远没有价格、条件永不触发的
+  // 记录。这里就地滤掉，让本功能的行为与放开板块之前完全一致。
+  return { ...res, data: (res.data ?? []).filter((s) => !isBoardExchange(s.exchange)) }
 }
 
 // ── 每日观察日记 ────────────────────────────────────────────────────────

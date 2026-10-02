@@ -31,7 +31,7 @@ import {
   type Styles,
 } from 'klinecharts'
 import type { Period, SymbolInfo, KLineData } from './types'
-import { ZettarancDatafeed } from './datafeed'
+import { ZettarancDatafeed, type KLineErrorKind } from './datafeed'
 
 /** 区间带：横跨整个绘图区的半透明色块 + 上下两条虚线。 */
 const RANGE_BAND = 'wkRangeBand'
@@ -292,7 +292,7 @@ export function createCoreChart(options: {
   subIndicators: string[]
   onDataLoaded?: (data: KLineData[]) => void
   onNoData?: () => void
-  onError?: (message: string) => void
+  onError?: (message: string, kind: KLineErrorKind) => void
 }): { chart: Chart; datafeed: ZettarancDatafeed } {
   ensureTemplates()
 
@@ -300,7 +300,7 @@ export function createCoreChart(options: {
     adjust: options.adjust,
     onDataLoaded: (data) => options.onDataLoaded?.(data),
     onNoData: () => options.onNoData?.(),
-    onError: (_symbol, message) => options.onError?.(message),
+    onError: (_symbol, message, kind) => options.onError?.(message, kind),
   })
 
   const chart = init(options.container, {

@@ -13,6 +13,7 @@
  *     datafeed.ts 已经踩过的区分（404 = 没这只票；其余 = 链路故障）。
  */
 
+import { isBoardExchange } from '../../../utils/aShareTicker';
 import type { KLineData } from './types';
 
 export type KlinePeriod = 'day' | 'week' | 'month';
@@ -142,10 +143,14 @@ async function request(req: Required<KlineRequest>): Promise<KLineData[]> {
  * `no-data` 是可预期的（代码不存在），`transient` 是要报警的（服务故障）。
  */
 export function fetchKline(request_: KlineRequest): Promise<KLineData[]> {
+  // 板块/指数只有不复权裸行情（后端把三档都映射到 v_index_daily）。默认的
+  // `forward` 传过去不会报错，但它会让请求与缓存键都声称"这是一只可复权的个股"；
+  // 按代码后缀就地归到 none，调用方（对比条 / 悬浮卡 / 工作台）不必各自记得这件事。
+  const boardDefault: KlineAdjust = isBoardExchange(request_.symbol.split('.').pop()) ? 'none' : 'forward';
   const req: Required<KlineRequest> = {
     symbol: request_.symbol,
     period: request_.period ?? 'day',
-    adjust: request_.adjust ?? 'forward',
+    adjust: request_.adjust ?? boardDefault,
     limit: request_.limit ?? 300,
   };
   const key = cacheKey(req);

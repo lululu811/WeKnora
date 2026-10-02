@@ -157,6 +157,19 @@ test('请求 URL 带上 period/adjust/limit', async () => {
   assert.match(calls[0].url, /symbol=600519\.SH/)
 })
 
+test('板块标的的默认复权是 none，个股仍是 forward', async () => {
+  // 后端对板块把三档都映射到同一份不复权行情，所以 forward 不会出错，
+  // 但它会让请求与缓存键假装"这是一只可复权的个股"——对比条/悬浮卡这类
+  // 不传 adjust 的调用方都要靠这个默认值。
+  resetKlineCache()
+  const { calls } = stubFetch(() => ({ body: okBody([{}]) }))
+  await fetchKline({ symbol: '881101.TI', period: 'day', limit: 60 })
+  await fetchKline({ symbol: '600519.SH', period: 'day', limit: 60 })
+  assert.match(calls[0].url, /symbol=881101\.TI/)
+  assert.match(calls[0].url, /adjust=none/)
+  assert.match(calls[1].url, /adjust=forward/)
+})
+
 test('ts 秒 -> 毫秒，字段透传', async () => {
   resetKlineCache()
   stubFetch(() => ({ body: { code: 0, data: [{ ts: 1000, open: 1, high: 2, low: 0.5, close: 1.5, volume: 9 }] } }))
