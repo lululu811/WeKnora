@@ -18,6 +18,7 @@ import logging
 import os
 import re
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
@@ -56,7 +57,10 @@ _FORBIDDEN_SQL = re.compile(
 )
 _TRAILING_LIMIT = re.compile(r"\bLIMIT\s+\d+\s*;?\s*$", re.IGNORECASE)
 _SQL_COMMENT = re.compile(r"--[^\n]*|/\*.*?\*/", re.DOTALL)
-_THSCODE = re.compile(r"^\d{6}\.(?:SH|SZ|BJ|HK|US)$", re.IGNORECASE)
+# 6 位数字 + 交易所后缀。`.TI` 是同花顺的板块/指数代码（如 881101.TI = 种植业与林业），
+# 与个股共用同一个形状，所以格式校验放在一起；「这个端点支不支持板块」是另一层判断，
+# 见 `_require_stock_thscode` —— 只有 /api/kline 支持板块。
+_THSCODE = re.compile(r"^\d{6}\.(?:SH|SZ|BJ|HK|US|TI)$", re.IGNORECASE)
 
 
 @asynccontextmanager
@@ -190,8 +194,75 @@ def _require_thscode(thscode: str) -> str:
     """thscode 必须是 `600000.SH` 这种形态。挡掉注入串的最外层。"""
     code = (thscode or "").strip()
     if not _THSCODE.match(code):
-        raise fail(422, f"thscode 格式非法：{thscode!r}，应为 6 位数字 + .SH/.SZ/.BJ/.HK/.US")
+        raise fail(422, f"thscode 格式非法：{thscode!r}，应为 6 位数字 + .SH/.SZ/.BJ/.HK/.US/.TI")
     return code.upper()
+
+
+# 板块/指数（同花顺 .TI）与个股走两套数据集：库不同、视图不同、日期列名也不同。
+_BOARD_SUFFIX = ".TI"
+
+
+def _is_board(code: str) -> bool:
+    """同花顺板块/指数代码（`.TI`）。"""
+    return code.upper().endswith(_BOARD_SUFFIX)
+
+
+def _require_stock_thscode(thscode: str) -> str:
+    """
+    只接受个股（.SH/.SZ/.BJ/.HK/.US），用于不支持板块的端点。
+
+    板块目前只支持 K 线（`/api/kline`）：指标、形态、复权、画像这些端点读的是
+    market / indicators 库，而 `index.v_index_daily` 只有裸 OHLCV，没有 *_qfq/_hfq，
+    也没有指标列。这里必须给出**带原因**的拒绝，而不是让它掉进"格式非法"：
+    后者会让人去改代码写法，而实际要做的是换一个标的。
+    """
+    code = _require_thscode(thscode)
+    if _is_board(code):
+        raise fail(
+            422,
+            f"该接口不支持板块/指数标的：{code}（板块只提供 K 线，不提供复权/指标/形态/画像）",
+        )
+    return code
+
+
+@dataclass(frozen=True)
+class _Dataset:
+    """
+    一个可画 K 线的数据集。
+
+    取数差异只有三处，抽出来而不是在每个 SQL 分支里写 `if board`：数据源
+    （registry 里的名字）、各复权档位对应的视图、日期列名。K 线的 SQL 分支有
+    day/week/month × 有/无起始日 共 6 条，把差异复制进每一条必然会漏掉一条。
+    """
+
+    datasource: str
+    view_by_adjust: Dict[str, str]
+    date_column: str
+
+
+_MARKET_DATASET = _Dataset(
+    datasource="market",
+    view_by_adjust={"none": "v_daily", "forward": "v_daily_qfq", "backward": "v_daily_hfq"},
+    date_column="date",
+)
+
+# 板块/指数只有不复权裸行情（index.duckdb 里没有 *_qfq/_hfq 视图），三个复权档位
+# 都指向同一视图。前端默认发 `adjust=forward`，所以这里必须**接受**它而不是报 400，
+# 否则板块永远画不出来；口径由前端标注（复权选择器置灰并写明"板块为不复权"）。
+_BOARD_DATASET = _Dataset(
+    datasource="index",
+    view_by_adjust={
+        "none": "v_index_daily",
+        "forward": "v_index_daily",
+        "backward": "v_index_daily",
+    },
+    date_column="trade_date",
+)
+
+
+def _dataset_for(thscode: str) -> _Dataset:
+    """按代码后缀选数据集：`.TI` → 板块/指数，其余 → 个股。"""
+    return _BOARD_DATASET if _is_board(thscode) else _MARKET_DATASET
 
 
 def _read_only_sql(sql: str) -> str:
@@ -1119,7 +1190,7 @@ async def zettaranc_analyze(request: AnalyzeRequest) -> Dict[str, Any]:
         analyze_chart_pattern, analyze_levels,
     )
 
-    thscode = _require_thscode(request.thscode)
+    thscode = _require_stock_thscode(request.thscode)
     market_src = registry.get("market")
     if market_src is None:
         raise fail(503, "market 数据源未就绪")
@@ -1203,7 +1274,7 @@ async def zettaranc_four_bricks(request: FourBricksRequest) -> Dict[str, Any]:
     from datasources import registry
     from zettaranc import analyze_four_bricks, fetch_market_data
 
-    thscode = _require_thscode(request.thscode)
+    thscode = _require_stock_thscode(request.thscode)
     market_src = registry.get("market")
     if market_src is None:
         raise fail(503, "market 数据源未就绪")
@@ -1227,7 +1298,7 @@ async def zettaranc_scan(request: ScanRequest) -> Dict[str, Any]:
     from datasources import registry
     from zettaranc import scan_patterns
 
-    thscode = _require_thscode(request.thscode)
+    thscode = _require_stock_thscode(request.thscode)
     indicators_src = registry.get("indicators")
     if indicators_src is None:
         raise fail(503, "indicators 数据源未就绪")
@@ -1477,11 +1548,10 @@ async def halo_query(request: HaloQueryRequest) -> Dict[str, Any]:
 
 # ===== KLine 与形态图表 API (前端 KLineChart Pro 直连) =====
 
-_ADJUST_VIEWS = {
-    "none": "v_daily",
-    "forward": "v_daily_qfq",
-    "backward": "v_daily_hfq",
-}
+# 个股的复权视图。与 `_MARKET_DATASET.view_by_adjust` 是同一份数据，这里保留别名
+# 是因为 annotate / chart-pattern 两个端点只服务个股，直接用这个名字更直白；
+# 不要再写一份字面量，否则改视图名会漏掉一半。
+_ADJUST_VIEWS = _MARKET_DATASET.view_by_adjust
 
 
 def _date_to_epoch_sec(d: Any) -> int:
@@ -1499,51 +1569,56 @@ def _date_to_epoch_sec(d: Any) -> int:
 @app.get("/api/kline")
 @app.get("/kline")
 async def get_kline(
-    symbol: str = Query(..., description="股票代码，如 600519.SH"),
+    symbol: str = Query(..., description="标的代码：个股 600519.SH / 板块指数 881101.TI"),
     period: str = Query("day", description="K线周期: day | week | month"),
-    adjust: str = Query("forward", description="复权类型: none | forward | backward"),
+    adjust: str = Query("forward", description="复权类型: none | forward | backward（板块无复权数据，三种取值等价）"),
     from_date: Optional[str] = Query(None, alias="from", description="起始日期 YYYY-MM-DD"),
     to_date: Optional[str] = Query(None, alias="to", description="结束日期 YYYY-MM-DD"),
     limit: int = Query(5000, ge=1, le=20000, description="最大K线根数"),
 ):
     """
     K 线数据查询接口 — 输出与 KLineChart Pro 兼容的 OHLCV 数组
+
+    数据集按代码后缀路由（见 `_Dataset`）：`.TI` 走 index 库的 `v_index_daily`
+    （日期列叫 `trade_date`，且没有复权列），其余走 market 库。
     """
     from datasources import registry
 
     thscode = _require_thscode(symbol)
-    if adjust not in _ADJUST_VIEWS:
+    dataset = _dataset_for(thscode)
+    if adjust not in dataset.view_by_adjust:
         raise fail(400, f"无效的复权类型: {adjust}，可用: none, forward, backward")
     if period not in ("day", "week", "month"):
         raise fail(400, f"无效的周期: {period}，可用: day, week, month")
 
-    market_src = registry.get("market")
-    if market_src is None:
-        raise fail(503, "market 数据源未就绪")
+    src = registry.get(dataset.datasource)
+    if src is None:
+        raise fail(503, f"{dataset.datasource} 数据源未就绪")
 
-    view = _ADJUST_VIEWS[adjust]
+    view = dataset.view_by_adjust[adjust]
+    date_col = dataset.date_column
     conditions = ["thscode = ?"]
     params: List[Any] = [thscode]
 
     if from_date:
-        conditions.append("date >= ?")
+        conditions.append(f"{date_col} >= ?")
         params.append(from_date)
     if to_date:
-        conditions.append("date <= ?")
+        conditions.append(f"{date_col} <= ?")
         params.append(to_date)
 
     where_clause = " AND ".join(conditions)
 
     if period in ("week", "month"):
-        trunc = "date_trunc('week', date)" if period == "week" else "date_trunc('month', date)"
+        trunc = f"date_trunc('week', {date_col})" if period == "week" else f"date_trunc('month', {date_col})"
         if from_date:
             sql = f"""
                 SELECT
                     {trunc} as date,
-                    arg_min(open, date) as open,
+                    arg_min(open, {date_col}) as open,
                     max(high) as high,
                     min(low) as low,
-                    arg_max(close, date) as close,
+                    arg_max(close, {date_col}) as close,
                     sum(volume) as volume,
                     sum(turnover) as turnover
                 FROM {view}
@@ -1558,10 +1633,10 @@ async def get_kline(
                 FROM (
                     SELECT
                         {trunc} as date,
-                        arg_min(open, date) as open,
+                        arg_min(open, {date_col}) as open,
                         max(high) as high,
                         min(low) as low,
-                        arg_max(close, date) as close,
+                        arg_max(close, {date_col}) as close,
                         sum(volume) as volume,
                         sum(turnover) as turnover
                     FROM {view}
@@ -1575,7 +1650,7 @@ async def get_kline(
     else:
         if from_date:
             sql = f"""
-                SELECT date, open, high, low, close, volume, turnover
+                SELECT {date_col} as date, open, high, low, close, volume, turnover
                 FROM {view}
                 WHERE {where_clause}
                 ORDER BY date ASC
@@ -1585,17 +1660,17 @@ async def get_kline(
             sql = f"""
                 SELECT date, open, high, low, close, volume, turnover
                 FROM (
-                    SELECT date, open, high, low, close, volume, turnover
+                    SELECT {date_col} as date, open, high, low, close, volume, turnover
                     FROM {view}
                     WHERE {where_clause}
-                    ORDER BY date DESC
+                    ORDER BY {date_col} DESC
                     LIMIT {limit}
                 ) sub
                 ORDER BY date ASC
             """
 
     try:
-        rows = await market_src.execute(sql, params)
+        rows = await src.execute(sql, params)
     except Exception as exc:
         logger.warning("K线查询失败: %s", exc)
         raise fail(503, f"查询 K 线数据失败: {exc}") from exc
@@ -1673,6 +1748,7 @@ async def get_quotes(
 
     requested: List[str] = []
     invalid: List[str] = []
+    unsupported: List[str] = []
     for token in symbols.split(","):
         raw = token.strip()
         if not raw:
@@ -1680,6 +1756,11 @@ async def get_quotes(
         code = raw.upper()
         if not _THSCODE.match(code):
             invalid.append(raw)
+        elif _is_board(code):
+            # 板块/指数没有个股快照：v_daily_qfq 里没有 .TI 行，放过去只会被算进
+            # missing，调用方就把它显示成"查不到该标的的行情数据"——把"不支持"
+            # 说成了"没有数据"。单独一列出来，调用方才能给出正确的下一步。
+            unsupported.append(code)
         elif code not in requested:
             requested.append(code)
 
@@ -1687,7 +1768,7 @@ async def get_quotes(
         raise fail(422, f"一次最多查询 {MAX_QUOTE_SYMBOLS} 只标的，收到 {len(requested)} 只")
 
     if not requested:
-        return {"code": 0, "data": {}, "missing": [], "invalid": invalid}
+        return {"code": 0, "data": {}, "missing": [], "invalid": invalid, "unsupported": unsupported}
 
     # VALUES 的每一行必须带括号：`VALUES ?` 是语法错误（DuckDB 的 parser 在
     # 这里就报 "syntax error at or near ?"），`VALUES (?)` 才是合法的行构造。
@@ -1780,6 +1861,7 @@ async def get_quotes(
         "data": data,
         "missing": [c for c in requested if c not in data],
         "invalid": invalid,
+        "unsupported": unsupported,
     }
 
 
@@ -1799,7 +1881,7 @@ async def get_annotations(
     from datasources import registry
     from zettaranc.annotator import annotator
 
-    thscode = _require_thscode(symbol)
+    thscode = _require_stock_thscode(symbol)
     if adjust not in _ADJUST_VIEWS:
         raise fail(400, f"无效的复权类型: {adjust}")
 
@@ -1873,7 +1955,7 @@ async def get_chart_pattern(
     from zettaranc.pattern import analyze_chart_pattern
     from zettaranc.waves import detect_elliott_waves
 
-    thscode = _require_thscode(symbol)
+    thscode = _require_stock_thscode(symbol)
     if adjust not in _ADJUST_VIEWS:
         raise fail(400, f"无效的复权类型: {adjust}")
 
@@ -2000,6 +2082,12 @@ async def stock_profile(
     if not _THSCODE.match(symbol):
         return {"code": 0, "symbol": symbol, "capital": None, "valuation": None,
                 "sectors": [], "unavailable": ["代码格式非法"]}
+    if _is_board(symbol):
+        # 与"格式非法"分开报：格式非法的下一步是改写法，板块的下一步是换标的。
+        # 板块没有资金面/估值/归属这三块（它们都来自个股表），这里直接说明，
+        # 而不是让它查成一堆空值被前端显示成"无数据"。
+        return {"code": 0, "symbol": symbol.upper(), "capital": None, "valuation": None,
+                "sectors": [], "unavailable": ["板块/指数不提供速览数据（仅个股有）"]}
 
     unavailable: list[str] = []
 
@@ -2134,23 +2222,57 @@ async def search_symbols(
         LIMIT ?
     """
     rows = await market_src.execute(sql, [like_pat, like_pat, like_pat, query_str.upper(), limit])
-    return {
-        "code": 0,
-        "data": [
+    data = [
+        {
+            "thscode": r["thscode"],
+            "ticker": r["ticker"],
+            "name": r["name"],
+            "exchange": r["exchange"],
+            "asset_type": r.get("asset_type", "a-share"),
+        }
+        for r in rows
+    ]
+
+    # 板块/指数来自另一个库（index.v_index_universe），与 v_symbol 是两个独立的
+    # DuckDB 连接（没有 ATTACH），只能在 Python 里合并；不合并的话搜索框永远搜不到
+    # 板块——v_symbol 里 5571 行全是 a-share，一行 .TI 都没有。
+    #
+    # v_index_universe 只有 (thscode, name, tag)：没有 ticker/exchange 列，所以
+    # ticker 取 6 位数字、exchange 固定 TI，asset_type 用 tag（industry /
+    # cn_concept / tzs / region）。调用方按 asset_type 区分"板块"与个股。
+    index_src = registry.get("index")
+    if index_src is not None:
+        board_rows = await index_src.execute(
+            """
+            SELECT thscode, name, tag
+            FROM v_index_universe
+            WHERE thscode LIKE ? OR name LIKE ?
+            ORDER BY name ASC
+            LIMIT ?
+            """,
+            [like_pat, like_pat, limit],
+        )
+        data.extend(
             {
                 "thscode": r["thscode"],
-                "ticker": r["ticker"],
+                "ticker": r["thscode"].split(".")[0],
                 "name": r["name"],
-                "exchange": r["exchange"],
-                "asset_type": r.get("asset_type", "a-share"),
+                "exchange": "TI",
+                "asset_type": r.get("tag") or "board",
             }
-            for r in rows
-        ],
-    }
+            for r in board_rows
+        )
+
+    return {"code": 0, "data": data}
 
 
 # 股票代码格式：6 位数字 + 交易所后缀。用于 /symbols/resolve 的入参白名单，
 # 只有通过这个正则的值才会拼进 SQL 查询，天然免疫注入。
+#
+# 故意**不含** `.TI`：这个端点服务的是"从模型回答的文本里抽出代码再校验回填名称"
+# 这条链路（正文点票签 / 提及条）。板块的文本识别是单独一期的活（`881101` 与
+# 订单号、日期在文本里长得一样，放开要连带改前端两处抽取器的判据），在那之前
+# 让板块代码在这里解析失败并被丢弃，比猜测成别的标的更安全。
 THSCODE_RE = re.compile(r"^[0-9]{6}\.(SH|SZ|BJ)$")
 
 
@@ -2234,7 +2356,7 @@ async def get_indicators(
     """
     from datasources import registry
 
-    thscode = _require_thscode(symbol)
+    thscode = _require_stock_thscode(symbol)
     indicators_src = registry.get("indicators")
     if indicators_src is None:
         raise fail(503, "indicators 数据源未就绪")
