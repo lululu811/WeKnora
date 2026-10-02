@@ -8,6 +8,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/Tencent/WeKnora/internal/agent/tools/hithink_finance/query"
 )
 
 // 本测试是 hithink-finance 工具 SQL 与真实 DuckDB schema 之间的**契约闸门**。
@@ -173,14 +175,18 @@ func TestToolSQLMatchesSchema(t *testing.T) {
 					continue
 				}
 				loc := fmt.Sprintf("%s 第 %d 条 SQL", path, i+1)
-				checkedSQL++
 
 				// 1) 引用的对象必须存在于快照。
+				//
+				// 没有 FROM/JOIN 的反引号字面量不是查询而是散文：工具描述开头那句
+				// 「只允许 SELECT 查询」也含 SELECT 一词，会被同一条 sqlLiteralRe
+				// 抓进来。真正的查询必有 FROM/JOIN，这里跳过散文、只把查询计入
+				// checkedSQL，末尾的「一条都没扫到」守门依然有效。
 				tables := fromRe.FindAllStringSubmatch(sql, -1)
 				if len(tables) == 0 {
-					t.Errorf("%s 未解析出 FROM/JOIN 对象，跳过：%.60s", loc, sql)
 					continue
 				}
+				checkedSQL++
 				// JOIN 会引用多张表，列必须取**并集**。曾经这里写成"只取第一张表
 				// 的列"，结果 JOIN 里的第二张表独有的列（如 v_index_universe.tag）
 				// 全被误报成不存在——测试自己成了噪音，闸门就形同虚设。
@@ -239,4 +245,67 @@ func TestToolSQLMatchesSchema(t *testing.T) {
 		t.Fatal("没有扫描到任何工具 SQL —— 扫描逻辑可能失效，契约闸门形同虚设")
 	}
 	t.Logf("校验了 %d 条工具 SQL、%d 个列引用", checkedSQL, checkedCols)
+}
+
+// descCatalogRe 抓 Description() 里的 `v_xxx(列, 列, …)` 目录形状。只匹配 ASCII
+// 圆括号：目录里用中文括号的说明（如 `（无 v_ 视图）`）不会误入。
+var descCatalogRe = regexp.MustCompile(`\b(v_[a-z0-9_]+)\(([^()]*)\)`)
+
+// descColumnRe 只认 ASCII 标识符列名，用来滤掉 `… 共 231 列` 这类截断标记。
+var descColumnRe = regexp.MustCompile(`^[a-z_][a-z0-9_]*$`)
+
+// TestToolDescriptionColumnsMatchSchema 守着描述里的表/列目录。
+//
+// TestToolSQLMatchesSchema 只从工具源码的反引号字面量里抓 SELECT（要求字面量以
+// SELECT 开头），而工具描述本身是一整个大反引号字面量、以中文开头，于是描述里
+// 所有 SELECT 的列名它一个都验不到——v_symbol / v_futures_daily / v_fund_nav
+// 的列错能长期潜伏，正是这个盲区。本测试改为直接调用 Description()，抽
+// `表(列, …)` 形状里的列名逐一对快照校验。目录由 go:generate 生成（见
+// query/gencatalog），因此这条断言守住生成链的出口。
+func TestToolDescriptionColumnsMatchSchema(t *testing.T) {
+	snap := loadSchema(t)
+	owner := indexOwner(snap)
+
+	desc := query.NewSQLQueryTool(nil).Description()
+
+	checkedTables, checkedCols := 0, 0
+	seen := map[string]bool{}
+	for _, m := range descCatalogRe.FindAllStringSubmatch(desc, -1) {
+		tbl, list := m[1], m[2]
+		db, ok := owner[tbl]
+		if !ok {
+			t.Errorf("描述里引用了快照中不存在的对象 %q（可能改名/删除了）", tbl)
+			continue
+		}
+		if seen[tbl] {
+			continue
+		}
+		seen[tbl] = true
+		checkedTables++
+
+		known := map[string]bool{}
+		for _, c := range snap[db][tbl].Columns {
+			known[c] = true
+		}
+		for _, token := range strings.Split(list, ",") {
+			token = strings.TrimSpace(token)
+			if !descColumnRe.MatchString(token) {
+				continue // `… 共 N 列` 之类的截断标记不是列名
+			}
+			if !known[token] {
+				t.Errorf("描述里 %s 的列 %q 不存在于快照（真实列见 testdata/schema.json）。\n"+
+					"描述由 query/gencatalog 从快照生成：先确认快照是新的，再重新 go generate。",
+					tbl, token)
+				continue
+			}
+			checkedCols++
+		}
+	}
+
+	// 目录应覆盖快照里全部 v_* 视图（当前 42 个）。少于 40 说明目录塌陷或正则失效，
+	// 空壳断言比没有断言更危险。
+	if checkedTables < 40 {
+		t.Fatalf("描述目录只解析出 %d 张表（预期 ≥40）——目录或扫描正则可能失效", checkedTables)
+	}
+	t.Logf("校验了描述里 %d 张表的 %d 个列名", checkedTables, checkedCols)
 }
