@@ -50,7 +50,7 @@ import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { MessagePlugin } from 'tdesign-vue-next';
 import { useAgentWorkspace } from '@/composables/useAgentWorkspace';
-import { extractMentionedStocks, type MentionedStock } from '@/utils/stockMentions';
+import { extractMentionedStocks, extractTrackingReason, type MentionedStock } from '@/utils/stockMentions';
 import { addWatchItem } from '@/api/watchlist';
 
 const props = defineProps<{
@@ -103,6 +103,13 @@ const handleAddToPool = async (stock: MentionedStock) => {
       thscode: stock.thscode,
       name: stock.name,
       exchange: stock.exchange,
+      // 理由随入池一起提交，服务端与 `added` 事件在同一事务里落库。
+      // 分两次请求的话，中间失败会留下一行没有理由的记录，而事件快照也是空的
+      // ——「它当初为什么进池」就再也答不出来了。
+      //
+      // 抽不到就传空串：note 允许为空，用户可以之后手写。宁可空着，
+      // 也不要存一段不相干的话——那比空更难被发现。
+      note: extractTrackingReason(rawContent.value, stock.thscode),
     });
     // created=false 说明它本来就在池子里（服务端顺手刷新了名称）——照实说，
     // 而不是让用户以为自己刚做了一件没发生过的事。
@@ -142,9 +149,9 @@ const handleAddToPool = async (stock: MentionedStock) => {
   flex-wrap: wrap;
   gap: 8px 12px;
   padding: 8px 14px;
-  background: var(--td-bg-color-secondarycontainer, rgba(0, 82, 217, 0.04));
-  border: 1px solid var(--td-component-stroke, rgba(0, 82, 217, 0.12));
-  border-radius: 8px;
+  background: var(--td-bg-color-secondarycontainer);
+  border: 1px solid var(--td-component-stroke);
+  border-radius: var(--app-radius-md);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
 
   :root[theme-mode="dark"] & {
@@ -157,19 +164,19 @@ const handleAddToPool = async (stock: MentionedStock) => {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 12px;
+  font-size: var(--app-text-sm);
   font-weight: 600;
-  color: var(--td-text-color-primary, #1e293b);
+  color: var(--td-text-color-primary);
   white-space: nowrap;
   flex-shrink: 0;
 
   .stocks-bar__icon {
-    font-size: 14px;
+    font-size: var(--app-text-base);
   }
 
   .stocks-bar__count {
-    font-size: 11px;
-    color: var(--td-text-color-placeholder, #64748b);
+    font-size: var(--app-text-xs);
+    color: var(--td-text-color-placeholder);
   }
 }
 
@@ -217,14 +224,14 @@ const handleAddToPool = async (stock: MentionedStock) => {
   align-items: center;
   gap: 6px;
   padding: 4px 10px;
-  border-radius: 6px;
-  border: 1px solid var(--td-component-stroke, #cbd5e1);
-  background: var(--td-bg-color-container, #ffffff);
-  color: var(--td-text-color-primary, #0f172a);
-  font-size: 12px;
+  border-radius: var(--app-radius-sm);
+  border: 1px solid var(--td-component-stroke);
+  background: var(--td-bg-color-container);
+  color: var(--td-text-color-primary);
+  font-size: var(--app-text-sm);
   cursor: pointer;
   white-space: nowrap;
-  transition: all 0.15s ease;
+  transition: all var(--app-motion-fast) ease;
 
   :root[theme-mode="dark"] & {
     background: #1e293b;
@@ -233,13 +240,13 @@ const handleAddToPool = async (stock: MentionedStock) => {
   }
 
   &:hover {
-    border-color: var(--td-brand-color, #0052d9);
-    background: var(--td-brand-color-light, rgba(0, 82, 217, 0.08));
+    border-color: var(--td-brand-color);
+    background: var(--td-brand-color-light);
     transform: translateY(-1px);
     box-shadow: 0 2px 6px rgba(0, 82, 217, 0.15);
 
     .stock-chip__action {
-      color: var(--td-brand-color, #0052d9);
+      color: var(--td-brand-color);
     }
   }
 
@@ -272,13 +279,13 @@ const handleAddToPool = async (stock: MentionedStock) => {
 
   .stock-chip__code {
     font-family: monospace;
-    font-size: 11px;
-    color: var(--td-text-color-secondary, #64748b);
+    font-size: var(--app-text-xs);
+    color: var(--td-text-color-secondary);
   }
 
   .stock-chip__action {
-    font-size: 11px;
-    color: var(--td-brand-color, #0052d9);
+    font-size: var(--app-text-xs);
+    color: var(--td-brand-color);
     opacity: 0.85;
     margin-left: 2px;
     font-weight: 500;

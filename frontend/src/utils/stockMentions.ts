@@ -210,6 +210,187 @@ export function extractMentionedStocks(text: string): MentionedStock[] {
 }
 
 /**
+ * 抽取某只票的「关注理由」——入池时预填到 note 里的一段正文。
+ *
+ * 为什么取**最后一次**出现而不是第一次：`extractStockMentions` 按 thscode
+ * 去重，只保留首次位置，而模型写股票分析的结构几乎总是
+ * 「铺垫 → 展开 → 结论」。结论段才是理由；第一次提及往往在
+ * 「我们来看看 601127.SH 的情况」这种引出句里，把它当理由存进池子，
+ * 半年后回看只会得到一句废话。
+ *
+ * 但「最后一次」本身不够。它假设结论段会再提一次这只票——很多回答不会：
+ * 代码只出现在开头的引出句里，之后全是分析，于是「最后一次」和「第一次」
+ * 是同一段，抽出来仍然是一句废话。所以引出段会被跳过，取它之后的第一段
+ * 实质内容（见 isLeadInParagraph）。
+ *
+ * 段落边界用空行（\n\n）而不是换行：一段 markdown 列表、单换行分行的表格
+ * 都不该被切成两半。
+ *
+ * 找不到前边界就退化成从 0 开始，而不是返回空——宁可给一段可能不完整的理由，
+ * 也好过让用户面对一个空输入框猜该填什么。
+ *
+ * 抽不出（非空但完全找不到这只票）返回空串，由调用方决定是否提示。
+ */
+export function extractTrackingReason(
+  text: string,
+  thscode: string,
+  maxLen = 500,
+): string {
+  if (!text || !thscode) return ''
+
+  const at = lastMentionIndex(text, thscode)
+  if (at < 0) return ''
+
+  let { start, end } = paragraphAt(text, at)
+
+  // 引出段（"我们来看看 X"）后面通常才是正题。若后面还有实质内容就取它。
+  //
+  // 是个 while 而不是 if：模型常在引出句之后连着放小标题
+  //（「我们来看看 X」→「赛力斯的销量数据：」→真正的结论），只跳一次会停在
+  // 小标题上。跳过的段落数有上限，免得正文全是短行时一路跳到末尾。
+  for (let hop = 0; hop < 3; hop++) {
+    if (!isLeadInParagraph(text.slice(start, end))) break
+    const next = nextParagraph(text, end)
+    if (!next) break
+    const body = text.slice(next.start, next.end)
+    // 下一段在讲别的票，就地停下。理由栏存的是「为什么跟这只票」，存成
+    // 另一只标的的分析比存一句引出话更糟——它读起来通顺，错误却极难发现。
+    if (mentionsOtherSymbol(body, thscode)) break
+    ;({ start, end } = next)
+  }
+
+  return cleanReason(text.slice(start, end), maxLen)
+}
+
+/** 这一段里出现的是不是别的标的（不含 thscode 自己）。 */
+function mentionsOtherSymbol(para: string, thscode: string): boolean {
+  const mine = thscode.split('.')[0]
+  for (const other of extractStockMentions(para)) {
+    if (other.ticker !== mine) return true
+  }
+  return false
+}
+
+/** text 中包含 at 的那个空行分隔段落的 [start, end)。 */
+function paragraphAt(text: string, at: number): { start: number; end: number } {
+  const before = text.lastIndexOf('\n\n', at)
+  const start = before < 0 ? 0 : before + 2
+  const after = text.indexOf('\n\n', at)
+  const end = after < 0 ? text.length : after
+  return { start, end }
+}
+
+/** end 之后的下一个非空段落，没有则返回 null。 */
+function nextParagraph(
+  text: string, end: number,
+): { start: number; end: number } | null {
+  const start = text.indexOf('\n\n', end)
+  if (start < 0) return null
+  const from = start + 2
+  const next = text.indexOf('\n\n', from)
+  const to = next < 0 ? text.length : next
+  if (text.slice(from, to).trim() === '') return null
+  return { start: from, end: to }
+}
+
+/**
+ * 一段文字是不是「引出句」而不是实质内容。
+ *
+ * 判定必须**窄**。这个函数的错误代价是不对称的：漏判一个引出句，用户看到一句
+ * 废话、可以自己改；误判一段实质内容，理由就变成了下一段的无关内容，而
+ * 下一段谈的可能是完全不同的票。所以宁可漏判。
+ *
+ * 因此只认两种明确形态：显式的引出语（说到/关于/比如…），以及「短到不可能
+ * 是分析」的一句话转场——阈值压到 24 字，比一句话的常见长度更短，只有真正
+ * 的转场才会落进来。带引出语的段落即使长也仍然算引出，那正是它的定义。
+ */
+function isLeadInParagraph(para: string): boolean {
+  const text = para.trim()
+  if (text === '') return false
+  if (LEAD_IN_PREFIX_RE.test(text)) return true
+  // 以冒号收尾且不长：小标题（「赛力斯的销量数据：」）。长段落以冒号收尾
+  // 是正常的叙述，不算。
+  if (/[：:]\s*$/.test(text) && text.length <= 40) return true
+  return text.length <= 24
+}
+
+/**
+ * 该票在文本中**最后一次**出现的位置，找不到返回 -1。
+ *
+ * 不复用 extractStockMentions：它按首次出现去重并丢掉后续位置，而这里要的
+ * 恰恰是最后一次。共用一个「抽取」函数会把这个区别藏在某个排序细节里，
+ * 而它正是这个功能成立与否的分界。
+ *
+ * 自己扫描而不是用一条大正则，是因为带后缀与裸码两种写法会互相重叠：
+ * `601127.SH` 里，裸码模式同样能匹配到前 6 位，两条正则各报一个位置，
+ * 取谁全看先后顺序——而这个顺序恰好决定了「引出句」判定是否成立。
+ * 逐个位置手工判断前后字符，规则只写一次。
+ */
+function lastMentionIndex(text: string, thscode: string): number {
+  const [code, exchange] = thscode.split('.')
+  if (!code) return -1
+  const upper = text.toUpperCase()
+  const digits = code.toUpperCase()
+  // 两种写法都算命中：带后缀的「600519.SH」和裸的「600519」。模型按提示词
+  // 约定写前者，但人手打的对话里后者更常见，漏掉它等于让一半的会话抽不出理由。
+  // 裸码的边界更严：后面不能跟字母，否则「6005198」「600519X」都不是这只票。
+  const forms = exchange
+    ? [digits + '.' + exchange.toUpperCase(), digits]
+    : [digits]
+
+  let last = -1
+  for (const want of forms) {
+    let from = 0
+    for (;;) {
+      const at = upper.indexOf(want, from)
+      if (at < 0) break
+      const prev = at > 0 ? upper[at - 1] : ''
+      const next = upper[at + want.length] ?? ''
+      // 前后不能是数字或小数点：20260927 里不能取出 202609，
+      // 1.600519 里也不能取出 600519。裸码还要额外拒绝后接字母，
+      // 带后缀的写法后面接中文或标点是正常的。
+      const ok = !/[\d.]/.test(prev) && !/\d/.test(next) &&
+        (want.length > digits.length || !/[A-Za-z]/.test(next))
+      if (ok && at > last) last = at
+      from = at + want.length
+    }
+  }
+  return last
+}
+
+/**
+ * 去掉 markdown 记号与多余空白，并硬截到 maxLen。
+ *
+ * 截断按**字符**而不是 grapheme：note 落库后由服务端按 rune 计长，
+ * 这里只需要保证不会超得离谱，且 emoji 被从中间劈开不会造成任何问题。
+ */
+function cleanReason(raw: string, maxLen: number): string {
+  const text = raw
+    // 代码围栏：连同 ``` 一起删掉，围栏里是给终端看的内容。
+    .replace(/```[a-zA-Z]*\n?/g, '')
+    // 行内记号：保留文字，去掉渲染用的符号。
+    .replace(/`([^`]*)`/g, '$1')
+    .replace(/\*\*([^*]*)\*\*/g, '$1')
+    .replace(/(^|[^*])\*([^*\n]+)\*/g, '$1$2')
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/^>\s?/gm, '')
+    // 表格分隔行与整行竖线：note 存成竖线残骸对谁都没有意义。
+    .replace(/^\s*\|?[\s:|-]+\|[\s:|-]*$/gm, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+
+  if (text.length <= maxLen) return text
+  // 截在最后一个句读之前，避免留下半个词；找不到就硬截。
+  const tail = text.slice(0, maxLen)
+  const cut = Math.max(
+    tail.lastIndexOf('。'), tail.lastIndexOf('；'), tail.lastIndexOf('，'),
+    tail.lastIndexOf('. '), tail.lastIndexOf('; '),
+  )
+  return (cut > maxLen * 0.6 ? tail.slice(0, cut + 1) : tail).trim()
+}
+
+/**
  * 判定某只票在一段文本里是不是「被讨论的对象」，而不是被顺带提到。
  *
  * 用来选主标的：判不出来就返回 null，让调用方**把图位空出来**，而不是猜一只。

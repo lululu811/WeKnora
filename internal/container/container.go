@@ -195,6 +195,7 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(repository.NewStockWatchEventsRepository))
 	must(container.Provide(repository.NewStockWatchConditionRepository))
 	must(container.Provide(repository.NewStockWatchNotificationRepository))
+	must(container.Provide(repository.NewStockWatchDiaryRepository))
 	must(container.Provide(service.NewWebSearchStateService))
 	must(container.Provide(repository.NewDataSourceRepository))
 	must(container.Provide(repository.NewSyncLogRepository))
@@ -290,6 +291,7 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(service.NewUserResourceFavoriteService))
 	must(container.Provide(service.NewStockWatchService))
 	must(container.Provide(service.NewStockWatchConditionService))
+	must(container.Provide(service.NewStockWatchDiaryService))
 	must(container.Provide(service.NewWikiPageService))
 	must(container.Provide(service.NewWikiIngestService, dig.Name("wikiIngest")))
 	must(container.Provide(service.NewWikiLintService))
@@ -504,6 +506,20 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(quoteclient.NewClient, dig.As(new(service.QuoteFetcher))))
 	must(container.Provide(alertnotify.NewFeishuNotifier, dig.As(new(service.AlertNotifier))))
 	must(container.Provide(service.NewStockWatchConditionJob))
+	// The diary is attached to the existing 08:30 job by MUTATION inside an
+	// Invoke, not by a provider that takes the job and returns the job: that
+	// decorator shape is a dependency cycle in dig and is rejected at boot,
+	// which `go build` cannot see. One Invoke that mutates in place keeps the
+	// graph acyclic and puts the attachment next to the Start call it belongs
+	// with. The diary shares the run so both see the same quote batch and the
+	// same trading day.
+	must(container.Invoke(func(
+		job *service.StockWatchConditionJob,
+		diaries *service.StockWatchDiaryService,
+		diaryRepo interfaces.StockWatchDiaryRepository,
+	) {
+		job.WithDiary(diaries, diaryRepo)
+	}))
 	must(container.Invoke(startStockWatchConditionJob))
 	logger.Debugf(ctx, "[Container] Stock watch condition notifier registered")
 	must(container.Provide(chatpipeline.NewEventManager))
@@ -622,6 +638,10 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(handler.NewCustomAgentHandler))
 	must(container.Provide(handler.NewUserResourceFavoriteHandler))
 	must(container.Provide(handler.NewStockWatchHandler))
+	// The diary handler is its own provider rather than a decorator on the
+	// watch handler, for the same dig-cycle reason as the job above. Both
+	// handlers still share watchContext, so the auth rule is stated once.
+	must(container.Provide(handler.NewStockWatchDiaryHandler))
 	must(container.Provide(func(
 		s *service.TenantSkillService, agents interfaces.AgentShareService,
 	) *handler.SkillHandler {

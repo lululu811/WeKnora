@@ -49,15 +49,49 @@ type AlertNotifier interface {
 // what to buy, never ranks, never scores. It reads what the user wrote, checks
 // it against the market's readings, records crossings, and — if configured —
 // tells the user once per run.
+//
+// Diary is the optional second half of the same run. It is held as an optional
+// dependency rather than a required constructor argument so the condition job
+// keeps working on a deployment where the diary service was not wired: the
+// diary is an addition to the pool, not a precondition for the thresholds the
+// user set by hand.
 type StockWatchConditionJob struct {
 	conditions    interfaces.StockWatchConditionRepository
 	notifications interfaces.StockWatchNotificationRepository
 	quotes        QuoteFetcher
 	notifier      AlertNotifier
 
+	// diary is nil when the diary feature is not wired. Every use is behind a
+	// nil check rather than a build tag, so one binary serves both shapes and
+	// there is no second thing to keep in sync.
+	diary func(ctx context.Context) error
+
 	cron    *cron.Cron
 	mu      sync.Mutex
 	started bool
+}
+
+// WithDiary attaches the daily observation diary to this job's run.
+//
+// It is a mutator rather than a constructor argument, and it is called from a
+// container Invoke rather than a provider. A provider that took the job and
+// returned the job would be a dependency cycle in dig — rejected at boot, and
+// invisible to `go build` — so the attachment happens in place next to the
+// Start call it belongs beside.
+//
+// Calling it on a nil job is a no-op, matching startStockWatchConditionJob's
+// own nil tolerance: a deployment that failed to build the job should not
+// panic here on its way to logging the real problem.
+func (j *StockWatchConditionJob) WithDiary(
+	svc *StockWatchDiaryService, repo interfaces.StockWatchDiaryRepository,
+) *StockWatchConditionJob {
+	if j == nil {
+		return nil
+	}
+	j.diary = func(ctx context.Context) error {
+		return RunDiaries(ctx, svc, repo, j.notifications, j.quotes)
+	}
+	return j
 }
 
 // NewStockWatchConditionJob constructs the job. It does NOT start the cron —
@@ -142,7 +176,32 @@ func (j *StockWatchConditionJob) StopWithin(timeout time.Duration) {
 //  3. Evaluate and persist per scope, each scope in one transaction.
 //  4. Push at most ONE aggregated message for the whole run, then record the
 //     attempt (even when there is no webhook).
+//
+// The diary step runs at the very end, after the condition work is committed
+// and after the push. Ordering is deliberate: the two features must not be
+// able to take each other down, and a condition run that crossed a threshold
+// has already delivered value by the time the diary is attempted. A diary
+// failure is logged and the run still returns the condition outcome, so a
+// broken prompt can never delay or suppress a user's own alert.
 func (j *StockWatchConditionJob) RunOnce(ctx context.Context) error {
+	runErr := j.runConditionsOnce(ctx)
+	if err := j.runDiaryOnce(ctx); err != nil {
+		logger.Warnf(ctx, "[WatchlistDiary] daily run failed: %v", err)
+	}
+	return runErr
+}
+
+// runDiaryOnce is the optional diary step, isolated so its nil check lives in
+// one place rather than at three call sites.
+func (j *StockWatchConditionJob) runDiaryOnce(ctx context.Context) error {
+	if j.diary == nil {
+		return nil
+	}
+	return j.diary(ctx)
+}
+
+// runConditionsOnce is the threshold evaluation this job existed for.
+func (j *StockWatchConditionJob) runConditionsOnce(ctx context.Context) error {
 	scopes, err := j.conditions.ListScopes(ctx)
 	if err != nil {
 		return fmt.Errorf("[StockWatchConditions] list scopes: %w", err)

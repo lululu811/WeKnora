@@ -111,10 +111,18 @@ func (h *StockWatchHandler) ListStockWatch(c *gin.Context) {
 // Name and exchange are optional: the caller (the picker) already has them
 // from the symbol search, but a caller that only knows the code still works —
 // the row then renders as the bare code until a re-add refreshes the label.
+//
+// Note is the reason for tracking the symbol, captured at the moment of entry.
+// It is part of THIS request rather than a follow-up PUT on purpose: the
+// reason and the entry are one fact, and splitting them means a crash between
+// the two calls leaves a row that entered the pool with no recorded reason
+// and an `added` event whose note snapshot is empty — which is precisely the
+// question the event log exists to answer.
 type AddStockWatchRequest struct {
 	THSCode  string `json:"thscode"`
 	Name     string `json:"name"`
 	Exchange string `json:"exchange"`
+	Note     string `json:"note"`
 }
 
 // AddStockWatch godoc
@@ -135,7 +143,7 @@ func (h *StockWatchHandler) AddStockWatch(c *gin.Context) {
 		c.Error(apperrors.NewBadRequestError("invalid request body").WithDetails(err.Error()))
 		return
 	}
-	row, created, err := h.service.Add(ctx, userID, tenantID, req.THSCode, req.Name, req.Exchange)
+	row, created, err := h.service.Add(ctx, userID, tenantID, req.THSCode, req.Name, req.Exchange, req.Note)
 	if err != nil {
 		if mapStockWatchError(c, err) {
 			return

@@ -79,7 +79,7 @@ func TestStockWatchPoolStateColumnDefaultsToObserving(t *testing.T) {
 
 	// 服务自己加进来的那一行同样是 observing —— 两条入口不能各说各话。
 	row, created, err := service.NewStockWatchService(repo, repository.NewStockWatchEventsRepository(db)).
-		Add(ctx, poolTestUser, poolTestTenant, "000001.SZ", "平安银行", "SZ")
+		Add(ctx, poolTestUser, poolTestTenant, "000001.SZ", "平安银行", "SZ", "")
 	require.NoError(t, err)
 	require.True(t, created)
 	assert.Equal(t, types.StockWatchStateObserving, row.State)
@@ -90,7 +90,7 @@ func TestStockWatchPoolAddWritesAddedEvent(t *testing.T) {
 	_, _, events, svc := setupStockWatchPoolFixture(t)
 	ctx := context.Background()
 
-	row, created, err := svc.Add(ctx, poolTestUser, poolTestTenant, "600519.SH", "贵州茅台", "SH")
+	row, created, err := svc.Add(ctx, poolTestUser, poolTestTenant, "600519.SH", "贵州茅台", "SH", "")
 	require.NoError(t, err)
 	require.True(t, created)
 	require.Equal(t, types.StockWatchStateObserving, row.State)
@@ -104,7 +104,7 @@ func TestStockWatchPoolAddWritesAddedEvent(t *testing.T) {
 	assert.Equal(t, types.StockWatchStateObserving, list[0].ToState)
 
 	// 重复加入不是新事件：票没有离开过池子。
-	_, created, err = svc.Add(ctx, poolTestUser, poolTestTenant, "600519.SH", "贵州茅台-ST", "SH")
+	_, created, err = svc.Add(ctx, poolTestUser, poolTestTenant, "600519.SH", "贵州茅台-ST", "SH", "")
 	require.NoError(t, err)
 	assert.False(t, created)
 	list, err = events.List(ctx, poolTestUser, poolTestTenant, "", 50)
@@ -117,7 +117,7 @@ func TestStockWatchPoolStateChangeWritesExactlyOneEvent(t *testing.T) {
 	_, _, events, svc := setupStockWatchPoolFixture(t)
 	ctx := context.Background()
 
-	_, _, err := svc.Add(ctx, poolTestUser, poolTestTenant, "600519.SH", "贵州茅台", "SH")
+	_, _, err := svc.Add(ctx, poolTestUser, poolTestTenant, "600519.SH", "贵州茅台", "SH", "")
 	require.NoError(t, err)
 
 	row, err := svc.Update(ctx, poolTestUser, poolTestTenant, "600519.SH", interfaces.StockWatchPatch{
@@ -152,7 +152,7 @@ func TestStockWatchPoolNoteChangeWritesSnapshotEvent(t *testing.T) {
 	_, repo, events, svc := setupStockWatchPoolFixture(t)
 	ctx := context.Background()
 
-	_, _, err := svc.Add(ctx, poolTestUser, poolTestTenant, "600519.SH", "贵州茅台", "SH")
+	_, _, err := svc.Add(ctx, poolTestUser, poolTestTenant, "600519.SH", "贵州茅台", "SH", "")
 	require.NoError(t, err)
 
 	_, err = svc.Update(ctx, poolTestUser, poolTestTenant, "600519.SH", interfaces.StockWatchPatch{
@@ -191,7 +191,7 @@ func TestStockWatchPoolRejectsUnknownState(t *testing.T) {
 	_, repo, events, svc := setupStockWatchPoolFixture(t)
 	ctx := context.Background()
 
-	_, _, err := svc.Add(ctx, poolTestUser, poolTestTenant, "600519.SH", "贵州茅台", "SH")
+	_, _, err := svc.Add(ctx, poolTestUser, poolTestTenant, "600519.SH", "贵州茅台", "SH", "")
 	require.NoError(t, err)
 
 	_, err = svc.Update(ctx, poolTestUser, poolTestTenant, "600519.SH", interfaces.StockWatchPatch{
@@ -216,7 +216,7 @@ func TestStockWatchPoolRejectsIllegalTransition(t *testing.T) {
 	_, repo, events, svc := setupStockWatchPoolFixture(t)
 	ctx := context.Background()
 
-	_, _, err := svc.Add(ctx, poolTestUser, poolTestTenant, "600519.SH", "贵州茅台", "SH")
+	_, _, err := svc.Add(ctx, poolTestUser, poolTestTenant, "600519.SH", "贵州茅台", "SH", "")
 	require.NoError(t, err)
 	_, err = svc.Update(ctx, poolTestUser, poolTestTenant, "600519.SH", interfaces.StockWatchPatch{
 		State: new(types.StockWatchStateDropped),
@@ -247,7 +247,7 @@ func TestStockWatchPoolNoEventWhenRowUpdateFails(t *testing.T) {
 	db, repo, events, svc := setupStockWatchPoolFixture(t)
 	ctx := context.Background()
 
-	_, _, err := svc.Add(ctx, poolTestUser, poolTestTenant, "600519.SH", "贵州茅台", "SH")
+	_, _, err := svc.Add(ctx, poolTestUser, poolTestTenant, "600519.SH", "贵州茅台", "SH", "")
 	require.NoError(t, err)
 
 	require.NoError(t, db.Exec(`
@@ -277,7 +277,7 @@ func TestStockWatchPoolRowUpdateRollsBackWhenEventInsertFails(t *testing.T) {
 	db, repo, events, svc := setupStockWatchPoolFixture(t)
 	ctx := context.Background()
 
-	_, _, err := svc.Add(ctx, poolTestUser, poolTestTenant, "600519.SH", "贵州茅台", "SH")
+	_, _, err := svc.Add(ctx, poolTestUser, poolTestTenant, "600519.SH", "贵州茅台", "SH", "")
 	require.NoError(t, err)
 
 	require.NoError(t, db.Exec(`
@@ -307,12 +307,12 @@ func TestStockWatchPoolEventsAreScopedAndFilterable(t *testing.T) {
 	_, _, events, svc := setupStockWatchPoolFixture(t)
 	ctx := context.Background()
 
-	_, _, err := svc.Add(ctx, poolTestUser, poolTestTenant, "600519.SH", "贵州茅台", "SH")
+	_, _, err := svc.Add(ctx, poolTestUser, poolTestTenant, "600519.SH", "贵州茅台", "SH", "")
 	require.NoError(t, err)
-	_, _, err = svc.Add(ctx, poolTestUser, poolTestTenant, "000001.SZ", "平安银行", "SZ")
+	_, _, err = svc.Add(ctx, poolTestUser, poolTestTenant, "000001.SZ", "平安银行", "SZ", "")
 	require.NoError(t, err)
 	// 同一个人、另一个空间：另一份池子，另一段历史。
-	_, _, err = svc.Add(ctx, poolTestUser, 99, "600519.SH", "贵州茅台", "SH")
+	_, _, err = svc.Add(ctx, poolTestUser, 99, "600519.SH", "贵州茅台", "SH", "")
 	require.NoError(t, err)
 
 	pool, err := events.List(ctx, poolTestUser, poolTestTenant, "", 50)
@@ -334,7 +334,7 @@ func TestStockWatchPoolRejectsOverlongNote(t *testing.T) {
 	_, _, _, svc := setupStockWatchPoolFixture(t)
 	ctx := context.Background()
 
-	_, _, err := svc.Add(ctx, poolTestUser, poolTestTenant, "600519.SH", "贵州茅台", "SH")
+	_, _, err := svc.Add(ctx, poolTestUser, poolTestTenant, "600519.SH", "贵州茅台", "SH", "")
 	require.NoError(t, err)
 
 	_, err = svc.Update(ctx, poolTestUser, poolTestTenant, "600519.SH", interfaces.StockWatchPatch{

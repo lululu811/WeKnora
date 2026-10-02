@@ -31,56 +31,61 @@ import (
 type RouterParams struct {
 	dig.In
 
-	Config                       *config.Config
-	FileService                  interfaces.FileService
-	UserService                  interfaces.UserService
-	KBService                    interfaces.KnowledgeBaseService
-	KnowledgeService             interfaces.KnowledgeService
-	ChunkService                 interfaces.ChunkService
-	SessionService               interfaces.SessionService
-	MessageService               interfaces.MessageService
-	ModelService                 interfaces.ModelService
-	EvaluationService            interfaces.EvaluationService
-	KBShareService               interfaces.KBShareService
-	AgentShareService            interfaces.AgentShareService
-	KBHandler                    *handler.KnowledgeBaseHandler
-	KnowledgeHandler             *handler.KnowledgeHandler
-	TenantHandler                *handler.TenantHandler
-	TenantService                interfaces.TenantService
-	TenantAPIKeyService          interfaces.TenantAPIKeyService
-	TenantMemberService          interfaces.TenantMemberService
-	TenantMemberHandler          *handler.TenantMemberHandler
-	TenantInvitationHandler      *handler.TenantInvitationHandler
-	AuditLogHandler              *handler.AuditLogHandler
-	AuditLogService              interfaces.AuditLogService
-	ChunkHandler                 *handler.ChunkHandler
-	SessionHandler               *session.Handler
-	MessageHandler               *handler.MessageHandler
-	MessageSuggestionHandler     *handler.MessageSuggestionHandler
-	ModelHandler                 *handler.ModelHandler
-	ModelCredentialsHandler      *handler.ModelCredentialsHandler
-	SandboxConfigHandler         *handler.SandboxConfigHandler
-	SandboxSkillHandler          *handler.SandboxSkillHandler
-	MeEnvVarHandler              *handler.MeEnvVarHandler
-	EvaluationHandler            *handler.EvaluationHandler
-	AuthHandler                  *handler.AuthHandler
-	InitializationHandler        *handler.InitializationHandler
-	SystemHandler                *handler.SystemHandler
-	MCPServiceHandler            *handler.MCPServiceHandler
-	MCPCredentialsHandler        *handler.MCPCredentialsHandler
-	MCPOAuthHandler              *handler.MCPOAuthHandler
-	WebSearchHandler             *handler.WebSearchHandler
-	WebSearchProviderHandler     *handler.WebSearchProviderHandler
-	WebSearchCredentialsHandler  *handler.WebSearchProviderCredentialsHandler
-	VectorStoreHandler           *handler.VectorStoreHandler
-	StorageBackendHandler        *handler.StorageBackendHandler
-	StorageBackendResolver       interfaces.StorageBackendResolver
-	ResourceCatalog              interfaces.ResourceCatalog
-	FAQHandler                   *handler.FAQHandler
-	TagHandler                   *handler.TagHandler
-	CustomAgentHandler           *handler.CustomAgentHandler
-	UserFavoriteHandler          *handler.UserResourceFavoriteHandler
-	StockWatchHandler            *handler.StockWatchHandler
+	Config                      *config.Config
+	FileService                 interfaces.FileService
+	UserService                 interfaces.UserService
+	KBService                   interfaces.KnowledgeBaseService
+	KnowledgeService            interfaces.KnowledgeService
+	ChunkService                interfaces.ChunkService
+	SessionService              interfaces.SessionService
+	MessageService              interfaces.MessageService
+	ModelService                interfaces.ModelService
+	EvaluationService           interfaces.EvaluationService
+	KBShareService              interfaces.KBShareService
+	AgentShareService           interfaces.AgentShareService
+	KBHandler                   *handler.KnowledgeBaseHandler
+	KnowledgeHandler            *handler.KnowledgeHandler
+	TenantHandler               *handler.TenantHandler
+	TenantService               interfaces.TenantService
+	TenantAPIKeyService         interfaces.TenantAPIKeyService
+	TenantMemberService         interfaces.TenantMemberService
+	TenantMemberHandler         *handler.TenantMemberHandler
+	TenantInvitationHandler     *handler.TenantInvitationHandler
+	AuditLogHandler             *handler.AuditLogHandler
+	AuditLogService             interfaces.AuditLogService
+	ChunkHandler                *handler.ChunkHandler
+	SessionHandler              *session.Handler
+	MessageHandler              *handler.MessageHandler
+	MessageSuggestionHandler    *handler.MessageSuggestionHandler
+	ModelHandler                *handler.ModelHandler
+	ModelCredentialsHandler     *handler.ModelCredentialsHandler
+	SandboxConfigHandler        *handler.SandboxConfigHandler
+	SandboxSkillHandler         *handler.SandboxSkillHandler
+	MeEnvVarHandler             *handler.MeEnvVarHandler
+	EvaluationHandler           *handler.EvaluationHandler
+	AuthHandler                 *handler.AuthHandler
+	InitializationHandler       *handler.InitializationHandler
+	SystemHandler               *handler.SystemHandler
+	MCPServiceHandler           *handler.MCPServiceHandler
+	MCPCredentialsHandler       *handler.MCPCredentialsHandler
+	MCPOAuthHandler             *handler.MCPOAuthHandler
+	WebSearchHandler            *handler.WebSearchHandler
+	WebSearchProviderHandler    *handler.WebSearchProviderHandler
+	WebSearchCredentialsHandler *handler.WebSearchProviderCredentialsHandler
+	VectorStoreHandler          *handler.VectorStoreHandler
+	StorageBackendHandler       *handler.StorageBackendHandler
+	StorageBackendResolver      interfaces.StorageBackendResolver
+	ResourceCatalog             interfaces.ResourceCatalog
+	FAQHandler                  *handler.FAQHandler
+	TagHandler                  *handler.TagHandler
+	CustomAgentHandler          *handler.CustomAgentHandler
+	UserFavoriteHandler         *handler.UserResourceFavoriteHandler
+	StockWatchHandler           *handler.StockWatchHandler
+	// StockWatchDiaryHandler is a separate parameter rather than something
+	// read off StockWatchHandler: a dig provider that both consumes and
+	// produces the same type is a dependency cycle, and that fails at boot.
+	// A nil here simply means the diary routes are not registered.
+	StockWatchDiaryHandler       *handler.StockWatchDiaryHandler
 	SkillHandler                 *handler.SkillHandler
 	OrganizationHandler          *handler.OrganizationHandler
 	IMHandler                    *handler.IMHandler
@@ -337,6 +342,7 @@ func NewRouter(params RouterParams) *gin.Engine {
 		RegisterCustomAgentRoutes(v1, params.CustomAgentHandler, rbacGuards)
 		RegisterUserFavoriteRoutes(v1, params.UserFavoriteHandler, rbacGuards)
 		RegisterStockWatchRoutes(v1, params.StockWatchHandler, rbacGuards)
+		RegisterStockWatchDiaryRoutes(v1, params.StockWatchDiaryHandler, rbacGuards)
 		RegisterSkillRoutes(v1, params.SkillHandler, rbacGuards)
 		RegisterOrganizationRoutes(v1, params.OrganizationHandler, rbacGuards)
 		RegisterIMChannelRoutes(v1, params.IMHandler, rbacGuards)

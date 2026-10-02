@@ -55,3 +55,33 @@ func RegisterStockWatchRoutes(r *gin.RouterGroup, h *handler.StockWatchHandler, 
 		watch.DELETE("/:thscode/conditions/:id", g.Viewer(), h.RemoveStockWatchCondition)
 	}
 }
+
+// RegisterStockWatchDiaryRoutes wires the daily observation diary endpoints.
+//
+// The diary handler is a parameter rather than something read off the watch
+// handler, and that is a dig constraint rather than a style choice: a provider
+// that both consumes and produces *StockWatchHandler is a dependency cycle,
+// which dig rejects at boot. Passing it here keeps the graph acyclic, and the
+// two handlers still share watchContext, so the auth scoping rule is stated
+// once for both.
+//
+// h is nil on a deployment where the diary was not wired: nothing is
+// registered, and the pool routes above keep working.
+//
+// Route shape: the two actions are POSTs to static segments under the symbol's
+// diaries, matching the conditions group above. The same reasoning applies to
+// Gin: /:thscode/diaries/accept is two levels deeper than the parameterised
+// /:thscode, so no radix conflict can arise. And "accept" / "ignore" can never
+// collide with a thscode for the same reason "events" cannot — a thscode is
+// six digits and a dot.
+func RegisterStockWatchDiaryRoutes(
+	r *gin.RouterGroup, h *handler.StockWatchDiaryHandler, g *rbacGuards,
+) {
+	if h == nil {
+		return
+	}
+	watch := r.Group("/watchlist")
+	watch.GET("/:thscode/diaries", g.Viewer(), h.ListStockWatchDiaries)
+	watch.POST("/:thscode/diaries/accept", g.Viewer(), h.AcceptStockWatchDiary)
+	watch.POST("/:thscode/diaries/ignore", g.Viewer(), h.IgnoreStockWatchDiary)
+}

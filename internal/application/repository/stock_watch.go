@@ -223,3 +223,18 @@ func (r *stockWatchRepository) Update(
 	}
 	return updated, nil
 }
+
+// RecordEvent appends one event with no accompanying row change.
+//
+// The only caller is the diary's "I saw the verdict and declined it" path;
+// see interfaces.StockWatchRepository.RecordEvent for why that single case is
+// allowed to write an event on its own. A lone insert needs no transaction to
+// group it with, and stock_watches is deliberately left untouched.
+func (r *stockWatchRepository) RecordEvent(
+	ctx context.Context, event *types.StockWatchEvent,
+) error {
+	if event == nil {
+		return errors.New("event is required")
+	}
+	return r.db.WithContext(ctx).Create(event).Error
+}

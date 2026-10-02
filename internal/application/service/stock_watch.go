@@ -62,12 +62,26 @@ func (s *stockWatchService) List(
 	return s.repo.List(ctx, userID, tenantID)
 }
 
+// Add puts a symbol into the pool, capturing the reason for tracking it.
+//
+// The reason arrives with the entry rather than as a follow-up update, so the
+// `added` event's note snapshot is written in the same transaction as the row.
+// A reason that exists only on the row would leave the event — the thing that
+// answers "why did this symbol enter the pool" — empty.
+//
+// note is validated here, against the same MaxStockWatchNoteLen the update
+// path uses, for the same reason: the error has to arrive as
+// ErrStockWatchNoteTooLong rather than as a driver-level truncation.
 func (s *stockWatchService) Add(
-	ctx context.Context, userID string, tenantID uint64, thscode, name, exchange string,
+	ctx context.Context, userID string, tenantID uint64, thscode, name, exchange, note string,
 ) (*types.StockWatch, bool, error) {
 	code, err := normaliseCode(thscode)
 	if err != nil {
 		return nil, false, err
+	}
+	trimmedNote := strings.TrimSpace(note)
+	if utf8.RuneCountInString(trimmedNote) > types.MaxStockWatchNoteLen {
+		return nil, false, ErrStockWatchNoteTooLong
 	}
 
 	// Cap check first, then insert. Two concurrent adds can both pass the check
@@ -91,6 +105,7 @@ func (s *stockWatchService) Add(
 		// 显式写入默认态，而不是依赖列的 DEFAULT：新增行要同时喂给 `added`
 		// 事件（to_state），只有真值在手，事件才不用去猜刚落库的是什么。
 		State: types.StockWatchStateObserving,
+		Note:  trimmedNote,
 	}
 	return s.repo.Add(ctx, item)
 }

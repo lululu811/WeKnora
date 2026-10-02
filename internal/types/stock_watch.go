@@ -91,8 +91,21 @@ const (
 	StockWatchStateDropped = "dropped"
 )
 
-// MaxStockWatchNoteLen matches the note column's varchar(200).
-const MaxStockWatchNoteLen = 200
+// MaxStockWatchNoteLen is the ceiling on a tracking reason, counted in runes.
+//
+// It is no longer a mirror of a column width. The PostgreSQL column is TEXT
+// (migration 000119) and SQLite does not enforce VARCHAR widths at all, so
+// this constant is the only thing standing between a runaway LLM and an
+// unbounded row. That is the point: the guard belongs in the layer that can
+// report a useful error (ErrStockWatchNoteTooLong) rather than in a schema
+// declaration that only fails at the driver, in a message that says "value
+// too long for type character varying".
+//
+// 500 is roughly four sentences of Chinese. It is enough for the paragraph an
+// assistant wrote about why a symbol is worth tracking, which is what the
+// inbox "进池" button captures, and short enough that the note column stays a
+// reason rather than becoming a second diary.
+const MaxStockWatchNoteLen = 500
 
 // stockWatchStateTransitions is the whole state machine, as data.
 //

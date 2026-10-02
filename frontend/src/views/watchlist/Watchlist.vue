@@ -49,8 +49,11 @@
     <EmptyState v-if="!loading && !rows.length" icon="chart-line" :title="t('watchlist.empty')"
       :description="t('watchlist.emptyHint')" />
 
+    <div class="wl-body">
+      <div class="wl-body__table">
     <t-table v-else row-key="thscode" class="watchlist-table" :data="rows" :columns="columns"
-      :loading="loading || quotesLoading" size="medium" hover>
+      :loading="loading || quotesLoading" size="medium" hover
+      :row-class-name="rowClassName" @row-click="onRowClick">
       <template #thscode="{ row }">
         <div class="wl-code">
           <span class="wl-code__code">{{ row.thscode }}</span>
@@ -141,6 +144,19 @@
         </div>
       </template>
     </t-table>
+      </div>
+
+      <!-- 详情面板：选中一行后右侧滑出，内含 K 线与该票的观察日记。
+           挂在表格外面而不是展开行里，是因为图表需要一个稳定尺寸的容器，
+           展开行的高度由内容决定，画布量到 0 高时 klinecharts 不会画任何东西。 -->
+      <WatchDetailPanel
+        v-if="selectedRow"
+        :thscode="selectedRow.thscode"
+        :name="displayName(selectedRow)"
+        :quote="selectedRow.quote"
+        @close="selectedThscode = ''"
+      />
+    </div>
 
     <!-- 条件面板。用 dialog 而不是 popover：里面有两个 t-select，下拉渲染到 body，
          挂在 popover 里会被"点击外部"判成关闭，选中值的一瞬间面板就没了。 -->
@@ -186,6 +202,7 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
 import EmptyState from '@/components/EmptyState.vue'
+import WatchDetailPanel from '@/components/watchlist/WatchDetailPanel.vue'
 import {
   addCondition,
   addWatchItem,
@@ -403,6 +420,23 @@ async function saveNote(row: WatchRow) {
   } finally {
     noteSaving = false
   }
+}
+
+/** 正在看详情的那一行（存代码而不是行对象：行情每分钟刷新，行对象会换）。 */
+const selectedThscode = ref('')
+
+const selectedRow = computed<WatchRow | null>(
+  () => rows.value.find((r) => r.thscode === selectedThscode.value) || null,
+)
+
+/** 点行开详情，再点同一行关闭。 */
+function onRowClick({ row }: { row: WatchRow }) {
+  selectedThscode.value = selectedThscode.value === row.thscode ? '' : row.thscode
+}
+
+/** 选中行的高亮。空选中不返回任何类，避免"什么都没选也有高亮"。 */
+function rowClassName({ row }: { row: WatchRow }) {
+  return row.thscode === selectedThscode.value ? 'is-selected' : ''
 }
 
 /** 缺数据一律返回 null：0 是"真的等于零"，不能拿它顶替"查不到"。 */
@@ -797,6 +831,28 @@ onUnmounted(() => {
   flex-shrink: 0;
 }
 
+// 表格与详情面板并排。表格这一侧必须 min-width: 0，否则 t-table 的内容宽度
+// 会把 flex 容器撑破，右侧面板被挤出视口——这是 flex 子项的默认行为
+// （min-width:auto），不显式归零就一定会发生。
+.wl-body {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+}
+
+.wl-body__table {
+  flex: 1;
+  min-width: 0;
+}
+
+// 选中行：左侧一条竖线而不是整行底色。整行底色会盖掉 hover 与涨跌色的
+// 可读性，一条竖线只表达"正在看这只"，不与状态色抢注意力。
+:deep(.watchlist-table .is-selected > td:first-child) {
+  box-shadow: inset 3px 0 0 var(--wl-up);
+}
+
 .watchlist-title-row {
   display: flex;
   align-items: center;
@@ -860,7 +916,7 @@ onUnmounted(() => {
   list-style: none;
   background: var(--td-bg-color-container);
   border: 1px solid var(--td-border-level-1-color);
-  border-radius: 6px;
+  border-radius: var(--app-radius-sm);
   box-shadow: var(--td-shadow-2);
 }
 
@@ -869,7 +925,7 @@ onUnmounted(() => {
   align-items: center;
   gap: 12px;
   padding: 7px 8px;
-  border-radius: 4px;
+  border-radius: var(--app-radius-xs);
   cursor: pointer;
 
   &:hover {
@@ -892,7 +948,7 @@ onUnmounted(() => {
 .watchlist-hint {
   margin: 12px 0 0;
   padding: 8px 12px;
-  border-radius: 6px;
+  border-radius: var(--app-radius-sm);
   background: var(--td-bg-color-secondarycontainer);
   color: var(--td-text-color-secondary);
   font-size: var(--app-text-sm);
@@ -956,7 +1012,7 @@ onUnmounted(() => {
 
 .wl-change__pct {
   padding: 1px 6px;
-  border-radius: 4px;
+  border-radius: var(--app-radius-xs);
   font-size: var(--app-text-xs);
 
   .is-up & {

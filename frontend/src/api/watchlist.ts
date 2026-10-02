@@ -96,7 +96,18 @@ export function listWatchlist() {
   return get<{ success: boolean; data: WatchItem[] }>('/api/v1/watchlist')
 }
 
-export function addWatchItem(payload: { thscode: string; name?: string; exchange?: string }) {
+export function addWatchItem(payload: {
+  thscode: string;
+  name?: string;
+  exchange?: string;
+  /**
+   * 入池理由。与 thscode 同一次请求提交，服务端在写行与写 `added` 事件的
+   * 同一个事务里落库——这是「为什么当初跟这只票」唯一可追溯的记录。
+   *
+   * 省略或空串等价于「没给理由」，是合法输入，不是错误。
+   */
+  note?: string;
+}) {
   // created=false 表示这只票本来就在清单里（服务端据此刷新了名称）——
   // 让调用方能区分"已加入"和"已在自选中"，而不是两次都报同一句话。
   return post<{ success: boolean; data: WatchItem; created: boolean }>('/api/v1/watchlist', payload)
@@ -248,5 +259,90 @@ export function fetchQuotes(thscodes: string[]) {
 export function searchSymbols(q: string, limit = 20) {
   return get<{ code: number; data: SymbolSuggestion[] }>(
     `/api/symbols/search?q=${encodeURIComponent(q)}&limit=${limit}`,
+  )
+}
+
+// ── 每日观察日记 ────────────────────────────────────────────────────────
+
+/**
+ * 一篇观察日记。服务端 types.StockWatchDiary 的前端形状。
+ *
+ * 注意 verdict 与 WatchState 是**两件事**：state 是用户自己的立场，verdict 是
+ * 模型的意见。前者只能由用户点击改变，后者由每日作业写入、用户决定是否采纳。
+ * 混用这两个是本功能最容易出的错，所以它们在类型上就是两个不相干的联合类型。
+ */
+export interface WatchDiary {
+  thscode: string
+  /** 所属**交易日**（不是写入日）。作业在 D+1 早上报告 D 日收盘。 */
+  trade_date: string
+  /**
+   * 未持仓票：buy | hold | sell
+   * 已持仓票：keep | tighten | exit
+   * 两套共用：none = 读数不足，无法判断
+   */
+  verdict: DiaryVerdict
+  /** 模型自评置信度 0-5；0 表示没有把握，是合法值。 */
+  confidence: number
+  /** 一句话依据，渲染成 verdict 徽标的 tooltip。 */
+  reasons: string
+  /** 日记正文。 */
+  body: string
+  /** 写这篇日记的模型 id。模型被换掉时，这栏能解释风格为什么变了。 */
+  model_id: string
+  created_at: string
+}
+
+export type DiaryVerdict =
+  | 'buy' | 'hold' | 'sell'
+  | 'keep' | 'tighten' | 'exit'
+  | 'none'
+
+/** 每个 verdict 建议的状态。'none' 映射到 ''，即「不建议任何状态变更」。 */
+export const DIARY_VERDICT_TARGET: Record<DiaryVerdict, WatchState | ''> = {
+  buy: 'holding',
+  keep: 'holding',
+  sell: 'dropped',
+  exit: 'dropped',
+  tighten: 'observing',
+  hold: 'observing',
+  none: '',
+}
+
+/**
+ * 某只票的观察日记，新的交易日在前。
+ *
+ * 默认 30 条（服务端上限 250）。刻意不给「加载更多」：日记的价值在最近几篇，
+ * 想看全年的人应该去导出，而不是让抽屉里堆两百条。
+ */
+export function listDiaries(thscode: string, limit = 30) {
+  return get<{ success: boolean; data: WatchDiary[] }>(
+    `/api/v1/watchlist/${encodeURIComponent(thscode)}/diaries?limit=${limit}`,
+  )
+}
+
+/**
+ * 采纳某一篇日记的建议，把池子状态改成用户选的那个。
+ *
+ * trade_date 必填而不是默认取最新：日记是每天新增的，隔夜再打开页面时
+ * 「最新」已经换了，而事件日志要记下用户当时依据的是哪一篇。
+ */
+export function acceptDiary(thscode: string, tradeDate: string, toState: WatchState) {
+  return post<{ success: boolean; data: WatchItem }>(
+    `/api/v1/watchlist/${encodeURIComponent(thscode)}/diaries/accept`,
+    { trade_date: tradeDate, to_state: toState },
+  )
+}
+
+/**
+ * 忽略某一篇的建议：不改状态，但记一条 verdict_ignored 事件。
+ *
+ * 落这条事件是刻意的。「模型天天说买、人天天不买」和「模型什么都没说」
+ * 在数据里必须可区分，否则一个系统性出错的 prompt 和一个被正确忽略的
+ * prompt 长得一模一样，将来调 prompt 就没有任何依据。
+ */
+export function ignoreDiary(thscode: string, tradeDate: string) {
+  return post<{ success: boolean }>(
+    `/api/v1/watchlist/${encodeURIComponent(thscode)}/diaries/ignore`,
+    { trade_date: tradeDate },
   )
 }

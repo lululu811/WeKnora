@@ -38,6 +38,21 @@ type StockWatchRepository interface {
 	Update(
 		ctx context.Context, userID string, tenantID uint64, thscode string, patch StockWatchPatch,
 	) (*types.StockWatch, error)
+	// RecordEvent appends one event WITHOUT changing any row.
+	//
+	// This is the single, named exception to the rule above, and it exists for
+	// exactly one situation: recording a decision NOT to act. Declining an
+	// observation diary's verdict changes no field of the pool, so there is no
+	// row update to pair a transaction with, and the two other options are
+	// both worse — either the decline is lost, or the decline is smuggled in
+	// through a fake no-op Update, which would put a "nothing changed" entry
+	// in the log and teach the next reader that the log lies.
+	//
+	// The trade-off accepted here: an event of this kind can exist without a
+	// corresponding row change. That is the truth about declining something.
+	// The event's kind (verdict_ignored) marks it as record-only, so a reader
+	// can tell the two kinds apart.
+	RecordEvent(ctx context.Context, event *types.StockWatchEvent) error
 }
 
 // StockWatchPatch carries the optional fields of a pool update.
@@ -75,8 +90,12 @@ type StockWatchService interface {
 	List(ctx context.Context, userID string, tenantID uint64) ([]*types.StockWatch, error)
 	// Add returns the stored row plus whether it was newly inserted, so the
 	// UI can distinguish "已加入" from "已在池中".
+	//
+	// note is the reason for tracking the symbol, captured with the entry
+	// rather than afterwards so the `added` event carries it in the same
+	// transaction. Empty is legal and means "no reason was given".
 	Add(
-		ctx context.Context, userID string, tenantID uint64, thscode, name, exchange string,
+		ctx context.Context, userID string, tenantID uint64, thscode, name, exchange, note string,
 	) (row *types.StockWatch, created bool, err error)
 	Remove(ctx context.Context, userID string, tenantID uint64, thscode string) (bool, error)
 	Update(
