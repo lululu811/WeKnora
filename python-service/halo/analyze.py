@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any, Dict, List, Optional
 
@@ -321,8 +322,34 @@ def render_markdown(result: Dict[str, Any]) -> str:
             L.append(f"| {f['field']} | {v} | p{f.get('source_page', '-')} | {raw} |")
         L.append("")
 
+    # --- 近期公告 ---
+    #
+    # 恒渲染这一节，即使没取到：报告里「没有公告」和「忘了取」必须看得出区别。
+    # 未开启 include_announcements 时说明原因，而不是留一段空白让人猜。
+    announcements = result.get("announcements") or []
+    L.append("## 四、近期公告")
+    L.append("")
+    if announcements:
+        L.append(f"> 共 {len(announcements)} 条（按披露时间倒序，取自巨潮全类型公告流）。")
+        L.append("")
+        L.append("| 披露日 | 类型 | 标题 |")
+        L.append("|:--|:--|:--|")
+        for a in announcements:
+            # 标题里的 | 会破坏表格，替换成全角；链接用详情页（PDF 直链对未登录
+            # 用户会 302，详情页才是稳的入口）。
+            title = (a.get("title") or "").replace("|", "／")
+            doc_type = (a.get("doc_type") or "-").replace("|", "／")
+            date = a.get("date") or "-"
+            url = a.get("detail_url") or ""
+            cell = f"[{title}]({url})" if url else title
+            L.append(f"| {date} | {doc_type} | {cell} |")
+    else:
+        L.append("- （未取公告。生成报告时需显式开启 include_announcements；"
+                 "它走巨潮，是限速的按需请求。）")
+    L.append("")
+
     slots = result.get("ai_slots") or []
-    L.append("## 四、定性维度（待判分）")
+    L.append("## 五、定性维度（待判分）")
     L.append("")
     L.append("下列维度的分数需要人工/AI 判断。**量化锚点已算好**，请依据锚点与"
              "「评分要点」判断，不要凭印象给分；标 `无量化锚点` 的子项只做定性判断。")
@@ -348,7 +375,7 @@ def render_markdown(result: Dict[str, Any]) -> str:
     # 逐字相同），还会把医用敷料公司判成「半导体」。这里给的是真实营收结构
     # 与毛利率 + 行业归属，AI 读这些比查表可靠得多。
     segs = result.get("narratives", {}).get("business_segments") or {}
-    L.append("## 五、产业链定位")
+    L.append("## 六、产业链定位")
     L.append("")
     if segs:
         for dim, blk in segs.items():
@@ -398,7 +425,7 @@ def render_markdown(result: Dict[str, Any]) -> str:
                      f"{r.get('date')}：{r.get('title')}")
         L.append("")
 
-    L.append("## 六、综合评分")
+    L.append("## 七、综合评分")
     L.append("")
     L.append("先给出九个维度的分数，再由 Python 按权重复算校验：")
     L.append("")
@@ -521,6 +548,42 @@ async def fetch_external(code: str, *, with_fund_flow: bool = True) -> Dict[str,
     return out
 
 
+async def _fetch_announcements(thscode: str) -> List[Dict[str, Any]]:
+    """取近期全类型公告（公告流）。
+
+    只取**一页**（``CNINFO_MAX_PAGE_SIZE`` 条）。这是刻意的：巨潮会封 IP，而公告
+    在报告里只是「消息面」的背景，不值得为它多翻几页。``recent_announcements``
+    的循环条件在取数**之前**判断，所以 max_items 正好等于单页上限时只发一次请求。
+
+    失败一律降级成空列表：拿不到公告只是少一节，不该让整份报告失败 —— 与
+    ``fetch_external`` 按子域降级是同一条规矩。
+
+    这里不缓存。公告是每日新增的，缓存要处理失效；而报告生成本就是低频动作
+    （且归档路径已经由「先同步年报」把关），为它引入一层缓存得不偿失。
+    """
+    from .cninfo_source import CNINFO_MAX_PAGE_SIZE, CninfoSource
+
+    bare = thscode.split(".")[0]
+    try:
+        source = CninfoSource()
+        rows = await asyncio.to_thread(
+            source.recent_announcements, bare, max_items=CNINFO_MAX_PAGE_SIZE
+        )
+    except Exception as exc:  # noqa: BLE001 —— 降级优先于报错
+        logger.warning("取公告失败 %s: %s", thscode, exc)
+        return []
+    return [
+        {
+            "title": a.title,
+            "date": a.date,
+            "doc_type": a.doc_type,
+            "detail_url": a.detail_url,
+            "pdf_url": a.pdf_url,
+        }
+        for a in rows
+    ]
+
+
 async def analyze(
     thscode: str,
     *,
@@ -530,12 +593,16 @@ async def analyze(
     scope: str = SCOPE_CONSOLIDATED,
     pages: Optional[ExtractResult] = None,
     include_external: bool = False,
+    include_announcements: bool = False,
 ) -> Dict[str, Any]:
     """对一只股票出评分结果。
 
     Args:
         include_external: 额外拉外网数据（治理/估值分位/研报）。默认关闭 ——
             分析是按需行为，外网慢且会封 IP，需要时再显式开启。
+        include_announcements: 额外取近期全类型公告（巨潮，一次请求）。默认关闭，
+            理由同上：巨潮同样限速，公告是归档/出报告时才需要的东西，不该让每次
+            分析都多打一次外网。
     """
     thscode = normalize_thscode(thscode)
     # 空串必须当成「没指定」，不能只判 None。
@@ -578,6 +645,10 @@ async def analyze(
                 "anomalies": [],
             },
             "ai_slots": [],
+            # 恒存在：结构完整是早返回路径的既有承诺（缺键会让调用方在 KeyError
+            # 上崩，而不是读到「暂无数据」）。这里不真去取公告 —— 没有年报事实时
+            # 报告本来就不会被归档，为它多打一次巨潮不值得。
+            "announcements": [],
             "markdown": f"# {thscode} HALO 分析\n\n"
                         f"**⚠️ 无数据**：{thscode} 尚无已落库的年报事实，"
                         f"请先调用 halo.filing.sync。\n",
@@ -691,6 +762,11 @@ async def analyze(
     if include_external:
         external = await fetch_external(thscode)
 
+    # 公告与外部数据一样是**按需**取的：巨潮限速，公告只在出报告/归档时需要。
+    announcements: List[Dict[str, Any]] = []
+    if include_announcements:
+        announcements = await _fetch_announcements(thscode)
+
     result: Dict[str, Any] = {
         "thscode": thscode,
         "period": period,
@@ -726,6 +802,9 @@ async def analyze(
             ),
         },
         "ai_slots": build_ai_slots(facts, financial, ind, external),
+        # 恒存在（未取时为空列表）：缺键会让 render_markdown 与下游调用方在
+        # KeyError 上崩，而不是渲染出「没有公告」这一正常情况。
+        "announcements": announcements,
     }
     if fact_records:
         result["fresh_facts"] = [f["field"] for f in fact_records]

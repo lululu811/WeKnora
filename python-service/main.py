@@ -1419,6 +1419,11 @@ class HaloScoreRequest(BaseModel):
         description="是否额外拉外网数据（治理/风险硬信号、估值历史分位、研报评级）。"
                     "默认关闭：分析是按需行为，外网慢且可能触发 IP 封禁。",
     )
+    include_announcements: bool = Field(
+        False,
+        description="是否额外取近期全类型公告（巨潮，一次请求）。默认关闭，理由同上："
+                    "巨潮同样限速，公告只在出报告/归档时需要。",
+    )
 
 
 @app.post("/halo/score", dependencies=[Depends(require_api_key)])
@@ -1446,6 +1451,7 @@ async def halo_score(request: HaloScoreRequest) -> Dict[str, Any]:
         report_type=request.report_type,
         scope=request.scope,
         include_external=request.include_external,
+        include_announcements=request.include_announcements,
     )
     return jsonable_encoder(result)
 

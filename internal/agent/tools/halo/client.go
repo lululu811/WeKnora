@@ -66,15 +66,17 @@ type QueryRequest struct {
 
 // ScoreRequest 是 /halo/score 的请求体。
 //
-// IncludeExternal 默认关闭，与端点侧一致：打开会去打东财的易封子域
-// （push2his），是**按需行为**而不是默认行为。归档时尤其不要默认打开 ——
-// 归档一次报告不该把 IP 风险搭进去。
+// IncludeExternal 与 IncludeAnnouncements 都默认关闭，与端点侧一致：打开会分别
+// 去打东财的易封子域（push2his）和巨潮（限速），是**按需行为**而不是默认行为。
+// 归档时尤其不要默认打开 external —— 归档一次报告不该把 IP 风险搭进去；公告则
+// 由归档路径显式打开（报告里需要它，且只多一次请求）。
 type ScoreRequest struct {
-	Thscode    string `json:"thscode"`
-	Period     string `json:"period,omitempty"`
-	ReportType string `json:"report_type,omitempty"`
-	Scope      string `json:"scope,omitempty"`
-	IncludeExt bool   `json:"include_external"`
+	Thscode              string `json:"thscode"`
+	Period               string `json:"period,omitempty"`
+	ReportType           string `json:"report_type,omitempty"`
+	Scope                string `json:"scope,omitempty"`
+	IncludeExt           bool   `json:"include_external"`
+	IncludeAnnouncements bool   `json:"include_announcements"`
 }
 
 // post 发一个 JSON 请求并解出响应体。

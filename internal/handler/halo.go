@@ -148,12 +148,17 @@ func (h *HaloHandler) ArchiveHaloReport(c *gin.Context) {
 
 	// include_external 刻意恒为 false：归档不该顺带把请求打到东财的易封子域
 	// （push2his）。要拉外网是**分析时**的按需动作，不是归档的副作用。
+	//
+	// include_announcements 则为 true：公告是报告里「消息面」的背景，而它只多
+	// 一次巨潮请求（单页，见 _fetch_announcements）。报告里没有公告那一节会让
+	// 读者以为这只票近期没有公告，而实际是没取 —— 这两件事必须能区分。
 	score, err := h.haloClient.Score(ctx, halo.ScoreRequest{
-		Thscode:    thscode,
-		Period:     strings.TrimSpace(req.Period),
-		ReportType: reportType,
-		Scope:      scope,
-		IncludeExt: false,
+		Thscode:              thscode,
+		Period:               strings.TrimSpace(req.Period),
+		ReportType:           reportType,
+		Scope:                scope,
+		IncludeExt:           false,
+		IncludeAnnouncements: true,
 	})
 	if err != nil {
 		logger.ErrorWithFields(ctx, err, map[string]interface{}{"thscode": secutils.SanitizeForLog(thscode)})
