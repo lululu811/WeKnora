@@ -1481,7 +1481,7 @@ onUnmounted(() => {
   }
   h1 { font-size: var(--app-text-4xl); border-bottom: 1px solid @border-color; padding-bottom: 8px; }
   h2 { font-size: var(--app-text-3xl); border-bottom: 1px solid @border-color; padding-bottom: 6px; }
-  h3 { font-size: 17px; }
+  h3 { font-size: var(--app-text-xl); }
 
   p { margin: 8px 0; }
   blockquote {

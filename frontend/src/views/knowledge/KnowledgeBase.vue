@@ -3034,7 +3034,7 @@ const handleKBEditorSuccess = (kbIdValue: string) => {
 
   &__caret {
     flex-shrink: 0;
-    transition: transform 0.2s ease;
+    transition: transform var(--app-motion-base) ease;
 
     &.open { transform: rotate(180deg); }
   }

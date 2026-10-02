@@ -80,7 +80,7 @@ onBeforeUnmount(() => { alive = false })
   .description { margin: 0 0 16px; color: var(--td-text-color-secondary); font-size: var(--app-text-md); line-height: 1.5; }
   .actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 16px; }
   .actions span { color: var(--td-success-color); font-size: var(--app-text-sm); }
-  :deep(.t-textarea__inner) { padding: 14px 16px; border-radius: 10px; border-color: var(--td-component-stroke); font-size: var(--app-text-md); line-height: 1.7; transition: border-color .18s, box-shadow .18s; }
+  :deep(.t-textarea__inner) { padding: 14px 16px; border-radius: var(--app-radius-lg); border-color: var(--td-component-stroke); font-size: var(--app-text-md); line-height: 1.7; transition: border-color .18s, box-shadow .18s; }
   :deep(.t-textarea__inner:hover) { border-color: var(--td-component-border); }
   :deep(.t-textarea__inner:focus) { border-color: var(--td-brand-color); }
   :deep(.t-textarea__info_wrapper) { margin-top: 8px; font-size: var(--app-text-xs); line-height: 1.5; }

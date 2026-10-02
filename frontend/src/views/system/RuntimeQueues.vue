@@ -1311,7 +1311,7 @@ onUnmounted(() => {
 
 .rq-pool-value {
   color: var(--td-brand-color);
-  font-size: 22px;
+  font-size: var(--app-text-3xl);
   font-weight: 600;
   line-height: 1;
   letter-spacing: -0.02em;

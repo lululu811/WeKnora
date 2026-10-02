@@ -18,13 +18,13 @@
 
     <!-- 未配置 -->
     <div v-if="credentialState === 'unconfigured'" class="credential-status unconfigured">
-      <t-icon name="info-circle" style="font-size: 16px; flex-shrink: 0;" />
+      <t-icon name="info-circle" style="font-size: var(--app-text-xl); flex-shrink: 0;" />
       <span>{{ $t('settings.weknoraCloud.unconfigured') }}</span>
     </div>
 
     <!-- 凭证失效 -->
     <div v-else-if="credentialState === 'expired'" class="credential-warning">
-      <t-icon name="error-circle" style="font-size: 16px; color: #f97316; flex-shrink: 0; margin-top: 1px;" />
+      <t-icon name="error-circle" style="font-size: var(--app-text-xl); color: #f97316; flex-shrink: 0; margin-top: 1px;" />
       <div class="warning-text">
         <strong>{{ $t('settings.weknoraCloud.expired') }}</strong><br />
         {{ reinitReason || $t('settings.weknoraCloud.expiredDefault') }}
@@ -33,7 +33,7 @@
 
     <!-- 已配置正常 -->
     <div v-else-if="credentialState === 'configured'" class="credential-status success">
-      <t-icon name="check-circle" style="font-size: 16px; color: var(--td-brand-color); flex-shrink: 0;" />
+      <t-icon name="check-circle" style="font-size: var(--app-text-xl); color: var(--td-brand-color); flex-shrink: 0;" />
       <span class="status-text">{{ $t('settings.weknoraCloud.configured') }}</span>
       <t-button
         v-if="!formExpanded"

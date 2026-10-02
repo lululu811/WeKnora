@@ -765,7 +765,7 @@ onBeforeUnmount(() => {
   .t-select-option {
     height: auto !important;
     padding: 6px 10px;
-    border-radius: 6px;
+    border-radius: var(--app-radius-sm);
     margin: 2px 0;
     white-space: normal;
   }

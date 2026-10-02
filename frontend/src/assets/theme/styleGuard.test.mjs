@@ -44,9 +44,13 @@ const RULES = [
   },
   {
     name: 'font-size-literal',
-    why: '字号请用 var(--app-text-2xs … 4xl)（10~24px）',
+    // 基线已回到 0（2026-10）。此前超过基线的是展示级与极小标签字号，处理方式是把它们
+    // 变成设计令牌而不是靠调基线：theme.css 里新增 --app-text-4xs(7px) 与展示级
+    // --app-text-5xl(28px) / --app-text-display(32px) / --app-text-display-lg(48px)，
+    // 其余（9 / 10.5 / 12.5 / 13.5 / 17 / 19 / 22 / 26 / 30px）就近靠到相邻令牌，位移 ≤2px。
+    why: '字号请用 var(--app-text-4xs|2xs … 4xl|5xl|display|display-lg)（7~48px）',
     pattern: /font-size\s*:\s*\d+(?:\.\d+)?px/g,
-    baseline: 28,
+    baseline: 0,
   },
   {
     name: 'motion-literal',

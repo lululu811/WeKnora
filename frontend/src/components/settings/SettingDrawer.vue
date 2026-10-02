@@ -336,7 +336,7 @@ const handleCancel = () => {
   flex-shrink: 0;
   width: 28px;
   height: 28px;
-  border-radius: 8px;
+  border-radius: var(--app-radius-md);
   display: flex;
   align-items: center;
   justify-content: center;

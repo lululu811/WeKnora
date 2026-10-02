@@ -414,7 +414,7 @@ function resizePanel(delta: number) {
 .sandbox-panel-leave-active .chat-sandbox-panel {
   transition:
     transform 0.3s cubic-bezier(0.22, 0.61, 0.36, 1),
-    opacity 0.3s cubic-bezier(0.22, 0.61, 0.36, 1);
+    opacity var(--app-motion-slow) cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 
 .sandbox-panel-enter-from .chat-sandbox-panel,

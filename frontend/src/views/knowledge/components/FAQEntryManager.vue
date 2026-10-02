@@ -2544,7 +2544,7 @@ const arrangeCards = () => {
         if (Math.abs(currentTop - top) > 1 || Math.abs(currentLeft - left) > 1) {
           // 使用 will-change 提示浏览器优化
           card.style.willChange = 'top, left'
-          card.style.transition = 'top 0.3s cubic-bezier(0.4, 0, 0.2, 1), left 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
+          card.style.transition = 'top 0.3s cubic-bezier(0.4, 0, 0.2, 1), left var(--app-motion-slow) cubic-bezier(0.4, 0, 0.2, 1)'
         }
 
         card.style.position = 'absolute'
@@ -4974,14 +4974,14 @@ watch(() => entries.value.map(e => ({
 // Slide down animation - 优化性能
 .slide-down-enter-active {
   transition: opacity var(--app-motion-base) cubic-bezier(0.4, 0, 0.2, 1),
-    transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    transform var(--app-motion-base) cubic-bezier(0.4, 0, 0.2, 1);
   overflow: hidden;
   will-change: opacity, transform;
 }
 
 .slide-down-leave-active {
   transition: opacity var(--app-motion-base) cubic-bezier(0.4, 0, 0.2, 1),
-    transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    transform var(--app-motion-base) cubic-bezier(0.4, 0, 0.2, 1);
   overflow: hidden;
   will-change: opacity, transform;
 }

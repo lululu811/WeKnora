@@ -606,7 +606,7 @@ const handleAction = (action: 'download' | 'edit' | 'reparse' | 'cancel-parse' |
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 26px;
+  font-size: var(--app-text-4xl);
   background: transparent;
   color: var(--td-text-color-secondary);
 }

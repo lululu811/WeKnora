@@ -97,8 +97,8 @@ const railLabel = computed(() => WORKSPACE_LABELS[workspace.activeType.value] ||
   pointer-events: auto;
   display: flex;
   flex-direction: column;
-  background: var(--td-bg-color-container, #ffffff);
-  border-left: 1px solid var(--td-component-stroke, #e7e7e7);
+  background: var(--td-bg-color-container);
+  border-left: 1px solid var(--td-component-stroke);
   box-shadow: -4px 0 16px rgba(0, 0, 0, 0.06);
 
   // 宽度走 CSS 变量而非行内 width，这样下面的断点能覆盖它
@@ -132,22 +132,22 @@ const railLabel = computed(() => WORKSPACE_LABELS[workspace.activeType.value] ||
   height: 100%;
   padding: 12px 0;
   border: 0;
-  border-left: 1px solid var(--td-component-stroke, #e7e7e7);
-  background: var(--td-bg-color-secondarycontainer, #f8f8f8);
-  color: var(--td-text-color-secondary, #5e5e5e);
+  border-left: 1px solid var(--td-component-stroke);
+  background: var(--td-bg-color-secondarycontainer);
+  color: var(--td-text-color-secondary);
   cursor: pointer;
   transition: background-color var(--app-motion-base), color var(--app-motion-base);
 
   &:hover {
-    background: var(--td-bg-color-container-hover, #f0f0f0);
-    color: var(--td-brand-color, #0052d9);
+    background: var(--td-bg-color-container-hover);
+    color: var(--td-brand-color);
   }
 }
 
 .agent-workspace-rail__text {
   writing-mode: vertical-rl;
   letter-spacing: 2px;
-  font-size: 12px;
+  font-size: var(--app-text-sm);
   font-weight: 600;
 }
 
@@ -164,7 +164,7 @@ const railLabel = computed(() => WORKSPACE_LABELS[workspace.activeType.value] ||
 
 .workspace-slide-enter-active,
 .workspace-slide-leave-active {
-  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform var(--app-motion-base) cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .workspace-slide-enter-from,

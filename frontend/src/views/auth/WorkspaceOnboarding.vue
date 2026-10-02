@@ -157,7 +157,7 @@ async function handleLogout() {
 h1 {
   margin: 0;
   color: var(--td-text-color-primary);
-  font-size: 26px;
+  font-size: var(--app-text-4xl);
   line-height: 1.3;
 }
 

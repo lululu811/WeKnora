@@ -691,7 +691,7 @@ const tierTheme = (tier: StrategyTier) => {
 .chunk-text {
   margin: 0;
   padding: 12px 14px;
-  font-size: 12.5px;
+  font-size: var(--app-text-sm);
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-word;

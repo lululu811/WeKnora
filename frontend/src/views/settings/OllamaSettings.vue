@@ -442,7 +442,7 @@ onMounted(async () => {
     flex: 1;
 
     h3 {
-      font-size: 17px;
+      font-size: var(--app-text-xl);
       font-weight: 600;
       color: var(--td-text-color-primary);
       margin: 0 0 6px 0;

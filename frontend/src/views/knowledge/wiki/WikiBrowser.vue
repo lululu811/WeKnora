@@ -3959,7 +3959,7 @@ function renderGraph(opts: RenderGraphOpts = {}) {
     line.setAttribute('stroke-width', '1.2')
     line.setAttribute('stroke-opacity', '0.4')
     line.setAttribute('marker-end', 'url(#arrow-end)')
-    line.style.transition = 'stroke 0.2s, stroke-width 0.2s, stroke-opacity 0.2s'
+    line.style.transition = 'stroke 0.2s, stroke-width 0.2s, stroke-opacity var(--app-motion-base)'
     if (bidir) {
       line.setAttribute('marker-start', 'url(#arrow-start)')
     }
@@ -4002,7 +4002,7 @@ function renderGraph(opts: RenderGraphOpts = {}) {
     expansionRing.setAttribute('stroke-dasharray', '3 3')
     expansionRing.setAttribute('pointer-events', 'none')
     expansionRing.style.opacity = showExpansionRing ? '0.55' : '0'
-    expansionRing.style.transition = 'opacity 0.2s'
+    expansionRing.style.transition = 'opacity var(--app-motion-base)'
     expansionRing.classList.add('node-expansion-ring')
     g.appendChild(expansionRing)
 
@@ -4051,7 +4051,7 @@ function renderGraph(opts: RenderGraphOpts = {}) {
     text.setAttribute('font-size', '11')
     text.setAttribute('fill', 'var(--td-text-color-secondary)')
     text.setAttribute('pointer-events', 'none')
-    text.style.transition = 'opacity 0.2s' // Smooth fade in/out
+    text.style.transition = 'opacity var(--app-motion-base)' // Smooth fade in/out
     text.style.textShadow = '0 1px 3px var(--td-bg-color-container), 0 -1px 3px var(--td-bg-color-container), 1px 0 3px var(--td-bg-color-container), -1px 0 3px var(--td-bg-color-container)'
     text.textContent = n.title.length > 14 ? n.title.substring(0, 14) + '…' : n.title
     g.appendChild(text)
@@ -4071,7 +4071,7 @@ function renderGraph(opts: RenderGraphOpts = {}) {
       bloomBtn = document.createElementNS('http://www.w3.org/2000/svg', 'g')
       bloomBtn.classList.add('node-bloom-btn')
       bloomBtn.style.opacity = '0'
-      bloomBtn.style.transition = 'opacity 0.15s'
+      bloomBtn.style.transition = 'opacity var(--app-motion-fast)'
       bloomBtn.style.pointerEvents = 'none' // lit up only on hover
       bloomBtn.style.cursor = 'pointer'
       // Position at 45° up-right of the node center, just past the
@@ -5565,7 +5565,7 @@ onUnmounted(() => {
 
 .wiki-reader-title {
   margin: 0;
-  font-size: 26px;
+  font-size: var(--app-text-4xl);
   font-weight: 600;
   line-height: 1.3;
   color: var(--td-text-color-primary);
@@ -5612,7 +5612,7 @@ onUnmounted(() => {
   width: 100%;
 
   :deep(.t-input__inner) {
-    font-size: 22px;
+    font-size: var(--app-text-3xl);
     font-weight: 600;
     line-height: 1.35;
     padding: 10px 12px;

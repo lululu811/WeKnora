@@ -384,7 +384,7 @@ async function openProjectDir() {
     display: flex;
     color: var(--td-text-color-primary);
     font-family: var(--app-font-family);
-    font-size: 28px;
+    font-size: var(--app-text-5xl);
     font-weight: 600;
     align-items: center;
     margin-bottom: 0;
@@ -436,7 +436,7 @@ async function openProjectDir() {
 
 .sq-slide-fade-leave-active {
     transition: opacity var(--app-motion-fast) cubic-bezier(0.4, 0, 1, 1),
-        transform 0.15s cubic-bezier(0.4, 0, 1, 1);
+        transform var(--app-motion-fast) cubic-bezier(0.4, 0, 1, 1);
 }
 
 .sq-slide-fade-enter-from {

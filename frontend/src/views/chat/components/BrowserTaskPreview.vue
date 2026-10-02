@@ -153,7 +153,7 @@ onBeforeUnmount(() => { alive = false; document.removeEventListener('visibilityc
   position: absolute; right: 20px; bottom: 16px; width: 320px; max-width: calc(100% - 40px);
   max-height: calc(100% - 24px); box-sizing: border-box; z-index: 5; overflow: auto;
   background: var(--td-bg-color-container); border: 1px solid var(--td-component-stroke);
-  border-radius: 12px; box-shadow: 0 8px 28px #18252014, 0 2px 6px #18252008;
+  border-radius: var(--app-radius-xl); box-shadow: 0 8px 28px #18252014, 0 2px 6px #18252008;
 }
 .preview-heading {
   display: flex; align-items: center; gap: 8px; min-height: 38px; padding: 0 9px 0 12px;
@@ -189,7 +189,7 @@ onBeforeUnmount(() => { alive = false; document.removeEventListener('visibilityc
 .preview-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; margin-left: auto; }
 .preview-control, .preview-popout {
   display: inline-flex; align-items: center; justify-content: center; gap: 4px;
-  min-width: 28px; min-height: 28px; padding: 4px; border: 0; border-radius: 6px;
+  min-width: 28px; min-height: 28px; padding: 4px; border: 0; border-radius: var(--app-radius-sm);
   font: inherit; font-size: var(--app-text-xs); background: transparent;
   color: var(--td-text-color-secondary); cursor: pointer; flex-shrink: 0;
   transition: background-color .16s, color .16s;

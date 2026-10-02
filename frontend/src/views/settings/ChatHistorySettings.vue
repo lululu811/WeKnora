@@ -262,7 +262,7 @@ onMounted(async () => {
 }
 
 .stat-value {
-  font-size: 28px;
+  font-size: var(--app-text-5xl);
   font-weight: 700;
   color: var(--td-brand-color);
   margin-bottom: 4px;

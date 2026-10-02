@@ -2712,7 +2712,7 @@ const handleCancel = () => {
   width: 18px;
   height: 18px;
   flex-shrink: 0;
-  border-radius: 4px;
+  border-radius: var(--app-radius-xs);
   object-fit: contain;
 
   &--placeholder {
@@ -2732,7 +2732,7 @@ const handleCancel = () => {
   align-items: center;
   padding: 0 6px;
   height: 18px;
-  border-radius: 4px;
+  border-radius: var(--app-radius-xs);
   background: var(--td-bg-color-secondarycontainer);
   color: var(--td-text-color-secondary);
   font-size: var(--app-text-xs);
@@ -2753,7 +2753,7 @@ const handleCancel = () => {
 .resolved-panel {
   padding: 10px 12px;
   border: 1px dashed var(--td-component-stroke);
-  border-radius: 8px;
+  border-radius: var(--app-radius-md);
   background: var(--td-bg-color-container-hover);
 
   &__header {
@@ -2832,12 +2832,12 @@ const handleCancel = () => {
   &:focus-visible {
     outline: 2px solid var(--td-brand-color-focus);
     outline-offset: 2px;
-    border-radius: 4px;
+    border-radius: var(--app-radius-xs);
   }
 
   .toggle-arrow {
     font-size: var(--app-text-base);
-    transition: transform 0.15s ease;
+    transition: transform var(--app-motion-fast) ease;
 
     &.open {
       transform: rotate(90deg);
@@ -2994,7 +2994,7 @@ const handleCancel = () => {
       align-items: center;
       padding: 0 6px;
       height: 18px;
-      border-radius: 4px;
+      border-radius: var(--app-radius-xs);
       background: var(--td-bg-color-secondarycontainer);
       color: var(--td-text-color-secondary);
       font-size: var(--app-text-xs);
@@ -3071,7 +3071,7 @@ const handleCancel = () => {
       width: 18px;
       height: 18px;
       flex-shrink: 0;
-      border-radius: 4px;
+      border-radius: var(--app-radius-xs);
       object-fit: contain;
 
       &--placeholder {

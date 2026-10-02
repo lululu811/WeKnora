@@ -11,8 +11,20 @@ const prompt = readFileSync(promptUrl, 'utf8')
 const promptPath = fileURLToPath(promptUrl)
 
 test('xterm palette keeps prompt green but ls directories blue', () => {
-  assert.match(theme, /--td-brand-color-4: #07c05f/)
-  assert.match(terminal, /brightGreen: '#07c05f'/)
+  // 不变量（见 SandboxTerminal.vue 中 xtermTheme 的注释）：ANSI 绿色槽位取产品品牌色，
+  // 让 user@host（01;32）与品牌一致；目录蓝（01;34）保持蓝。
+  // 所以这里断言「brightGreen 的取值确实是 theme.css 里定义的某个品牌色」，
+  // 而不是钉死某个字面量：换配色不会误报，配色跑偏（绿槽脱离品牌色）仍然会报错。
+  const brightGreen = terminal.match(/brightGreen: '(#[0-9A-Fa-f]{6})'/)?.[1]
+  assert.ok(brightGreen, 'brightGreen 必须是 6 位十六进制颜色')
+  const brandColors = new Set(
+    [...theme.matchAll(/--td-brand-color-\d+: (#[0-9A-Fa-f]{6})/g)].map(([, hex]) => hex),
+  )
+  assert.ok(brandColors.size > 0, 'theme.css 必须定义品牌色')
+  assert.ok(
+    brandColors.has(brightGreen),
+    `brightGreen ${brightGreen} 必须是 theme.css 中的品牌色之一，实际品牌色：${[...brandColors].join(' ')}`,
+  )
   assert.match(terminal, /brightBlue: '#729fcf'/)
   assert.doesNotMatch(terminal, /brightBlue: '#07c05f'/)
   assert.match(terminal, /brightCyan: '#34e2e2'/)

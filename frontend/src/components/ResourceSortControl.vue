@@ -95,7 +95,7 @@ function selectOption(value: ResourceSortValue) {
   font-size: var(--app-text-sm);
   cursor: pointer;
   box-shadow: inset 0 1px 0 color-mix(in srgb, var(--td-bg-color-container) 72%, transparent);
-  transition: color 0.12s ease, background-color 0.12s ease, border-color 0.12s ease;
+  transition: color 0.12s ease, background-color 0.12s ease, border-color var(--app-motion-instant) ease;
 
   &:hover,
   &.active {
@@ -113,7 +113,7 @@ function selectOption(value: ResourceSortValue) {
 
   &__caret {
     flex-shrink: 0;
-    transition: transform 0.15s ease;
+    transition: transform var(--app-motion-fast) ease;
 
     &.open {
       transform: rotate(180deg);

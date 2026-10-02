@@ -58,7 +58,7 @@ withDefaults(
   border-radius: 50%;
   background: var(--td-bg-color-secondarycontainer);
   color: var(--td-text-color-placeholder);
-  font-size: 30px;
+  font-size: var(--app-text-5xl);
 
   img {
     width: 40px;
@@ -69,7 +69,7 @@ withDefaults(
     width: 48px;
     height: 48px;
     margin-bottom: 12px;
-    font-size: 22px;
+    font-size: var(--app-text-3xl);
   }
 }
 

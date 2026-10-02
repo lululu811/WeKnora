@@ -49,7 +49,7 @@ const badgeStyle = computed((): Record<string, string> => (
 .sandbox-badge--md {
   width: 36px;
   height: 36px;
-  font-size: 17px;
+  font-size: var(--app-text-xl);
 }
 
 .sandbox-badge--sm {

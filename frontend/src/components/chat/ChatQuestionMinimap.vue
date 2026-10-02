@@ -367,7 +367,7 @@ onBeforeUnmount(() => {
   content: '';
   position: absolute;
   inset: -8px -4px;
-  border-radius: 6px;
+  border-radius: var(--app-radius-sm);
 }
 
 .question-minimap__rail:focus-visible {

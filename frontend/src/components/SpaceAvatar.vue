@@ -140,7 +140,7 @@ const letterStyle = computed(() => {
     }
 
     .space-avatar-emoji-char {
-      font-size: 28px;
+      font-size: var(--app-text-5xl);
     }
   }
 

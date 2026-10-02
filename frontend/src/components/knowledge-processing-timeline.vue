@@ -2342,7 +2342,7 @@ const processConfigLines = computed<string[]>(() => {
 }
 
 .kp-attempt-glyph {
-  font-size: 9px;
+  font-size: var(--app-text-2xs);
   line-height: 1;
 }
 
@@ -2676,7 +2676,7 @@ const processConfigLines = computed<string[]>(() => {
      1Hz cadence. */
   transition: left 800ms cubic-bezier(0.2, 0.8, 0.2, 1),
     width 800ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    filter 150ms ease;
+    filter var(--app-motion-fast) ease;
   z-index: 2;
 }
 
@@ -2857,7 +2857,7 @@ const processConfigLines = computed<string[]>(() => {
   left: clamp(0px, calc(var(--kp-offset-position) - 45px), max(0px, calc(100% - 90px)));
   width: min(90px, 100%);
   line-height: 11px;
-  font-size: 9px;
+  font-size: var(--app-text-2xs);
   text-align: center;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3481,7 +3481,7 @@ const processConfigLines = computed<string[]>(() => {
   display: inline-block;
   margin-left: 6px;
   padding: 0 6px;
-  font-size: 9px;
+  font-size: var(--app-text-2xs);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;

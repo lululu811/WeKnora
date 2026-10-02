@@ -2279,9 +2279,9 @@ onBeforeRouteUpdate((to, from, next) => {
     }
 
     &::-webkit-scrollbar-thumb {
-        border-radius: 999px;
+        border-radius: var(--app-radius-pill);
         background: rgba(148, 163, 184, 0.35);
-        transition: background-color 0.2s ease;
+        transition: background-color var(--app-motion-base) ease;
     }
 
     &:hover::-webkit-scrollbar-thumb,
@@ -2537,13 +2537,13 @@ onBeforeRouteUpdate((to, from, next) => {
     display: inline-block;
     padding: 1px 6px;
     margin: 0 1px;
-    border-radius: 4px;
+    border-radius: var(--app-radius-xs);
     background: rgba(0, 82, 217, 0.08);
-    color: var(--td-brand-color, #0052d9);
-    font-family: var(--td-font-family-mono, monospace);
+    color: var(--td-brand-color);
+    font-family: var(--td-font-family-mono);
     font-weight: 500;
     cursor: pointer;
-    transition: background 0.12s ease, transform 0.12s ease;
+    transition: background 0.12s ease, transform var(--app-motion-instant) ease;
     user-select: none;
 }
 
