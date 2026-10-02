@@ -67,10 +67,20 @@ function resolveVueOfficePptxEntry(): string {
   }
 }
 
+// index.html / embed.html 里的 %VITE_APP_NAME% 由 Vite 的 HTML 环境变量替换处理。
+// 这里兜底，保证未设置 VITE_APP_NAME 时产物里不会残留字面量占位符；
+// 组件侧读同一个值的入口是 src/config/appIdentity.ts。
+process.env.VITE_APP_NAME ||= 'WeKnora'
+
 export default defineConfig({
   define: {
     __FRONTEND_VERSION__: JSON.stringify(FRONTEND_VERSION),
     __FRONTEND_COMMIT__: JSON.stringify(FRONTEND_COMMIT),
+    // 产品名。走 define 而不是 import.meta.env：后者只在 .env 文件里定义的值才可见，
+    // 而 Docker 构建是把 VITE_APP_NAME 作为 build arg 传进进程环境的。
+    // index.html / embed.html 的 %VITE_APP_NAME% 由 Vite 的 HTML 替换处理，
+    // 两者共用同一个 process.env 值，见文件顶部的兜底赋值。
+    __APP_NAME__: JSON.stringify(process.env.VITE_APP_NAME),
   },
   build: {
     modulePreload: {

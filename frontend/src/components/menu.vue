@@ -3,7 +3,7 @@
         <!-- 展开时：Logo + 搜索/折叠按钮同行 -->
         <div class="logo_row" v-if="!uiStore.sidebarCollapsed">
             <div class="logo_box" @click="router.push('/platform/knowledge-bases')" style="cursor: pointer;">
-                <span class="logo logo-text">小陈知识库</span>
+                <span class="logo logo-text">{{ APP_NAME }}</span>
                 <sup v-if="isLiteEdition" class="lite-badge">Lite</sup>
             </div>
             <div class="logo_actions">
@@ -222,6 +222,7 @@ import { listAllIMChannels } from '@/api/agent/index';
 import SessionSidebarRow from './SessionSidebarRow.vue';
 import PanelResizeHandle from './PanelResizeHandle.vue';
 import { SIDEBAR_COLLAPSED_WIDTH, SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH } from '@/utils/sidebarWidth';
+import { APP_NAME } from '@/config/appIdentity';
 import {
     clearSession,
     removeSession,
@@ -1404,11 +1405,11 @@ const resizeSidebar = (delta: number, keyboard: boolean) => {
 
         .logo-text {
             font-family: var(--app-font-display, "Noto Serif SC", "Source Han Serif SC", "Songti SC", serif);
-            font-size: 16px;
+            font-size: var(--app-text-xl);
             font-weight: 600;
             letter-spacing: 0.05em;
             white-space: nowrap;
-            background: linear-gradient(135deg, var(--td-brand-color, #2D6A64) 0%, var(--td-brand-color-hover, #458F87) 100%);
+            background: linear-gradient(135deg, var(--td-brand-color) 0%, var(--td-brand-color-hover) 100%);
             -webkit-background-clip: text;
             background-clip: text;
             -webkit-text-fill-color: transparent;
@@ -1419,7 +1420,7 @@ const resizeSidebar = (delta: number, keyboard: boolean) => {
             margin-left: 2px;
             align-self: flex-start;
             margin-top: 2px;
-            font-size: 9px;
+            font-size: var(--app-text-2xs);
             font-weight: 600;
             color: var(--td-text-color-placeholder);
             user-select: none;

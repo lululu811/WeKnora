@@ -5090,7 +5090,7 @@ export default {
     }
   },
   createChat: {
-    title: '你好，这里是小陈知识库，让知识触手可及',
+    title: "你好，这里是@:{'appName'}，让知识触手可及",
     newSessionTitle: '新会话',
     openProject: '选择项目',
     clearProject: '取消绑定',
@@ -5379,7 +5379,7 @@ export default {
     registerSuccess: '注册成功，请登录',
     registerFailed: '注册失败',
     subtitle: 'RAG 问答、ReAct 智能体与 Wiki 知识库，大模型驱动的企业级知识框架',
-    registerSubtitle: '创建账户并开始使用小陈知识库',
+    registerSubtitle: "创建账户并开始使用@:{'appName'}",
     emailPlaceholder: '输入邮箱地址',
     passwordPlaceholder: '输入密码',
     confirmPasswordPlaceholder: '再次输入密码',
@@ -7683,7 +7683,7 @@ export default {
         desc: '知识库是一切的起点：上传文档、网页或 FAQ，WeKnora 会自动解析并建立索引。点击这里进入知识库。'
       },
       welcome: {
-        title: '欢迎使用小陈知识库',
+        title: "欢迎使用@:{'appName'}",
         desc: '只需几步，带你快速了解知识库、对话与智能体的核心用法。点击「下一步」开始。'
       }
     }

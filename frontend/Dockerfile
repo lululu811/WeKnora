@@ -46,6 +46,10 @@ COPY . .
 # After npm ci so a new commit hash does not bust the dependency layer.
 ARG VITE_FRONTEND_COMMIT=unknown
 ENV VITE_FRONTEND_COMMIT=${VITE_FRONTEND_COMMIT}
+# 产品名：影响 index.html / embed.html 的标题与界面里的 Logo 文字。
+# 默认 WeKnora；部署方可用 .env 的 VITE_APP_NAME 覆盖（compose 的 build args 会带进来）。
+ARG VITE_APP_NAME=WeKnora
+ENV VITE_APP_NAME=${VITE_APP_NAME}
 RUN npm run build
 
 # ---------------------------------------------------------------------------
