@@ -251,6 +251,8 @@ select:-webkit-autofill {
     --app-radius-pill: 999px;
 
     /* 字号 */
+    /* 两档低于正文的极小标签：SVG 图标内文字（7px）与角标（10px 起） */
+    --app-text-4xs: 7px;
     --app-text-2xs: 10px;
     --app-text-xs: 11px;
     --app-text-sm: 12px;
@@ -261,6 +263,11 @@ select:-webkit-autofill {
     --app-text-2xl: 18px;
     --app-text-3xl: 20px;
     --app-text-4xl: 24px;
+    /* 展示级：落地页标题与装饰符号。这些尺寸由所在容器的几何决定
+       （例如 48px 的装饰引号、32px 的欢迎页主标题），压进 4xl 会直接改版式。 */
+    --app-text-5xl: 28px;
+    --app-text-display: 32px;
+    --app-text-display-lg: 48px;
 
     /* 间距（4px 网格） */
     --app-space-1: 4px;
