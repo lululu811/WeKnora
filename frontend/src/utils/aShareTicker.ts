@@ -45,3 +45,20 @@ export function inferAShareExchange(ticker: string): AShareExchange | null {
 export function isPlausibleAShareCode(ticker: string): boolean {
   return inferAShareExchange(ticker) !== null
 }
+
+/**
+ * 板块/指数标的的交易所后缀（同花顺 `.TI`，如 881101.TI = 种植业与林业）。
+ *
+ * 它**不在**上面的 A 股前缀表里：`.TI` 不是交易所，是标的类别。把它放在这个
+ * 模块是因为全站判定「这是什么标的」的唯一入口就在这里，多写一份常量必然会
+ * 出现"一处按 TI 判、一处按小写 ti 判"的分裂。
+ *
+ * 三个消费者据此决定行为：K 线数据集路由（后端按后缀选库）、复权选择器是否
+ * 可点（板块只有不复权裸行情）、以及哪些功能不对板块开放（跟踪池按个股设计）。
+ */
+export const BOARD_EXCHANGE = 'TI'
+
+/** 该标的是板块/指数而不是个股。 */
+export function isBoardExchange(exchange: string | undefined): boolean {
+  return (exchange ?? '').toUpperCase() === BOARD_EXCHANGE
+}

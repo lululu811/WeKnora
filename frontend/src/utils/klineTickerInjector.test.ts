@@ -1,13 +1,22 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { inferAShareExchange, isPlausibleAShareCode } from './aShareTicker.ts'
+import { inferAShareExchange, isBoardExchange, isPlausibleAShareCode } from './aShareTicker.ts'
 import { injectKLineTickers } from './klineTickerInjector.ts'
 
 /** 抽出注入结果里的 thscode 列表，按出现顺序。 */
 function thscodes(markdown: string): string[] {
   return [...injectKLineTickers(markdown).matchAll(/data-thscode="([^"]+)"/g)].map((m) => m[1])
 }
+
+test('isBoardExchange 只认 .TI，且大小写不敏感', () => {
+  assert.equal(isBoardExchange('TI'), true)
+  assert.equal(isBoardExchange('ti'), true)
+  assert.equal(isBoardExchange('SH'), false)
+  assert.equal(isBoardExchange(''), false)
+  // undefined 是"这一行没有 exchange 字段"，按个股处理而不是抛错
+  assert.equal(isBoardExchange(undefined), false)
+})
 
 test('inferAShareExchange 按板块前缀判定交易所', () => {
   // 沪主板 / 科创板
@@ -80,6 +89,40 @@ test('不误伤非 ticker 的数字', () => {
   assert.deepEqual(thscodes('版本 202609 发布'), [])
   // 小数点后不能被切开
   assert.deepEqual(thscodes('价格 1.600499'), [])
+})
+
+// ---------------------------------------------------------------------------
+// 非 A 股后缀必须被「消费掉」再交给判据，不能退化成裸码去猜交易所。
+//
+// 旧正则 `(?:\.(SH|SZ|BJ)\b)?` 只认三个后缀：遇到 `.TI`（同花顺板块/指数）或
+// `.HK`（港股）时后缀组失配，正则只匹配到前 6 位数字，于是
+// `resolveTickerThscode('881101', undefined)` 按前缀表把它判成 **BJ** ——
+// 正文里点开的是不存在的 `881101.BJ`；`00700.HK` 同理被判成 `00700.SZ`。
+// 而同一段文本在 stockMentions 里（CODE_RE 吃任意两个字母后缀）是被丢弃的：
+// 两个入口对同一串数字给出相反结论，正是文件头警告的那类分裂。
+// ---------------------------------------------------------------------------
+
+test('板块/指数代码（.TI）不被截断成裸码乱猜交易所', () => {
+  // 881101 以 88 开头，旧写法会命中 /^(43|83|87|88|92)/ 判成 BJ
+  assert.deepEqual(thscodes('板块 881101.TI 今天走强'), [])
+  assert.equal(injectKLineTickers('板块 881101.TI 今天走强'), '板块 881101.TI 今天走强')
+  // 非 A 股后缀同理：00700 以 00 开头，旧写法会判成 SZ
+  assert.deepEqual(thscodes('腾讯 00700.HK 的表现'), [])
+})
+
+test('未知后缀原样放行，不吞掉后面的文本', () => {
+  assert.deepEqual(thscodes('600519.XX 是未知后缀'), [])
+  assert.equal(injectKLineTickers('600519.XX'), '600519.XX')
+  // 后缀后面的内容必须完整保留（`(?![A-Za-z0-9])` 保证不截断成两段）
+  assert.equal(injectKLineTickers('600519.XX 和 600519.SH'), '600519.XX 和 '
+    + '<span class="kline-ticker" data-thscode="600519.SH">600519.SH</span>')
+})
+
+test('后缀大小写与长度边界', () => {
+  // 小写后缀仍按 A 股处理并归一成大写
+  assert.deepEqual(thscodes('600499.sh'), ['600499.SH'])
+  // 三个字母不是交易所后缀，整串应原样保留（数字也不该被单独标出来）
+  assert.deepEqual(thscodes('600519.SHH'), [])
 })
 
 test('代码块内的 ticker 不注入', () => {
