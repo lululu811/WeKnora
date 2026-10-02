@@ -149,15 +149,48 @@ def _field_value(
     return row.get("value")
 
 
+def _fund_flow_anchors(external: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """把已抓回来的 push2his 资金流序列换成「股东资金面」能用的锚点。
+
+    ``extdata.fund_flow`` 的 docstring 明确**不自行合并「主力」**（该接口没取
+    f56 超大单，少一个档位就做加法等于用错口径），所以这里只用它返回的
+    ``main_net`` 原值，不做任何跨档合并。
+
+    给三个尺度而不是一个：单日噪声大，5/20 日才看得出方向。``main_fund_flow``
+    是 AI_DIMENSIONS 声明的锚点名，取最新一日；5d/20d 以**附加键**给出 ——
+    附加键不进 ``wanted``，因此不会把 ``has_anchor`` 拖成 false。
+
+    单位跟其它 amount 锚点一致（元），不做亿元换算：换算是展示层的事，锚点这层
+    多一次换算就多一个口径。
+    """
+    series = ((external or {}).get("push2his") or {}).get("fund_flow") or []
+    rows = [r for r in series if isinstance(r.get("main_net"), (int, float))]
+    if not rows:
+        return {}
+    rows.sort(key=lambda r: str(r.get("date") or ""))
+    out: Dict[str, Any] = {"main_fund_flow": rows[-1]["main_net"]}
+    for label, window in (("5d", 5), ("20d", 20)):
+        tail = rows[-window:]
+        if tail:
+            out[f"main_fund_flow_{label}"] = sum(r["main_net"] for r in tail)
+    return out
+
+
 def build_ai_slots(
     facts: Dict[str, Dict[str, Any]],
     financial: Dict[str, Any],
     industry: Optional[Dict[str, Any]] = None,
+    external: Optional[Dict[str, Any]] = None,
 ) -> List[Dict[str, Any]]:
     """构造 7 个定性维度的待判槽位，附上各自能拿到的量化锚点。
 
     锚点缺失时显式标注 —— 区分「有锚点却没给分」和「没锚点却给了分」这两种
     不同的失败，前者是判断问题，后者是数据问题。
+
+    锚点解析顺序：本地库（financial）→ 年报事实（facts）→ 外网（external）。
+    外网放在**最后**是刻意的：``holder_count`` 同时存在于年报事实和东财快照，
+    而年报是权威原文、东财只是更快的近似；让外网抢先会静默换掉既有锚点的口径。
+    外网只补本地两处都没有的项（当前就是 ``main_fund_flow``）。
     """
     derived: Dict[str, Any] = {}
     emp = _field_value(facts, "employees_total")
@@ -175,10 +208,15 @@ def build_ai_slots(
         if tp is not None:
             derived["tangible_pct"] = tp
 
+    external_anchors = _fund_flow_anchors(external)
+
     def anchor(name: str) -> Optional[Any]:
         if financial.get(name) is not None:
             return financial[name]
-        return _field_value(facts, name)
+        value = _field_value(facts, name)
+        if value is not None:
+            return value
+        return external_anchors.get(name)
 
     risk_flags = {
         k: _field_value(facts, k)
@@ -205,6 +243,13 @@ def build_ai_slots(
             anchors["emissions"] = derived["emissions"]
         if key == "risk" and risk_flags:
             anchors["hard_risk_facts"] = risk_flags
+        if key == "shareholder" and external_anchors:
+            # 5d/20d 只作附加键。锚点名 main_fund_flow 已由 anchor() 解析过，
+            # 这里补上多尺度是为了让判分看得到方向；它们不进 wanted，所以
+            # missing / has_anchor 的语义完全不变。
+            anchors.update(
+                {k: v for k, v in external_anchors.items() if k != "main_fund_flow"}
+            )
         slots.append({
             "dimension": key,
             "label": label,
@@ -631,6 +676,13 @@ async def analyze(
     else:
         env_disclosure = any(k.startswith("emission_") for k in facts)
 
+    # 外网数据必须在构造槽位**之前**拿到：main_fund_flow 是 AI_DIMENSIONS 声明的
+    # 锚点名，而它只有 push2his 一条来源（本地库和年报事实都没有）。挪到前面不增加
+    # 任何请求 —— 就是原来那个调用，只是提前。
+    external: Optional[Dict[str, Any]] = None
+    if include_external:
+        external = await fetch_external(thscode)
+
     result: Dict[str, Any] = {
         "thscode": thscode,
         "period": period,
@@ -665,14 +717,14 @@ async def analyze(
                 "无记录表示近期无异动事件，不表示基本面信息缺失。"
             ),
         },
-        "ai_slots": build_ai_slots(facts, financial, ind),
+        "ai_slots": build_ai_slots(facts, financial, ind, external),
     }
     if fact_records:
         result["fresh_facts"] = [f["field"] for f in fact_records]
-    if include_external:
-        result["external"] = await fetch_external(thscode)
+    if external is not None:
+        result["external"] = external
         result["narratives"]["research_reports"] = [
-            r for r in (result["external"].get("reportapi") or {}).get("research_reports", [])
+            r for r in (external.get("reportapi") or {}).get("research_reports", [])
         ]
     result["markdown"] = render_markdown(result)
     return result
