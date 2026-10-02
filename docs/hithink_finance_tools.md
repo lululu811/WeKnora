@@ -282,6 +282,7 @@ hithink.finance.
 
 ## 参考
 
+- [K 线数据集与板块/指数支持](./kline-datasets.md)：数据集路由（market vs index）、板块能画什么、指标公式归谁算、SQL 目录的生成方式
 - zettaranc-skill: https://github.com/lululu811/zettaranc-skill
 - WeKnora: https://github.com/Tencent/WeKnora
 - hithink-finance: `~/.hithink-finance/`（本地数据，不随仓库分发）
