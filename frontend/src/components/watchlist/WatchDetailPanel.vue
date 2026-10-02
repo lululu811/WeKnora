@@ -18,14 +18,88 @@
       <span class="wl-detail__date">{{ quote.date }}</span>
     </div>
 
+    <!-- 持仓操盘成本与防守止损位 -->
+    <div class="wl-targets-card">
+      <div v-if="!editingTarget" class="wl-targets-card__view">
+        <div class="wl-targets-card__info">
+          <div class="wl-targets-item">
+            <span class="wl-targets-item__k">{{ t('watchlist.targetCost') }}:</span>
+            <span v-if="tradeTarget?.cost" class="wl-targets-item__v" :class="costPnlClass">
+              ¥{{ tradeTarget.cost.toFixed(2) }} ({{ costPnlText }})
+            </span>
+            <span v-else class="wl-targets-item__empty">未设置</span>
+          </div>
+          <div class="wl-targets-item">
+            <span class="wl-targets-item__k">{{ t('watchlist.targetStop') }}:</span>
+            <span v-if="tradeTarget?.stopLoss" class="wl-targets-item__v is-stop">
+              ¥{{ tradeTarget.stopLoss.toFixed(2) }} ({{ stopLossPnlText }})
+            </span>
+            <span v-else class="wl-targets-item__empty">未设置</span>
+          </div>
+        </div>
+        <t-button size="small" variant="text" theme="primary" class="wl-targets-card__edit-btn" @click="startEditTarget">
+          <template #icon><t-icon name="edit" /></template>
+          {{ tradeTarget?.cost || tradeTarget?.stopLoss ? t('common.edit') || '修改' : t('watchlist.setTarget') }}
+        </t-button>
+      </div>
+
+      <div v-else class="wl-targets-card__form">
+        <div class="wl-targets-form__row">
+          <span class="wl-targets-form__lbl">成本:</span>
+          <t-input-number
+            v-model="editCost"
+            :decimal-places="2"
+            :min="0"
+            :step="0.1"
+            size="small"
+            placeholder="成本价"
+            class="wl-targets-form__input"
+          />
+          <span class="wl-targets-form__lbl">止损:</span>
+          <t-input-number
+            v-model="editStop"
+            :decimal-places="2"
+            :min="0"
+            :step="0.1"
+            size="small"
+            placeholder="止损线"
+            class="wl-targets-form__input"
+          />
+        </div>
+        <div class="wl-targets-form__actions">
+          <t-button size="small" theme="primary" @click="handleSaveTarget">{{ t('common.save') || '保存' }}</t-button>
+          <t-button size="small" variant="text" @click="handleClearTarget">{{ t('common.clear') || '清空' }}</t-button>
+          <t-button size="small" variant="text" @click="editingTarget = false">{{ t('common.cancel') || '取消' }}</t-button>
+        </div>
+      </div>
+    </div>
+
     <!-- K 线。选行即看图是本面板存在的理由，所以它常驻在日记上面。 -->
     <section class="wl-detail__section">
-      <h3 class="wl-detail__h3">{{ t('watchlist.detailChart') }}</h3>
-      <WatchKLineChart :thscode="thscode" :name="displayName" />
+      <div class="wl-detail__section-head">
+        <h3 class="wl-detail__h3">{{ t('watchlist.detailChart') }}</h3>
+        <t-button size="small" variant="text" theme="primary" class="wl-detail__ws-btn" @click="$emit('open-workspace')">
+          <template #icon><t-icon name="fullscreen" /></template>
+          {{ t('watchlist.fullWorkspace') }}
+        </t-button>
+      </div>
+      <WatchKLineChart
+        :thscode="thscode"
+        :name="displayName"
+        :conditions="conditions"
+        :trade-target="tradeTarget"
+        @loaded-bars="onBarsLoaded"
+      />
     </section>
 
     <section class="wl-detail__section wl-detail__section--diary">
-      <h3 class="wl-detail__h3">{{ t('watchlist.detailDiary') }}</h3>
+      <div class="wl-detail__section-head">
+        <h3 class="wl-detail__h3">{{ t('watchlist.detailDiary') }}</h3>
+        <!-- 胜率统计徽章 -->
+        <span v-if="backtestSummary.totalBuys > 0" class="wl-diary__stats-badge" title="基于过去真实K线复盘：买点后5日最高涨幅达标率">
+          买点胜率 {{ backtestSummary.winRate }}% ({{ backtestSummary.wins }}/{{ backtestSummary.totalBuys }}) · 冲高+{{ backtestSummary.avgMaxGain }}%
+        </span>
+      </div>
 
       <p v-if="diaryLoading" class="wl-detail__hint">{{ t('watchlist.diaryLoading') }}</p>
 
@@ -42,6 +116,10 @@
               {{ verdictLabel(d.verdict) }}
             </span>
             <span class="wl-diary__conf">{{ t('watchlist.diaryConfidence', { n: d.confidence }) }}</span>
+            <!-- 历史走势跟踪印章 -->
+            <span v-if="diaryOutcomes[d.trade_date]" class="wl-diary__track-badge" :class="'is-' + diaryOutcomes[d.trade_date].status">
+              {{ diaryOutcomes[d.trade_date].label }}
+            </span>
           </div>
           <p class="wl-diary__body">{{ d.body }}</p>
           <p v-if="d.model_id" class="wl-diary__model">{{ t('watchlist.diaryBy', { model: d.model_id }) }}</p>
@@ -70,6 +148,23 @@
             >
               {{ t('watchlist.diaryIgnore') }}
             </t-button>
+            <t-button
+              size="small"
+              theme="default"
+              variant="outline"
+              @click="askAiAboutDiary(d)"
+            >
+              <template #icon><t-icon name="chat" /></template>
+              {{ t('watchlist.diaryAskAI') }}
+            </t-button>
+            <t-button
+              size="small"
+              variant="text"
+              @click="$emit('open-conditions')"
+            >
+              <template #icon><t-icon name="notification" /></template>
+              {{ t('watchlist.cond') }}
+            </t-button>
           </div>
         </li>
       </ul>
@@ -79,6 +174,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { MessagePlugin } from 'tdesign-vue-next'
 import WatchKLineChart from './WatchKLineChart.vue'
@@ -89,18 +185,29 @@ import {
   DIARY_VERDICT_TARGET,
   type DiaryVerdict,
   type Quote,
+  type WatchCondition,
   type WatchDiary,
   type WatchState,
 } from '@/api/watchlist'
+import { getTradeTarget, saveTradeTarget, type TradeTarget } from '@/utils/tradeTargets'
+import { computeDiaryOutcomes } from '@/utils/diaryBacktest'
+import type { KLineData } from '@/components/workspace/kline/types'
 
 const props = defineProps<{
   thscode: string
   name?: string
   quote?: Quote
+  conditions?: WatchCondition[]
   panelWidth?: number
 }>()
 
-const emit = defineEmits<{ (e: 'close'): void }>()
+const emit = defineEmits<{
+  (e: 'close'): void
+  (e: 'open-workspace'): void
+  (e: 'open-conditions'): void
+}>()
+
+const router = useRouter()
 
 const { t } = useI18n()
 
@@ -108,6 +215,72 @@ const diaries = ref<WatchDiary[]>([])
 const diaryLoading = ref(false)
 /** 正在提交的那一篇（`日期:动作`），用来只禁用对应的那两个按钮。 */
 const acting = ref('')
+
+// ── 持仓操盘成本与防守止损 ──────────────────────────────────────────
+const tradeTarget = ref<TradeTarget | null>(null)
+const editingTarget = ref(false)
+const editCost = ref<number | undefined>(undefined)
+const editStop = ref<number | undefined>(undefined)
+
+function refreshTradeTarget() {
+  tradeTarget.value = getTradeTarget(props.thscode)
+  editCost.value = tradeTarget.value?.cost
+  editStop.value = tradeTarget.value?.stopLoss
+  editingTarget.value = false
+}
+
+function startEditTarget() {
+  editCost.value = tradeTarget.value?.cost
+  editStop.value = tradeTarget.value?.stopLoss
+  editingTarget.value = true
+}
+
+function handleSaveTarget() {
+  const tVal: TradeTarget = {
+    cost: editCost.value && editCost.value > 0 ? editCost.value : undefined,
+    stopLoss: editStop.value && editStop.value > 0 ? editStop.value : undefined,
+  }
+  saveTradeTarget(props.thscode, tVal)
+  tradeTarget.value = tVal
+  editingTarget.value = false
+  MessagePlugin.success(t('watchlist.targetSaved'))
+}
+
+function handleClearTarget() {
+  saveTradeTarget(props.thscode, null)
+  tradeTarget.value = null
+  editCost.value = undefined
+  editStop.value = undefined
+  editingTarget.value = false
+  MessagePlugin.success(t('watchlist.targetCleared'))
+}
+
+const costPnlText = computed(() => {
+  if (!tradeTarget.value?.cost || !props.quote?.close) return ''
+  const diff = ((props.quote.close - tradeTarget.value.cost) / tradeTarget.value.cost) * 100
+  return `${diff >= 0 ? '+' : ''}${diff.toFixed(2)}%`
+})
+
+const costPnlClass = computed(() => {
+  if (!tradeTarget.value?.cost || !props.quote?.close) return ''
+  return props.quote.close >= tradeTarget.value.cost ? 'is-up' : 'is-down'
+})
+
+const stopLossPnlText = computed(() => {
+  if (!tradeTarget.value?.stopLoss || !props.quote?.close) return ''
+  const diff = ((tradeTarget.value.stopLoss - props.quote.close) / props.quote.close) * 100
+  return `${diff >= 0 ? '+' : ''}${diff.toFixed(2)}%`
+})
+
+// ── 历史真实 K 线走势复盘与胜率回测 ─────────────────────────────────
+const currentBars = ref<KLineData[]>([])
+function onBarsLoaded(bars: KLineData[]) {
+  currentBars.value = bars
+}
+
+const backtestData = computed(() => computeDiaryOutcomes(diaries.value, currentBars.value))
+const diaryOutcomes = computed(() => backtestData.value.outcomes)
+const backtestSummary = computed(() => backtestData.value.summary)
 
 const displayName = computed(() => props.name || props.thscode)
 
@@ -207,9 +380,40 @@ async function ignore(d: WatchDiary) {
   }
 }
 
-onMounted(loadDiaries)
-// 换一只票就换一份日记。不加 immediate 是因为 onMounted 已经拉过。
-watch(() => props.thscode, loadDiaries)
+function askAiAboutDiary(d: WatchDiary) {
+  const vLabel = verdictLabel(d.verdict)
+  let costContext = ''
+  if (tradeTarget.value?.cost && props.quote?.close) {
+    const pnl = (((props.quote.close - tradeTarget.value.cost) / tradeTarget.value.cost) * 100).toFixed(2)
+    costContext = `\n【我的持仓操盘基准】\n` +
+      `- 持仓成本价：¥${tradeTarget.value.cost.toFixed(2)}\n` +
+      `- 最新市价：¥${props.quote.close.toFixed(2)} (浮动盈亏: ${Number(pnl) >= 0 ? '+' : ''}${pnl}%)\n` +
+      `- 防守止损线：${tradeTarget.value.stopLoss ? `¥${tradeTarget.value.stopLoss.toFixed(2)}` : '未设置'}\n` +
+      `请务必结合我的持仓成本与盈亏比，评估是否应收紧止损至保本线、部分止盈或继续持股。\n`
+  }
+
+  const prompt = `请帮我针对关注的标的【${displayName.value} (${props.thscode})】展开深度分析与决策推演：\n\n` +
+    `【系统观察日记】(行情日: ${d.trade_date})\n` +
+    `- 模型建议：${vLabel} (把握度: ${d.confidence}/5)\n` +
+    `- 核心依据：${d.reasons || d.body}\n` +
+    `- 观察日记全文：\n${d.body}\n` +
+    costContext + '\n' +
+    `请结合近期技术形态、主力资金动向、板块大盘环境及关键均线支撑位，帮我做进一步复盘，并给出具体的操作应对策略。`
+  router.push({
+    path: '/platform/creatChat',
+    query: { q: prompt },
+  })
+}
+
+onMounted(() => {
+  loadDiaries()
+  refreshTradeTarget()
+})
+// 换一只票就换一份日记与操盘位。
+watch(() => props.thscode, () => {
+  loadDiaries()
+  refreshTradeTarget()
+})
 </script>
 
 <style lang="less" scoped>
@@ -249,6 +453,15 @@ watch(() => props.thscode, loadDiaries)
 .is-down { color: var(--wl-down, #047857); }
 
 .wl-detail__section { display: flex; flex-direction: column; gap: 6px; }
+.wl-detail__section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.wl-detail__ws-btn {
+  font-size: var(--app-text-xs);
+  padding: 0 4px;
+}
 .wl-detail__section--diary { flex: 1; }
 .wl-detail__h3 { margin: 0; font-size: var(--app-text-md); font-weight: 600; opacity: 0.75; }
 .wl-detail__hint { font-size: var(--app-text-sm); opacity: 0.6; margin: 0; }
@@ -278,6 +491,120 @@ watch(() => props.thscode, loadDiaries)
 .wl-diary__verdict.is-hold, .wl-diary__verdict.is-none { color: #475569; }
 
 .wl-diary__body { margin: 6px 0 0; font-size: var(--app-text-md); line-height: 1.65; white-space: pre-wrap; }
-.wl-diary__model { margin: 4px 0 0; font-size: var(--app-text-2xs); opacity: 0.5; }
 .wl-diary__actions { display: flex; gap: 8px; margin-top: 8px; }
+
+.wl-targets-card {
+  padding: 8px 10px;
+  border: 1px dashed var(--td-border-level-2-color);
+  border-radius: var(--app-radius-sm);
+  background: var(--td-bg-color-secondarycontainer);
+}
+
+.wl-targets-card__view {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.wl-targets-card__info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: var(--app-text-xs);
+}
+
+.wl-targets-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
+  &__k {
+    color: var(--td-text-color-secondary);
+  }
+
+  &__v {
+    font-weight: 600;
+    font-family: monospace;
+    color: var(--td-brand-color);
+
+    &.is-stop {
+      color: var(--td-error-color);
+    }
+  }
+
+  &__empty {
+    color: var(--td-text-color-placeholder);
+  }
+}
+
+.wl-targets-card__edit-btn {
+  font-size: var(--app-text-xs);
+  padding: 0 4px;
+}
+
+.wl-targets-card__form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.wl-targets-form__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--app-text-xs);
+}
+
+.wl-targets-form__lbl {
+  color: var(--td-text-color-secondary);
+  flex-shrink: 0;
+}
+
+.wl-targets-form__input {
+  width: 90px;
+}
+
+.wl-targets-form__actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.wl-diary__stats-badge {
+  font-size: var(--app-text-xs);
+  padding: 2px 8px;
+  border-radius: var(--app-radius-pill);
+  background: color-mix(in srgb, var(--td-brand-color) 12%, transparent);
+  color: var(--td-brand-color);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.wl-diary__track-badge {
+  font-size: var(--app-text-xs);
+  padding: 1px 6px;
+  border-radius: var(--app-radius-xs);
+  font-family: monospace;
+  font-weight: 600;
+  margin-left: 4px;
+
+  &.is-win {
+    background: color-mix(in srgb, var(--td-brand-color) 14%, transparent);
+    color: var(--td-brand-color);
+    border: 1px solid color-mix(in srgb, var(--td-brand-color) 35%, transparent);
+  }
+
+  &.is-loss {
+    background: color-mix(in srgb, var(--td-error-color) 14%, transparent);
+    color: var(--td-error-color);
+    border: 1px solid color-mix(in srgb, var(--td-error-color) 35%, transparent);
+  }
+
+  &.is-neutral {
+    background: var(--td-bg-color-component);
+    color: var(--td-text-color-secondary);
+  }
+}
 </style>

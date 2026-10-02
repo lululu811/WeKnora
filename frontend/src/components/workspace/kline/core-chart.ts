@@ -33,13 +33,22 @@ import { ZettarancDatafeed, type KLineErrorKind } from './datafeed'
 /** 水平位：一条全宽虚线 + 右侧价格标签。 */
 const PRICE_LEVEL = 'wkPriceLevel'
 
+/** 预警位：醒目警戒色虚线 + 右侧预警标签。 */
+export const ALERT_LEVEL = 'wkAlertLevel'
+
+/** 持仓操盘位：成本线与止损线。 */
+export const COST_LEVEL = 'wkCostLevel'
+export const STOP_LEVEL = 'wkStopLevel'
+
 /** 图表侧统一使用的 overlay 分组名。切标的时按组整体清掉。 */
 const GROUP_LEVEL = 'wk_levels'
+export const GROUP_ALERT = 'wk_alerts'
+export const GROUP_TRADE_TARGETS = 'wk_trade_targets'
 
 /** 模板在模块加载时注册一次；重复注册同名模板会覆盖，无副作用。 */
 let templatesRegistered = false
 
-function ensureTemplates(): void {
+export function ensureTemplates(): void {
   if (templatesRegistered) return
   templatesRegistered = true
 
@@ -76,6 +85,135 @@ function ensureTemplates(): void {
           styles: {
             style: 'fill',
             color: 'rgba(201, 146, 8, 0.95)',
+            size: 11,
+            align: 'right',
+            baseline: 'bottom',
+            textAlign: 'right',
+          },
+        },
+      ]
+    },
+  })
+
+  // 预警位：醒目警戒色虚线 + 右侧预警标签
+  registerOverlay({
+    name: ALERT_LEVEL,
+    totalStep: 2,
+    needDefaultPointFigure: false,
+    needDefaultXAxisFigure: false,
+    needDefaultYAxisFigure: false,
+    lock: true,
+    createPointFigures: ({ coordinates, bounding, precision, overlay }: OverlayCreateFiguresCallbackParams) => {
+      const y = coordinates[0]?.y ?? 0
+      const value = overlay.points[0]?.value
+      const label = (overlay.extendData as string) || '🔔 预警'
+      const valText = typeof value === 'number' ? value.toFixed(precision?.price ?? 2) : ''
+      const text = `${label} ${valText}`.trim()
+      return [
+        {
+          type: 'line',
+          ignoreEvent: true,
+          attrs: {
+            coordinates: [
+              { x: 0, y },
+              { x: bounding.width, y },
+            ],
+          },
+          styles: { style: 'dashed', size: 1.5, color: 'rgba(235, 94, 40, 0.95)', dashedValue: [5, 3] },
+        },
+        {
+          type: 'text',
+          ignoreEvent: true,
+          attrs: { x: bounding.width - 4, y: y - 4, text },
+          styles: {
+            style: 'fill',
+            color: 'rgba(235, 94, 40, 0.95)',
+            size: 11,
+            align: 'right',
+            baseline: 'bottom',
+            textAlign: 'right',
+          },
+        },
+      ]
+    },
+  })
+
+  // 持仓成本位：青绿色虚线 + 右侧成本及浮盈标签
+  registerOverlay({
+    name: COST_LEVEL,
+    totalStep: 2,
+    needDefaultPointFigure: false,
+    needDefaultXAxisFigure: false,
+    needDefaultYAxisFigure: false,
+    lock: true,
+    createPointFigures: ({ coordinates, bounding, precision, overlay }: OverlayCreateFiguresCallbackParams) => {
+      const y = coordinates[0]?.y ?? 0
+      const value = overlay.points[0]?.value
+      const label = (overlay.extendData as string) || '📈 成本'
+      const valText = typeof value === 'number' ? value.toFixed(precision?.price ?? 2) : ''
+      const text = `${label} ${valText}`.trim()
+      return [
+        {
+          type: 'line',
+          ignoreEvent: true,
+          attrs: {
+            coordinates: [
+              { x: 0, y },
+              { x: bounding.width, y },
+            ],
+          },
+          styles: { style: 'dashed', size: 1.5, color: 'rgba(13, 148, 136, 0.95)', dashedValue: [6, 3] },
+        },
+        {
+          type: 'text',
+          ignoreEvent: true,
+          attrs: { x: bounding.width - 4, y: y - 4, text },
+          styles: {
+            style: 'fill',
+            color: 'rgba(13, 148, 136, 0.95)',
+            size: 11,
+            align: 'right',
+            baseline: 'bottom',
+            textAlign: 'right',
+          },
+        },
+      ]
+    },
+  })
+
+  // 防守止损位：鲜红色虚线 + 右侧止损标签
+  registerOverlay({
+    name: STOP_LEVEL,
+    totalStep: 2,
+    needDefaultPointFigure: false,
+    needDefaultXAxisFigure: false,
+    needDefaultYAxisFigure: false,
+    lock: true,
+    createPointFigures: ({ coordinates, bounding, precision, overlay }: OverlayCreateFiguresCallbackParams) => {
+      const y = coordinates[0]?.y ?? 0
+      const value = overlay.points[0]?.value
+      const label = (overlay.extendData as string) || '🛑 止损'
+      const valText = typeof value === 'number' ? value.toFixed(precision?.price ?? 2) : ''
+      const text = `${label} ${valText}`.trim()
+      return [
+        {
+          type: 'line',
+          ignoreEvent: true,
+          attrs: {
+            coordinates: [
+              { x: 0, y },
+              { x: bounding.width, y },
+            ],
+          },
+          styles: { style: 'dashed', size: 1.5, color: 'rgba(220, 38, 38, 0.95)', dashedValue: [5, 3] },
+        },
+        {
+          type: 'text',
+          ignoreEvent: true,
+          attrs: { x: bounding.width - 4, y: y - 4, text },
+          styles: {
+            style: 'fill',
+            color: 'rgba(220, 38, 38, 0.95)',
             size: 11,
             align: 'right',
             baseline: 'bottom',
@@ -228,6 +366,92 @@ export function drawPriceLevel(
     lock: true,
     points: [{ value }],
   })
+}
+
+/**
+ * 画一个条件预警价格位。
+ * 带明显的橙黄色预警虚线与标签，如 `🔔 预警 ≤ 18.50`。
+ */
+export function drawAlertLevel(
+  chart: Chart | null,
+  id: string,
+  value: number,
+  label = '🔔 预警',
+): void {
+  if (!chart || !Number.isFinite(value) || value <= 0) return
+  ensureTemplates()
+  chart.createOverlay({
+    name: ALERT_LEVEL,
+    id,
+    groupId: GROUP_ALERT,
+    lock: true,
+    points: [{ value }],
+    extendData: label,
+  })
+}
+
+/** 清空当前图上的预警线。 */
+export function clearAlertOverlays(chart: Chart | null): void {
+  if (!chart) return
+  chart.removeOverlay({ groupId: GROUP_ALERT })
+}
+
+/**
+ * 画一个持仓成本线。
+ * 带青绿色虚线与标签，如 `📈 成本 15.20 (+8.5%)`。
+ */
+export function drawCostLevel(
+  chart: Chart | null,
+  cost: number,
+  currentPrice?: number,
+): void {
+  if (!chart || !Number.isFinite(cost) || cost <= 0) return
+  ensureTemplates()
+  let pnlText = ''
+  if (currentPrice && Number.isFinite(currentPrice) && currentPrice > 0) {
+    const diffPct = ((currentPrice - cost) / cost) * 100
+    pnlText = ` (${diffPct >= 0 ? '+' : ''}${diffPct.toFixed(2)}%)`
+  }
+  chart.createOverlay({
+    name: COST_LEVEL,
+    id: 'target_cost',
+    groupId: GROUP_TRADE_TARGETS,
+    lock: true,
+    points: [{ value: cost }],
+    extendData: `📈 成本${pnlText}`,
+  })
+}
+
+/**
+ * 画一个防守止损线。
+ * 带鲜红色虚线与标签，如 `🛑 止损 14.10 (-7.2%)`。
+ */
+export function drawStopLevel(
+  chart: Chart | null,
+  stopPrice: number,
+  currentPrice?: number,
+): void {
+  if (!chart || !Number.isFinite(stopPrice) || stopPrice <= 0) return
+  ensureTemplates()
+  let diffText = ''
+  if (currentPrice && Number.isFinite(currentPrice) && currentPrice > 0) {
+    const diffPct = ((stopPrice - currentPrice) / currentPrice) * 100
+    diffText = ` (${diffPct >= 0 ? '+' : ''}${diffPct.toFixed(2)}%)`
+  }
+  chart.createOverlay({
+    name: STOP_LEVEL,
+    id: 'target_stop',
+    groupId: GROUP_TRADE_TARGETS,
+    lock: true,
+    points: [{ value: stopPrice }],
+    extendData: `🛑 止损${diffText}`,
+  })
+}
+
+/** 清空当前图上的持仓操盘线（成本与止损）。 */
+export function clearTradeTargetOverlays(chart: Chart | null): void {
+  if (!chart) return
+  chart.removeOverlay({ groupId: GROUP_TRADE_TARGETS })
 }
 
 /**

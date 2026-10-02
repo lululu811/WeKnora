@@ -1,4 +1,5 @@
 import { ref, computed, inject, provide, type InjectionKey, type Ref, type ComputedRef } from 'vue';
+import router from '@/router';
 import type { WorkspaceType, PickItem } from '@/components/workspace/types';
 
 export const WORKSPACE_MIN_WIDTH = 450;
@@ -30,7 +31,7 @@ export interface AgentWorkspaceContext {
   addOrSwitchPick: (pick: PickItem) => void;
   nextStock: () => void;
   prevStock: () => void;
-  sendToChatCallback?: Ref<((text: string) => void) | null>;
+  sendToChatCallback: Ref<((text: string) => void) | null>;
   sendToChat: (text: string) => void;
   /**
    * 用户在本轮里手动选过的标的（null = 还没表态）。
@@ -161,6 +162,11 @@ export function createAgentWorkspaceContext(): AgentWorkspaceContext {
   const sendToChat = (text: string) => {
     if (sendToChatCallback.value) {
       sendToChatCallback.value(text);
+    } else {
+      router.push({
+        path: '/platform/creatChat',
+        query: { q: text },
+      });
     }
   };
 

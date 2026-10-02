@@ -79,6 +79,18 @@
         >
           {{ latestQuote.aboveBbi ? '🐂 站上BBI' : '🐻 跌破BBI' }}
         </span>
+
+        <!-- 当前光标命中的形态反哺提问 -->
+        <button
+          v-if="activePatternNames.length > 0"
+          type="button"
+          class="status-pill is-pattern-ask"
+          :title="`点击直接向 AI 深度解析形态：${activePatternNames.join('、')}`"
+          @click="handleAskPattern(activePatternNames[0])"
+        >
+          <t-icon name="chat" size="12px" />
+          形态: {{ activePatternNames.join('、') }}（向AI提问）
+        </button>
       </div>
 
       <!-- 右侧辅助行情指标 -->
@@ -276,6 +288,57 @@
         </button>
       </div>
 
+      <div class="toolbar__divider" />
+
+      <!-- 交易员画线工具箱 -->
+      <div class="toolbar__group drawing-group">
+        <span class="group__label">画线:</span>
+        <button
+          type="button"
+          class="toolbar__btn"
+          :class="{ 'is-active': activeDrawTool === 'segment' }"
+          :title="t('watchlist.drawTrend')"
+          @click="startDrawing('segment')"
+        >
+          {{ t('watchlist.drawTrend') }}
+        </button>
+        <button
+          type="button"
+          class="toolbar__btn"
+          :class="{ 'is-active': activeDrawTool === 'horizontalStraightLine' }"
+          :title="t('watchlist.drawHorizontal')"
+          @click="startDrawing('horizontalStraightLine')"
+        >
+          {{ t('watchlist.drawHorizontal') }}
+        </button>
+        <button
+          type="button"
+          class="toolbar__btn"
+          :class="{ 'is-active': activeDrawTool === 'priceChannelLine' }"
+          :title="t('watchlist.drawChannel')"
+          @click="startDrawing('priceChannelLine')"
+        >
+          {{ t('watchlist.drawChannel') }}
+        </button>
+        <button
+          type="button"
+          class="toolbar__btn"
+          :class="{ 'is-active': activeDrawTool === 'fibonacciLine' }"
+          :title="t('watchlist.drawFibo')"
+          @click="startDrawing('fibonacciLine')"
+        >
+          {{ t('watchlist.drawFibo') }}
+        </button>
+        <button
+          type="button"
+          class="toolbar__btn drawing-clear-btn"
+          :title="t('watchlist.drawClear')"
+          @click="clearUserDrawings"
+        >
+          {{ t('watchlist.drawClear') }}
+        </button>
+      </div>
+
       <div class="toolbar__spacer" />
 
       <!-- 折叠工作台：收成右侧窄边而不是销毁，当前股票/指标/周期全部保留。
@@ -365,6 +428,15 @@
         >
           查阅最新研报与核心逻辑
         </button>
+        <button
+          v-if="activePatternNames.length > 0"
+          type="button"
+          class="action-chip is-pattern-highlight"
+          @click="handleAskPattern(activePatternNames[0])"
+        >
+          <t-icon name="lightbulb" size="13px" />
+          深度解析形态【{{ activePatternNames.join('、') }}】
+        </button>
       </div>
     </div>
   </div>
@@ -386,7 +458,11 @@ import {
   drawPriceLevel,
   getChartData,
   swapIndicators,
+  drawCostLevel,
+  drawStopLevel,
+  clearTradeTargetOverlays,
 } from './core-chart';
+import { getTradeTarget } from '@/utils/tradeTargets';
 import { setZettarancPalette } from './palette';
 import { getKlineChartTheme } from './theme';
 import KLineCompareBar from './KLineCompareBar.vue';
@@ -978,6 +1054,38 @@ const handleActionAsk = (type: 'valuation' | 'strategy' | 'report') => {
       `最后给出一句话结论：这只票当前的核心矛盾是什么。`;
   }
 
+  const thscode = `${currentTicker.value}.${currentExchange.value}`;
+  const target = getTradeTarget(thscode);
+  if (target?.cost && latestQuote.value?.close) {
+    const pnl = (((latestQuote.value.close - target.cost) / target.cost) * 100).toFixed(2);
+    prompt += `\n\n【我的持仓操盘基准】\n` +
+      `- 持仓成本价：¥${target.cost.toFixed(2)}\n` +
+      `- 当前市价：¥${latestQuote.value.close.toFixed(2)} (浮动盈亏: ${Number(pnl) >= 0 ? '+' : ''}${pnl}%)\n` +
+      `- 防守止损线：${target.stopLoss ? `¥${target.stopLoss.toFixed(2)}` : '未设置'}\n` +
+      `请在分析结论中务必结合我的持仓成本与盈亏比，给出加仓、移动止损保本或分批止盈的操作对策。`;
+  }
+
+  workspace.sendToChat(prompt);
+};
+
+// 针对当前光标选中的形态直接向 AI 发起深度研判
+const handleAskPattern = (patternName: string) => {
+  const code = `${currentTicker.value}.${currentExchange.value}`;
+  const name = workspace.activePick.value?.name ? `(${workspace.activePick.value.name})` : '';
+  let prompt = `请深度解析标的 ${code} ${name} 当前图表上识别出的技术形态【${patternName}】：\n\n` +
+    `1. 结合该形态的几何结构与历史胜率特征，判断形态是否已经有效确立（颈线/突破位确认）；\n` +
+    `2. 结合当期成交量与均线系统（MA/BBI/LongBBI），评估其反转或持续的确定性；\n` +
+    `3. 给出该形态下的目标测量位（理论上涨/下跌空间）与严格的防守止损线。`;
+
+  const target = getTradeTarget(code);
+  if (target?.cost && latestQuote.value?.close) {
+    const pnl = (((latestQuote.value.close - target.cost) / target.cost) * 100).toFixed(2);
+    prompt += `\n\n【持仓操盘参考】\n` +
+      `- 持仓成本：¥${target.cost.toFixed(2)} | 浮动盈亏: ${Number(pnl) >= 0 ? '+' : ''}${pnl}%\n` +
+      `- 防守止损：${target.stopLoss ? `¥${target.stopLoss.toFixed(2)}` : '未设置'}\n` +
+      `请结合当前形态突破点是否支持继续持有或应逢高止盈。`;
+  }
+
   workspace.sendToChat(prompt);
 };
 
@@ -1154,23 +1262,52 @@ const handleChartMouseLeave = () => {
   syncPatternHighlight(undefined);
 };
 
+// ── 交易员交互画线工具 ──────────────────────────────────────────
+const GROUP_USER_DRAWINGS = 'user_drawings';
+const activeDrawTool = ref<string | null>(null);
+
+function startDrawing(overlayName: string) {
+  if (!chartInstance.value) return;
+  activeDrawTool.value = overlayName;
+  chartInstance.value.createOverlay({
+    name: overlayName,
+    groupId: GROUP_USER_DRAWINGS,
+    onDrawEnd: () => {
+      activeDrawTool.value = null;
+      return false;
+    },
+  });
+}
+
+function clearUserDrawings() {
+  if (!chartInstance.value) return;
+  chartInstance.value.removeOverlay({ groupId: GROUP_USER_DRAWINGS });
+  activeDrawTool.value = null;
+}
+
 /**
- * 重画全部水平位。
- *
- * 这是唯一的入口：数据加载/换标的都调它，避免"某个路径忘了清"
- * 这类只在特定操作顺序下出现的残留。
- *
- * 注意这里**不画服务端形态标注**。那些标注是按日期锚定的形态（早晨之星、
- * 关键K…），已经由 overlay-drawer 画成 K 线上的胶囊徽章；把它们同时画成
- * 横向价格线是错的——一条横线表达的是「这个价位有意义」，而一个日期上的形态
- * 跟水平价位没有任何关系。之前那版就是这么画的，等于把同一批数据画了两遍，
- * 还是错的那种画法。
+ * 重画全部水平位与持仓操盘位。
  */
 const redrawOverlays = (chart: Chart | null) => {
   if (!chart) return;
   clearAllOverlays(chart);
+  clearTradeTargetOverlays(chart);
   for (const level of collectLevelCandidates(chart)) {
     drawPriceLevel(chart, `lvl_${level.price.toFixed(2)}`, level.price);
+  }
+
+  // 绘制持仓成本线与防守止损线
+  const thscode = `${currentTicker.value}.${currentExchange.value}`;
+  const target = getTradeTarget(thscode);
+  if (target) {
+    const bars = getChartData(chart);
+    const curClose = bars[bars.length - 1]?.close;
+    if (target.cost && target.cost > 0) {
+      drawCostLevel(chart, target.cost, curClose);
+    }
+    if (target.stopLoss && target.stopLoss > 0) {
+      drawStopLevel(chart, target.stopLoss, curClose);
+    }
   }
 };
 
@@ -1582,6 +1719,16 @@ onUnmounted(() => {
       color: #9ca3af;
       border-color: rgba(107, 114, 128, 0.3);
     }
+    &.is-pattern-ask {
+      background: rgba(235, 94, 40, 0.15);
+      color: #eb5e28;
+      border-color: rgba(235, 94, 40, 0.4);
+      cursor: pointer;
+      &:hover {
+        background: rgba(235, 94, 40, 0.25);
+        border-color: rgba(235, 94, 40, 0.8);
+      }
+    }
   }
 
   .quote-strip__metrics {
@@ -1816,6 +1963,15 @@ onUnmounted(() => {
         font-family: monospace;
       }
     }
+
+    &.drawing-clear-btn {
+      color: var(--td-text-color-placeholder);
+      border-style: dashed;
+      &:hover {
+        color: var(--td-error-color);
+        border-color: var(--td-error-color);
+      }
+    }
   }
 
   // 板块不支持某项能力时的一句话说明（如「板块不提供形态识别」）。
@@ -2017,6 +2173,29 @@ onUnmounted(() => {
       .is-dark & {
         background: #3b82f6;
         color: #ffffff;
+      }
+    }
+
+    &.is-pattern-highlight {
+      border-color: #eb5e28;
+      background: rgba(235, 94, 40, 0.12);
+      color: #eb5e28;
+      font-weight: 600;
+
+      .is-dark & {
+        border-color: #f97316;
+        background: rgba(249, 115, 22, 0.18);
+        color: #fdba74;
+      }
+
+      &:hover {
+        background: #eb5e28;
+        color: #ffffff;
+
+        .is-dark & {
+          background: #f97316;
+          color: #ffffff;
+        }
       }
     }
   }

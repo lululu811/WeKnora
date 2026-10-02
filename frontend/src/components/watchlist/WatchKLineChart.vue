@@ -59,7 +59,10 @@ import { useI18n } from 'vue-i18n'
 import { useTheme } from '@/composables/useTheme'
 import { getKlineChartTheme } from '@/components/workspace/kline/theme'
 import { setZettarancPalette, zettarancPalette } from '@/components/workspace/kline/palette'
+import { drawAlertLevel, clearAlertOverlays, drawCostLevel, drawStopLevel, clearTradeTargetOverlays } from '@/components/workspace/kline/core-chart'
 import type { KLineData } from '@/components/workspace/kline/types'
+import type { WatchCondition } from '@/api/watchlist'
+import type { TradeTarget } from '@/utils/tradeTargets'
 
 /**
  * 自选侧栏的单标的 K 线图：蜡烛 + 成交量 + MA。
@@ -77,6 +80,12 @@ const props = defineProps<{
   /** `600519.SH` 形态。python-service 的 /api/kline 直接吃这个形态。 */
   thscode: string
   name?: string
+  conditions?: WatchCondition[]
+  tradeTarget?: TradeTarget | null
+}>()
+
+const emit = defineEmits<{
+  (e: 'loaded-bars', bars: KLineData[]): void
 }>()
 
 const { t } = useI18n()
@@ -244,6 +253,8 @@ function ensureChart(): Chart | null {
 function resetChart(): void {
   const instance = chart.value
   if (!instance) return
+  clearAlertOverlays(instance)
+  clearTradeTargetOverlays(instance)
   instance.clearData()
   // clearData 只把数据仓清空，**不重绘画布**（klinecharts 里它只碰
   // _dataList / _visibleDataList / timeScale / tooltip）。新数据回来时
@@ -358,7 +369,38 @@ async function load(): Promise<void> {
   }
 
   instance.applyNewData(bars)
+  emit('loaded-bars', bars)
+  renderAlertConditions(instance)
+  renderTradeTargets(instance, bars[bars.length - 1]?.close)
   state.value = null
+}
+
+/** 在图表上绘制已设置的价格预警线。 */
+function renderAlertConditions(instance: Chart | null): void {
+  if (!instance) return
+  clearAlertOverlays(instance)
+  if (!props.conditions || !props.conditions.length) return
+  for (const cond of props.conditions) {
+    if (cond.field === 'price' && Number.isFinite(cond.value) && cond.value > 0) {
+      const opSign = cond.op === 'above' ? '≥' : '≤'
+      drawAlertLevel(instance, `alert_${cond.id}`, cond.value, `🔔 预警 ${opSign}`)
+    }
+  }
+}
+
+/** 在图表上绘制持仓成本线与防守止损线。 */
+function renderTradeTargets(instance: Chart | null, lastClose?: number): void {
+  if (!instance) return
+  clearTradeTargetOverlays(instance)
+  if (!props.tradeTarget) return
+  const dataList = instance.getDataList() || []
+  const curPrice = lastClose ?? dataList[dataList.length - 1]?.close
+  if (props.tradeTarget.cost && Number.isFinite(props.tradeTarget.cost) && props.tradeTarget.cost > 0) {
+    drawCostLevel(instance, props.tradeTarget.cost, curPrice)
+  }
+  if (props.tradeTarget.stopLoss && Number.isFinite(props.tradeTarget.stopLoss) && props.tradeTarget.stopLoss > 0) {
+    drawStopLevel(instance, props.tradeTarget.stopLoss, curPrice)
+  }
 }
 
 onMounted(() => {
@@ -383,6 +425,22 @@ watch(isDark, () => {
   setZettarancPalette(isDark.value)
   chart.value?.setStyles(getKlineChartTheme(isDark.value))
 })
+
+watch(
+  () => props.conditions,
+  () => {
+    renderAlertConditions(chart.value)
+  },
+  { deep: true },
+)
+
+watch(
+  () => props.tradeTarget,
+  () => {
+    renderTradeTargets(chart.value)
+  },
+  { deep: true },
+)
 
 onBeforeUnmount(() => {
   // 卸载时先掐掉在飞请求：组件没了而 fetch 还在，回来时 setState 会打到已卸载的

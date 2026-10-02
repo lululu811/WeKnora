@@ -212,7 +212,24 @@ watch(
 
 onMounted(() => {
     fetchSuggestedQuestions();
+    const queryQ = route.query.q;
+    if (typeof queryQ === 'string' && queryQ.trim()) {
+        nextTick(() => {
+            inputFieldRef.value?.triggerSend(queryQ.trim());
+        });
+    }
 });
+
+watch(
+    () => route.query.q,
+    (newQ) => {
+        if (typeof newQ === 'string' && newQ.trim()) {
+            nextTick(() => {
+                inputFieldRef.value?.triggerSend(newQ.trim());
+            });
+        }
+    },
+);
 
 const inputFieldRef = ref();
 

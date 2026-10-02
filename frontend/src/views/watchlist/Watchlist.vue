@@ -15,10 +15,76 @@
             <template #icon><t-icon name="refresh" /></template>
             {{ t('watchlist.refresh') }}
           </t-button>
+          <t-button
+            variant="outline"
+            theme="primary"
+            size="small"
+            :disabled="rows.length === 0"
+            @click="openPortfolioDiagnosis"
+          >
+            <template #icon><t-icon name="dashboard" /></template>
+            {{ t('watchlist.portfolioDiagnosis') }}
+          </t-button>
         </div>
       </div>
       <p class="watchlist-subtitle" style="--wails-draggable: drag">{{ t('watchlist.subtitle') }}</p>
     </header>
+
+    <!-- 顶部决策指标条 (Executive Metric Bar) -->
+    <div class="watchlist-metrics" v-if="rows.length">
+      <div
+        class="wl-metric-card"
+        :class="{ 'is-active': activeTab === 'all' }"
+        @click="activeTab = 'all'"
+      >
+        <div class="wl-metric-card__title">{{ t('watchlist.metricTotal') }}</div>
+        <div class="wl-metric-card__val">{{ rows.length }}</div>
+      </div>
+      <div
+        class="wl-metric-card wl-metric-card--triggered"
+        :class="{ 'is-active': activeTab === 'triggered', 'has-badge': countTriggered > 0 }"
+        @click="activeTab = 'triggered'"
+      >
+        <div class="wl-metric-card__title">
+          <t-icon name="notification-filled" size="14px" />
+          {{ t('watchlist.metricTriggered') }}
+        </div>
+        <div class="wl-metric-card__val">{{ countTriggered }}</div>
+      </div>
+      <div
+        class="wl-metric-card wl-metric-card--holding"
+        :class="{ 'is-active': activeTab === 'holding' }"
+        @click="activeTab = 'holding'"
+      >
+        <div class="wl-metric-card__title">
+          <span class="wl-state__dot is-holding"></span>
+          {{ t('watchlist.metricHolding') }}
+        </div>
+        <div class="wl-metric-card__val">{{ countHolding }}</div>
+      </div>
+      <div
+        class="wl-metric-card wl-metric-card--observing"
+        :class="{ 'is-active': activeTab === 'observing' }"
+        @click="activeTab = 'observing'"
+      >
+        <div class="wl-metric-card__title">
+          <span class="wl-state__dot is-observing"></span>
+          {{ t('watchlist.metricObserving') }}
+        </div>
+        <div class="wl-metric-card__val">{{ countObserving }}</div>
+      </div>
+      <div
+        class="wl-metric-card wl-metric-card--dropped"
+        :class="{ 'is-active': activeTab === 'dropped' }"
+        @click="activeTab = 'dropped'"
+      >
+        <div class="wl-metric-card__title">
+          <span class="wl-state__dot is-dropped"></span>
+          {{ t('watchlist.metricDropped') }}
+        </div>
+        <div class="wl-metric-card__val">{{ countDropped }}</div>
+      </div>
+    </div>
 
     <!-- 添加：输入代码或名称片段 → 联想 → 选中即加入。回车在有候选时直接取第一条，
          因为输入框里已经是「600519」这种可判定的前缀时再点一次纯属多余。 -->
@@ -56,9 +122,22 @@
         adjacent v-if"。
       -->
       <div class="wl-body__table">
-    <t-table row-key="thscode" class="watchlist-table" :data="rows" :columns="columns"
-      :loading="loading || quotesLoading" size="medium" hover
-      :row-class-name="rowClassName" @row-click="onRowClick">
+        <div class="watchlist-tabs" v-if="rows.length">
+          <t-radio-group v-model="activeTab" variant="default-filled" size="small">
+            <t-radio-button value="all">{{ t('watchlist.tabAll') }} ({{ rows.length }})</t-radio-button>
+            <t-radio-button value="triggered">
+              <span class="wl-tab-triggered" :class="{ 'has-count': countTriggered > 0 }">
+                🎯 {{ t('watchlist.tabTriggered') }} ({{ countTriggered }})
+              </span>
+            </t-radio-button>
+            <t-radio-button value="holding">💼 {{ t('watchlist.tabHolding') }} ({{ countHolding }})</t-radio-button>
+            <t-radio-button value="observing">🔍 {{ t('watchlist.tabObserving') }} ({{ countObserving }})</t-radio-button>
+            <t-radio-button value="dropped">📦 {{ t('watchlist.tabDropped') }} ({{ countDropped }})</t-radio-button>
+          </t-radio-group>
+        </div>
+        <t-table row-key="thscode" class="watchlist-table" :data="filteredRows" :columns="columns"
+          :loading="loading || quotesLoading" size="medium" hover
+          :row-class-name="rowClassName" @row-click="onRowClick">
       <template #thscode="{ row }">
         <div class="wl-code">
           <span class="wl-code__code">{{ row.thscode }}</span>
@@ -159,7 +238,10 @@
         :thscode="selectedRow.thscode"
         :name="displayName(selectedRow)"
         :quote="selectedRow.quote"
+        :conditions="conditionsByThscode[selectedRow.thscode] || []"
         @close="selectedThscode = ''"
+        @open-workspace="openFullWorkspace(selectedRow)"
+        @open-conditions="openConditions(selectedRow)"
       />
     </div>
 
@@ -185,6 +267,19 @@
         </ul>
         <p v-else class="wl-cond__empty">{{ t('watchlist.condEmpty') }}</p>
 
+        <div class="wl-cond-presets">
+          <span class="wl-cond-presets__title">常用预设:</span>
+          <button type="button" class="wl-preset-btn" @click="applyPreset('ma20')">
+            {{ t('watchlist.presetCondMa20') }}
+          </button>
+          <button type="button" class="wl-preset-btn" @click="applyPreset('drop3')">
+            {{ t('watchlist.presetCondDrop3') }}
+          </button>
+          <button type="button" class="wl-preset-btn" @click="applyPreset('vol2')">
+            {{ t('watchlist.presetCondVolume2') }}
+          </button>
+        </div>
+
         <div class="wl-cond-add">
           <t-select class="wl-cond-add__field" :value="condField" :options="fieldOptions"
             :aria-label="t('watchlist.condField')" @change="setCondField" />
@@ -199,15 +294,92 @@
         </div>
       </div>
     </t-dialog>
+
+    <!-- 全功能 K 线工作台模态 -->
+    <t-dialog
+      v-model:visible="fullWorkspaceVisible"
+      :header="fullWorkspaceTitle"
+      :footer="false"
+      width="94vw"
+      top="3vh"
+      dialog-class-name="wl-workspace-dialog"
+      destroy-on-close
+    >
+      <div class="wl-workspace-modal-body">
+        <KLineWorkspace v-if="fullWorkspaceVisible" />
+      </div>
+    </t-dialog>
+
+    <!-- 自选池组合诊断全景模态 -->
+    <t-dialog
+      v-model:visible="diagnosisVisible"
+      :header="t('watchlist.diagnosisTitle')"
+      :footer="false"
+      width="680px"
+      dialog-class-name="wl-diag-dialog"
+    >
+      <div class="wl-diag-body">
+        <div class="wl-diag-metrics">
+          <div class="wl-diag-metric-card">
+            <span class="wl-diag-metric-card__lbl">总跟踪标的</span>
+            <span class="wl-diag-metric-card__val">{{ rows.length }} 只</span>
+          </div>
+          <div class="wl-diag-metric-card">
+            <span class="wl-diag-metric-card__lbl">当前持仓组合</span>
+            <span class="wl-diag-metric-card__val">{{ countHolding }} 只</span>
+          </div>
+          <div class="wl-diag-metric-card is-triggered">
+            <span class="wl-diag-metric-card__lbl">今日触发预警</span>
+            <span class="wl-diag-metric-card__val">{{ countTriggered }} 只</span>
+          </div>
+          <div class="wl-diag-metric-card">
+            <span class="wl-diag-metric-card__lbl">重点观察池</span>
+            <span class="wl-diag-metric-card__val">{{ countObserving }} 只</span>
+          </div>
+        </div>
+
+        <div class="wl-diag-summary">
+          <h4 class="wl-diag-h4">组合行情速览</h4>
+          <div class="wl-diag-tags">
+            <div
+              v-for="r in rows.slice(0, 10)"
+              :key="r.thscode"
+              class="wl-diag-tag"
+              :class="r.quote && (r.quote.change_pct ?? 0) >= 0 ? 'is-up' : 'is-down'"
+            >
+              <span class="wl-diag-tag__name">{{ displayName(r) }}</span>
+              <span class="wl-diag-tag__pct">
+                {{ r.quote ? `${(r.quote.change_pct ?? 0) >= 0 ? '+' : ''}${(r.quote.change_pct ?? 0).toFixed(2)}%` : '—' }}
+              </span>
+            </div>
+            <span v-if="rows.length > 10" class="wl-diag-more">等共 {{ rows.length }} 只标的</span>
+          </div>
+        </div>
+
+        <div class="wl-diag-prompt-box">
+          <p class="wl-diag-prompt-box__desc">
+            🚀 准备将自选池全景数据（持仓标的与盈亏比、今日触发预警明细、重点观察池、日内表现）结构化打包至 AI 对话，为您生成专属的《组合复盘与攻防配置研报》。
+          </p>
+          <t-button theme="primary" size="large" block class="wl-diag-launch-btn" @click="launchAiPortfolioReport">
+            <template #icon><t-icon name="chat" /></template>
+            {{ t('watchlist.startAiDiagnosis') }}
+          </t-button>
+        </div>
+      </div>
+    </t-dialog>
   </main>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
 import EmptyState from '@/components/EmptyState.vue'
 import WatchDetailPanel from '@/components/watchlist/WatchDetailPanel.vue'
+import KLineWorkspace from '@/components/workspace/kline/KLineWorkspace.vue'
+import { provideAgentWorkspace } from '@/composables/useAgentWorkspace'
+import { provideChatKLinePanel } from '@/composables/useChatKLinePanel'
 import {
   addCondition,
   addWatchItem,
@@ -231,6 +403,114 @@ import {
 } from '@/api/watchlist'
 
 const { t } = useI18n()
+const router = useRouter()
+
+// 注入 AgentWorkspace 上下文以供全功能 K 线工作台模态使用
+const agentWorkspace = provideAgentWorkspace()
+provideChatKLinePanel(agentWorkspace)
+
+const fullWorkspaceVisible = ref(false)
+const fullWorkspaceTitle = ref('')
+
+function openFullWorkspace(row: WatchRow) {
+  const parts = row.thscode.split('.')
+  const ticker = parts[0] || row.thscode
+  const exchange = parts[1] || 'SH'
+  const name = displayName(row)
+  fullWorkspaceTitle.value = `${name} (${row.thscode})`
+  agentWorkspace.open('kline', [{ ticker, exchange, name }], 0)
+  fullWorkspaceVisible.value = true
+}
+
+agentWorkspace.sendToChatCallback.value = (text: string) => {
+  fullWorkspaceVisible.value = false
+  router.push({
+    path: '/platform/creatChat',
+    query: { q: text },
+  })
+}
+
+// ── 自选池组合诊断全景 ───────────────────────────────────────────────
+import { getTradeTarget } from '@/utils/tradeTargets'
+
+const diagnosisVisible = ref(false)
+
+function openPortfolioDiagnosis() {
+  diagnosisVisible.value = true
+}
+
+function launchAiPortfolioReport() {
+  diagnosisVisible.value = false
+  const holdingList = rows.value.filter(r => r.state === 'holding').map(r => {
+    const target = getTradeTarget(r.thscode)
+    let pnlStr = ''
+    if (target?.cost && r.quote?.close) {
+      const pnl = (((r.quote.close - target.cost) / target.cost) * 100).toFixed(2)
+      pnlStr = ` (持仓成本 ¥${target.cost.toFixed(2)}, 当前浮动盈亏: ${Number(pnl) >= 0 ? '+' : ''}${pnl}%)`
+    }
+    return `- ${displayName(r)} (${r.thscode}): 现价 ¥${r.quote?.close?.toFixed(2) ?? '—'}, 日内涨跌 ${r.quote?.change_pct ? `${r.quote.change_pct >= 0 ? '+' : ''}${r.quote.change_pct.toFixed(2)}%` : '—'}${pnlStr}`
+  })
+
+  const triggeredList = rows.value.filter(r => (todayTriggerNotesByCode.value[r.thscode]?.length ?? 0) > 0).map(r => {
+    const notes = todayTriggerNotes(r).join('; ')
+    return `- ${displayName(r)} (${r.thscode}): 触发预警【${notes}】(现价 ¥${r.quote?.close?.toFixed(2) ?? '—'})`
+  })
+
+  const observingList = rows.value.filter(r => r.state === 'observing').slice(0, 8).map(r => {
+    return `- ${displayName(r)} (${r.thscode}): 现价 ¥${r.quote?.close?.toFixed(2) ?? '—'}, 日内涨跌 ${r.quote?.change_pct ? `${r.quote.change_pct >= 0 ? '+' : ''}${r.quote.change_pct.toFixed(2)}%` : '—'}, 关注理由: ${r.note || '无'}`
+  })
+
+  const prompt = `请帮我针对当前自选池（共 ${rows.value.length} 只标的）进行一次全景组合诊断与复盘研判：\n\n` +
+    `【当前持仓组合】(共 ${countHolding.value} 只)\n` +
+    (holdingList.length > 0 ? holdingList.join('\n') : '暂无持仓标的') + '\n\n' +
+    `【今日触发预警/买点标的】(共 ${countTriggered.value} 只)\n` +
+    (triggeredList.length > 0 ? triggeredList.join('\n') : '今日暂无触发标的') + '\n\n' +
+    `【重点观察池候选】(共 ${countObserving.value} 只)\n` +
+    (observingList.length > 0 ? observingList.join('\n') : '暂无观察标的') + '\n\n' +
+    `请结合当前大盘与行业主线轮动环境，输出一份专业的《自选池盘后大盘点与组合攻防策略》：\n` +
+    `1. 【板块暴露与市场主线】当前自选池标的集中在哪些行业题材？资金是否在其主线方向？\n` +
+    `2. 【持仓攻防与买卖点】针对当前持仓标的及其实际浮盈/浮亏，哪些建议上移止损保本？哪些出现分歧需要止盈或减仓？\n` +
+    `3. 【重点异动机会】对今日触发预警和观察池中异动的标的，判断突破真实性与介入胜率；\n` +
+    `4. 【总仓位与交易节奏建议】给出明晰的仓位配比与明日开盘应对策略。`
+
+  router.push({
+    path: '/platform/creatChat',
+    query: { q: prompt },
+  })
+}
+
+/** 状态分流 Tab */
+const activeTab = ref<'all' | 'triggered' | 'holding' | 'observing' | 'dropped'>('all')
+
+/** 缓存每个标的的条件列表供 K 线图与详情面板使用 */
+const conditionsByThscode = ref<Record<string, WatchCondition[]>>({})
+
+async function fetchConditionsForSymbol(thscode: string) {
+  if (!thscode) return
+  try {
+    const res = await listConditions(thscode)
+    if (res.data) {
+      conditionsByThscode.value[thscode] = res.data
+    }
+  } catch {}
+}
+
+/** 预设条件快速应用 */
+function applyPreset(type: 'ma20' | 'drop3' | 'vol2') {
+  if (type === 'ma20') {
+    condField.value = 'close_vs_ma20'
+    condOp.value = 'below'
+    condValue.value = 0
+  } else if (type === 'drop3') {
+    condField.value = 'pct_change'
+    condOp.value = 'below'
+    condValue.value = -3.0
+  } else if (type === 'vol2') {
+    condField.value = 'volume_ratio'
+    condOp.value = 'above'
+    condValue.value = 2.0
+  }
+}
 
 /** 行情自动刷新的间隔。日线级别的读数，一分钟一次足够。 */
 const REFRESH_INTERVAL_MS = 60_000
@@ -302,6 +582,28 @@ const todayTriggerNotesByCode = computed<Record<string, string[]>>(() => {
 function todayTriggerNotes(row: WatchRow): string[] {
   return todayTriggerNotesByCode.value[row.thscode] ?? []
 }
+
+const countTriggered = computed(
+  () => rows.value.filter((r) => (todayTriggerNotesByCode.value[r.thscode]?.length ?? 0) > 0).length,
+)
+const countHolding = computed(() => rows.value.filter((r) => r.state === 'holding').length)
+const countObserving = computed(() => rows.value.filter((r) => r.state === 'observing').length)
+const countDropped = computed(() => rows.value.filter((r) => r.state === 'dropped').length)
+
+const filteredRows = computed(() => {
+  switch (activeTab.value) {
+    case 'triggered':
+      return rows.value.filter((r) => (todayTriggerNotesByCode.value[r.thscode]?.length ?? 0) > 0)
+    case 'holding':
+      return rows.value.filter((r) => r.state === 'holding')
+    case 'observing':
+      return rows.value.filter((r) => r.state === 'observing')
+    case 'dropped':
+      return rows.value.filter((r) => r.state === 'dropped')
+    default:
+      return rows.value
+  }
+})
 
 /** 条件面板当前对着哪一行（只存代码 + 展示名，避免行情刷新后握着过期对象）。 */
 const condThscode = ref('')
@@ -436,7 +738,12 @@ const selectedRow = computed<WatchRow | null>(
 
 /** 点行开详情，再点同一行关闭。 */
 function onRowClick({ row }: { row: WatchRow }) {
-  selectedThscode.value = selectedThscode.value === row.thscode ? '' : row.thscode
+  if (selectedThscode.value === row.thscode) {
+    selectedThscode.value = ''
+  } else {
+    selectedThscode.value = row.thscode
+    void fetchConditionsForSymbol(row.thscode)
+  }
 }
 
 /** 选中行的高亮。空选中不返回任何类，避免"什么都没选也有高亮"。 */
@@ -597,6 +904,7 @@ async function loadConditions(thscode: string) {
     // 否则面板会显示上一条标的的条件。
     if (condThscode.value !== thscode) return
     conditions.value = res.data ?? []
+    conditionsByThscode.value[thscode] = res.data ?? []
   } catch (error: any) {
     MessagePlugin.error(error?.message || t('watchlist.loadFailed'))
   } finally {
@@ -616,6 +924,7 @@ async function submitCondition() {
     MessagePlugin.success(res.created ? t('watchlist.condAdded') : t('watchlist.condExists'))
     condValue.value = undefined
     await loadConditions(thscode)
+    conditionsByThscode.value[thscode] = conditions.value
   } catch (error: any) {
     MessagePlugin.error(error?.message || t('watchlist.loadFailed'))
   } finally {
@@ -630,6 +939,7 @@ async function deleteCondition(c: WatchCondition) {
     await removeCondition(thscode, c.id)
     MessagePlugin.success(t('watchlist.condDeleted'))
     await loadConditions(thscode)
+    conditionsByThscode.value[thscode] = conditions.value
   } catch (error: any) {
     MessagePlugin.error(error?.message || t('watchlist.loadFailed'))
   }
@@ -1270,5 +1580,227 @@ onUnmounted(() => {
 
 .wl-cond-add__value {
   flex: 0 0 96px;
+}
+
+.wl-cond-presets {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  font-size: var(--app-text-xs);
+
+  &__label {
+    color: var(--td-text-color-secondary);
+    flex-shrink: 0;
+  }
+}
+
+.wl-preset-btn {
+  padding: 2px 8px;
+  border: 1px dashed var(--td-border-level-2-color);
+  border-radius: var(--app-radius-pill);
+  background: transparent;
+  color: var(--td-text-color-secondary);
+  font-size: var(--app-text-xs);
+  cursor: pointer;
+  transition: all var(--app-motion-fast) ease;
+
+  &:hover {
+    border-color: var(--td-brand-color);
+    color: var(--td-brand-color);
+    background: color-mix(in srgb, var(--td-brand-color) 8%, transparent);
+  }
+}
+
+.watchlist-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 16px 0 12px;
+}
+
+.wl-metric-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 120px;
+  padding: 10px 14px;
+  border: 1px solid var(--td-border-level-1-color);
+  border-radius: var(--app-radius-sm);
+  background: var(--td-bg-color-container);
+  cursor: pointer;
+  transition: all var(--app-motion-fast) ease;
+
+  &:hover {
+    border-color: var(--td-brand-color-hover);
+    background: var(--td-bg-color-secondarycontainer);
+  }
+
+  &.is-active {
+    border-color: var(--td-brand-color);
+    box-shadow: 0 0 0 1px var(--td-brand-color);
+    background: color-mix(in srgb, var(--td-brand-color) 6%, var(--td-bg-color-container));
+  }
+
+  &__label {
+    font-size: var(--app-text-xs);
+    color: var(--td-text-color-secondary);
+  }
+
+  &__val {
+    font-size: var(--app-text-xl);
+    font-weight: 600;
+    font-family: monospace;
+    color: var(--td-text-color-primary);
+    line-height: 1.2;
+  }
+
+  &--triggered {
+    &.has-badge {
+      border-color: color-mix(in srgb, var(--td-warning-color) 45%, transparent);
+      background: color-mix(in srgb, var(--td-warning-color) 8%, var(--td-bg-color-container));
+
+      .wl-metric-card__val {
+        color: var(--td-warning-color);
+      }
+
+      &.is-active {
+        border-color: var(--td-warning-color);
+        box-shadow: 0 0 0 1px var(--td-warning-color);
+      }
+    }
+  }
+}
+
+.watchlist-tabs {
+  margin-bottom: 12px;
+}
+
+:deep(.wl-workspace-dialog) {
+  .t-dialog__body {
+    padding: 0;
+    height: 84vh;
+    overflow: hidden;
+  }
+}
+
+.wl-workspace-modal-body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.wl-diag-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 8px 0;
+}
+
+.wl-diag-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+
+.wl-diag-metric-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--td-border-level-1-color);
+  border-radius: var(--app-radius-sm);
+  background: var(--td-bg-color-secondarycontainer);
+
+  &__lbl {
+    font-size: var(--app-text-xs);
+    color: var(--td-text-color-secondary);
+  }
+
+  &__val {
+    font-size: var(--app-text-lg);
+    font-weight: 600;
+    font-family: monospace;
+    color: var(--td-text-color-primary);
+  }
+
+  &.is-triggered {
+    border-color: color-mix(in srgb, var(--td-warning-color) 45%, transparent);
+    background: color-mix(in srgb, var(--td-warning-color) 8%, var(--td-bg-color-container));
+    .wl-diag-metric-card__val {
+      color: var(--td-warning-color);
+    }
+  }
+}
+
+.wl-diag-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.wl-diag-h4 {
+  margin: 0;
+  font-size: var(--app-text-sm);
+  color: var(--td-text-color-secondary);
+}
+
+.wl-diag-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.wl-diag-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: var(--app-radius-xs);
+  border: 1px solid var(--td-component-stroke);
+  background: var(--td-bg-color-container);
+  font-size: var(--app-text-xs);
+  font-family: monospace;
+
+  &__name {
+    color: var(--td-text-color-primary);
+  }
+
+  &__pct {
+    font-weight: 600;
+  }
+
+  &.is-up {
+    color: var(--wl-up);
+    border-color: color-mix(in srgb, var(--wl-up) 35%, transparent);
+  }
+
+  &.is-down {
+    color: var(--wl-down);
+    border-color: color-mix(in srgb, var(--wl-down) 35%, transparent);
+  }
+}
+
+.wl-diag-more {
+  font-size: var(--app-text-xs);
+  color: var(--td-text-color-placeholder);
+}
+
+.wl-diag-prompt-box {
+  padding: 12px;
+  border-radius: var(--app-radius-sm);
+  background: color-mix(in srgb, var(--td-brand-color) 6%, var(--td-bg-color-container));
+  border: 1px solid color-mix(in srgb, var(--td-brand-color) 25%, transparent);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+
+  &__desc {
+    margin: 0;
+    font-size: var(--app-text-sm);
+    line-height: 1.6;
+    color: var(--td-text-color-primary);
+  }
 }
 </style>
