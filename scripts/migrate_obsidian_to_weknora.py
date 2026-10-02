@@ -12,7 +12,7 @@ from typing import Dict, List, Tuple, Optional
 from datetime import datetime
 
 # 配置
-OBSIDIAN_ROOT = Path("/Users/chenlei/003_knowledge/knowledge_base/research-reports")
+OBSIDIAN_ROOT = Path(os.environ.get("OBSIDIAN_ROOT", "./knowledge_base/research-reports"))
 WIKI_DIR = OBSIDIAN_ROOT / "wiki"
 WEKNORA_BASE_URL = "http://localhost:18080"
 WEKNORA_API_KEY = "your_api_key_here"  # 替换成你的API key

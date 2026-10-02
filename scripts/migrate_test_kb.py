@@ -14,10 +14,11 @@ from typing import Dict, List, Tuple, Optional
 from datetime import datetime
 
 # ========== 配置 ==========
-KNOWLEDGE_BASE_ROOT = Path("/Users/chenlei/003_knowledge/knowledge_base")
-WEKNORA_BASE_URL = "http://localhost:8080"
-WEKNORA_EMAIL = "admin@163.com"
-WEKNORA_PASSWORD = "ZXCv123321"
+# 全部走环境变量，不要把本机路径和账号密码写进代码里。
+KNOWLEDGE_BASE_ROOT = Path(os.environ.get("KNOWLEDGE_BASE_ROOT", "./knowledge_base"))
+WEKNORA_BASE_URL = os.environ.get("WEKNORA_BASE_URL", "http://localhost:8080")
+WEKNORA_EMAIL = os.environ.get("WEKNORA_EMAIL", "admin@example.com")
+WEKNORA_PASSWORD = os.environ.get("WEKNORA_PASSWORD", "")
 
 # Embedding模型配置
 EMBEDDING_MODEL_ID = "bc764613-9bc0-4af6-aadf-8fc5dc105985"  # milkey/wemm-embedding-2b:Q4_K_M
@@ -272,6 +273,11 @@ def main():
     print("=" * 70)
     print(f"试点迁移: {TEST_KB_NAME}")
     print("=" * 70)
+
+    if not WEKNORA_PASSWORD:
+        print("[ERROR] 未设置 WEKNORA_PASSWORD 环境变量，脚本无法登录。")
+        print("  用法: WEKNORA_EMAIL=you@example.com WEKNORA_PASSWORD=xxx python3 migrate_test_kb.py")
+        return 1
 
     # 初始化客户端
     client = WeKnoraClient(WEKNORA_BASE_URL, WEKNORA_EMAIL, WEKNORA_PASSWORD)

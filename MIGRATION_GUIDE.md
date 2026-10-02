@@ -3,7 +3,7 @@
 ## 📋 迁移概览
 
 ### 源数据
-- **位置**: `/Users/chenlei/003_knowledge/knowledge_base`
+- **位置**: 由环境变量 `KNOWLEDGE_BASE_ROOT` 指定（脚本默认读 `./knowledge_base`）
 - **知识库数量**: 18个(排除course-knowledge)
 - **总文件数**: 28,348个(过滤后)
   - wiki层: 9,326个(结构化知识)

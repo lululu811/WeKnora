@@ -13,7 +13,7 @@ from datetime import datetime
 from collections import defaultdict
 
 # ========== 配置 ==========
-KNOWLEDGE_BASE_ROOT = Path("/Users/chenlei/003_knowledge/knowledge_base")
+KNOWLEDGE_BASE_ROOT = Path(os.environ.get("KNOWLEDGE_BASE_ROOT", "./knowledge_base"))
 WEKNORA_BASE_URL = "http://localhost:18080"
 WEKNORA_API_KEY = "your_api_key_here"
 
