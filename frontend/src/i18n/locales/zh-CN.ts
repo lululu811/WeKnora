@@ -5375,7 +5375,7 @@ export default {
     haveAccount: '已有账户？',
     backToLogin: '返回登录',
     loginHint: '登录以继续使用；首次使用请在下方创建账户。',
-    firstTime: '首次使用 WeKnora？',
+    firstTime: "首次使用@:{'appName'}？",
     registerSuccess: '注册成功，请登录',
     registerFailed: '注册失败',
     subtitle: 'RAG 问答、ReAct 智能体与 Wiki 知识库，大模型驱动的企业级知识框架',
