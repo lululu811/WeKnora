@@ -538,7 +538,15 @@ async def analyze(
             分析是按需行为，外网慢且会封 IP，需要时再显式开启。
     """
     thscode = normalize_thscode(thscode)
-    if period is None:
+    # 空串必须当成「没指定」，不能只判 None。
+    #
+    # 这是实测过的线上失败：调用方（Go 工具、curl、任何客户端）把可选参数序列化
+    # 成 "" 而不是省略时，period 就不是 None，于是跳过「取最新期次」的解析，一路
+    # 带到 _fetch_financials 的 `int(period[:4])` —— 在那里抛
+    # `ValueError: invalid literal for int() with base 10: ''`，整个端点 500。
+    # 而且它**只在 financials 数据源就绪时才炸**：数据源缺失时 _fetch_financials
+    # 提前返回，于是本地无库的环境测不出来。
+    if not period:
         period = store.latest_period(thscode, report_type)
     if period is None:
         # 早返回也要带**完整结构**。缺键会让调用方（agent / 前端）在

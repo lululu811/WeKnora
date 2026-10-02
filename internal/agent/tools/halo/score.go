@@ -110,15 +110,14 @@ func (t *ScoreTool) Execute(ctx context.Context, args json.RawMessage) (*types.T
 		params.Scope = "consolidated"
 	}
 
-	var out map[string]any
-	req := map[string]any{
-		"thscode":          params.Thscode,
-		"period":           params.Period,
-		"report_type":      params.ReportType,
-		"scope":            params.Scope,
-		"include_external": params.IncludeExt,
-	}
-	if err := t.client.post(ctx, "/halo/score", req, queryTimeout, &out); err != nil {
+	out, err := t.client.Score(ctx, ScoreRequest{
+		Thscode:    params.Thscode,
+		Period:     params.Period,
+		ReportType: params.ReportType,
+		Scope:      params.Scope,
+		IncludeExt: params.IncludeExt,
+	})
+	if err != nil {
 		return &types.ToolResult{Success: false, Error: err.Error()}, nil
 	}
 

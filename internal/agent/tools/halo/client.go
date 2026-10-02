@@ -64,6 +64,19 @@ type QueryRequest struct {
 	OnlyVerified *bool    `json:"only_verified,omitempty"`
 }
 
+// ScoreRequest 是 /halo/score 的请求体。
+//
+// IncludeExternal 默认关闭，与端点侧一致：打开会去打东财的易封子域
+// （push2his），是**按需行为**而不是默认行为。归档时尤其不要默认打开 ——
+// 归档一次报告不该把 IP 风险搭进去。
+type ScoreRequest struct {
+	Thscode    string `json:"thscode"`
+	Period     string `json:"period,omitempty"`
+	ReportType string `json:"report_type,omitempty"`
+	Scope      string `json:"scope,omitempty"`
+	IncludeExt bool   `json:"include_external"`
+}
+
 // post 发一个 JSON 请求并解出响应体。
 //
 // timeout 必须按端点给足：sync 要下载年报 PDF（单份 1–10 MB）再逐页解析，
@@ -124,6 +137,10 @@ const syncTimeout = 10 * time.Minute
 // queryTimeout 只读 SQLite，秒级足够。
 const queryTimeout = 30 * time.Second
 
+// scoreTimeout 覆盖 analyze()：本地读表与评分是秒级，但 IncludeExternal
+// 会去打东财三个子域（本模块串行 + 最小间隔），实测几十秒。给 2 分钟。
+const scoreTimeout = 2 * time.Minute
+
 // Sync 触发一只股票的年报抽取与落表。
 func (c *HTTPClient) Sync(ctx context.Context, thscode, reportType string, force bool) (map[string]any, error) {
 	var out map[string]any
@@ -139,5 +156,13 @@ func (c *HTTPClient) Sync(ctx context.Context, thscode, reportType string, force
 func (c *HTTPClient) Query(ctx context.Context, req QueryRequest) (map[string]any, error) {
 	var out map[string]any
 	err := c.post(ctx, "/halo/query", req, queryTimeout, &out)
+	return out, err
+}
+
+// Score 取评分结果。返回体含预渲染的 markdown 骨架（见 analyze.render_markdown），
+// 归档就是把它写进知识库，所以调用方不必自己拼报告。
+func (c *HTTPClient) Score(ctx context.Context, req ScoreRequest) (map[string]any, error) {
+	var out map[string]any
+	err := c.post(ctx, "/halo/score", req, scoreTimeout, &out)
 	return out, err
 }
