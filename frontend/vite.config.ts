@@ -179,6 +179,15 @@ export default defineConfig({
         target: process.env.VITE_PY_SERVICE_TARGET || 'http://localhost:50052',
         changeOrigin: true,
       },
+      // 悬浮卡的个股/板块速览。**这条之前漏了**，于是 dev 下它落到泛化的 '/api'
+      // 规则被转到 Go 应用、拿到 401（卡片对画像失败是静默的，所以只表现为
+      // "画像那几块不显示"，没有任何报错）。生产 nginx 的白名单里有它，dev 也必须有：
+      // 这份列表与 nginx.conf 里 `location ~ ^/api/(kline|annotate|indicators|symbols|
+      // stock-profile|quotes|chart-pattern)` 必须一致。
+      '/api/stock-profile': {
+        target: process.env.VITE_PY_SERVICE_TARGET || 'http://localhost:50052',
+        changeOrigin: true,
+      },
       '/api': {
         target: DEV_PROXY_TARGET,
         changeOrigin: true,

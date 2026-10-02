@@ -2084,10 +2084,11 @@ async def stock_profile(
                 "sectors": [], "unavailable": ["代码格式非法"]}
     if _is_board(symbol):
         # 与"格式非法"分开报：格式非法的下一步是改写法，板块的下一步是换标的。
-        # 板块没有资金面/估值/归属这三块（它们都来自个股表），这里直接说明，
-        # 而不是让它查成一堆空值被前端显示成"无数据"。
+        # 与"数据源查不到"（`unavailable`）也分开：板块是**本来就没有**资金面/估值/
+        # 归属，重试多少次都一样；混进 unavailable 会被读成同步出了问题。
         return {"code": 0, "symbol": symbol.upper(), "capital": None, "valuation": None,
-                "sectors": [], "unavailable": ["板块/指数不提供速览数据（仅个股有）"]}
+                "sectors": [], "unavailable": [],
+                "unsupported": ["板块/指数没有资金面与管理层数据（仅个股提供）"]}
 
     unavailable: list[str] = []
 

@@ -26,6 +26,14 @@ export interface StockProfile {
   sectors: SectorChip[];
   /** 后端查不到的库名。渲染层据此说明「为什么这块是空的」。 */
   unavailable: string[];
+  /**
+   * 这个标的**本来就没有**这类数据（如板块/指数没有资金面/估值/行业归属）。
+   *
+   * 与 `unavailable` 分开：前者是"这次没查到"（可能重试就好），后者是"这里根本
+   * 不适用"（重试多少次都一样）。合并成一句"数据源不可用"会把后者说成故障，
+   * 让人去查数据同步。
+   */
+  unsupported: string[];
 }
 
 export interface CapitalProfile {
@@ -177,6 +185,7 @@ export function normalizeProfile(raw: any, symbol: string): StockProfile {
     valuation: normalizeValuation(raw?.valuation),
     sectors: rawSectors.filter((s) => typeof s?.name === 'string'),
     unavailable: Array.isArray(raw?.unavailable) ? raw.unavailable : [],
+    unsupported: Array.isArray(raw?.unsupported) ? raw.unsupported : [],
   };
 }
 

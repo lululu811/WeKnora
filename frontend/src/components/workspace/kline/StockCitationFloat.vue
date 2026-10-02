@@ -170,6 +170,10 @@
           <span v-if="profileUnavailable.length" class="quality__note">
             以下数据源本次不可用：{{ profileUnavailable.join('、') }}
           </span>
+          <!-- "本来就没有"与"这次没查到"是两件事：前者重试无用，不该说成故障。 -->
+          <span v-if="profileUnsupported.length" class="quality__note">
+            {{ profileUnsupported.join('；') }}
+          </span>
         </div>
 
         <!-- 核心战法速览提炼 -->
@@ -247,6 +251,8 @@ const insufficient = ref(false);
  */
 const profile = ref<StockProfile | null>(null);
 const profileUnavailable = ref<string[]>([]);
+// 与 profileUnavailable 分开存：那是"这次没查到"，这是"这个标的本来就没有"。
+const profileUnsupported = ref<string[]>([]);
 
 const valuation = computed(() => profile.value?.valuation ?? null);
 const capital = computed(() => profile.value?.capital ?? null);
@@ -370,6 +376,7 @@ const loadProfile = async (symbolStr: string, seq: number) => {
   if (cached) {
     profile.value = cached;
     profileUnavailable.value = cached.unavailable;
+    profileUnsupported.value = cached.unsupported;
     return;
   }
 
@@ -387,6 +394,7 @@ const loadProfile = async (symbolStr: string, seq: number) => {
       setCachedProfile(symbolStr, p);
       profile.value = p;
       profileUnavailable.value = p.unavailable;
+      profileUnsupported.value = p.unsupported;
     }
     // code !== 0 不写 state：保留 null，卡片上那三块自然不渲染。
     // 后端已经做了「查不到就返回 null + 记 unavailable」的处理，
@@ -416,6 +424,7 @@ const loadStockData = async (symbolStr: string) => {
   dataQualitySnapshot.value = null;
   profile.value = null;
   profileUnavailable.value = [];
+  profileUnsupported.value = [];
 
   const controller = new AbortController();
   const ticker = symbolStr.split('.')[0];
@@ -430,7 +439,13 @@ const loadStockData = async (symbolStr: string) => {
       .then((r) => r.json())
       .then((json) => {
         const n = json?.data?.[0]?.name;
-        if (n) nameCache.set(ticker, n);
+        if (!n) return;
+        nameCache.set(ticker, n);
+        // 拿到名字要立刻写进卡片，否则**首次** hover 显示的是代码、第二次才显示
+        // 名字（只有 `nameCache` 命中那条分支会赋值）。板块尤其明显：它在聊天的
+        // 本地名称表里没有条目，`props.name` 一定是空串。
+        if (isStale()) return;
+        resolvedName.value = n;
       })
       .catch(() => {});
   }
