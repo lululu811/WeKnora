@@ -39,6 +39,16 @@ data/weknora.db-wal
 data/weknora.db-shm
 skills-lock.json
 
+# 误建的零字节文件（名字里带引号），2026-10 误提交后清理
+'"model_id"'
+
+# finance profile 的占位挂载目录。
+# 默认路径下没有本地 hithink DuckDB 库时，app/python-service 会挂到这里——
+# 空目录、挂载成功、查不到数据但主流程不受影响。
+# 真实数据请设 HITHINK_DB_DIR 指向自己的库，不要往这里放。
+!.hithink-placeholder/
+!.hithink-placeholder/.gitkeep
+
 web/
 
 **/__pycache__

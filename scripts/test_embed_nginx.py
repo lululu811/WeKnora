@@ -31,6 +31,10 @@ def check():
         for key, value in {
             "APP_SCHEME": "http", "APP_HOST": "127.0.0.1", "APP_PORT": "18081",
             "MAX_FILE_SIZE": "50m", "MAX_SKILL_BUNDLE_SIZE": "100m",
+            # 投研栈直通（/api/kline、/api/chart-pattern 等）由 nginx 反代到 python-service。
+            # 这两个占位符必须一起替换，否则 nginx 会把它当成未知变量、
+            # 以 `unknown "python_service_host" variable` 直接启动失败。
+            "PYTHON_SERVICE_HOST": "127.0.0.1", "PYTHON_SERVICE_PORT": "50052",
         }.items():
             config = config.replace("${" + key + "}", value)
         config = config.replace("/usr/share/nginx/html", "/check/web")

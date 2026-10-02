@@ -11,6 +11,8 @@ services:
         VITE_FRONTEND_COMMIT: ${VITE_FRONTEND_COMMIT:-unknown}
         NPM_REGISTRY: ${NPM_REGISTRY:-}
         NODE_MAX_OLD_SPACE_SIZE: ${NODE_MAX_OLD_SPACE_SIZE:-4096}
+        # 产品名（界面 Logo 与页面标题）。默认 WeKnora，改这个即可换成自己的名字。
+        VITE_APP_NAME: ${VITE_APP_NAME:-WeKnora}
     container_name: WeKnora-frontend
     ports:
       - "${FRONTEND_PORT:-80}:80"
@@ -24,6 +26,10 @@ services:
       # For remote deployment, set this to the remote App's service port.
       - APP_PORT=${APP_BACKEND_PORT:-8080}
       - APP_SCHEME=${APP_SCHEME:-http}
+      # nginx 反代 python-service 的目标（仅 finance profile 需要）。
+      # 默认就是 compose 服务名；覆盖它才能把前端指向另一个 python-service。
+      - PYTHON_SERVICE_HOST=${PYTHON_SERVICE_HOST:-python-service}
+      - PYTHON_SERVICE_PORT=${PYTHON_SERVICE_PORT:-50052}
     # NOTE: If using a remote App backend, comment out or remove the depends_on
     # block below and set APP_HOST/APP_BACKEND_PORT/APP_SCHEME in your .env file.
     depends_on:
@@ -61,8 +67,13 @@ services:
       # 它此前只存在于镜像里——与上面这些 config 的行为不一致：改别的配置重启就生效，
       # 改它必须重建镜像。挂上之后这一族的行为统一了。
       - ./config/indicators.yaml:/app/config/indicators.yaml:ro
-      # Hithink Finance DuckDB databases (read-write for lock files)
-      - /Users/chenlei/.hithink-finance:/Users/chenlei/.hithink-finance:rw
+      # Hithink Finance DuckDB databases (read-write for lock files).
+      # 金融数据不随仓库分发：默认挂到仓库内的空占位目录，挂载必定成功但查不到
+      # 数据，hithink_* 工具会返回友好错误，主流程（知识库/对话）不受影响。
+      # 要启用投研栈：设 HITHINK_DB_DIR 指向本机库目录，见 README.md。
+      # 容器内 target 固定为 /data/hithink —— Go 侧不直连 .duckdb（只经
+      # PYTHON_SERVICE_URL 调 python-service），真正读库的是 python-service。
+      - ${HITHINK_DB_DIR:-./.hithink-placeholder}:/data/hithink:rw
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 30s
@@ -153,7 +164,6 @@ services:
       # ========== Zettaranc Finance Tools (now via python-service HTTP API) ==========
       # PYTHON_SERVICE_URL: endpoint of the python-service container (analyze/screener/backtest tools)
       - PYTHON_SERVICE_URL=${PYTHON_SERVICE_URL:-http://python-service:50052}
-      - ZETTARANC_DATA_MODE=${ZETTARANC_DATA_MODE:-jnb}
       # ========== Langfuse (optional observability) ==========
       # Enabled automatically when LANGFUSE_PUBLIC_KEY + LANGFUSE_SECRET_KEY are set.
       # See website-docs/03-features/16-observability.md for the full list of tuning knobs.
@@ -1048,6 +1058,11 @@ services:
   # Python Service for DuckDB and Zettaranc Analysis
   # ===========================================================================
   python-service:
+    # 投研栈（python-service + hithink/halo/zettaranc 工具链）默认不启动。
+    # 启用：docker compose --profile finance up -d
+    # 不启用不影响 app：Go 侧工具注册是懒加载，缺库时只是调用失败，不会启动崩溃。
+    profiles:
+      - finance
     build:
       context: ./python-service
       dockerfile: Dockerfile
@@ -1055,9 +1070,9 @@ services:
     ports:
       - "50052:50052"
     volumes:
-      - /Users/chenlei/.hithink-finance:/Users/chenlei/.hithink-finance:ro
+      - ${HITHINK_DB_DIR:-./.hithink-placeholder}:/data/hithink:ro
     environment:
-      - DB_DIR=/Users/chenlei/.hithink-finance
+      - DB_DIR=/data/hithink
       - PORT=50052
       # 二级缓存接 compose 里的 redis 服务；留空则不启用 Redis
       - REDIS_HOST=${REDIS_HOST:-redis}

@@ -1,0 +1,3 @@
+# 占位目录：finance profile 在未设置 HITHINK_DB_DIR 时挂载到这里。
+# 空目录 + 挂载成功 = hithink_* 工具返回"数据源不可用"，主流程不受影响。
+# 真实数据请设 HITHINK_DB_DIR 指向本机库目录，不要往这里放 *.duckdb。
