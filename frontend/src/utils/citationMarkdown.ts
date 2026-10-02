@@ -44,7 +44,7 @@ export type CitationKnowledgeRef = {
 /**
  * 解析行内标签的属性串（`key="value"` / `key=value`，含实体还原）。
  *
- * 导出给 klineAnchors 复用：`<anchor/>` 与 `<kb/>`/`<web/>` 是同一族标签，
+ * `parseTagAttributes` 被多处行内标签解析共用（`<kb/>`/`<web/>` 等），
  * 用同一个解析器才不会出现「同一个属性两种解析结果」这种漂移。
  */
 export function parseTagAttributes(attrString: string): Record<string, string> {

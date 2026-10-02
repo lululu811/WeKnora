@@ -206,17 +206,6 @@
         @leave="scheduleStockFloatClose(150)"
         @open-workspace="handleOpenStockWorkspace"
     />
-    <!-- 日期标记的悬浮提示。用 Teleport 到 body：正文容器有 overflow 裁剪，
-         放在里面会被裁掉一半。 -->
-    <Teleport to="body">
-        <div
-            v-if="rangeTip && rangeTip.visible"
-            class="kline-range-tip"
-            :style="{ top: `${rangeTip.top}px`, left: `${rangeTip.left}px` }"
-        >
-            {{ rangeTip.text }}
-        </div>
-    </Teleport>
 </template>
 <script setup>
 import { makeSteerClientId } from '@/utils/steerId';
@@ -276,9 +265,6 @@ import { shouldAutoSwitchChart, isStreamedAnswer } from '@/utils/chartAutoSwitch
 import { provideChatKLinePanel } from '@/composables/useChatKLinePanel';
 import { provideAgentWorkspace } from '@/composables/useAgentWorkspace';
 import { useKLineTickerObserver } from '@/composables/useKLineTickerObserver';
-import { useKLineMarkerObserver } from '@/composables/useKLineMarkerObserver';
-import { createHoverDebounce } from '@/utils/hoverDebounce';
-import { findAnchors, KLINE_ANCHOR_INDEX_ATTR } from '@/utils/klineAnchors';
 import BrowserTaskPreview from './components/BrowserTaskPreview.vue';
 import { collectSessionArtifacts, markSessionArtifactDeleted } from '@/utils/sessionArtifacts';
 import { isCollectingSkillArtifacts } from '@/utils/skillArtifacts';
@@ -779,126 +765,6 @@ onMounted(() => {
   };
 });
 
-// 正文里的绝对日期 → 右侧 K 线滚动到该区间并画出价格带。
-//
-// **hover 也触发**，不只是 click。第一版只绑了 click，理由是「hover 会让图跟着
-// 鼠标来回跳」；但代价是把可发现性一起砍掉了——用户看不出这个日期是可交互的，
-// 交互感因此很模糊。抖动问题用防抖解决（见下），而不是靠砍掉交互。
-//
-// 移开时**不撤销**：用户此刻正在看那张图，把标记撤掉等于把上下文抽走。
-// 防抖 200ms：鼠标只是**路过**这段文字不该动图，只有停上去才算「我要看这一段」。
-// 没有这层，把鼠标移向滚动条的路上就会触发好几次跳转。实现在 utils/hoverDebounce.ts，
-// 那里有单测覆盖「重复 schedule 只触发一次」「cancel 后不补触发」。
-const RANGE_HOVER_DELAY = 200;
-const rangeTip = ref(null);
-
-const rangeHover = createHoverDebounce(RANGE_HOVER_DELAY, (range, el) => {
-    agentWorkspace.focusRange(range);
-    const rect = el.getBoundingClientRect();
-    rangeTip.value = {
-        visible: true,
-        text: `在 K 线图上定位 ${el.textContent || ''}`,
-        top: rect.top,
-        left: rect.left + rect.width / 2,
-    };
-});
-
-/**
- * 把某条回答的锚点整组推给工作台。
- *
- * 「一条回答 = 一组锚点」：切到另一条回答就整组替换，不累积。用 messageId 去重，
- * 避免每次列表刷新都重推一遍——重推会连带清掉 hover 态。
- */
-const anchorsMessageId = ref(null);
-const answerText = (m) => m?.answer || m?.content || m?.message || '';
-
-const syncAnchorsForMessage = (message) => {
-    if (!message || !message.id) return;
-    if (anchorsMessageId.value === message.id) return;
-    anchorsMessageId.value = message.id;
-    agentWorkspace.setAnchors(findAnchors(answerText(message)));
-};
-
-/** 从被 hover/点击的锚点元素回溯到它所属的回答。 */
-const syncAnchorsFromElement = (el) => {
-    const row = el && el.closest ? el.closest('[data-message-id]') : null;
-    const id = row && row.getAttribute('data-message-id');
-    if (!id) return;
-    syncAnchorsForMessage(messagesList.find((m) => m.id === id));
-};
-
-/**
- * 反向联动：图上 hover 锚点 -> 正文里对应的那句话高亮。
- *
- * 两个方向共用 `hoveredAnchorIndex` 一份状态，所以「正文 hover」和「图上 hover」
- * 得到完全一致的压暗与高亮，不必各写一套、也不会互相打架。
- *
- * 滚动只在句子**完全不在视野内**时才做：反向联动不该有副作用，用户明明看着
- * 正文时把正文拽走是最讨厌的一种。
- */
-let highlightedAnchorEl = null;
-
-const clearAnchorHighlight = () => {
-    if (highlightedAnchorEl) {
-        highlightedAnchorEl.classList.remove('is-anchor-highlighted');
-        highlightedAnchorEl = null;
-    }
-};
-
-const highlightAnchorSentence = (index) => {
-    clearAnchorHighlight();
-    if (index === null || index === undefined) return;
-    const root = scrollContainer.value;
-    if (!root) return;
-    const el = root.querySelector(`.kline-anchor[${KLINE_ANCHOR_INDEX_ATTR}="${index}"]`);
-    if (!el) return;
-    el.classList.add('is-anchor-highlighted');
-    highlightedAnchorEl = el;
-
-    const rect = el.getBoundingClientRect();
-    const box = root.getBoundingClientRect();
-    const fullyVisible = rect.top >= box.top && rect.bottom <= box.bottom;
-    if (!fullyVisible) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-};
-
-watch(() => agentWorkspace.hoveredAnchorIndex.value, (index) => {
-    highlightAnchorSentence(index);
-});
-
-useKLineMarkerObserver(scrollContainer, {
-    range: {
-        onHover: (range, el) => rangeHover.schedule(range, el),
-        onLeave: () => {
-            rangeHover.cancel();
-            if (rangeTip.value) rangeTip.value.visible = false;
-        },
-        onActivate: (range) => {
-            // 点击/回车立即生效，不走防抖——用户已经明确表达了意图。
-            rangeHover.cancel();
-            agentWorkspace.focusRange(range);
-        },
-    },
-    anchor: {
-        // 锚点的 hover 是「看」（压暗 + 统计），不改变视野，所以**不需要防抖**——
-        // 防抖是为了躲开"滚动视野"这种有副作用的动作，而压暗是可逆的。
-        onHover: (index, el) => {
-            // 先同步锚点集合（可能 hover 的是另一条回答里的锚点），再置 hover 编号：
-            // 顺序不能反——setAnchors 会清掉 hover 态。
-            syncAnchorsFromElement(el);
-            agentWorkspace.setHoveredAnchor(index);
-        },
-        onLeave: () => {
-            agentWorkspace.setHoveredAnchor(null);
-        },
-        onActivate: (index, el) => {
-            // 点击才是「去」：把图滚到这一段。
-            syncAnchorsFromElement(el);
-            agentWorkspace.focusAnchor(index);
-        },
-    },
-});
 const composerHeight = ref(0)
 const scrollbarGutter = ref(0)
 // Reserve space for the independent composer and keep it aligned with the
@@ -1267,11 +1133,6 @@ const {
             (message) => isStreamedAnswer(message, currentAssistantMessageId.value)
         );
         maybeAutoSwitchChart(streamedAnswer);
-        // 回答落地后把它的锚点整组推给图。放在这里而不是流式回调里，理由同
-        // 自动切图：流式过程中解析会读到半截标签，锚点集合会反复变。
-        if (streamedAnswer && streamedAnswer.is_completed) {
-            syncAnchorsForMessage(streamedAnswer);
-        }
         if (!steerQueue.value.length) {
             await hydrateSteerQueue();
         }
@@ -2532,132 +2393,26 @@ onBeforeRouteUpdate((to, from, next) => {
 }
 
 /* Chat 答案里出现的 A 股 ticker（6位.SH/SZ/BJ）会被包成 <span class="kline-ticker">；
- * hover/click 后右侧栏抽屉打开对应股票的 K 线图。 */
+ * hover/click 后右侧栏抽屉打开对应股票的 K 线图。
+ *
+ * 视觉上就是正文文字：不加底色/内边距/圆角/等宽/位移，避免打断阅读。
+ * 可交互的提示只靠 hover/聚焦时的 1px 下划线。 */
 .kline-ticker {
-    display: inline-block;
-    padding: 1px 6px;
-    margin: 0 1px;
-    border-radius: var(--app-radius-xs);
-    background: rgba(0, 82, 217, 0.08);
-    color: var(--td-brand-color);
-    font-family: var(--td-font-family-mono);
-    font-weight: 500;
     cursor: pointer;
-    transition: background 0.12s ease, transform var(--app-motion-instant) ease;
-    user-select: none;
+    text-underline-offset: 2px;
 }
 
 .kline-ticker:hover,
 .kline-ticker:focus {
-    background: rgba(0, 82, 217, 0.18);
-    transform: translateY(-1px);
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
     outline: none;
 }
 
 .kline-ticker:focus-visible {
-    box-shadow: 0 0 0 2px rgba(0, 82, 217, 0.4);
-}
-
-/* Chat 答案里出现的绝对日期会被包成 <span class="kline-range">；
- * hover/click 后右侧 K 线滚动到对应区间。视觉上刻意与 .kline-ticker 区分：
- * 日期是「看图上哪一段」，标的是「看哪只票」，两者不该长得一样。 */
-.kline-range {
-    display: inline-block;
-    padding: 0 4px;
-    margin: 0 1px;
-    border-bottom: 1px dashed rgba(201, 146, 8, 0.7);
-    border-radius: var(--app-radius-xs) var(--app-radius-xs) 0 0;
-    color: #b8860b;
-    cursor: pointer;
-    transition: background var(--app-motion-instant) ease, border-color var(--app-motion-instant) ease;
-    user-select: none;
-}
-
-/* hover 态必须**明显**——第一版只有一点点背景色变化，用户根本看不出这个日期
-   是可交互的，交互感因此很模糊。这里同时改背景、把虚线底边变实线、轻微上浮，
-   三个信号叠加，扫一眼就能认出「这个日期能点」。 */
-.kline-range:hover,
-.kline-range:focus {
-    background: rgba(201, 146, 8, 0.18);
-    border-bottom-color: #b8860b;
-    border-bottom-style: solid;
-    outline: none;
-}
-
-.kline-range:focus-visible {
-    box-shadow: 0 0 0 2px rgba(201, 146, 8, 0.35);
-}
-
-/* 正文里的回答锚点：模型显式标记的时段/价位，与图上的框和线共用同一个编号。
-   配色与日期标记同族（琥珀），但更"实体"——它才是主入口，日期标记是正则兜底。 */
-.kline-anchor {
-    display: inline-block;
-    padding: 0 5px 0 2px;
-    margin: 0 1px;
-    border-radius: var(--app-radius-xs);
-    background: rgba(201, 146, 8, 0.14);
-    color: #b8860b;
-    font-weight: 500;
-    cursor: pointer;
-    transition: background var(--app-motion-instant) ease;
-    user-select: none;
-}
-
-/* 圆编号：与图上 overlay 画的圆徽章同形同色，两处印同一个符号，眼睛自己就接上了。 */
-.kline-anchor__num {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 14px;
-    height: 14px;
-    margin-right: 4px;
-    border-radius: var(--app-radius-pill);
-    background: rgba(201, 146, 8, 0.9);
-    color: #1a1408;
-    font-size: var(--app-text-2xs);
-    font-weight: 700;
-    line-height: 1;
-}
-
-.kline-anchor:hover,
-.kline-anchor:focus {
-    background: rgba(201, 146, 8, 0.26);
-    outline: none;
-}
-
-.kline-anchor:focus-visible {
-    box-shadow: 0 0 0 2px rgba(201, 146, 8, 0.35);
-}
-
-/* 反向联动：图上 hover 框/徽章时，正文里这句话高亮。 */
-.kline-anchor.is-anchor-highlighted {
-    background: rgba(201, 146, 8, 0.34);
-    box-shadow: 0 0 0 1px rgba(201, 146, 8, 0.75) inset;
-}
-
-/* 无效锚点：语法没露出来、内容按文本保留，但**不给交互语义**——
-   一个"点了没反应"的可点元素比不可点更让人困惑。 */
-.kline-anchor[data-anchor-valid="0"] {
-    padding: 0;
-    background: transparent;
-    color: inherit;
-    font-weight: inherit;
-    cursor: default;
-}
-
-/* 悬浮提示：告诉用户「悬停这个日期会发生什么」。 */
-.kline-range-tip {
-    position: fixed;
-    z-index: 3000;
-    transform: translate(-50%, calc(-100% - 8px));
-    padding: 4px 8px;
-    border-radius: var(--app-radius-sm);
-    background: rgba(32, 26, 12, 0.94);
-    color: #f6d98a;
-    font-size: var(--app-text-xs);
-    line-height: 1.4;
-    white-space: nowrap;
-    pointer-events: none;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.28);
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    outline: 2px solid rgba(0, 82, 217, 0.4);
+    outline-offset: 1px;
 }
 </style>

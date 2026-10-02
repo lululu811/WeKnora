@@ -15,8 +15,6 @@ import {
   type CitationKnowledgeRef,
 } from './citationMarkdown.ts'
 import { injectKLineTickers } from './klineTickerInjector'
-import { injectKLineRanges } from './klineRangeInjector'
-import { injectKLineAnchors, stripIncompleteAnchorTag } from './klineAnchors'
 
 const STREAMING_IMAGE_PLACEHOLDER =
   '<span class="streaming-image-loading"><span class="streaming-image-loading__skeleton"></span></span>'
@@ -462,20 +460,9 @@ export function renderChatMarkdown(rawMarkdown: unknown, options: RenderChatMark
   configureMarkedForChatMarkdown()
 
   const streamingSafeText = options.streaming
-    ? stripIncompleteAnchorTag(
-        stripTrailingStreamingListMarker(stripTrailingStreamingHorizontalRule(rawText)),
-      )
+    ? stripTrailingStreamingListMarker(stripTrailingStreamingHorizontalRule(rawText))
     : rawText
-  // 三条标注管线的顺序：日期区间 -> 锚点 -> ticker。
-  //
-  // 三者现在都靠「HTML 标签整体不被改写」这条规则互不污染（见各自文件里的
-  // CODE_SPLIT_RE），所以顺序不再影响正确性。固定成这个次序是为了避免一种
-  // 观感问题：锚点的 label 里可能含日期（`label="2026-05-20 第一波"`），
-  // 先跑区间管线时它还在标签属性里、受保护；若反过来先跑锚点，那串日期就成了
-  // span 的正文，会被区间管线再包一层，出现嵌套标记。
-  const rangeAnnotated = injectKLineRanges(streamingSafeText)
-  const anchorAnnotated = injectKLineAnchors(rangeAnnotated)
-  const tickerAnnotated = injectKLineTickers(anchorAnnotated)
+  const tickerAnnotated = injectKLineTickers(streamingSafeText)
   const imageContextSafeText = normalizeLegacyImageContextMarkup(
     tickerAnnotated,
     Boolean(options.streaming),

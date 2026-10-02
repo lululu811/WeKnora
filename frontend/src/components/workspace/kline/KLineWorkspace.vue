@@ -274,15 +274,6 @@
         >
           关键位
         </button>
-        <button
-          type="button"
-          class="toolbar__btn feature-btn"
-          :class="{ 'is-active': isAnchorsEnabled }"
-          :title="`回答标记：把这条回答里模型标记的时段与价位画在图上，编号与正文里的 ①②③ 一致（最多常驻 ${MAX_PERSISTENT_ANCHORS} 个）`"
-          @click="toggleAnchors"
-        >
-          回答标记<span v-if="workspace.anchors.value.length > 0" class="feature-count">({{ workspace.anchors.value.length }})</span>
-        </button>
       </div>
 
       <div class="toolbar__spacer" />
@@ -393,12 +384,7 @@ import {
   swapSymbol,
   clearAllOverlays,
   drawPriceLevel,
-  drawRangeBand,
-  scrollToTimestamp as chartScrollToTimestamp,
   getChartData,
-  drawAnchorFocus,
-  clearAnchorFocus,
-  anchorCanvasBoxes,
   swapIndicators,
 } from './core-chart';
 import { setZettarancPalette } from './palette';
@@ -412,9 +398,7 @@ import LayerFilterDropdown from './LayerFilterDropdown.vue';
 import { clearAllOptions, collapseByValue, enabledCount, isOptionEnabled, loadSelection, saveSelection, selectAllOptions, toggleOption, type LayerOption, type LayerSelection } from './layer-selection';
 import { fetchChartPatterns, resolvePatternGeometry, resolveCandleMarks, patternsAtBar, samePatternSet, type DrawableCandle, type DrawablePattern } from './chart-patterns';
 import { computeLevels, pickChartLevels } from './levels';
-import { resolveAnchorsForChart, hitTestAnchor, MAX_PERSISTENT_ANCHORS } from './anchor-render';
 import { ActionType, type Coordinate } from 'klinecharts';
-import { computeAnchorStats, formatAnchorStats } from './anchor-stats';
 import { calcDEMA, calcLongBBI, calcBBI, calcZXBrick } from './stock-score';
 import type { Period, SymbolInfo, KLineData } from './types';
 
@@ -465,8 +449,6 @@ const isPatternsEnabled = ref(true);
 // 关键位（支撑/阻力）开关。默认打开，但必须能一键关掉——图上已经有形态气泡，
 // 再加一组横线在某些行情下会糊住 K 线，用户需要能自己让画面回到干净状态。
 const isLevelsEnabled = ref(true);
-// 正文锚点开关。与关键位同理：锚点是常驻的，用户要能一键清空画面。
-const isAnchorsEnabled = ref(true);
 
 // 主图模式 / 副图模式：全部来自 config/indicators.yaml 的 views 段
 // （经由生成的 indicator-meta.ts 读入），代码里不再出现任何指标名字符串。
@@ -1060,89 +1042,6 @@ watch(isDark, () => {
   chartInstance.value?.setStyles(getKlineChartTheme(isDark.value));
 });
 
-// 正文日期 → 图上区间。这是「聊天 → 图表」第二条通道。
-//
-// 降级链条是刻意收紧的，原则是**宁可少画，不可画错**：
-//   1. 完整日期（from/to）→ 直接滚过去，按该区间的价格上下沿画带；
-//   2. 只有 md（缺年份的「5月20日」）→ 在已加载数据里找当年最近的一根；
-//   3. 换算不出任何一根 → 什么都不做（不滚、不画），由正文标记自身的 title 兜底。
-// 绝不猜年份：「5月20日」在一段 2024 年的分析里可能指完全不同的两段行情。
-const resolveTimestamp = (value: number | undefined, md: string | undefined): number | null => {
-  const bars = getChartData(chartInstance.value);
-  if (bars.length === 0) return null;
-  if (value !== undefined) return value;
-  if (!md) return null;
-  const [mm, dd] = md.split('-');
-  if (!mm || !dd) return null;
-  // 优先落在与当前数据末根同一年，避免跨年错配。
-  const lastYear = new Date(bars[bars.length - 1].timestamp).getUTCFullYear();
-  let best: number | null = null;
-  for (const bar of bars) {
-    const d = new Date(bar.timestamp);
-    if (d.getUTCMonth() + 1 !== Number(mm) || d.getUTCDate() !== Number(dd)) continue;
-    if (d.getUTCFullYear() !== lastYear) continue;
-    if (best === null) best = bar.timestamp;
-  }
-  return best;
-};
-
-/** 区间带上的日期文字。两端同一根时不写成「A ~ A」。 */
-const formatFocusLabel = (from: number, to: number): string => {
-  const fmt = (ts: number) => {
-    const d = new Date(ts);
-    const y = d.getUTCFullYear();
-    const m = String(d.getUTCMonth() + 1).padStart(2, '0');
-    const day = String(d.getUTCDate()).padStart(2, '0');
-    return `${y}-${m}-${day}`;
-  };
-  const a = fmt(from);
-  const b = fmt(to);
-  return a === b ? a : `${a} ~ ${b}`;
-};
-
-const handleChartFocus = (range: { from?: number; to?: number; md?: string }) => {
-  const chart = chartInstance.value;
-  if (!chart) return;
-  // 先回到"干净的关键位 + 标注"状态，再叠区间带/单点位——否则会把上一次
-  // 聚焦留下的带子留在图上，与新的区间叠成两条。
-  redrawOverlays(chart);
-
-  const from = resolveTimestamp(range.from, range.md);
-  const to = resolveTimestamp(range.to, undefined);
-  if (from === null) return;
-
-  if (to !== null && to > from) {
-    chartScrollToTimestamp(chart, from);
-    // 区间带的上下沿取该段真实价格包络，不是日期对应的单一收盘价——
-    // 否则带子可能整个落在 K 线实体之外，看上去像空画一块。
-    const bars = getChartData(chart)
-    const inRange = bars.filter((b) => b.timestamp >= from && b.timestamp <= to)
-    if (inRange.length > 0) {
-      drawRangeBand(
-        chart,
-        'focus_range',
-        // 左右边界跟着日期走，上下沿取该段真实价格包络——两个维度都要给，
-        // 否则带子会横贯整个时间轴，表达的就成了「这个价位区间」而不是「这段时间」。
-        from,
-        to,
-        Math.min(...inRange.map((b) => b.low)),
-        Math.max(...inRange.map((b) => b.high)),
-        // 带子上写日期，与正文里那串日期是同一份数据——联动的可读性主要靠
-        // 「左边写的是哪段、右边画的就是哪段」这个对应关系能被一眼看出来。
-        formatFocusLabel(from, to),
-      )
-    }
-    return
-  }
-
-  // 单点：标一根水平位，再把图滚过去。
-  const bar = getChartData(chart).find((b) => b.timestamp === from)
-  if (bar) {
-    drawPriceLevel(chart, 'focus_level', bar.close)
-    chartScrollToTimestamp(chart, from)
-  }
-};
-
 /**
  * 支撑/阻力位。来自本地按后端同一套公式算出的关键位（见 levels.ts）。
  *
@@ -1180,21 +1079,12 @@ const LEVEL_MERGE_TOLERANCE = 0.015;
 const LEVEL_MERGE_PIXELS = 10;
 
 /**
- * 收集所有水平价位 —— **关键位与锚点价位合并后再画**。
+ * 收集所有水平价位（关键位），合并后再画。
  *
- * 之前两者各画各的，于是同一个价位会出现两条线：实测天顺风能 002531.SZ，
- * 关键位算出 8.00（整数关口）、锚点说 7.98（强支撑共振），相差 0.25%，
- * 在图上叠成一条看着像渲染故障的「双虚线」。用户的原话是「支撑线太乱」。
- *
- * 合并规则：
- *  - 价位相差在容差内视为同一条线，只画一次；
- *  - **代表价取锚点的那个数**——用户读的是模型说的 7.98，不是算法算的 8.00；
- *  - 锚点带来的编号徽章与标签优先保留（那是联动的可见部分）。
+ * 合并规则：价位相差在容差内视为同一条线，只画一次。
  */
 interface LevelCandidate {
   price: number;
-  badge?: number;
-  label?: string;
   sources: string[];
 }
 
@@ -1211,16 +1101,9 @@ const collectLevelCandidates = (chart: Chart): LevelCandidate[] => {
     }
   }
 
-  if (isAnchorsEnabled.value) {
-    for (const a of resolveAnchorsForChart(workspace.anchors.value, bars)) {
-      if (!a.resolvable || a.kind !== 'level' || a.value === undefined) continue;
-      out.push({ price: a.value, badge: a.index, label: a.label, sources: [] });
-    }
-  }
-
   // 按**屏幕像素距离**合并，而不是按百分比。
   //
-  // 百分比容差与要解决的问题不匹配：实测 7.85（Pivot_PP）与 7.98（锚点）相差
+  // 百分比容差与要解决的问题不匹配：实测 7.85（Pivot_PP）与 7.98 相差
   // 1.6%，刚好越过 1.5% 的容差没被合并，而在屏幕上它们只差约 5px——看着就是
   // 一条渲染出错的"双虚线"。反过来，对一只 100 元的票，2% 就是 2 元，那可能是
   // 两个真的不同的价位。用户看到的是像素，判定就该用像素。
@@ -1244,114 +1127,9 @@ const collectLevelCandidates = (chart: Chart): LevelCandidate[] => {
       mergedY.push(y ?? Number.NaN);
       continue;
     }
-    const hit = merged[hitIdx];
-    hit.sources.push(...c.sources);
-    if (c.badge !== undefined) {
-      if (hit.badge === undefined) {
-        // 锚点接管这条线：价与标签都以它为准（用户读的是模型说的数）。
-        hit.badge = c.badge;
-        hit.label = c.label;
-        hit.price = c.price;
-      } else if (c.label && hit.label !== c.label) {
-        hit.label = `${hit.label} · ${c.label}`;
-      }
-    }
+    merged[hitIdx].sources.push(...c.sources);
   }
   return merged;
-};
-
-/**
- * 正文锚点在图上的常驻呈现。
- *
- * 与「关键位」是两种东西，刻意分开：
- *  - 关键位是**算法从 K 线算出来的**支撑阻力，与对话无关；
- *  - 锚点是**模型在这条回答里主张的**时段与价位，带它的原话标签。
- * 两者都会画水平线，所以视觉上必须能分辨——锚点带编号圆徽章，关键位不带。
- *
- * 上限与截断在 `anchor-render.ts` 里（纯函数，有单测）；这里只管画。
- */
-const drawAnchors = (chart: Chart | null) => {
-  if (!chart || !isAnchorsEnabled.value) return;
-  const renderable = resolveAnchorsForChart(workspace.anchors.value, getChartData(chart));
-  for (const anchor of renderable) {
-    if (!anchor.resolvable) continue;
-    // 价位锚点不在这里画——它要跟关键位合并成一条线（见 collectLevelCandidates），
-    // 否则同一个价位会画出两条重叠的线。
-    if (anchor.kind === 'level') continue;
-    if (
-      anchor.kind === 'range' &&
-      anchor.startIndex !== undefined &&
-      anchor.endIndex !== undefined &&
-      anchor.low !== undefined &&
-      anchor.high !== undefined
-    ) {
-      drawRangeBand(
-        chart,
-        `anchor_rg_${anchor.index}`,
-        anchor.startIndex,
-        anchor.endIndex,
-        anchor.low,
-        anchor.high,
-        anchor.label,
-        anchor.index,
-      );
-    }
-  }
-};
-
-/**
- * hover 某个时段锚点：框外压暗 + 框内叠统计。
- *
- * 只在 hover 期间存在（离开即撤）——常驻压暗会把整张图长期灰掉一半，
- * 是最毁观感的做法；而它要起的作用是「瞬间把注意力拉过去」，瞬时态就够了。
- *
- * 价格锚点（水平线）不做压暗：一条横贯全图的线没有"框外"可言，
- * 压暗整张图来表达"看这条线"是反效果。
- */
-const applyAnchorHover = (chart: Chart | null) => {
-  if (!chart) return;
-  clearAnchorFocus(chart);
-  const idx = workspace.hoveredAnchorIndex.value;
-  if (idx === null || !isAnchorsEnabled.value) return;
-  const bars = getChartData(chart);
-  const anchor = resolveAnchorsForChart(workspace.anchors.value, bars).find((a) => a.index === idx);
-  if (!anchor || !anchor.resolvable) return;
-  if (
-    anchor.kind !== 'range' ||
-    anchor.startIndex === undefined ||
-    anchor.endIndex === undefined ||
-    anchor.low === undefined ||
-    anchor.high === undefined
-  ) {
-    return;
-  }
-  const stats = computeAnchorStats(bars, anchor.startIndex, anchor.endIndex);
-  drawAnchorFocus(
-    chart,
-    anchor.startIndex,
-    anchor.endIndex,
-    anchor.low,
-    anchor.high,
-    formatAnchorStats(stats),
-  );
-};
-
-/**
- * 光标在图上移动时，判断它是否落在某个锚点上。
- *
- * 命中几何每帧重算（可见区间、缩放都会变），但只在有锚点时才算——
- * 没有锚点就没有反向联动的对象，省掉 convertToPixel 的开销。
- */
-const applyChartHoverHit = (data: { dataIndex?: number; y?: number } | null | undefined) => {
-  const chart = chartInstance.value;
-  syncPatternHighlight(data?.dataIndex);
-  if (!chart || !isAnchorsEnabled.value) return;
-  const anchors = resolveAnchorsForChart(workspace.anchors.value, getChartData(chart));
-  const boxes = anchorCanvasBoxes(chart, anchors);
-  const index = hitTestAnchor(boxes, data?.dataIndex ?? NaN, data?.y ?? NaN);
-  if (index !== workspace.hoveredAnchorIndex.value) {
-    workspace.setHoveredAnchor(index);
-  }
 };
 
 /**
@@ -1371,40 +1149,15 @@ const syncPatternHighlight = (dataIndex: number | undefined) => {
 };
 
 const handleChartMouseLeave = () => {
-  workspace.setHoveredAnchor(null);
-  // 移出图区要清掉压暗。crosshair 不一定补一次事件，不兜底的话压暗会一直挂着，
-  // 用户会以为形态坏了（锚点那套同样有这个兜底）。
+  // 移出图区要清掉形态高亮。crosshair 不一定补一次事件，不兜底的话高亮会一直挂着，
+  // 用户会以为形态坏了。
   syncPatternHighlight(undefined);
-};
-
-const toggleAnchors = () => {
-  isAnchorsEnabled.value = !isAnchorsEnabled.value;
-  redrawOverlays(chartInstance.value);
-};
-
-/**
- * 点击正文锚点 -> 图滚过去。
- *
- * 用锚点自己算好的区间，而不是重新按日期找——两边用同一份换算结果，
- * 才不会出现「框画在这儿、滚到那儿」的错位。
- */
-const handleAnchorFocus = (index: number) => {
-  const chart = chartInstance.value;
-  if (!chart) return;
-  const anchor = resolveAnchorsForChart(workspace.anchors.value, getChartData(chart)).find(
-    (a) => a.index === index,
-  );
-  if (!anchor || !anchor.resolvable) return;
-  if (anchor.kind !== 'range' || anchor.startIndex === undefined) return;
-  const data = getChartData(chart);
-  const ts = data[anchor.startIndex]?.timestamp;
-  if (typeof ts === 'number') chartScrollToTimestamp(chart, ts);
 };
 
 /**
  * 重画全部水平位。
  *
- * 这是唯一的入口：`handleChartFocus` 与数据加载都调它，避免"某个路径忘了清"
+ * 这是唯一的入口：数据加载/换标的都调它，避免"某个路径忘了清"
  * 这类只在特定操作顺序下出现的残留。
  *
  * 注意这里**不画服务端形态标注**。那些标注是按日期锚定的形态（早晨之星、
@@ -1416,39 +1169,22 @@ const handleAnchorFocus = (index: number) => {
 const redrawOverlays = (chart: Chart | null) => {
   if (!chart) return;
   clearAllOverlays(chart);
-  // 顺序：先画区间框（面积大、在下层），再把合并后的价位线叠上去。
-  drawAnchors(chart);
   for (const level of collectLevelCandidates(chart)) {
-    drawPriceLevel(chart, `lvl_${level.price.toFixed(2)}`, level.price, level.badge);
+    drawPriceLevel(chart, `lvl_${level.price.toFixed(2)}`, level.price);
   }
-  // 聚焦层也归这里管：redraw 会把它一起清掉，所以必须紧接着按当前 hover 复原，
-  // 否则「hover 时恰好发生一次数据刷新」会把压暗弄丢。
-  applyAnchorHover(chart);
 };
 
-// 锚点集合变化（切回答/回答完成）就重画。整组替换而不是累积——见工作台里的说明。
-watch(() => workspace.anchors.value, () => {
-  nextTick(() => redrawOverlays(chartInstance.value));
-});
-
-// hover 态只管聚焦层，不走整张重画——压暗要跟手，重建全部 overlay 会顿。
-watch(() => workspace.hoveredAnchorIndex.value, () => {
-  applyAnchorHover(chartInstance.value);
-});
-
 onMounted(() => {
-  workspace.registerChartFocus(handleChartFocus);
-  workspace.registerAnchorFocus(handleAnchorFocus);
-  // 反向联动：图上 hover 锚点 -> 走同一个 hoveredAnchorIndex，正文据此高亮。
+  // 图上光标移动 -> 点亮包含该 K 线的形态。
   //
-  // 用 crosshair 事件自己算命中，而不是库的 overlay figure 事件——后者在这套
+  // 用 crosshair 事件自己算，而不是库的 overlay figure 事件——后者在这套
   // 配置下实测不触发（lock 并非原因），排障要钻进库内部的命中判定。
-  // crosshair 稳定给出 dataIndex 与画布 y，判定逻辑是纯函数、有单测。
+  // crosshair 稳定给出 dataIndex，判定逻辑是纯函数、有单测。
   chartInstance.value?.subscribeAction(ActionType.OnCrosshairChange, (data) => {
-    applyChartHoverHit(data);
+    syncPatternHighlight(data?.dataIndex);
   });
   // crosshair 在鼠标移出图区时不一定补一次事件，这里兜底清空——
-  // 否则压暗会一直挂着，用户以为图坏了。
+  // 否则高亮会一直挂着，用户以为形态坏了。
   chartContainer.value?.addEventListener('mouseleave', handleChartMouseLeave);
 
   setGlobalOverlayConfig({
@@ -1480,8 +1216,6 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
-  workspace.registerChartFocus(null);
-  workspace.registerAnchorFocus(null);
   chartContainer.value?.removeEventListener('mouseleave', handleChartMouseLeave);
   window.removeEventListener('keydown', handleKeyDown);
   if (resizeObserver) {
