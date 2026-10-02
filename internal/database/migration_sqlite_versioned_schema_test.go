@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -75,7 +76,22 @@ var versionedSQLiteColumns = map[string][]string{
 	"stock_watch_events": {"eval_date"},     // 000037
 }
 
-const expectedSQLiteMigrationVersion = 37
+// expectedSQLiteMigrationVersion is the version every SQLite migration run must
+// land on.
+//
+// It is hand-maintained, which has already cost one red suite: it was last
+// bumped 33 -> 37, and then 000038_stock_watch_note_widen and
+// 000039_stock_watch_diaries were added without touching it, so three tests in
+// this file failed with "expected: 37, actual: 39". The expensive part is not
+// the number — it is that a stale constant is indistinguishable from a real
+// migration regression in the failure output, so the red suite hides actual
+// breakage.
+//
+// TestExpectedSQLiteMigrationVersionMatchesDisk pins this constant to the
+// migrations directory. The constant stays a constant (readable, greppable,
+// and still the thing the assertions below compare against); what changes is
+// that drifting from disk now fails loudly and names the number to write.
+const expectedSQLiteMigrationVersion = 39
 
 func TestSQLiteMigrationsCreateVersionedSchema(t *testing.T) {
 	repoRoot := sqliteRepoRoot(t)
@@ -217,6 +233,51 @@ func TestSQLiteMigrationsUpgradeV16AddsSessionForkColumns(t *testing.T) {
 		)
 	}
 	require.True(t, sqliteColumnExists(t, db, "messages", "sandbox_checkpoint"))
+}
+
+// TestExpectedSQLiteMigrationVersionMatchesDisk is the guard that keeps the
+// constant above honest.
+//
+// It deliberately runs as its own test, before any chdir: sqliteRepoRoot
+// resolves ".." / ".." relative to the package directory, so it is only correct
+// while cwd is still internal/database. That is also why the assertions in the
+// migration tests keep using the constant instead of deriving the version
+// inline — those run after chdirAndRestore, where the repo root is no longer
+// two levels up.
+func TestExpectedSQLiteMigrationVersionMatchesDisk(t *testing.T) {
+	highest, name := highestSQLiteMigrationOnDisk(t, sqliteRepoRoot(t))
+	require.Equalf(
+		t, expectedSQLiteMigrationVersion, highest,
+		"expectedSQLiteMigrationVersion is stale: %s is on disk. "+
+			"A stale constant makes a real migration regression unreadable, "+
+			"so update the constant in the same commit that adds the migration.",
+		name,
+	)
+}
+
+// highestSQLiteMigrationOnDisk returns the highest version among
+// migrations/sqlite/*.up.sql, plus the filename it came from so a failure can
+// name what to look at.
+func highestSQLiteMigrationOnDisk(t *testing.T, repoRoot string) (int, string) {
+	t.Helper()
+	pattern := filepath.Join(repoRoot, "migrations", "sqlite", "*.up.sql")
+	files, err := filepath.Glob(pattern)
+	require.NoError(t, err)
+	require.NotEmptyf(t, files, "no SQLite migrations found at %s", pattern)
+
+	highest, name := 0, ""
+	for _, file := range files {
+		base := filepath.Base(file)
+		digits, _, found := strings.Cut(base, "_")
+		require.Truef(t, found, "SQLite migration %q must be named <version>_<name>.up.sql", base)
+		version, err := strconv.Atoi(digits)
+		require.NoErrorf(t, err, "SQLite migration %q must start with a numeric version", base)
+		if version > highest {
+			highest, name = version, base
+		}
+	}
+	require.NotZerof(t, highest, "no numbered SQLite migration found at %s", pattern)
+	return highest, name
 }
 
 func sqliteRepoRoot(t *testing.T) string {
