@@ -2392,27 +2392,49 @@ onBeforeRouteUpdate((to, from, next) => {
     }
 }
 
-/* Chat 答案里出现的 A 股 ticker（6位.SH/SZ/BJ）会被包成 <span class="kline-ticker">；
- * hover/click 后右侧栏抽屉打开对应股票的 K 线图。
+/* Chat 答案里出现的标的（个股 `600519.SH` / 板块 `881101.TI`）会被包成
+ * <span class="kline-ticker">；hover 出悬浮卡，click 打开右侧 K 线工作台。
  *
- * 视觉上就是正文文字：不加底色/内边距/圆角/等宽/位移，避免打断阅读。
- * 可交互的提示只靠 hover/聚焦时的 1px 下划线。 */
+ * 视觉上仍是正文文字，但**给一层浅底色**：完全无装饰时用户看不出这里可交互
+ * （hover 才变下划线是"事后提示"，扫读时零线索）。底色只做"标示"，不做"按钮"——
+ * 不做等宽字体、不加粗、不上浮，内边距只留到刚好让底色不贴字形。
+ * 深色底（K 线画布）不涉及这里：这份样式只作用于聊天正文。 */
 .kline-ticker {
     cursor: pointer;
+    padding: 0 3px;
+    border-radius: var(--app-radius-xs);
+    background: rgba(0, 82, 217, 0.08);
     text-underline-offset: 2px;
+    transition: background var(--app-motion-instant) ease;
+
+    /* 深色正文下同一个蓝底几乎看不见，换更亮的蓝并抬高透明度 */
+    :root[theme-mode="dark"] & {
+        background: rgba(96, 165, 250, 0.18);
+    }
 }
 
 .kline-ticker:hover,
 .kline-ticker:focus {
+    /* 悬停时底色加深一档 + 补一条下划线：底色是"这里可点"，下划线是"正要帮你打开" */
+    background: rgba(0, 82, 217, 0.18);
     text-decoration: underline;
     text-decoration-thickness: 1px;
     outline: none;
+
+    :root[theme-mode="dark"] & {
+        background: rgba(96, 165, 250, 0.32);
+    }
 }
 
 .kline-ticker:focus-visible {
+    background: rgba(0, 82, 217, 0.18);
     text-decoration: underline;
     text-decoration-thickness: 1px;
     outline: 2px solid rgba(0, 82, 217, 0.4);
     outline-offset: 1px;
+
+    :root[theme-mode="dark"] & {
+        background: rgba(96, 165, 250, 0.32);
+    }
 }
 </style>
