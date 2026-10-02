@@ -23,7 +23,7 @@ import (
 // 列清单为什么必须实时取：hithink.finance.query.sql 没有列白名单，231 个指标列
 // 全都可达，但模型无从知道它们存在——"有没有 TRIX 读数"这类问题因此答不上来。
 // 而清单一旦被复制进源码/快照就会漂移，漂移的方向恰好是"谎报不存在"，
-// 这类 bug 本仓已经吃过一次（docs/zettaranc/complaints.md）。
+// 这类 bug 本仓已经吃过一次（当时的表现是模型反复猜列名、连试四次才绕道）。
 // testdata/schema.json 同理不能当运行时数据源：它是 schema_contract_test.go
 // 维护的**测试闸门**，不是运行时事实。
 type DiscoverTool struct {

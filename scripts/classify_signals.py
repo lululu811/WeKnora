@@ -31,11 +31,14 @@ Aroon空头 23.84% vs 23.65%）。所以：
 """
 from __future__ import annotations
 
+import os
 import sys
 
 import duckdb
 
-DB = "/Users/chenlei/.hithink-finance/indicators.duckdb"
+# 本地 hithink DuckDB 库位置，可用 HITHINK_DB_DIR 覆盖。
+DB_DIR = os.environ.get("HITHINK_DB_DIR", os.path.expanduser("~/.hithink-finance"))
+DB = os.path.join(DB_DIR, "indicators.duckdb")
 
 # (信号名, SQL 布尔表达式, 方向, signals.go 出处)
 SIGNALS: list[tuple[str, str, str, str]] = [

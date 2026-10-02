@@ -1,6 +1,8 @@
 package pattern
 
 import (
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -76,6 +78,12 @@ func TestNoisyListMatchesTheAudit(t *testing.T) {
 	path := filepath.Join(repoRootForTest(t),
 		"internal/agent/tools/hithink_finance/pattern/signal_frequency_audit.md")
 	raw, err := os.ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		// 审计报告由本地生产库跑出来（见 run_signal_audit.sh），**不随仓库分发**：
+		// 它本身就是数据。缺文件不是失败，是"这份数据不在这里"——本地有文件时照常断言。
+		t.Skipf("审计报告不存在，跳过：%s\n"+
+			"该文件由本地生产库生成、不随仓库分发；要跑这条断言请先跑 pattern/run_signal_audit.sh", path)
+	}
 	if err != nil {
 		t.Fatalf("读审计报告失败: %v", err)
 	}

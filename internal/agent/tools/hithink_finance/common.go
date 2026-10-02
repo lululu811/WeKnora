@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -178,25 +179,83 @@ func ExtractTables(sql string) []string {
 	return out
 }
 
+// syncWindowEnv 覆盖同步窗口，格式 `HH:MM-HH:MM[,HH:MM-HH:MM...]`。
+// 未设置时用 defaultSyncWindows；设为**空字符串**表示不做窗口拦截。
+const syncWindowEnv = "HITHINK_SYNC_WINDOWS"
+
+// defaultSyncWindows 是每日 ETL 重算的两个窗口。这段时间同步进程持有 DuckDB 写锁，
+// 窗口内放行查询会撞 "database is locked"，因此直接拒绝。
+const defaultSyncWindows = "17:25-17:35,02:55-03:05"
+
+type syncWindow struct {
+	start, end int // 当日分钟数
+}
+
 // CheckSyncWindow returns an error if the current time is within a sync window.
+//
+// 窗口来自 HITHINK_SYNC_WINDOWS：使用者的 ETL 时刻表与本仓库默认值不一定相同，
+// 所以不把时刻表烧进代码。
 func CheckSyncWindow() error {
-	now := time.Now()
-	currentMinutes := now.Hour()*60 + now.Minute()
-
-	syncWindows := []struct {
-		start, end int
-		label      string
-	}{
-		{17*60 + 25, 17*60 + 35, "日终同步"},
-		{2*60 + 55, 3*60 + 5, "夜间同步"},
+	spec, ok := os.LookupEnv(syncWindowEnv)
+	if !ok {
+		spec = defaultSyncWindows
 	}
+	return checkSyncWindowAt(time.Now(), spec)
+}
 
-	for _, w := range syncWindows {
-		if currentMinutes >= w.start && currentMinutes <= w.end {
-			return fmt.Errorf("数据同步中（%s，每日 17:30 和 03:00），请稍后重试。建议等待 5-10 分钟后重试", w.label)
+// checkSyncWindowAt 是 CheckSyncWindow 的纯函数内核，便于测试固定时刻。
+func checkSyncWindowAt(now time.Time, spec string) error {
+	current := now.Hour()*60 + now.Minute()
+	for _, w := range parseSyncWindows(spec) {
+		inWindow := current >= w.start && current <= w.end
+		if w.start > w.end { // 跨零点窗口，例如 23:50-00:10
+			inWindow = current >= w.start || current <= w.end
+		}
+		if inWindow {
+			return fmt.Errorf("数据同步中（%s-%s），请稍后重试。建议等待 5-10 分钟后重试",
+				formatClock(w.start), formatClock(w.end))
 		}
 	}
 	return nil
+}
+
+// parseSyncWindows 解析 `HH:MM-HH:MM` 列表。
+//
+// 无法识别的片段被**跳过**而不是报错：这个函数每次工具调用都会执行，配置写错
+// 不该让整族工具不可用，退化成「少拦截一个窗口」即可。
+func parseSyncWindows(spec string) []syncWindow {
+	var out []syncWindow
+	for _, part := range strings.Split(spec, ",") {
+		startStr, endStr, found := strings.Cut(strings.TrimSpace(part), "-")
+		if !found {
+			continue
+		}
+		start, okStart := parseClock(startStr)
+		end, okEnd := parseClock(endStr)
+		if !okStart || !okEnd {
+			continue
+		}
+		out = append(out, syncWindow{start: start, end: end})
+	}
+	return out
+}
+
+// parseClock 把 `HH:MM` 解析为当日分钟数。
+func parseClock(s string) (int, bool) {
+	hh, mm, found := strings.Cut(strings.TrimSpace(s), ":")
+	if !found {
+		return 0, false
+	}
+	h, errH := strconv.Atoi(strings.TrimSpace(hh))
+	m, errM := strconv.Atoi(strings.TrimSpace(mm))
+	if errH != nil || errM != nil || h < 0 || h > 23 || m < 0 || m > 59 {
+		return 0, false
+	}
+	return h*60 + m, true
+}
+
+func formatClock(minutes int) string {
+	return fmt.Sprintf("%02d:%02d", minutes/60, minutes%60)
 }
 
 // DBNames returns the list of available database names.

@@ -172,21 +172,31 @@ db="special"
 
 ### DuckDB 路径
 
-默认路径：`/Users/chenlei/.hithink-finance/`
+默认路径：`~/.hithink-finance/`
 
-可在 `hithink_finance.Config` 中修改。
+可用环境变量 `HITHINK_DB_DIR` 覆盖；也可在 `hithink_finance.Config` 中修改。
+
+> 该目录存放 hithink-finance 的本地 DuckDB 行情/财报库，**不随本仓库分发**。
+> 需自行准备数据，或不启用 finance profile（见 [README](../README.md)）。
 
 ### Python CLI 路径
 
 默认路径：
-- Python: `/Users/chenlei/007_DB/Financial-API/.venv/bin/python3`
-- CLI 目录: `/Users/chenlei/005_skill/skills/zettaranc-skill`
+- Python: `python3`（PATH 中的解释器）
+- CLI 目录: 由 `zettaranc.Config` 指定
 
 可在 `zettaranc.Config` 中修改。
 
 ### 时间窗口隔离
 
-每日 17:25-17:35 和 02:55-03:05 是数据同步时间，查询会被阻止以避免"database is locked"错误。
+每日 ETL 重算期间同步进程持有 DuckDB 写锁，窗口内放行查询会撞 `database is locked`，
+因此这些时段直接拒绝查询。窗口由 `HITHINK_SYNC_WINDOWS` 指定：
+
+- 格式 `HH:MM-HH:MM[,HH:MM-HH:MM...]`，例如 `17:25-17:35,02:55-03:05`
+- 不设置 = 用默认值 `17:25-17:35,02:55-03:05`
+- 设为**空字符串** = 不做窗口拦截（自建 ETL 时刻表与默认值不同时用这个）
+- `start > end` 视为跨零点窗口，例如 `23:50-00:10`
+- 无法识别的片段被跳过，不影响其余窗口
 
 ## 错误处理
 
@@ -274,4 +284,4 @@ hithink.finance.
 
 - zettaranc-skill: https://github.com/lululu811/zettaranc-skill
 - WeKnora: https://github.com/Tencent/WeKnora
-- hithink-finance: /Users/chenlei/.hithink-finance/
+- hithink-finance: `~/.hithink-finance/`（本地数据，不随仓库分发）

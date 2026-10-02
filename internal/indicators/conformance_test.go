@@ -977,7 +977,6 @@ func TestKnownGapsAreStillTrue(t *testing.T) {
 					g.ID, frontendCalcMACD, frontendCalcKDJ)
 			}
 
-
 		default:
 			t.Errorf("known_gaps 里有条目 %q，但本测试没有为它写断言 —— "+
 				"新的缺口要么补上断言，要么别登记（无断言的条目等于纯文档）", g.ID)
