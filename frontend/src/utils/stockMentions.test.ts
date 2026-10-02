@@ -34,6 +34,23 @@ test('resolveTickerThscode 拒绝非 A 股交易所后缀', () => {
   assert.equal(resolveTickerThscode('600519', 'US'), null)
 })
 
+test('板块/指数只认显式 .TI，裸码不猜成北交所股票', () => {
+  // 显式后缀 → 板块。悬浮卡与右侧 K 线都按这个 thscode 取数。
+  assert.equal(resolveTickerThscode('881101', 'TI'), '881101.TI')
+  assert.equal(resolveTickerThscode('881101', 'ti'), '881101.TI')
+  // 裸 88xxxx 什么都不认：本地北交所票全是 92 开头，88xxxx 是 848 个板块的地盘，
+  // 猜成 `881101.BJ` 会在候选池里变出一只本地不存在的股票。
+  assert.equal(resolveTickerThscode('881101'), null)
+})
+
+test('板块代码进入提及提取，名字取原文里的写法', () => {
+  const found = extractStockMentions('风电板块(881101.TI)今天走强')
+  assert.equal(found.length, 1)
+  assert.equal(found[0].thscode, '881101.TI')
+  assert.equal(found[0].exchange, 'TI')
+  assert.equal(found[0].name, '风电板块')
+})
+
 test('同一只票的多种写法收敛成一个标的', () => {
   const found = extractStockMentions('贵州茅台(600519.SH)今天不错，600519 也涨了，贵州茅台领涨')
   assert.equal(found.length, 1)

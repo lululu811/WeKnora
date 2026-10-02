@@ -31,8 +31,11 @@ test('inferAShareExchange 按板块前缀判定交易所', () => {
   assert.equal(inferAShareExchange('430047'), 'BJ')
   assert.equal(inferAShareExchange('830799'), 'BJ')
   assert.equal(inferAShareExchange('871981'), 'BJ')
-  assert.equal(inferAShareExchange('889999'), 'BJ')
   assert.equal(inferAShareExchange('920002'), 'BJ')
+  // `88` 段不猜：本地北交所票全是 92 开头，而 848 个同花顺板块住在 88xxxx。
+  // 猜成 BJ 会让正文里的板块代码变成一只本地不存在的股票。
+  assert.equal(inferAShareExchange('889999'), null)
+  assert.equal(inferAShareExchange('881101'), null)
 })
 
 test('inferAShareExchange 对前缀不明确的代码返回 null', () => {
@@ -98,19 +101,29 @@ test('不误伤非 ticker 的数字', () => {
 // `.HK`（港股）时后缀组失配，正则只匹配到前 6 位数字，于是
 // `resolveTickerThscode('881101', undefined)` 按前缀表把它判成 **BJ** ——
 // 正文里点开的是不存在的 `881101.BJ`；`00700.HK` 同理被判成 `00700.SZ`。
-// 而同一段文本在 stockMentions 里（CODE_RE 吃任意两个字母后缀）是被丢弃的：
-// 两个入口对同一串数字给出相反结论，正是文件头警告的那类分裂。
 // ---------------------------------------------------------------------------
 
-test('板块/指数代码（.TI）不被截断成裸码乱猜交易所', () => {
+test('板块代码（.TI）绑成板块，不再被截断成裸码乱猜交易所', () => {
   // 881101 以 88 开头，旧写法会命中 /^(43|83|87|88|92)/ 判成 BJ
-  assert.deepEqual(thscodes('板块 881101.TI 今天走强'), [])
-  assert.equal(injectKLineTickers('板块 881101.TI 今天走强'), '板块 881101.TI 今天走强')
-  // 非 A 股后缀同理：00700 以 00 开头，旧写法会判成 SZ
-  assert.deepEqual(thscodes('腾讯 00700.HK 的表现'), [])
+  assert.deepEqual(thscodes('板块 881101.TI 今天走强'), ['881101.TI'])
+  assert.match(injectKLineTickers('板块 881101.TI 今天走强'), /data-thscode="881101\.TI"/)
+  assert.ok(!injectKLineTickers('板块 881101.TI 今天走强').includes('881101.BJ'))
+  // 小写后缀同样归一成大写 TI
+  assert.deepEqual(thscodes('881101.ti'), ['881101.TI'])
 })
 
-test('未知后缀原样放行，不吞掉后面的文本', () => {
+test('裸 6 位码仍是「不认就放行」，不会被当板块', () => {
+  // `88` 段不猜：本地表里 347 只北交所票全是 92 开头，而 848 个同花顺板块
+  // 就住在 88xxxx —— 猜成北交所会得到一只本地不存在的股票（正文里点开是空图）。
+  assert.deepEqual(thscodes('板块 881101 今天走强'), [])
+  // 正文里的 6 位数字还可能是订单号/日期，只有显式 `.TI` 才算板块
+  assert.deepEqual(thscodes('订单 123456 号'), [])
+  // 真实存在的北交所号段仍然照常识别
+  assert.deepEqual(thscodes('北交所 920002'), ['920002.BJ'])
+})
+
+test('非 A 股、非板块的后缀原样放行，不吞掉后面的文本', () => {
+  assert.deepEqual(thscodes('腾讯 00700.HK 的表现'), [])
   assert.deepEqual(thscodes('600519.XX 是未知后缀'), [])
   assert.equal(injectKLineTickers('600519.XX'), '600519.XX')
   // 后缀后面的内容必须完整保留（`(?![A-Za-z0-9])` 保证不截断成两段）
@@ -121,7 +134,7 @@ test('未知后缀原样放行，不吞掉后面的文本', () => {
 test('后缀大小写与长度边界', () => {
   // 小写后缀仍按 A 股处理并归一成大写
   assert.deepEqual(thscodes('600499.sh'), ['600499.SH'])
-  // 三个字母不是交易所后缀，整串应原样保留（数字也不该被单独标出来）
+  // 三个字母不是已知后缀，整串应原样保留（数字也不该被单独标出来）
   assert.deepEqual(thscodes('600519.SHH'), [])
 })
 
@@ -155,8 +168,8 @@ test('单次扫描保证 span 内的数字不被二次包裹', () => {
 })
 
 // ---------------------------------------------------------------------------
-// 与 klineRangeInjector 同一个缺陷：代码正则会匹配属性值里的数字，
-// 把 span 塞进属性中间。`<kb doc="600519">` 这种引用标签会直接损坏。
+// 代码正则会匹配属性值里的数字，把 span 塞进属性中间。
+// `<kb doc="600519">` 这种引用标签会直接损坏。
 // ---------------------------------------------------------------------------
 
 test('不改写标签属性里的代码', () => {

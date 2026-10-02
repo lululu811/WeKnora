@@ -16,7 +16,7 @@
  *  - 纯名称命中只在本地已知映射表里成立，**不猜**没收录的公司。
  */
 
-import { inferAShareExchange, type AShareExchange } from './aShareTicker'
+import { inferAShareExchange, isBoardExchange, BOARD_EXCHANGE, type AShareExchange, type TickerExchange } from './aShareTicker'
 
 /** 本地已知的「代码 → 名称」映射。命中不了的名字不会被猜测成任何标的。 */
 export const KNOWN_STOCK_NAMES: Readonly<Record<string, string>> = {
@@ -39,7 +39,7 @@ export const KNOWN_STOCK_NAMES: Readonly<Record<string, string>> = {
 
 export interface MentionedStock {
   ticker: string;
-  exchange: AShareExchange;
+  exchange: TickerExchange;
   name: string;
   thscode: string;
 }
@@ -110,6 +110,9 @@ function normalizeExchange(raw: string | undefined, ticker: string): AShareExcha
  * 判不出就返回 null，调用方据此原样放行 —— 宁可漏，不可把用户绑到别的公司。
  */
 export function resolveTickerThscode(ticker: string, suffix?: string): string | null {
+  // 板块/指数：只认**显式后缀** `.TI`。裸 `881101` 一律不认——它会被前缀表
+  // 判成北交所股票（88 开头），而正文里的 6 位数字还可能是订单号。
+  if (isBoardExchange(suffix)) return `${ticker}.${BOARD_EXCHANGE}`
   const exchange = normalizeExchange(suffix, ticker)
   return exchange ? `${ticker}.${exchange}` : null
 }
@@ -148,7 +151,7 @@ export function extractStockMentions(text: string): StockMention[] {
   const push = (
     index: number,
     ticker: string,
-    exchange: AShareExchange,
+    exchange: TickerExchange,
     name?: string,
     fromTextName = false,
   ) => {
@@ -171,7 +174,7 @@ export function extractStockMentions(text: string): StockMention[] {
     const thscode = resolveTickerThscode(ticker, m[3])
     if (!thscode) continue
     // 分组 1 若非空，代码从 lead 之后开始
-    push(m.index + lead.length, ticker, thscode.slice(-2) as AShareExchange)
+    push(m.index + lead.length, ticker, thscode.slice(-2) as TickerExchange)
   }
 
   // --- 2. 名称(代码) ---
@@ -182,7 +185,7 @@ export function extractStockMentions(text: string): StockMention[] {
     // 括号里写了后缀就以它为准，没写才按板块前缀推断。
     const thscode = resolveTickerThscode(ticker, m[3])
     if (!thscode) continue
-    push(m.index, ticker, thscode.slice(-2) as AShareExchange, name, true)
+    push(m.index, ticker, thscode.slice(-2) as TickerExchange, name, true)
   }
 
   // --- 3. 已知名称直接出现 ---
