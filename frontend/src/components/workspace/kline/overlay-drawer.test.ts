@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { detectKLinePatterns, selectPatternIndicesToDraw, drawPatternGeometry, reserveLabel, type KLinePatternItem, type PlacedLabel } from './overlay-drawer.ts'
+import { calcTD9, detectKLinePatterns, selectPatternIndicesToDraw, drawPatternGeometry, reserveLabel, type KLinePatternItem, type PlacedLabel } from './overlay-drawer.ts'
 import type { DrawablePattern } from './chart-patterns.ts'
 import type { Annotation } from './annotate-api.ts'
 import type { KLineData } from './types.ts'
@@ -136,6 +136,81 @@ test('同一份输入重复调用结果一致（缓存不能改变答案）', ()
   const second = detectKLinePatterns(data, annotations)
   assert.deepEqual(filledIndexes(second), filledIndexes(first))
   assert.deepEqual(filledIndexes(first), [4])
+})
+
+// ---------------------------------------------------------------------------
+// calcTD9 的 memo：与上面 detectKLinePatterns 同源的一类失效
+//
+// detectKLinePatterns 的键曾经只有「根数」，修好之后 TD9 那份漏了 —— 它的键
+// 同样只有根数（模块级，跨图表实例共享）。limit=5000 时绝大多数活跃 A 股恰好
+// 返回 5000 根，所以任意两只互切都会命中上一只票的九转数组，图上画着别人的
+// 数字且不报错。
+//
+// 注意 TD9Item 只有 {type,count}、不带日期，所以两只「同向同形」的票即使缓存
+// 串了也看不出差别 —— 回归测试必须让第二只票方向相反，否则它验不出这个 bug。
+// ---------------------------------------------------------------------------
+
+/** 与 neutralSeries 根数相同、但逐根走低的第二只票。 */
+function fallingSeries(n: number, startIso: string): KLineData[] {
+  const start = Date.parse(`${startIso}T00:00:00Z`)
+  return Array.from({ length: n }, (_, i) => {
+    const open = 20 - i * 0.1
+    const close = open - 0.08
+    return {
+      timestamp: start + i * DAY,
+      open,
+      close,
+      high: open + 0.005,
+      low: close - 0.005,
+      volume: 1000,
+    }
+  })
+}
+
+test('换标的但根数相同：九转不得复用上一只票的结果', () => {
+  const rising = neutralSeries(12, '2026-03-02')
+  const up = calcTD9(rising)
+  assert.ok(up.some((b) => b?.type === 'up'), '构造数据应产出向上九转')
+
+  const falling = fallingSeries(12, '2026-04-01')
+  const down = calcTD9(falling)
+  assert.ok(
+    down.some((b) => b?.type === 'down'),
+    '根数相同的第二只票必须按自己的数据重算，而不是复用第一只的向上九转',
+  )
+  assert.equal(
+    down.some((b) => b?.type === 'up'),
+    false,
+    '第二只票走低，结果里不该残留第一只票的向上九转',
+  )
+})
+
+test('九转：同一只票换周期后根数相同也必须重算', () => {
+  // 同长度、不同日期区间：只有首尾时间戳能区分，根数区分不了。
+  const a = neutralSeries(12, '2026-05-04')
+  assert.ok(calcTD9(a).some((b) => b?.type === 'up'))
+
+  const b = fallingSeries(12, '2026-09-07')
+  assert.ok(
+    calcTD9(b).some((x) => x?.type === 'down'),
+    '日期区间变了就是另一段数据，必须重算',
+  )
+})
+
+test('九转：同一份输入重复调用结果一致（缓存不能改变答案）', () => {
+  const data = fallingSeries(12, '2026-11-02')
+  const first = calcTD9(data)
+  const second = calcTD9(data)
+  assert.deepEqual(second, first)
+})
+
+test('九转：空输入不崩，也不污染后续缓存命中', () => {
+  assert.deepEqual(calcTD9([]), [])
+  const data = neutralSeries(12, '2026-12-07')
+  assert.ok(
+    calcTD9(data).some((b) => b?.type === 'up'),
+    '空输入之后仍应按真实数据算出结果',
+  )
 })
 
 // ---------------------------------------------------------------------------

@@ -56,11 +56,32 @@ export interface TD9Item {
   count: number; // 1 ~ 9
 }
 
+/**
+ * calcTD9 的缓存键。
+ *
+ * 这个 memo 只比 `dataList.length` 是不够的，而且错得很安静：limit=5000 时绝大
+ * 多数活跃 A 股恰好返回 5000 根，于是「切到另一只票」会直接命中上一只票的九转
+ * 结果 —— 图上画着别人的数字，不报错。同一只票换周期、或重新拉一次根数相同但
+ * 日期不同的数据，也一样中招。缓存还是模块级的，跨图表实例共享。
+ *
+ * 这与下面 patternsCacheKey 处理的是同一类失效，键的形状也照它取：根数 + 首尾
+ * 时间戳足以区分不同标的和不同周期。calcTD9 本身是 O(n) 且实测微秒级（整帧绘制
+ * 约 229 µs），多算一次字符串拼接可以忽略，所以没必要为了省这点而留着会画错票
+ * 的缓存。
+ */
+function td9CacheKey(dataList: KLineData[]): string {
+  if (dataList.length === 0) return '0';
+  const first = dataList[0].timestamp;
+  const last = dataList[dataList.length - 1].timestamp;
+  return `${dataList.length}|${first}|${last}`;
+}
+
 let cachedTD9: Array<TD9Item | null> = [];
-let cachedTD9DataLength = 0;
+let cachedTD9Key = '';
 
 export function calcTD9(dataList: KLineData[]): Array<TD9Item | null> {
-  if (cachedTD9DataLength === dataList.length && cachedTD9.length > 0) {
+  const key = td9CacheKey(dataList);
+  if (cachedTD9Key === key && cachedTD9.length > 0) {
     return cachedTD9;
   }
 
@@ -102,7 +123,7 @@ export function calcTD9(dataList: KLineData[]): Array<TD9Item | null> {
   }
 
   cachedTD9 = result;
-  cachedTD9DataLength = dataList.length;
+  cachedTD9Key = key;
   return result;
 }
 
