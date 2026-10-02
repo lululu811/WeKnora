@@ -535,6 +535,81 @@ class CninfoSource:
         category = CATEGORY_BY_REPORT_TYPE.get(report_type)
         if category is None:
             raise CninfoError(f"未知 report_type: {report_type!r}")
+        return self._query(code, category, page=page, page_size=page_size, se_date=se_date)
+
+    def query_all_announcements(
+        self,
+        code: str,
+        *,
+        page: int = 1,
+        page_size: int = CNINFO_MAX_PAGE_SIZE,
+        se_date: str = "",
+    ) -> List[Announcement]:
+        """按**全部类型**检索该股票的公告（公告流用）。
+
+        与 ``query_announcements`` 的唯一区别是 category 传空串，也就是巨潮的
+        「不限类型」。这不是把模块 docstring 记的那个 bug 又放回来 —— 那条教训
+        针对的是**找年报**：不限类型时服务端只给最近 30 条，活跃股一个季度就能把
+        年报挤出这 30 条。公告流要的恰恰是全类型，但它必须自己翻页，不能只取第一
+        页就当成「近期全部公告」（见 ``recent_announcements``）。
+
+        Args:
+            code: 6 位股票代码。
+            page: 页码（1 起始）。
+            page_size: 每页条数，超过 30 会夹断并告警。
+            se_date: 巨潮的日期区间，``"2025-01-01~2026-12-31"``，空为不限。
+
+        Returns:
+            按服务端返回顺序（通常最新在前）的公告列表，无结果返回空列表。
+        """
+        return self._query(code, "", page=page, page_size=page_size, se_date=se_date)
+
+    def recent_announcements(
+        self,
+        code: str,
+        *,
+        max_items: int = 60,
+        se_date: str = "",
+    ) -> List[Announcement]:
+        """翻页取回近期全类型公告，最多 ``max_items`` 条。
+
+        为什么要翻页：巨潮单页上限 30 条且**超限静默截断**，而公告流要的是「近期
+        全部」。只取第一页会把「最近 30 条」当成「近期全部」，这跟模块 docstring
+        记的那个年报被挤出去的 bug 是同一个形状 —— 区别只是这次错在数量而不是
+        错在找错对象。
+
+        翻页到拿不满一页、或达到 ``max_items`` 就停；单页异常向上抛（由调用方决定
+        降级），因为「翻到一半失败」返回半个列表会被下游当成「就这么少」。
+        """
+        if max_items <= 0:
+            return []
+        out: List[Announcement] = []
+        page = 1
+        while len(out) < max_items:
+            batch = self.query_all_announcements(
+                code,
+                page=page,
+                page_size=CNINFO_MAX_PAGE_SIZE,
+                se_date=se_date,
+            )
+            if not batch:
+                break
+            out.extend(batch)
+            if len(batch) < CNINFO_MAX_PAGE_SIZE:
+                break
+            page += 1
+        return out[:max_items]
+
+    def _query(
+        self,
+        code: str,
+        category: str,
+        *,
+        page: int,
+        page_size: int,
+        se_date: str,
+    ) -> List[Announcement]:
+        """公告检索的共用实现。``category=""`` 表示不限类型。"""
         if page < 1:
             raise CninfoError(f"page 必须 ≥ 1，收到 {page}")
         if page_size > CNINFO_MAX_PAGE_SIZE:
@@ -554,8 +629,10 @@ class CninfoSource:
             "pageSize": str(page_size),
             "pageNum": str(page),
             "column": "",
-            # 本次改造的关键：按报告类型过滤。不传就只能拿到该股最近 30 条
-            # 全类型公告，年报会被挤出去。
+            # 按类型过滤是**找年报**的关键：不传就只能拿到该股最近 30 条全类型
+            # 公告，活跃股一个季度就能把年报挤出这 30 条。
+            # 公告流走 query_all_announcements，那里刻意传空串并靠
+            # recent_announcements 翻页 —— 全类型本身没错，只取第一页才错。
             "category": category,
             "plate": "",
             "seDate": se_date,

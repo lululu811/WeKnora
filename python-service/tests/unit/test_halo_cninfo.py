@@ -94,7 +94,10 @@ class FakeHttp:
             self.calls.append({"method": "GET", "url": full_url, "headers": dict(req.headers)})
             return FakeResponse(json.dumps(self.get_json).encode("utf-8"))
         if full_url == cs._QUERY_URL:
-            body = dict(urlparse.parse_qsl(req.data.decode("utf-8")))
+            # keep_blank_values=True 是必须的：巨潮表单里 category="" 有明确语义
+            # （不限类型），而 parse_qsl 默认**丢弃空值**，于是替身根本记录不到它 ——
+            # 「不限类型」和「字段没发出去」在替身眼里长得一样。
+            body = dict(urlparse.parse_qsl(req.data.decode("utf-8"), keep_blank_values=True))
             self.calls.append(
                 {
                     "method": "POST",
@@ -231,6 +234,100 @@ def test_unknown_report_type_rejected(http: FakeHttp):
     http.post_json = {"announcements": []}
     with pytest.raises(CninfoError, match="未知 report_type"):
         make_source().query_announcements("600519", report_type="quarterly")
+
+
+# ----------------------------------------------------------------------
+# 公告流：全类型 + 翻页
+#
+# 找年报要按类型过滤（不然年报被挤出最近 30 条）；公告流要的恰恰是全类型。
+# 两者共用 _query，靠 category 参数区分 —— 所以这里既要验公告流传空串，
+# 也要验找年报那条路没被顺手改成不限类型。
+# ----------------------------------------------------------------------
+
+
+def test_all_announcements_sends_empty_category(http: FakeHttp):
+    http.post_json = {"announcements": [announcement_item("关于回购公司股份的公告")]}
+    out = make_source().query_all_announcements("600519")
+    assert http.last_post()["payload"]["category"] == ""
+    assert [a.title for a in out] == ["关于回购公司股份的公告"]
+
+
+def test_all_announcements_still_sends_anti_scrape_headers(http: FakeHttp):
+    """多一条入口不能漏掉反爬头：缺任一头巨潮不报错、直接返空。"""
+    http.post_json = {"announcements": []}
+    make_source().query_all_announcements("600519")
+    headers = http.last_post()["headers"]
+    assert headers["referer"] == "https://www.cninfo.com.cn/new/disclosure"
+    assert headers["origin"] == "https://www.cninfo.com.cn"
+
+
+def test_all_announcements_still_clamps_page_size(http: FakeHttp):
+    """全类型入口同样受单页 30 条约束，否则翻页会漏数据。"""
+    http.post_json = {"announcements": []}
+    make_source().query_all_announcements("600519", page_size=200)
+    assert http.last_post()["payload"]["pageSize"] == str(cs.CNINFO_MAX_PAGE_SIZE)
+
+
+def test_recent_announcements_paginates_until_short_page(http: FakeHttp):
+    """单页满 30 条就要继续翻。
+
+    只取第一页 = 把「最近 30 条」当成「近期全部」—— 与模块 docstring 记的那个
+    年报被挤出去的 bug 同一个形状，只是这次错在数量而非错在找错对象。
+    """
+    full = [announcement_item(f"公告{i}", anno_id=str(1000 + i)) for i in range(30)]
+    http.post_json_by_page = {
+        "1": {"announcements": full},
+        "2": {"announcements": [announcement_item("较早的一条", anno_id="999")]},
+    }
+    out = make_source().recent_announcements("600519", max_items=60)
+    assert len(out) == 31
+    pages = [c["payload"]["pageNum"] for c in http.calls if c["method"] == "POST"]
+    assert pages == ["1", "2"], "第 2 页返回不满一页就该停，不该再翻"
+
+
+def test_recent_announcements_stops_at_max_items(http: FakeHttp):
+    full = [announcement_item(f"公告{i}", anno_id=str(2000 + i)) for i in range(30)]
+    http.post_json_by_page = {"1": {"announcements": full}, "2": {"announcements": full}}
+    out = make_source().recent_announcements("600519", max_items=40)
+    assert len(out) == 40
+    pages = [c["payload"]["pageNum"] for c in http.calls if c["method"] == "POST"]
+    assert pages == ["1", "2"], "拿到 60 条已超过 max_items=40，不该再请求第 3 页"
+
+
+def test_recent_announcements_empty_page_stops(http: FakeHttp):
+    full = [announcement_item(f"公告{i}", anno_id=str(4000 + i)) for i in range(30)]
+    http.post_json_by_page = {"1": {"announcements": full}, "2": {"announcements": []}}
+    out = make_source().recent_announcements("600519", max_items=90)
+    assert len(out) == 30
+
+
+def test_recent_announcements_zero_items_makes_no_request(http: FakeHttp):
+    assert make_source().recent_announcements("600519", max_items=0) == []
+    assert [c for c in http.calls if c["method"] == "POST"] == []
+
+
+def test_recent_announcements_does_not_return_partial_list_on_failure(http: FakeHttp):
+    """翻到一半失败必须向上抛。
+
+    返回半个列表会被下游当成「就这么少」—— 与「缺就标缺失，不估算」同一条规矩：
+    宁可报错，也不要给出一个看起来完整的结果。
+    """
+    full = [announcement_item(f"公告{i}", anno_id=str(3000 + i)) for i in range(30)]
+    http.post_json_by_page = {"1": {"announcements": full}}
+    http.post_raises = [None, cs.CninfoError("第二页挂了")]
+    with pytest.raises(cs.CninfoError, match="第二页挂了"):
+        make_source().recent_announcements("600519", max_items=60)
+
+
+def test_filing_lookup_still_filters_by_category(http: FakeHttp):
+    """回归：新增全类型入口后，找年报那条路必须继续按类型过滤。
+
+    这是模块 docstring 记的历史 bug —— 不限类型时年报会被挤出最近 30 条，
+    表现为永远「查无年报」。
+    """
+    http.post_json = {"announcements": [announcement_item("贵州茅台2025年年度报告")]}
+    make_source().find_filing("600519", report_type=REPORT_ANNUAL)
+    assert http.last_post()["payload"]["category"] == CATEGORY_ANNUAL
 
 
 # ----------------------------------------------------------------------
