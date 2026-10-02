@@ -2,8 +2,11 @@ name: Helm
 
 on:
   push:
+    # `mine` holds this fork's work; `main` is an upstream mirror that never
+    # receives a commit and this fork never opens a pull request. See app.yml.
     branches:
       - main
+      - mine
     paths:
       - "helm/**"
       - ".github/workflows/helm.yml"

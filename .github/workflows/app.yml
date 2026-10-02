@@ -5,7 +5,11 @@ name: App
 
 on:
   push:
-    branches: [main]
+    # `mine` is the long-lived branch that holds this fork's work. `main` is a
+    # pure mirror of upstream and, by policy, never receives a commit — and this
+    # fork never opens a pull request — so without `mine` here no push ever
+    # starts this workflow and the branch carrying every change is untested.
+    branches: [main, mine]
     paths:
       - "**/*.go"
       - "!cli/**"

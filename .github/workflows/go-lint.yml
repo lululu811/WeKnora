@@ -1,10 +1,8 @@
 name: Go Lint
 
 # The repository carries a large backlog of pre-existing golangci-lint findings,
-# so pull requests are only judged on the code they introduce. The filter needs
-# a pull request diff, which is why this workflow has no other trigger; the
-# companion go-lint-cache.yml keeps the caches this job restores from warm on
-# main.
+# so changes are only judged on the code they introduce. The companion
+# go-lint-cache.yml keeps the caches this job restores from warm on main.
 #
 # The filter is golangci-lint's own `--new-from-merge-base` rather than the
 # action's `only-new-issues`, because that option asks the GitHub API for the
@@ -13,8 +11,25 @@ name: Go Lint
 # to linting everything, which reports the entire backlog and can never pass.
 # Computing the merge base from git has no size limit, and `fetch-depth: 0`
 # below is what makes the base commit available to do it.
+#
+# Pushes also run this workflow, which is why the base is resolved through
+# LINT_BASE below instead of read straight out of the pull_request payload: on a
+# push event that payload is absent, and reading it directly left the diff range
+# empty and `--new-from-merge-base=` argument-less. The push trigger exists for
+# `mine` — the long-lived branch holding this fork's work. `main` is a pure
+# mirror of upstream and never receives a commit, and this fork never opens a
+# pull request, so before this the workflow could not run at all and
+# golangci-lint never executed anywhere.
 
 on:
+  push:
+    branches: [mine]
+    paths:
+      - "**/*.go"
+      - "**/go.mod"
+      - "**/go.sum"
+      - ".golangci.yml"
+      - ".github/workflows/go-lint.yml"
   pull_request:
     paths:
       - "**/*.go"
@@ -34,6 +49,20 @@ env:
   GO_VERSION: "1.26"
   GOLANGCI_LINT_VERSION: "v2.12.2"
   GOPROXY: https://proxy.golang.org,direct
+  # Base and head of the "only look at what changed" range.
+  #
+  # Pull requests use their own base/head. Pushes use github.event.before — the
+  # tip the branch had before this push — which gives the same "judge only what
+  # this change introduced" semantics a pull request gets. It is deliberately
+  # *not* origin/main: the fork's main is a mirror that can lag upstream, and
+  # diffing `mine` against it would mark the entire fork delta (400+ Go files)
+  # as new on the first run and report a backlog this workflow exists to avoid.
+  #
+  # `before` is all-zeros for a new branch and can name a commit that no longer
+  # exists after a force push, so the resolve step below validates it and falls
+  # back to origin/main. fetch-depth: 0 is what makes either rev available.
+  LINT_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+  LINT_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
 
 jobs:
   # Path filters above start this workflow for any Go change; the matrix still
@@ -46,15 +75,37 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       modules: ${{ steps.detect.outputs.modules }}
+      base: ${{ steps.resolve.outputs.base }}
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
+      - name: Resolve diff base
+        id: resolve
+        shell: bash
+        run: |
+          base="${{ env.LINT_BASE }}"
+          reason=""
+          if [ -z "$base" ]; then
+            reason="no base in the event payload"
+          elif [ "$base" = "0000000000000000000000000000000000000000" ]; then
+            reason="new branch (github.event.before is all zeros)"
+          elif ! git rev-parse --verify --quiet "${base}^{commit}" >/dev/null 2>&1; then
+            reason="base commit is not in this checkout (force push?)"
+          fi
+          if [ -n "$reason" ]; then
+            echo "Lint base '$base' unusable — $reason; falling back to origin/main."
+            base="origin/main"
+          fi
+          echo "base=$base" >> "$GITHUB_OUTPUT"
+          echo "Lint base: $base"
       - name: Detect changed modules
         id: detect
         shell: bash
+        env:
+          DIFF_BASE: ${{ steps.resolve.outputs.base }}
         run: |
-          diff_range="${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}"
+          diff_range="${DIFF_BASE}...${{ env.LINT_HEAD }}"
           modules=()
           if git diff --name-only --diff-filter=ACMR "$diff_range" -- \
                .golangci.yml .github/workflows/go-lint.yml | grep -q .; then
@@ -112,4 +163,4 @@ jobs:
           # Deliberately off: see the note at the top of this file. The same
           # filtering is done below, from git.
           only-new-issues: false
-          args: --new-from-merge-base=${{ github.event.pull_request.base.sha }}
+          args: --new-from-merge-base=${{ needs.changes.outputs.base }}

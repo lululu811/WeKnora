@@ -2,7 +2,9 @@ name: Frontend
 
 on:
   push:
-    branches: [main]
+    # `mine` holds this fork's work; `main` is an upstream mirror that never
+    # receives a commit and this fork never opens a pull request. See app.yml.
+    branches: [main, mine]
     paths:
       - "frontend/**"
       - "scripts/build_frontend_dist.sh"
