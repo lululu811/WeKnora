@@ -4,11 +4,11 @@ python-service 数据源管理层
 提供统一的数据源抽象、注册、管理和缓存能力。
 
 使用方式：
-    from datasources import registry, manager, cache
+    from datasources import registry, manager, cache, config
     from datasources.duckdb_source import DuckDBSource
 
-    # 注册数据源
-    registry.register(DuckDBSource("market", "~/.hithink-finance/market.duckdb"))
+    # 注册数据源。库目录来自 DB_DIR（默认 ~/.hithink-finance），不要在代码里写死路径。
+    registry.register(DuckDBSource("market", config.get_db_path("market")))
 
     # 启动管理器
     await manager.startup()

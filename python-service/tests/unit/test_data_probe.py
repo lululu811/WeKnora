@@ -21,7 +21,7 @@ DuckDB 明确拒绝"持有者还在的时候再开一个读写连接"：
   B. 真实跨命名空间层：容器里的服务 vs 宿主机的写入，只能对跑起来的
      容器做，见文件末尾的说明。
 
-跑法：cd /Users/chenlei/007_DB/WeKnora/python-service && python3 tests/unit/test_data_probe.py
+跑法：cd <repo>/python-service && python3 tests/unit/test_data_probe.py
 """
 import asyncio
 import shutil

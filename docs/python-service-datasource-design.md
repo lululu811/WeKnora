@@ -462,9 +462,9 @@ from datasources.api_source import APISource
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 启动：注册并初始化数据源
-    registry.register(DuckDBSource("market", "~/.hithink-finance/market.duckdb"))
-    registry.register(DuckDBSource("financials", "~/.hithink-finance/financials.duckdb"))
+    # 启动：注册并初始化数据源。库目录来自 DB_DIR，不要在代码里写死路径。
+    registry.register(DuckDBSource("market", config.get_db_path("market")))
+    registry.register(DuckDBSource("financials", config.get_db_path("financials")))
     registry.register(RedisSource("cache", host="localhost", port=6379))
     registry.register(APISource("quote_api", base_url="http://quote-api.example.com"))
     
