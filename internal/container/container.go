@@ -18,6 +18,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Tencent/WeKnora/internal/agent/tools/halo"
+
 	modelruntime "github.com/Tencent/WeKnora/internal/models/runtime"
 
 	sqlite_vec "github.com/asg017/sqlite-vec-go-bindings/cgo"
@@ -638,6 +640,13 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(handler.NewCustomAgentHandler))
 	must(container.Provide(handler.NewUserResourceFavoriteHandler))
 	must(container.Provide(handler.NewStockWatchHandler))
+	// HALO 报告归档。客户端单独 provide 而不是在 handler 里现造：agent 工具那侧
+	// 是懒加载自建的（agent_service.go），两处各造一个会让「PYTHON_SERVICE_URL
+	// 指向谁」有两个来源。这里给一个 provider，handler 消费它。
+	must(container.Provide(func() *halo.HTTPClient {
+		return halo.NewHTTPClient("")
+	}))
+	must(container.Provide(handler.NewHaloHandler))
 	// The diary handler is its own provider rather than a decorator on the
 	// watch handler, for the same dig-cycle reason as the job above. Both
 	// handlers still share watchContext, so the auth rule is stated once.

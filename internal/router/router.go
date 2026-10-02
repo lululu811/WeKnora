@@ -85,7 +85,12 @@ type RouterParams struct {
 	// read off StockWatchHandler: a dig provider that both consumes and
 	// produces the same type is a dependency cycle, and that fails at boot.
 	// A nil here simply means the diary routes are not registered.
-	StockWatchDiaryHandler       *handler.StockWatchDiaryHandler
+	StockWatchDiaryHandler *handler.StockWatchDiaryHandler
+	// HaloHandler is the analysis stack's HTTP surface (currently just the
+	// report archive). Nil means the route is not registered, matching the
+	// diary handler's contract above: a deployment without the finance stack
+	// must boot without it.
+	HaloHandler                  *handler.HaloHandler
 	SkillHandler                 *handler.SkillHandler
 	OrganizationHandler          *handler.OrganizationHandler
 	IMHandler                    *handler.IMHandler
@@ -332,6 +337,12 @@ func NewRouter(params RouterParams) *gin.Engine {
 		)
 		RegisterKnowledgeTagRoutes(v1, params.TagHandler, rbacGuards)
 		RegisterKnowledgeRoutes(v1, params.KnowledgeHandler, rbacGuards)
+		// HALO 报告归档。不套 rbacGuards：handler 内部走的是 KB 路由同一套
+		// 访问校验（resolveHandlerKBAccessFor + access.RequireKBWrite），再套一层
+		// 会让「谁有权写这个知识库」有两个说法。
+		if params.HaloHandler != nil {
+			v1.POST("/halo/archive", params.HaloHandler.ArchiveHaloReport)
+		}
 		RegisterFAQRoutes(v1, params.FAQHandler, rbacGuards)
 		RegisterChunkRoutes(v1, params.ChunkHandler, rbacGuards)
 		RegisterSessionRoutes(v1, params.SessionHandler, params.MessageSuggestionHandler, rbacGuards)
