@@ -48,10 +48,15 @@
 
     <EmptyState v-if="!loading && !rows.length" icon="chart-line" :title="t('watchlist.empty')"
       :description="t('watchlist.emptyHint')" />
-
-    <div class="wl-body">
+    <div v-else class="wl-body">
+      <!--
+        条件挂在**外层**的 .wl-body 上而不是 t-table 自己身上：v-else 必须紧贴
+        上面的 v-if，中间不能插元素（包括注释）。曾经把它挂在 table 上、外面
+        再包一层 div，vue-tsc 不报错，vite 构建时才炸 "v-else has no
+        adjacent v-if"。
+      -->
       <div class="wl-body__table">
-    <t-table v-else row-key="thscode" class="watchlist-table" :data="rows" :columns="columns"
+    <t-table row-key="thscode" class="watchlist-table" :data="rows" :columns="columns"
       :loading="loading || quotesLoading" size="medium" hover
       :row-class-name="rowClassName" @row-click="onRowClick">
       <template #thscode="{ row }">
