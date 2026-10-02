@@ -166,9 +166,13 @@ func NewRouter(params RouterParams) *gin.Engine {
 	// 503 when there are any, without affecting the liveness path above.
 	// Nothing in the deployment probes this, so a degraded verdict can
 	// never pull the instance out of rotation.
-	if params.HealthInspector != nil {
-		r.GET("/health/readiness", params.HealthInspector.ReadinessHandler)
-	}
+	//
+	// It is registered *after* the global Auth middleware, unlike /health —
+	// see the authenticated section below. The body names custom_agents rows by
+	// display name and id across every tenant, and embeds tenant/subject/session
+	// ids plus raw dead-letter and DB error text, so it cannot be anonymous.
+	// It previously sat here, which put it outside the Auth chain entirely and
+	// made the noAuthAPI entry that claimed to govern it dead code.
 
 	// Swagger API 文档（仅在非生产环境下启用）
 	// 通过 GIN_MODE 环境变量判断：release 模式下禁用 Swagger
@@ -230,6 +234,16 @@ func NewRouter(params RouterParams) *gin.Engine {
 
 	// 认证中间件
 	r.Use(middleware.Auth(params.TenantService, params.UserService, params.TenantMemberService, params.TenantAPIKeyService, params.Config))
+
+	// Readiness / degraded signal, behind Auth. Deliberately not next to
+	// /health above: this payload is an operator-facing dump of configuration
+	// findings, and those findings carry cross-tenant object names and ids
+	// (healthcheck/dangling.go names custom_agents rows by name), session and
+	// subject ids, and raw error strings. Anyone who needs it is already
+	// authenticated; the container healthcheck uses /health and is unaffected.
+	if params.HealthInspector != nil {
+		r.GET("/health/readiness", params.HealthInspector.ReadinessHandler)
+	}
 
 	// 文件服务：统一代理本地/MinIO/COS/TOS存储后端（需要认证）
 	serveFilesWithResources(r, params.FileService, params.StorageBackendResolver, params.ResourceCatalog)

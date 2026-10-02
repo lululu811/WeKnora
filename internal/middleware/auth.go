@@ -35,13 +35,18 @@ var (
 // 无需认证的API列表
 var noAuthAPI = map[string][]string{
 	"/health": {"GET"},
-	// Readiness carries configuration-inspection findings for operators and
-	// alerting. It is public for the same reason /health is: an operator
-	// diagnosing a degraded box has no reason to hold a session token, and
-	// the payload contains no tenant data — it names configuration objects
-	// and model ids, never content. It deliberately does not gate anything:
-	// /health, which the container healthcheck uses, is unaffected.
-	"/health/readiness":       {"GET"},
+	// NOTE: /health/readiness is deliberately absent.
+	//
+	// It used to be listed here — and the entry was inert, because the route is
+	// registered before the global Auth middleware and so never reaches
+	// isNoAuthAPI at all. That coincidence made the exemption look like the
+	// thing keeping it public, when in fact nothing did.
+	//
+	// The route now sits behind Auth (see router.go), and its payload rules out
+	// an exemption: the findings name custom_agents rows by display name and id
+	// with no tenant filter, and embed tenant/subject/session ids plus raw
+	// dead-letter and database error text. That is a cross-tenant configuration
+	// map, which is not something to serve anonymously. Do not re-add this.
 	"/api/v1/auth/register":   {"POST"},
 	"/api/v1/auth/login":      {"POST"},
 	"/api/v1/auth/auto-setup": {"POST"},

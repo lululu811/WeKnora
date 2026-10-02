@@ -78,13 +78,33 @@ func TestHealthSurfaceLivenessStaysGreenWithFindings(t *testing.T) {
 	assert.Equal(t, http.StatusOK, code, "liveness must not be affected by findings")
 	assert.Equal(t, "ok", body["status"])
 
-	// Readiness: the degraded signal, on its own route.
+	// Readiness must not be reachable anonymously.
+	//
+	// This assertion used to be `StatusServiceUnavailable` with the degraded
+	// body — i.e. it asserted the *leak* as if it were the feature, which is how
+	// the endpoint stayed public: the test pinned the wrong behaviour, so
+	// nothing failed when the route was registered outside the Auth chain.
 	code, body = getRoute(t, r, "/health/readiness")
-	assert.Equal(t, http.StatusServiceUnavailable, code)
-	assert.Equal(t, "degraded", body["status"])
-	assert.Equal(t, false, body["ready"])
+	assert.Equal(t, http.StatusUnauthorized, code,
+		"readiness must not be servable anonymously: its findings name cross-tenant "+
+			"objects and ids and embed raw error text")
+	assert.NotContains(t, body, "findings",
+		"an unauthorized response must not carry the findings payload")
+
+	// The degraded payload itself is still covered — invoked directly, because
+	// reaching it through the router now requires credentials. Dropping this
+	// would trade a security hole for a coverage hole.
+	rec := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(rec)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/health/readiness", nil)
+	insp.ReadinessHandler(ctx)
+	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
+	var readiness map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &readiness))
+	assert.Equal(t, "degraded", readiness["status"])
+	assert.Equal(t, false, readiness["ready"])
 	assert.Equal(t, "GET /health is unaffected by findings and must stay the container healthcheck",
-		body["liveness"], "the payload must say which endpoint is safe to probe")
+		readiness["liveness"], "the payload must say which endpoint is safe to probe")
 }
 
 // TestHealthSurfaceWithoutInspector keeps the liveness path independent of
@@ -99,7 +119,20 @@ func TestHealthSurfaceWithoutInspector(t *testing.T) {
 	assert.Equal(t, http.StatusOK, code, "liveness must work with no inspector wired")
 	assert.Equal(t, "ok", body["status"])
 
+	// With no inspector the readiness route is never registered, so there is no
+	// readiness surface at all.
+	//
+	// This used to assert 404. That no longer holds: the global Auth middleware
+	// runs before Gin's NoRoute handler, and /health/readiness is deliberately
+	// off the no-auth allowlist, so an anonymous caller now gets 401 for a path
+	// that does not exist. Rather than restate whichever code the router happens
+	// to answer first, pin the intent against a path that certainly does not
+	// exist — and assert the concrete code too, so a future change to the auth
+	// order is visible here instead of silently redefining "absent".
+	unknownCode, _ := getRoute(t, r, "/health/no-such-route")
 	code, _ = getRoute(t, r, "/health/readiness")
-	assert.Equal(t, http.StatusNotFound, code,
-		"with no inspector there is no readiness signal to serve; liveness is unaffected")
+	assert.Equal(t, unknownCode, code,
+		"with no inspector there is no readiness surface: it must look exactly like an unknown path")
+	assert.Equal(t, http.StatusUnauthorized, code,
+		"the readiness route is unregistered here; 401 comes from the global Auth middleware")
 }
