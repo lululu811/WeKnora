@@ -10,6 +10,7 @@ import {
   enabledCount,
   filterBySelection,
   isAllSelected,
+  collapseByValue,
   type LayerOption,
 } from './layer-selection.ts'
 
@@ -80,4 +81,60 @@ test('计数与可见项一致，可直接喂给按钮的 (n/m)', () => {
   const sel = toggleOption(toggleOption(SELECTION_ALL, '双顶'), '熊市旗形')
   assert.equal(enabledCount(OPTS, sel), 2)
   assert.equal(OPTS.length, 4)
+})
+
+// ---------------------------------------------------------------------------
+// 同名项必须压成一项。后端一次会报出两对同名背离（每种指标报最近两对），
+// 而这一层按 value 存勾选、按 value 做 v-for 的 key：不压就是两行一样的
+// 「RSI顶背离」，且勾任意一行两行一起变。
+// ---------------------------------------------------------------------------
+
+test('同名项压成一项，count 记本图出现次数', () => {
+  const raw: LayerOption[] = [
+    { value: 'MACD顶背离', label: 'MACD顶背离' },
+    { value: 'RSI顶背离', label: 'RSI顶背离', desc: '价格新高而 RSI 走低' },
+    { value: 'RSI顶背离', label: 'RSI顶背离' },
+    { value: 'RSI顶背离', label: 'RSI顶背离' },
+  ]
+  const out = collapseByValue(raw)
+  assert.deepEqual(out.map((o) => o.value), ['MACD顶背离', 'RSI顶背离'], '保持首次出现的先后')
+  assert.deepEqual(out.map((o) => o.count), [1, 3])
+  assert.equal(out[1].desc, '价格新高而 RSI 走低', 'desc 归首个有值的那个')
+})
+
+test('压过之后每项都唯一：关掉一项就是关掉本图上它全部的出现', () => {
+  const raw: LayerOption[] = [
+    { value: 'RSI顶背离', label: 'RSI顶背离' },
+    { value: 'RSI顶背离', label: 'RSI顶背离' },
+    { value: 'RSI底背离', label: 'RSI底背离' },
+  ]
+  const out = collapseByValue(raw)
+  assert.equal(new Set(out.map((o) => o.value)).size, out.length, 'value 唯一')
+
+  const sel = toggleOption(SELECTION_ALL, 'RSI顶背离')
+  const kept = raw.filter((o) => isOptionEnabled(sel, o.value))
+  assert.deepEqual(
+    kept.map((o) => o.value),
+    ['RSI底背离'],
+    '两条 RSI 顶背离都被这一次勾选关掉了，只有底背离留下',
+  )
+  assert.deepEqual(
+    out.filter((o) => isOptionEnabled(sel, o.value)).map((o) => o.value),
+    ['RSI底背离'],
+  )
+})
+
+test('压过之后 (n/m) 的 m 不再虚高', () => {
+  const raw: LayerOption[] = [
+    { value: '双顶', label: '双顶' },
+    { value: '头肩底', label: '头肩底' },
+    { value: '头肩底', label: '头肩底' },
+  ]
+  const out = collapseByValue(raw)
+  assert.equal(out.length, 2, '下拉里只有两行')
+  assert.equal(enabledCount(out, SELECTION_ALL), 2, 'm 取压过后的行数')
+})
+
+test('空列表压完还是空列表', () => {
+  assert.deepEqual(collapseByValue([]), [])
 })

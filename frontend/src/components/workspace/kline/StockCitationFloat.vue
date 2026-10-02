@@ -503,16 +503,16 @@ const handleOpenWorkspace = () => {
   z-index: 10050;
   width: 320px;
   max-width: 90vw;
-  background: var(--td-bg-color-container, #ffffff);
-  border: 1px solid var(--td-component-stroke, #e2e8f0);
-  border-radius: 8px;
+  background: var(--td-bg-color-container);
+  border: 1px solid var(--td-component-stroke);
+  border-radius: var(--app-radius-md);
   box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.18), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
   padding: 12px 14px;
   display: flex;
   flex-direction: column;
   gap: 10px;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  color: var(--td-text-color-primary, #1e293b);
+  color: var(--td-text-color-primary);
   transform: translate(-50%, -100%) translateY(-10px);
   pointer-events: auto;
   animation: floatFadeIn 0.15s cubic-bezier(0.16, 1, 0.3, 1);
@@ -556,7 +556,7 @@ const handleOpenWorkspace = () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 1px solid var(--td-component-stroke, #f1f5f9);
+  border-bottom: 1px solid var(--td-component-stroke);
   padding-bottom: 8px;
 
   :root[theme-mode="dark"] & {
@@ -570,13 +570,13 @@ const handleOpenWorkspace = () => {
   gap: 6px;
 
   .stock-float__name {
-    font-size: 15px;
+    font-size: var(--app-text-lg);
     font-weight: 700;
   }
 
   .stock-float__code {
-    font-size: 12px;
-    color: var(--td-text-color-placeholder, #94a3b8);
+    font-size: var(--app-text-sm);
+    color: var(--td-text-color-placeholder);
     font-family: monospace;
   }
 }
@@ -589,13 +589,13 @@ const handleOpenWorkspace = () => {
   font-weight: 700;
 
   .stock-float__price {
-    font-size: 14px;
+    font-size: var(--app-text-base);
     &.is-up { color: #ef4444; }
     &.is-down { color: #10b981; }
   }
 
   .stock-float__change {
-    font-size: 12px;
+    font-size: var(--app-text-sm);
     &.is-up { color: #ef4444; }
     &.is-down { color: #10b981; }
   }
@@ -606,15 +606,15 @@ const handleOpenWorkspace = () => {
   align-items: center;
   gap: 8px;
   padding: 16px 0;
-  font-size: 12px;
-  color: var(--td-text-color-secondary, #64748b);
+  font-size: var(--app-text-sm);
+  color: var(--td-text-color-secondary);
   justify-content: center;
 
   .stock-float__spinner {
     width: 14px;
     height: 14px;
     border: 2px solid rgba(0, 82, 217, 0.2);
-    border-top-color: var(--td-brand-color, #0052d9);
+    border-top-color: var(--td-brand-color);
     border-radius: 50%;
     animation: spin 0.8s linear infinite;
   }
@@ -629,7 +629,7 @@ const handleOpenWorkspace = () => {
   align-items: center;
   justify-content: space-between;
   padding: 6px 10px;
-  border-radius: 6px;
+  border-radius: var(--app-radius-sm);
   border-left: 3px solid #ef4444;
   background: rgba(0, 0, 0, 0.02);
 
@@ -640,15 +640,15 @@ const handleOpenWorkspace = () => {
   .score-card__stars {
     display: flex;
     gap: 2px;
-    font-size: 14px;
+    font-size: var(--app-text-base);
     line-height: 1;
   }
 
   .score-card__badge {
-    font-size: 11px;
+    font-size: var(--app-text-xs);
     font-weight: 600;
     padding: 2px 6px;
-    border-radius: 4px;
+    border-radius: var(--app-radius-xs);
   }
 }
 
@@ -926,9 +926,9 @@ const handleOpenWorkspace = () => {
   display: flex;
   align-items: flex-start;
   gap: 6px;
-  font-size: 12px;
+  font-size: var(--app-text-sm);
   line-height: 1.45;
-  color: var(--td-text-color-secondary, #475569);
+  color: var(--td-text-color-secondary);
 
   :root[theme-mode="dark"] & {
     color: #cbd5e1;
@@ -952,27 +952,27 @@ const handleOpenWorkspace = () => {
   align-items: center;
   justify-content: space-between;
   padding-top: 8px;
-  border-top: 1px solid var(--td-component-stroke, #f1f5f9);
+  border-top: 1px solid var(--td-component-stroke);
 
   :root[theme-mode="dark"] & {
     border-top-color: #28303d;
   }
 
   .stock-float__hint {
-    font-size: 10px;
-    color: var(--td-text-color-placeholder, #94a3b8);
+    font-size: var(--app-text-2xs);
+    color: var(--td-text-color-placeholder);
   }
 
   .stock-float__action-btn {
     border: none;
-    background: var(--td-brand-color, #0052d9);
+    background: var(--td-brand-color);
     color: #ffffff;
-    font-size: 11px;
+    font-size: var(--app-text-xs);
     font-weight: 600;
     padding: 4px 10px;
-    border-radius: 4px;
+    border-radius: var(--app-radius-xs);
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: all var(--app-motion-fast) ease;
 
     &:hover {
       opacity: 0.9;

@@ -383,7 +383,7 @@ import { MAIN_PRESETS, SUB_PRESETS } from './indicator-meta';
 import { fetchAnnotations, type Annotation, PATTERN_CONFIG } from './annotate-api';
 import { setGlobalOverlayConfig } from './overlay-drawer';
 import LayerFilterDropdown from './LayerFilterDropdown.vue';
-import { clearAllOptions, enabledCount, isOptionEnabled, loadSelection, saveSelection, selectAllOptions, toggleOption, type LayerOption, type LayerSelection } from './layer-selection';
+import { clearAllOptions, collapseByValue, enabledCount, isOptionEnabled, loadSelection, saveSelection, selectAllOptions, toggleOption, type LayerOption, type LayerSelection } from './layer-selection';
 import { fetchChartPatterns, resolvePatternGeometry, resolveCandleMarks, patternsAtBar, samePatternSet, type DrawableCandle, type DrawablePattern } from './chart-patterns';
 import { computeLevels, pickChartLevels } from './levels';
 import { resolveAnchorsForChart, hitTestAnchor, MAX_PERSISTENT_ANCHORS } from './anchor-render';
@@ -514,9 +514,16 @@ const bubbleOptions = computed<LayerOption[]>(() => [
   })),
 ]);
 
-/** 轮廓可勾选的就是本图实际识别出的形态——不列当前图没有的，免得勾了不生效。 */
+/**
+ * 轮廓可勾选的就是本图实际识别出的形态——不列当前图没有的，免得勾了不生效。
+ *
+ * 同名的要压成一项：后端一次可以报出两对同名背离（每种指标报最近两对），
+ * 而这一层的勾选按名字存、`v-for` 也按 value 做 key。列表里摆两行一模一样的
+ * 「RSI顶背离」不只是难看 —— 它们共用一个 value，勾掉任意一行，另一行也跟着
+ * 变，用户看到两个开关其实只有一个。压成一项并在右侧标出「本图 N 处」。
+ */
 const outlineOptions = computed<LayerOption[]>(() =>
-  chartPatternGeometry.value.map((p) => ({ value: p.name, label: p.name, desc: p.desc })),
+  collapseByValue(chartPatternGeometry.value.map((p) => ({ value: p.name, label: p.name, desc: p.desc }))),
 );
 
 const bubbleOnCount = computed(() => enabledCount(bubbleOptions.value, bubbleSelection.value));
@@ -1476,7 +1483,7 @@ onUnmounted(() => {
   gap: 8px;
   padding: 6px 12px;
   background: rgba(0, 0, 0, 0.03);
-  border-bottom: 1px solid var(--td-component-stroke, #e7e7e7);
+  border-bottom: 1px solid var(--td-component-stroke);
   overflow-x: auto;
   flex-shrink: 0;
   scrollbar-width: none;
@@ -1493,7 +1500,7 @@ onUnmounted(() => {
     display: flex;
     align-items: center;
     gap: 4px;
-    font-size: 11px;
+    font-size: var(--app-text-xs);
     font-weight: 600;
     white-space: nowrap;
     opacity: 0.8;
@@ -1528,26 +1535,26 @@ onUnmounted(() => {
     gap: 4px;
     /* 与 .toolbar__btn 同一套 token，两者并排时不该有尺寸差。 */
     padding: 4px 10px;
-    border-radius: 6px;
-    border: 1px solid var(--td-component-stroke, #d1d5db);
+    border-radius: var(--app-radius-sm);
+    border: 1px solid var(--td-component-stroke);
     background: transparent;
     color: inherit;
-    font-size: 12px;
+    font-size: var(--app-text-sm);
     cursor: pointer;
     white-space: nowrap;
-    transition: all 0.15s ease;
+    transition: all var(--app-motion-fast) ease;
 
     .is-dark & {
       border-color: #333d4d;
     }
 
     &:hover {
-      border-color: var(--td-brand-color, #0052d9);
+      border-color: var(--td-brand-color);
     }
 
     &.is-active {
-      background: var(--td-brand-color, #0052d9);
-      border-color: var(--td-brand-color, #0052d9);
+      background: var(--td-brand-color);
+      border-color: var(--td-brand-color);
       color: #ffffff;
       font-weight: 500;
     }
@@ -1557,15 +1564,15 @@ onUnmounted(() => {
     }
 
     .tab__tag {
-      font-size: 10px;
+      font-size: var(--app-text-2xs);
       padding: 0 4px;
-      border-radius: 4px;
+      border-radius: var(--app-radius-xs);
       background: rgba(255, 255, 255, 0.2);
     }
   }
 
   .picks-bar__hint {
-    font-size: 10px;
+    font-size: var(--app-text-2xs);
     opacity: 0.5;
     white-space: nowrap;
   }
@@ -1578,7 +1585,7 @@ onUnmounted(() => {
   justify-content: space-between;
   padding: 6px 12px;
   background: rgba(0, 0, 0, 0.02);
-  border-bottom: 1px solid var(--td-component-stroke, #e7e7e7);
+  border-bottom: 1px solid var(--td-component-stroke);
   flex-shrink: 0;
   gap: 12px;
 
@@ -1603,20 +1610,20 @@ onUnmounted(() => {
   }
 
   .strip-ctl__label {
-    font-size: 11px;
-    color: var(--td-text-color-placeholder, #9ca3af);
+    font-size: var(--app-text-xs);
+    color: var(--td-text-color-placeholder);
     margin-right: 2px;
   }
 
   .strip-ctl__btn {
     padding: 2px 7px;
-    font-size: 12px;
-    border-radius: 6px;
-    border: 1px solid var(--td-component-stroke, #d1d5db);
+    font-size: var(--app-text-sm);
+    border-radius: var(--app-radius-sm);
+    border: 1px solid var(--td-component-stroke);
     background: transparent;
     color: inherit;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: all var(--app-motion-fast) ease;
     white-space: nowrap;
 
     .is-dark & {
@@ -1624,12 +1631,12 @@ onUnmounted(() => {
     }
 
     &:hover {
-      border-color: var(--td-brand-color, #0052d9);
+      border-color: var(--td-brand-color);
     }
 
     &.is-active {
-      background: var(--td-brand-color, #0052d9);
-      border-color: var(--td-brand-color, #0052d9);
+      background: var(--td-brand-color);
+      border-color: var(--td-brand-color);
       color: #ffffff;
     }
   }
@@ -1650,37 +1657,37 @@ onUnmounted(() => {
     color: inherit;
     cursor: pointer;
     padding: 2px 4px;
-    border-radius: 4px;
-    transition: background 0.15s ease;
+    border-radius: var(--app-radius-xs);
+    transition: background var(--app-motion-fast) ease;
 
     &:hover {
       background: rgba(128, 128, 128, 0.15);
 
       .search-hint-icon {
         opacity: 1;
-        color: var(--td-brand-color, #0052d9);
+        color: var(--td-brand-color);
       }
     }
 
     .quote__name {
-      font-size: 14px;
+      font-size: var(--app-text-base);
       font-weight: 700;
     }
 
     .quote__symbol {
-      font-size: 11px;
-      color: var(--td-text-color-placeholder, #9ca3af);
+      font-size: var(--app-text-xs);
+      color: var(--td-text-color-placeholder);
       font-family: monospace;
     }
 
     .search-hint-icon {
       opacity: 0.4;
-      transition: all 0.15s ease;
+      transition: all var(--app-motion-fast) ease;
     }
   }
 
   .quote__price {
-    font-size: 16px;
+    font-size: var(--app-text-xl);
     font-weight: 700;
     font-family: monospace;
 
@@ -1693,11 +1700,11 @@ onUnmounted(() => {
   }
 
   .quote__change-badge {
-    font-size: 11px;
+    font-size: var(--app-text-xs);
     font-weight: 600;
     font-family: monospace;
     padding: 1px 6px;
-    border-radius: 4px;
+    border-radius: var(--app-radius-xs);
 
     &.is-up {
       background: rgba(239, 68, 68, 0.18);
@@ -1722,8 +1729,8 @@ onUnmounted(() => {
     align-items: center;
     gap: 4px;
     padding: 2px 8px;
-    border-radius: 10px;
-    font-size: 11px;
+    border-radius: var(--app-radius-lg);
+    font-size: var(--app-text-xs);
     font-weight: 500;
     white-space: nowrap !important;
     flex-shrink: 0;
@@ -1750,8 +1757,8 @@ onUnmounted(() => {
     display: flex;
     align-items: center;
     gap: 10px;
-    font-size: 11px;
-    color: var(--td-text-color-placeholder, #9ca3af);
+    font-size: var(--app-text-xs);
+    color: var(--td-text-color-placeholder);
     margin-left: auto;
     white-space: nowrap;
     flex-shrink: 0;
@@ -1770,10 +1777,10 @@ onUnmounted(() => {
   left: 12px;
   z-index: 100;
   width: 320px;
-  background: var(--td-bg-color-container, #ffffff);
-  border-radius: 6px;
+  background: var(--td-bg-color-container);
+  border-radius: var(--app-radius-sm);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
-  border: 1px solid var(--td-component-stroke, #e7e7e7);
+  border: 1px solid var(--td-component-stroke);
   overflow: hidden;
 
   .is-dark & {
@@ -1786,7 +1793,7 @@ onUnmounted(() => {
     align-items: center;
     gap: 8px;
     padding: 8px 12px;
-    border-bottom: 1px solid var(--td-component-stroke, #e7e7e7);
+    border-bottom: 1px solid var(--td-component-stroke);
 
     .is-dark & {
       border-bottom-color: #2d3644;
@@ -1799,7 +1806,7 @@ onUnmounted(() => {
     outline: none;
     background: transparent;
     color: inherit;
-    font-size: 12px;
+    font-size: var(--app-text-sm);
   }
 
   .search-modal__close {
@@ -1821,8 +1828,8 @@ onUnmounted(() => {
   .search-empty {
     padding: 12px;
     text-align: center;
-    font-size: 11px;
-    color: var(--td-text-color-placeholder, #9ca3af);
+    font-size: var(--app-text-xs);
+    color: var(--td-text-color-placeholder);
   }
 
   .search-item {
@@ -1830,9 +1837,9 @@ onUnmounted(() => {
     align-items: center;
     justify-content: space-between;
     padding: 7px 12px;
-    font-size: 12px;
+    font-size: var(--app-text-sm);
     cursor: pointer;
-    transition: background 0.15s ease;
+    transition: background var(--app-motion-fast) ease;
 
     &:hover {
       background: rgba(59, 130, 246, 0.15);
@@ -1844,8 +1851,8 @@ onUnmounted(() => {
 
     .search-item__code {
       font-family: monospace;
-      color: var(--td-text-color-placeholder, #9ca3af);
-      font-size: 11px;
+      color: var(--td-text-color-placeholder);
+      font-size: var(--app-text-xs);
     }
   }
 }
@@ -1856,8 +1863,8 @@ onUnmounted(() => {
   align-items: center;
   gap: 6px;
   padding: 6px 12px;
-  border-bottom: 1px solid var(--td-component-stroke, #e7e7e7);
-  background: var(--td-bg-color-container, #ffffff);
+  border-bottom: 1px solid var(--td-component-stroke);
+  background: var(--td-bg-color-container);
   flex-shrink: 0;
   overflow-x: auto;
   /* 这条必须留着：21 个按钮在窄宽度下会溢出，滚动条是唯一的可发现提示。
@@ -1892,16 +1899,16 @@ onUnmounted(() => {
   }
 
   .group__label {
-    font-size: 11px;
+    font-size: var(--app-text-xs);
     font-weight: 600;
-    color: var(--td-text-color-placeholder, #9ca3af);
+    color: var(--td-text-color-placeholder);
     margin-right: 2px;
   }
 
   .toolbar__divider {
     width: 1px;
     height: 14px;
-    background: var(--td-component-stroke, #e7e7e7);
+    background: var(--td-component-stroke);
     margin: 0 4px;
     flex-shrink: 0;
 
@@ -1915,13 +1922,13 @@ onUnmounted(() => {
        6px 圆角 / 4px 10px 内边距 / 12px 字号。之前这里是 3px / 2px 7px / 11px，
        比平台小一圈，K线面板和左侧聊天区并排时会显得"缩了一号"。 */
     padding: 4px 10px;
-    font-size: 12px;
-    border-radius: 6px;
-    border: 1px solid var(--td-component-stroke, #d1d5db);
+    font-size: var(--app-text-sm);
+    border-radius: var(--app-radius-sm);
+    border: 1px solid var(--td-component-stroke);
     background: transparent;
     color: inherit;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: all var(--app-motion-fast) ease;
     white-space: nowrap;
 
     .is-dark & {
@@ -1929,12 +1936,12 @@ onUnmounted(() => {
     }
 
     &:hover {
-      border-color: var(--td-brand-color, #0052d9);
+      border-color: var(--td-brand-color);
     }
 
     &.is-active {
-      background: var(--td-brand-color, #0052d9);
-      border-color: var(--td-brand-color, #0052d9);
+      background: var(--td-brand-color);
+      border-color: var(--td-brand-color);
       color: #ffffff;
       font-weight: 500;
     }
@@ -1949,7 +1956,7 @@ onUnmounted(() => {
 
       .feature-count {
         margin-left: 2px;
-        font-size: 10px;
+        font-size: var(--app-text-2xs);
         opacity: 0.85;
         font-family: monospace;
       }
@@ -1970,7 +1977,7 @@ onUnmounted(() => {
     background: transparent;
     color: inherit;
     cursor: pointer;
-    border-radius: 4px;
+    border-radius: var(--app-radius-xs);
 
     &:hover {
       background: rgba(128, 128, 128, 0.15);
@@ -2026,14 +2033,14 @@ onUnmounted(() => {
   background: rgba(250, 247, 240, 0.88);
 
   .empty__icon {
-    font-size: 32px;
+    font-size: var(--app-text-display);
     opacity: 0.6;
     line-height: 1;
   }
 
   .empty__title {
     margin: 0;
-    font-size: 14px;
+    font-size: var(--app-text-base);
     font-weight: 600;
     color: #2A2520;
   }
@@ -2041,7 +2048,7 @@ onUnmounted(() => {
   .empty__hint {
     margin: 0;
     max-width: 420px;
-    font-size: 12px;
+    font-size: var(--app-text-sm);
     line-height: 1.7;
     color: #6B6259;
 
@@ -2098,7 +2105,7 @@ onUnmounted(() => {
   align-items: center;
   gap: 10px;
   padding: 6px 12px;
-  border-top: 1px solid var(--td-component-stroke, #e7e7e7);
+  border-top: 1px solid var(--td-component-stroke);
   background: rgba(0, 0, 0, 0.02);
   flex-shrink: 0;
 
@@ -2111,9 +2118,9 @@ onUnmounted(() => {
     display: flex;
     align-items: center;
     gap: 4px;
-    font-size: 11px;
+    font-size: var(--app-text-xs);
     font-weight: 500;
-    color: var(--td-text-color-placeholder, #9ca3af);
+    color: var(--td-text-color-placeholder);
     white-space: nowrap;
   }
 
@@ -2125,14 +2132,14 @@ onUnmounted(() => {
 
   .action-chip {
     padding: 3px 9px;
-    font-size: 11px;
-    border-radius: 12px;
-    border: 1px solid var(--td-brand-color, #0052d9);
+    font-size: var(--app-text-xs);
+    border-radius: var(--app-radius-xl);
+    border: 1px solid var(--td-brand-color);
     background: rgba(0, 82, 217, 0.08);
-    color: var(--td-brand-color, #0052d9);
+    color: var(--td-brand-color);
     cursor: pointer;
     white-space: nowrap;
-    transition: all 0.15s ease;
+    transition: all var(--app-motion-fast) ease;
 
     .is-dark & {
       border-color: #3b82f6;
@@ -2141,7 +2148,7 @@ onUnmounted(() => {
     }
 
     &:hover {
-      background: var(--td-brand-color, #0052d9);
+      background: var(--td-brand-color);
       color: #ffffff;
 
       .is-dark & {

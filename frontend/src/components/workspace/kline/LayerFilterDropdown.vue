@@ -189,7 +189,7 @@ watch(
   justify-content: space-between;
   gap: 12px;
   padding: 2px 10px 6px;
-  border-bottom: 1px solid var(--td-component-stroke, #e5e7eb);
+  border-bottom: 1px solid var(--td-component-stroke);
 }
 
 .kline-layer-panel__title {
@@ -206,7 +206,7 @@ watch(
   }
 
   background: transparent;
-  color: var(--td-brand-color, #0052d9);
+  color: var(--td-brand-color);
   cursor: pointer;
   font-size: var(--app-text-xs);
   padding: 2px 4px;
@@ -285,8 +285,8 @@ watch(
 }
 
 .kline-layer-option.active .kline-layer-option__box {
-  background: var(--td-brand-color, #0052d9);
-  border-color: var(--td-brand-color, #0052d9);
+  background: var(--td-brand-color);
+  border-color: var(--td-brand-color);
   color: #fff;
 }
 
@@ -310,7 +310,7 @@ watch(
 
 .kline-layer-panel__hint {
   padding: 6px 10px 8px;
-  border-top: 1px solid var(--td-component-stroke, #e5e7eb);
+  border-top: 1px solid var(--td-component-stroke);
   font-size: var(--app-text-xs);
   opacity: 0.6;
   line-height: 1.4;

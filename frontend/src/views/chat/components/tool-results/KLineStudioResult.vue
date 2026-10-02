@@ -112,9 +112,9 @@ const openInPanel = (idx: number) => {
 .kline-studio-result {
   margin: 8px 0;
   padding: 12px 14px;
-  border: 1px solid var(--td-component-stroke, #e7e7e7);
-  border-radius: 8px;
-  background: var(--td-bg-color-container, #fff);
+  border: 1px solid var(--td-component-stroke);
+  border-radius: var(--app-radius-md);
+  background: var(--td-bg-color-container);
 }
 
 .kline-studio-header {
@@ -130,16 +130,16 @@ const openInPanel = (idx: number) => {
   align-items: center;
   gap: 8px;
   font-weight: 600;
-  font-size: 14px;
+  font-size: var(--app-text-base);
 }
 
 .kline-studio-icon {
-  font-size: 16px;
+  font-size: var(--app-text-xl);
 }
 
 .kline-studio-count {
-  font-size: 12px;
-  color: var(--td-text-color-secondary, #666);
+  font-size: var(--app-text-sm);
+  color: var(--td-text-color-secondary);
   font-weight: 400;
 }
 
@@ -155,23 +155,23 @@ const openInPanel = (idx: number) => {
   align-items: center;
   gap: 4px;
   padding: 4px 10px;
-  border: 1px solid var(--td-brand-color, #0052d9);
-  border-radius: 4px;
-  background: var(--td-brand-color, #0052d9);
+  border: 1px solid var(--td-brand-color);
+  border-radius: var(--app-radius-xs);
+  background: var(--td-brand-color);
   color: #fff;
-  font-size: 12px;
+  font-size: var(--app-text-sm);
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: background var(--app-motion-fast) ease;
 
   &:hover {
-    background: var(--td-brand-color-active, #003fa8);
+    background: var(--td-brand-color-active);
   }
 }
 
 .kline-studio-empty {
   margin: 0;
-  color: var(--td-text-color-secondary, #666);
-  font-size: 12px;
+  color: var(--td-text-color-secondary);
+  font-size: var(--app-text-sm);
 }
 
 .kline-studio-tickers {
@@ -189,26 +189,26 @@ const openInPanel = (idx: number) => {
   gap: 4px;
   padding: 4px 10px;
   border-radius: 16px;
-  border: 1px solid var(--td-component-stroke, #e7e7e7);
+  border: 1px solid var(--td-component-stroke);
   background: transparent;
   color: inherit;
-  font-size: 12px;
+  font-size: var(--app-text-sm);
   cursor: pointer;
-  transition: background 0.12s ease, border-color 0.12s ease;
+  transition: background 0.12s ease, border-color var(--app-motion-instant) ease;
 
   &:hover {
-    background: var(--td-brand-color-light, rgba(0, 82, 217, 0.08));
-    border-color: var(--td-brand-color, #0052d9);
+    background: var(--td-brand-color-light);
+    border-color: var(--td-brand-color);
   }
 }
 
 .ticker-code {
   font-weight: 600;
-  font-family: var(--td-font-family-mono, monospace);
+  font-family: var(--td-font-family-mono);
 }
 
 .ticker-exchange {
-  color: var(--td-text-color-secondary, #666);
-  font-size: 11px;
+  color: var(--td-text-color-secondary);
+  font-size: var(--app-text-xs);
 }
 </style>

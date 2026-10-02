@@ -71,6 +71,40 @@ export function clearAllOptions(options: readonly LayerOption[]): LayerSelection
   return { disabled: options.map((o) => o.value) };
 }
 
+/**
+ * 把**同名**的若干条压成一项，`count` 记它在本图上出现了几次。
+ *
+ * ## 为什么必须压
+ *
+ * 这一层的整个模型建立在「`value` 唯一」上：勾选存的是 `value`，`v-for` 的
+ * key 也是 `value`。而数据的来源并不保证唯一——后端一次可以报出两对同名背离
+ * （每种指标各报最近两对）。不去重时下拉里就是两行一模一样的「RSI顶背离」，
+ * 而且它们共用一个 `value`：勾掉一行，另一行跟着一起变。用户看到的是两个
+ * 开关，其实只有一个开关。
+ *
+ * 压掉不会丢信息：关掉「RSI顶背离」本来就同时关掉了本图上所有 RSI 顶背离
+ * （`syncOutline` 过滤的是整份 `patternGeometry`），计数只是把「关掉了几处」
+ * 如实说出来。
+ *
+ * 首次出现的位置与文案胜出（`desc` 缺失时用后来的补上）——同名项的 label 本来
+ * 就是同一个形态名，顺序则保持数据给出的先后。
+ */
+export function collapseByValue(options: readonly LayerOption[]): LayerOption[] {
+  // 名字来自数据，不是编译期字面量，所以走 Map 而不是 Record。
+  const merged = new Map<string, LayerOption>();
+  for (const o of options) {
+    const seen = merged.get(o.value);
+    if (!seen) {
+      merged.set(o.value, { ...o, count: typeof o.count === 'number' ? o.count : 1 });
+      continue;
+    }
+    seen.count = (seen.count ?? 1) + (typeof o.count === 'number' ? o.count : 1);
+    if (!seen.desc && o.desc) seen.desc = o.desc;
+  }
+  // Map 自带插入序，直接取值就是数据给出的先后。
+  return [...merged.values()];
+}
+
 /** 当前可见的项数。 */
 export function enabledCount(options: readonly LayerOption[], selection: LayerSelection): number {
   return options.filter((o) => isOptionEnabled(selection, o.value)).length;
