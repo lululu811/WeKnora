@@ -47,7 +47,7 @@ const emojiChar = computed(() => {
 
 // 预定义渐变色（与项目绿色主色协调，偏空间/协作感）
 const gradients = [
-  { from: '#2D6A64', to: '#265955' },  // 主绿
+  { from: 'var(--td-brand-color)', to: 'var(--td-brand-color-active)' },  // 主绿
   { from: '#11998e', to: '#38ef7d' },  // 深绿渐变
   { from: '#43e97b', to: '#38f9d7' },  // 绿青
   { from: '#02aab0', to: '#00cdac' },  // 青绿

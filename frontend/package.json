@@ -33,6 +33,7 @@
     "marked": "^17.0.5",
     "marked-katex-extension": "^5.1.8",
     "mermaid": "^11.15.0",
+    "motion-v": "^2.5.2",
     "pagefind": "^1.5.2",
     "papaparse": "^5.5.3",
     "pdfjs-dist": "^6.3.289",

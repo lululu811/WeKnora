@@ -3537,7 +3537,7 @@ const getImgSrc = (url: string) => {
     position: absolute;
     top: -2px;
     right: -2px;
-    background: #2D6A64;
+    background: var(--td-brand-color);
     color: #fff;
     font-size: var(--app-text-2xs);
     width: 14px;
@@ -3576,7 +3576,7 @@ const getImgSrc = (url: string) => {
     position: absolute;
     top: -2px;
     right: -2px;
-    background: #2D6A64;
+    background: var(--td-brand-color);
     color: #fff;
     font-size: var(--app-text-2xs);
     width: 14px;

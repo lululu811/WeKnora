@@ -823,8 +823,8 @@ onMounted(async () => {
   /* 温润现代：深湖蓝绿 → 暖琥珀 → 米白的柔和渐变 */
   background: linear-gradient(135deg,
     #1F4A46 0%,
-    #2D6A64 20%,
-    #458F87 40%,
+    var(--td-brand-color) 20%,
+    var(--td-brand-color-hover) 40%,
     #B8855E 65%,
     #D4A373 80%,
     #F7F5F0 100%);

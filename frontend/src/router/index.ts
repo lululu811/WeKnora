@@ -226,13 +226,34 @@ const router = createRouter({
         },
       ],
     },
-    // Dev-only markdown rendering test page
-    ...(import.meta.env.DEV ? [{
-      path: '/platform/dev/markdown',
-      name: 'markdownTest',
-      component: () => import('../views/dev/MarkdownTestPage.vue'),
-      meta: { requiresAuth: false, requiresInit: false }
-    }] : []),
+    // Dev-only pages: markdown rendering test + design-lab direction samples
+    // (design-lab views render full-bleed, outside the platform sidebar shell).
+    ...(import.meta.env.DEV ? [
+      {
+        path: '/platform/dev/markdown',
+        name: 'markdownTest',
+        component: () => import('../views/dev/MarkdownTestPage.vue'),
+        meta: { requiresAuth: false, requiresInit: false }
+      },
+      {
+        path: '/platform/design-lab/a',
+        name: 'designLabA',
+        component: () => import('../views/design-lab/a/index.vue'),
+        meta: { requiresAuth: false, requiresInit: false }
+      },
+      {
+        path: '/platform/design-lab/b',
+        name: 'designLabB',
+        component: () => import('../views/design-lab/b/index.vue'),
+        meta: { requiresAuth: false, requiresInit: false }
+      },
+      {
+        path: '/platform/design-lab/c',
+        name: 'designLabC',
+        component: () => import('../views/design-lab/c/index.vue'),
+        meta: { requiresAuth: false, requiresInit: false }
+      },
+    ] : []),
   ],
 });
 

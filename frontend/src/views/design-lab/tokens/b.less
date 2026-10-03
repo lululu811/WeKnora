@@ -1,0 +1,62 @@
+// Design-lab tokens · 方向 B「主编的长卷」
+// Scoped under .dl-b; dark variant follows the app's [theme-mode="dark"] toggle.
+// Variable names follow the shared a.less/b.less/c.less contract; direction-B
+// additions: --dl-font-ui（无衬线辅助）、--dl-rule/--dl-hairline（报刊分隔线）、
+// --dl-accent-soft（朱砂淡染）。此方向色彩身份不含青绿（--dl-aux 回落到朱砂）。
+
+.dl-b {
+  // surfaces
+  --dl-bg: #FBF6EC;            // 奶油纸底
+  --dl-surface: #F4EDDE;       // 次表面（采访手记、脚注卡底）
+  --dl-surface-2: #FFFDF8;     // 抬升面（composer、悬停展开的脚注卡）
+  // ink
+  --dl-ink: #1C1714;           // 墨
+  --dl-ink-2: #9C8E7E;         // 次要
+  --dl-ink-3: #B4A795;         // 三级（时间戳、上一章编号、版权行）
+  // accents（朱砂单色纪律：仅脚注编号 / 当前章节标记 / 主按钮 hover）
+  --dl-accent: #D4451F;        // 朱砂
+  --dl-accent-hover: #BC3A18;
+  --dl-accent-2: #D4451F;
+  --dl-aux: #D4451F;           // 无青绿：辅助色回落朱砂
+  --dl-accent-soft: rgba(212, 69, 31, 0.07); // 目录行 hover 的淡染
+  --dl-on-accent: #FFFDF8;
+  // lines（1px 墨线：描边用 20% 墨，报刊分隔线用全墨）
+  --dl-border: color-mix(in srgb, var(--dl-ink) 20%, transparent);
+  --dl-border-strong: var(--dl-ink);
+  --dl-rule: var(--dl-ink);                       // 报头双线（粗+细）
+  --dl-hairline: color-mix(in srgb, var(--dl-ink) 12%, transparent); // 章节通栏细线
+  // shape（主编不用胖圆角）
+  --dl-radius: 4px;
+  --dl-radius-lg: 6px;
+  // type（衬线主导：正文也是衬线；无衬线只留 12px 辅助）
+  --dl-font-display: var(--app-font-display);  // Noto Serif SC 700 章节标题 32-40px
+  --dl-font-body: var(--app-font-display);     // Noto Serif SC 400 正文 16px/1.9
+  --dl-font-ui: var(--app-font-family);        // 无衬线辅助 12px，缩到最小存在
+  --dl-font-mono: var(--app-font-family-mono);
+  // elevation（排版即主视觉：无卡片阴影，仅悬停脚注卡留一点纸面浮起）
+  --dl-shadow-card: none;
+  --dl-shadow-card-hover: none;
+  --dl-shadow-pop: 0 10px 28px rgba(28, 23, 20, 0.12);
+  --dl-glow: rgba(212, 69, 31, 0.10);
+}
+
+[theme-mode="dark"] .dl-b {
+  --dl-bg: #171310;            // 墨底
+  --dl-surface: #221C17;
+  --dl-surface-2: #2A231C;
+  --dl-ink: #EDE3D2;           // 宣纸字
+  --dl-ink-2: #8D8073;
+  --dl-ink-3: #6E6357;
+  --dl-accent: #E05A33;        // 暗版朱砂提亮保可读
+  --dl-accent-hover: #EC6C46;
+  --dl-accent-2: #E05A33;
+  --dl-aux: #E05A33;
+  --dl-accent-soft: rgba(224, 90, 51, 0.10);
+  --dl-on-accent: #171310;
+  --dl-border: color-mix(in srgb, var(--dl-ink) 24%, transparent);
+  --dl-border-strong: var(--dl-ink);
+  --dl-rule: var(--dl-ink);
+  --dl-hairline: color-mix(in srgb, var(--dl-ink) 14%, transparent);
+  --dl-shadow-pop: 0 10px 28px rgba(0, 0, 0, 0.44);
+  --dl-glow: rgba(224, 90, 51, 0.14);
+}

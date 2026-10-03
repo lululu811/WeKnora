@@ -16,6 +16,9 @@ const SRC_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const SCAN_DIRS = ['views', 'components', 'assets']
 const EXTS = new Set(['.vue', '.less', '.css'])
 const EXEMPT_FILES = new Set(['assets/theme/theme.css'])
+// design-lab/ 是方向探索的 dev-only 小样（未走应用令牌体系，令牌见
+// views/design-lab/tokens/*.less），阶段 3 清理该目录时连同本豁免一起删除。
+const EXEMPT_DIRS = ['views/design-lab/']
 
 const RULES = [
   {
@@ -103,6 +106,7 @@ function countMatches(rule) {
     for (const file of walk(join(SRC_ROOT, dir))) {
       const rel = relative(SRC_ROOT, file)
       if (EXEMPT_FILES.has(rel)) continue
+      if (EXEMPT_DIRS.some((dir) => rel.startsWith(dir))) continue
       const text = readFileSync(file, 'utf8')
       const n = (text.match(rule.pattern) ?? []).length
       if (n > 0) {

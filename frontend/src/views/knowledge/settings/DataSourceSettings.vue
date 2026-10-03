@@ -457,7 +457,7 @@ onBeforeUnmount(stopPolling)
     font-weight: 600;
     letter-spacing: 0.02em;
     background: color-mix(in srgb, var(--td-brand-color) 12%, transparent);
-    color: #2D6A64;
+    color: var(--td-brand-color);
     overflow: hidden;
   }
 

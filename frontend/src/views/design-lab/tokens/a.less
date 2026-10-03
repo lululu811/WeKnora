@@ -1,0 +1,69 @@
+// Design-lab tokens · 方向 A「午后的工作室」
+// Scoped under .dl-a; dark variant follows the app's [theme-mode="dark"] toggle.
+// Variable names are shared across a.less / b.less / c.less so direction views
+// can be written against one contract.
+
+.dl-a {
+  // surfaces
+  --dl-bg: #FAF4EA;            // 纸底
+  --dl-surface: #F3EAD9;       // 次表面
+  --dl-surface-2: #FFFCF6;     // 抬升面（composer、便签卡）
+  // ink
+  --dl-ink: #2B2320;           // 墨
+  --dl-ink-2: #8A7B6D;         // 次级
+  --dl-ink-3: #AC9E8D;         // 三级（时间戳、脚注）
+  // accents（饱和度预算：珊瑚 ≤8%，青绿 ≤5%）
+  --dl-accent: #E85D3D;        // 珊瑚（唯一高饱和强调）
+  --dl-accent-hover: #D94E2E;  // hover 加深 ~6%
+  --dl-accent-2: #C4572E;      // 陶土（渐变端）
+  --dl-aux: #2D6A64;           // 青绿（辅助、成功态）
+  --dl-on-accent: #FFFFFF;
+  // lines
+  --dl-border: #E6DBC9;        // 1px 暖灰描边
+  --dl-border-strong: #D9CBB4;
+  // shape
+  --dl-radius: 10px;
+  --dl-radius-lg: 14px;
+  // type
+  --dl-font-display: var(--app-font-display);   // Noto Serif SC
+  --dl-font-body: var(--app-font-family);       // Inter / system
+  --dl-font-mono: var(--app-font-family-mono);  // JetBrains Mono
+  // elevation（暖光阴影，斜射午后光）
+  --dl-shadow-card: 0 1px 2px rgba(43, 35, 32, 0.04), 0 8px 24px rgba(196, 87, 46, 0.06);
+  --dl-shadow-card-hover: 0 2px 4px rgba(43, 35, 32, 0.05), 0 14px 32px rgba(196, 87, 46, 0.14);
+  // composer 聚焦暖光（台灯亮了）：从下缘晕开的极淡珊瑚光
+  --dl-glow: rgba(232, 93, 61, 0.16);
+}
+
+[theme-mode="dark"] .dl-a {
+  --dl-bg: #1F1A16;            // 暖深棕底
+  --dl-surface: #2A231C;
+  --dl-surface-2: #322A21;
+  --dl-ink: #EDE3D3;           // 暖纸字
+  --dl-ink-2: #A79A89;
+  --dl-ink-3: #7E7264;
+  --dl-accent: #E85D3D;
+  --dl-accent-hover: #F06A48;  // 暗版 hover 提亮
+  --dl-accent-2: #C4572E;
+  --dl-aux: #3D857D;           // 暗版青绿提亮保证可读
+  --dl-on-accent: #FFFFFF;
+  --dl-border: #3A3128;
+  --dl-border-strong: #4A4034;
+  --dl-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.28);
+  --dl-shadow-card-hover: 0 2px 6px rgba(0, 0, 0, 0.32), 0 14px 32px rgba(232, 93, 61, 0.12);
+  --dl-glow: rgba(232, 93, 61, 0.22);
+}
+
+// Q12 实物对比：中性深灰基底变体（无暖色相）。仅暗色模式生效，只覆盖
+// 底/面/字/描边一族；珊瑚强调与青绿辅助保持与暖棕暗版完全一致——对比的
+// 就是基底色系本身。明度阶梯与暖棕暗版一一对应。
+[theme-mode="dark"] .dl-a.dl-a--neutral-dark {
+  --dl-bg: #17181A;            // 中性深灰底（对应暖棕 #1F1A16）
+  --dl-surface: #1F2124;       // 对应 #2A231C
+  --dl-surface-2: #26282C;     // 对应 #322A21
+  --dl-ink: #E8E9EB;           // 对应 #EDE3D3
+  --dl-ink-2: #9A9EA6;         // 对应 #A79A89
+  --dl-ink-3: #6E7279;         // 对应 #7E7264
+  --dl-border: #313438;        // 对应 #3A3128
+  --dl-border-strong: #42464C; // 对应 #4A4034
+}

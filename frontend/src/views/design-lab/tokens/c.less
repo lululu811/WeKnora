@@ -1,0 +1,66 @@
+// Design-lab tokens · 方向 C「周末市集」
+// Scoped under .dl-c; dark variant follows the app's [theme-mode="dark"] toggle.
+// Variable names are shared across a.less / b.less / c.less so direction views
+// can be written against one contract. 多色市集：每色绑死语义（无单一强调色纪律）。
+
+.dl-c {
+  // surfaces
+  --dl-bg: #FFF3DC;            // 蜂蜜底
+  --dl-surface: #FFE9C4;       // 次表面
+  --dl-surface-2: #FFFBF0;     // 抬升面（订单夹 composer）
+  --dl-kraft: #F5E3B8;         // 牛皮纸（AI 答复卡）
+  // ink
+  --dl-ink: #3B2A1E;           // 墨
+  --dl-ink-2: #8A7257;         // 次级
+  --dl-ink-3: #B09473;         // 三级（时间戳）
+  // 市集多色（语义固定）
+  --dl-accent: #D94F2B;        // 砖红 · 主行动 / Z哥摊位
+  --dl-accent-hover: #C4431F;  // hover 加深
+  --dl-accent-2: #F2A93B;      // 杏黄 · 快速问答摊位
+  --dl-aux: #2D6A64;           // 青绿 · 智能推理摊位
+  --dl-accent-3: #8B5E83;      // 陶紫 · 维基问答摊位（方向 C 独有）
+  --dl-on-accent: #FFFFFF;
+  // lines：2px 墨描边（市集木牌感）
+  --dl-border: #3B2A1E;
+  --dl-border-strong: #3B2A1E;
+  // shape：圆胖控件
+  --dl-radius: 14px;
+  --dl-radius-lg: 16px;
+  // type：圆润无衬线主导 + 手写招牌名；全部系统/本机字体栈，无网络字体
+  --dl-font-display: "Yuanti SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", var(--app-font-family);
+  --dl-font-body: var(--app-font-family);
+  --dl-font-mono: var(--app-font-family-mono);
+  --dl-font-hand: "Zhi Mang Xing", "Yuanti SC", "Comic Sans MS", "PingFang SC", cursive;
+  // elevation：木牌厚度（按下时消失 → 凹陷物理感）
+  --dl-shadow-card: 0 3px 0 rgba(59, 42, 30, 0.9);
+  --dl-shadow-card-hover: 0 5px 0 rgba(59, 42, 30, 0.9);
+  --dl-shadow-pressed: 0 1px 0 rgba(59, 42, 30, 0.9);
+  // 贴纸白边
+  --dl-sticker-edge: #FFFFFF;
+  // 聚焦光晕（杏黄，小面积）
+  --dl-glow: rgba(242, 169, 59, 0.28);
+}
+
+[theme-mode="dark"] .dl-c {
+  --dl-bg: #241A12;            // 烤栗色底
+  --dl-surface: #332417;
+  --dl-surface-2: #3D2C1C;
+  --dl-kraft: #453522;
+  --dl-ink: #F3E6CE;           // 暖纸字
+  --dl-ink-2: #B89F80;
+  --dl-ink-3: #8F7B60;
+  // 暗版提高饱和的市集色
+  --dl-accent: #EC6240;
+  --dl-accent-hover: #F4744F;
+  --dl-accent-2: #F5B854;
+  --dl-aux: #3D857D;
+  --dl-accent-3: #A5759C;
+  --dl-on-accent: #241A12;
+  --dl-border: #F3E6CE;
+  --dl-border-strong: #F3E6CE;
+  --dl-shadow-card: 0 3px 0 rgba(0, 0, 0, 0.55);
+  --dl-shadow-card-hover: 0 5px 0 rgba(0, 0, 0, 0.55);
+  --dl-shadow-pressed: 0 1px 0 rgba(0, 0, 0, 0.55);
+  --dl-sticker-edge: #241A12;
+  --dl-glow: rgba(245, 184, 84, 0.22);
+}

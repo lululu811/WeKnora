@@ -75,7 +75,7 @@ prefersDark?.addEventListener('change', onSystemThemeChange);
 // ANSI palette: ls --color uses the usual dircolors mapping (dir=blue,
 // exec=green, link=cyan). Only the green slots stay WeKnora brand so
 // user@host (01;32) matches the product color; path (01;34) stays blue
-// like directories.
+// like directories. 方向 A 之后品牌色为珊瑚：亮槽 #E85D3D，暗槽陶土 #C4572E。
 function xtermTheme(dark: boolean) {
     return dark
         ? {
@@ -86,8 +86,8 @@ function xtermTheme(dark: boolean) {
             selectionBackground: '#3a3a3a',
             red: '#c64751',
             brightRed: '#de6670',
-            green: '#1F4A46',
-            brightGreen: '#2D6A64',
+            green: '#C4572E',
+            brightGreen: '#E85D3D',
             yellow: '#c4a000',
             brightYellow: '#fce94f',
             blue: '#3465a4',
@@ -105,8 +105,8 @@ function xtermTheme(dark: boolean) {
             selectionBackground: '#d0d7de',
             red: '#e34d59',
             brightRed: '#f36d78',
-            green: '#1F4A46',
-            brightGreen: '#2D6A64',
+            green: '#C4572E',
+            brightGreen: '#E85D3D',
             yellow: '#c4a000',
             brightYellow: '#c4a000',
             blue: '#3465a4',

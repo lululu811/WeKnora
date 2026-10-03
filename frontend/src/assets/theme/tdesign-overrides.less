@@ -17,8 +17,8 @@
 }
 
 :root[theme-mode="dark"] .wk-popover .t-popup__content {
-  background: rgba(42, 39, 35, 0.92);
-  border-color: rgba(232, 225, 213, 0.08);
+  background: rgba(42, 35, 28, 0.92);
+  border-color: rgba(237, 227, 211, 0.08);
 }
 
 // .wk-popover clips to its rounded corners with overflow:hidden, which also
@@ -67,4 +67,10 @@
 }
 .t-select-option.t-is-selected:not(.t-is-disabled):not(:has(.t-checkbox)) {
   gap: 8px;
+}
+
+// 方向 A 控件语法：按下凹陷 scale(0.98)。珊瑚实底/白字/hover 加深 6% 由
+// theme.css 的品牌令牌（--td-brand-color/-hover）提供，这里只补按下手感。
+.t-button:not(.t-is-disabled):active {
+  transform: scale(0.98);
 }

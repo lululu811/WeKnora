@@ -1,0 +1,14 @@
+/**
+ * Motion tokens — Direction A「午后的工作室」motion language.
+ * All durations ≤300ms, displacement ≤12px (except signature moments).
+ * Respect prefers-reduced-motion: consumers should gate animations.
+ */
+:root {
+    --motion-duration-fast: 180ms;
+    --motion-duration-normal: 260ms;
+    --motion-duration-slow: 300ms;
+    --motion-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+    --motion-ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+    --motion-displacement: 12px;
+    --motion-stagger: 60ms;
+}
