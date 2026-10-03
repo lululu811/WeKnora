@@ -12,8 +12,7 @@ import wechatIcon from './assets/wechat.svg';
 
 registerModule({
   id: 'wechat',
-  // 可选参数：/platform/wechat 进列表，带 id 进阅读态。
-  path: 'wechat/:knowledgeId?',
+  path: 'wechat',
   titleKey: 'menu.wechat',
   icon: 'wechat',
   iconSrc: wechatIcon,

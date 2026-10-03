@@ -45,26 +45,44 @@ export function useWechatWorkbench() {
 
   const hasVault = computed(() => Boolean(detail.value?.vaultPath));
 
+  // 探测默认库期间不要让 watch 再插一脚，否则两个并发请求会互相覆盖
+  // articles.value，探测结果不可信。
+  let probing = false;
+
   async function loadBases() {
     const list = await listCandidateBases();
     bases.value = list;
     if (!kbId.value && list.length) {
-      // 优先挑已经装过公众号文章的那个库：空库进去会看到空列表，
-      // 容易被当成"功能坏了"。
-      const withContent = list.find((kb: any) => (kb.knowledge_count || 0) > 0);
-      kbId.value = (withContent || list[0]).id;
+      // 只按 knowledge_count 挑「非空库」是不够的：工作台列的是 file_type=manual，
+      // 一个装了几千篇上传文档的库在这里是空的，用户会以为功能坏了。
+      // 所以逐个探测到真有文章的那个为止，最多试 5 个。
+      const ordered = [...list].sort(
+        (a, b) => (b.knowledge_count || 0) - (a.knowledge_count || 0),
+      );
+      probing = true;
+      try {
+        for (const candidate of ordered.slice(0, 5)) {
+          kbId.value = candidate.id;
+          if ((await loadArticles()).length) return;
+        }
+        // 全都没有：停在最后一个试过的库上，列表区显示"该知识库还没有公众号文章"。
+      } finally {
+        probing = false;
+      }
     }
   }
 
-  async function loadArticles() {
-    if (!kbId.value) return;
+  async function loadArticles(): Promise<ArticleRow[]> {
+    if (!kbId.value) return [];
     loadingList.value = true;
     listError.value = '';
     try {
       articles.value = await listWechatArticles(kbId.value);
+      return articles.value;
     } catch (e: any) {
       listError.value = e?.message || String(e);
       articles.value = [];
+      return [];
     } finally {
       loadingList.value = false;
     }
@@ -89,8 +107,9 @@ export function useWechatWorkbench() {
   }
 
   // 切库就换列表；换列表不自动选第一篇 —— 让用户自己挑，避免每换一次库
-  // 右栏的会话作用域就悄悄换掉。
+  // 右栏的会话作用域就悄悄换掉。探测默认库期间不响应（探测自己会调）。
   watch(kbId, () => {
+    if (probing) return;
     currentId.value = '';
     detail.value = null;
     void loadArticles();
