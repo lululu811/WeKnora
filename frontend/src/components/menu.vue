@@ -87,7 +87,7 @@
                         <div class="menu_item-box">
                             <div class="menu_icon">
                                 <img class="icon"
-                                    :src="getImgSrc(item.icon == 'zhishiku' ? knowledgeIcon : item.icon == 'agent' ? agentIcon : item.icon == 'artifact' ? artifactIcon : item.icon == 'toolbox' ? toolboxIcon : item.icon == 'watchlist' ? watchlistIcon : item.icon == 'organization' ? organizationIcon : item.icon == 'logout' ? logoutIcon : item.icon == 'setting' ? settingIcon : prefixIcon)"
+                                    :src="menuItemIconSrc(item)"
                                     alt="">
                             </div>
                             <template v-if="!uiStore.sidebarCollapsed">
@@ -214,7 +214,7 @@
 
 <script setup lang="ts">
 import { storeToRefs } from 'pinia';
-import { onMounted, onUnmounted, watch, computed, ref, h, nextTick } from 'vue';
+import { onMounted, onUnmounted, watch, computed, reactive, ref, h, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { getSessionsList, batchDelSessions, deleteAllSessions, getSession } from "@/api/chat/index";
 import { useChatResourcesStore } from '@/stores/chatResources';
@@ -1164,15 +1164,32 @@ watch([() => route.name, () => route.params], (newvalue, oldvalue) => {
         loadCurrentKbInfo((newvalue[1] as any)?.kbId as string);
     }
 });
-let knowledgeIcon = ref('zhishiku-green.svg');
-let prefixIcon = ref('prefixIcon.svg');
-let logoutIcon = ref('logout.svg');
-let settingIcon = ref('setting.svg');
-let agentIcon = ref('agent.svg');
-let artifactIcon = ref('artifact.svg');
-let toolboxIcon = ref('toolbox.svg');
-let watchlistIcon = ref('watchlist.svg');
-let organizationIcon = ref('organization.svg');
+// 图标名 → 当前 svg 文件名。
+//
+// 以前这里是八个独立 ref 加模板里一条图标三元链，等于每注册一个外部模块就要
+// 改一次通用菜单组件 —— 正是 4.4 那次重构想从通用设施里拿掉的耦合。改成查表
+// 之后内置项的改动只落在这一处，外部模块则可以直接带 iconSrc 进来。
+//
+// 键名同时是 `ModuleRegistration.icon` 的取值域；未登记的名字回落到 prefix，
+// 与旧三元链的 else 分支行为一致。
+const menuIcons = reactive<Record<string, string>>({
+    zhishiku: 'zhishiku.svg',
+    agent: 'agent.svg',
+    artifact: 'artifact.svg',
+    toolbox: 'toolbox.svg',
+    watchlist: 'watchlist.svg',
+    organization: 'organization.svg',
+    setting: 'setting.svg',
+    logout: 'logout.svg',
+    prefix: 'prefixIcon.svg',
+});
+
+/** 外部模块自带的图标资源优先，其次查内置表，最后回落 prefix。 */
+const menuItemIconSrc = (item: { icon?: string; iconSrc?: string }) => {
+    if (item.iconSrc) return item.iconSrc;
+    return getImgSrc(menuIcons[item.icon || ''] ?? menuIcons.prefix);
+};
+
 let pathPrefix = ref(route.name)
 const getIcon = (path: string) => {
     // 根据当前路由状态更新所有图标
@@ -1184,30 +1201,30 @@ const getIcon = (path: string) => {
     const organizationsActiveState = route.name === 'organizationList';
 
     // 知识库图标：只在知识库页面显示绿色
-    knowledgeIcon.value = kbActiveState.isKbActive ? 'zhishiku-green.svg' : 'zhishiku.svg';
+    menuIcons.zhishiku = kbActiveState.isKbActive ? 'zhishiku-green.svg' : 'zhishiku.svg';
 
     // 智能体图标：只在智能体页面显示绿色
-    agentIcon.value = agentsActiveState ? 'agent-green.svg' : 'agent.svg';
+    menuIcons.agent = agentsActiveState ? 'agent-green.svg' : 'agent.svg';
 
     // 产物图标：只在产物页面显示绿色
-    artifactIcon.value = artifactsActiveState ? 'artifact-green.svg' : 'artifact.svg';
+    menuIcons.artifact = artifactsActiveState ? 'artifact-green.svg' : 'artifact.svg';
 
-    toolboxIcon.value = route.name === 'toolbox' ? 'toolbox-green.svg' : 'toolbox.svg';
+    menuIcons.toolbox = route.name === 'toolbox' ? 'toolbox-green.svg' : 'toolbox.svg';
 
     // 自选图标：只在自选页面显示绿色
-    watchlistIcon.value = route.name === 'watchlist' ? 'watchlist-green.svg' : 'watchlist.svg';
+    menuIcons.watchlist = route.name === 'watchlist' ? 'watchlist-green.svg' : 'watchlist.svg';
 
     // 组织图标：只在组织页面显示绿色
-    organizationIcon.value = organizationsActiveState ? 'organization-green.svg' : 'organization.svg';
+    menuIcons.organization = organizationsActiveState ? 'organization-green.svg' : 'organization.svg';
 
     // 对话图标：只在对话创建页面显示绿色，其他情况显示默认
-    prefixIcon.value = creatChatActiveState.isCreatChatActive ? 'prefixIcon-green.svg' : 'prefixIcon.svg';
+    menuIcons.prefix = creatChatActiveState.isCreatChatActive ? 'prefixIcon-green.svg' : 'prefixIcon.svg';
 
     // 设置图标：只在设置页面显示绿色
-    settingIcon.value = settingsActiveState.isSettingsActive ? 'setting-green.svg' : 'setting.svg';
+    menuIcons.setting = settingsActiveState.isSettingsActive ? 'setting-green.svg' : 'setting.svg';
 
     // 退出图标：始终显示默认
-    logoutIcon.value = 'logout.svg';
+    menuIcons.logout = 'logout.svg';
 }
 getIcon(typeof route.name === 'string' ? route.name as string : (route.name ? String(route.name) : ''))
 const handleMenuClick = async (path: string) => {

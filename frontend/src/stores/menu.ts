@@ -52,6 +52,8 @@ export const useMenuStore = defineStore('menuStore', () => {
       title: '',
       titleKey: mod.titleKey,
       icon: mod.icon,
+      // 注册方自带图标资源时直接用它的，省得为一个图标去改 menu.vue。
+      iconSrc: mod.iconSrc,
       path: mod.path,
     })
   }
