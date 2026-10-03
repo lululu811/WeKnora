@@ -1517,6 +1517,26 @@ async def halo_verify(request: HaloVerifyRequest) -> Dict[str, Any]:
     verdict = verify_comprehensive(
         request.declared_total, scores, declared_rating=request.declared_rating,
     )
+
+    # 判分层影子记录（旁路）：把「LLM 这次给了什么分」和「判分依据是什么锚点」
+    # 落成一份可离线比对的现场。基线与证据在此处天然同处 —— request.scores 是
+    # LLM 刚交的 7 个分，result["ai_slots"] 是上面 analyze() 算出来的量化锚点。
+    # 整段包 try/except：判分层挂掉只该少一条影子记录，绝不能影响下面的返回。
+    # 注意本段**不向返回体添加任何字段**，影子不外泄是第一铁律。
+    try:
+        from halo import decider as halo_decider
+
+        await halo_decider.collect_shadow(
+            thscode=str(result.get("thscode") or request.thscode),
+            period=str(result.get("period") or request.period or ""),
+            report_type=request.report_type,
+            llm_scores=dict(request.scores),
+            slots=result.get("ai_slots") or [],
+            recheck=verdict,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("影子记录跳过（%s）：%s", request.thscode, exc)
+
     return jsonable_encoder({
         "thscode": result.get("thscode"),
         "period": result.get("period"),
