@@ -181,7 +181,9 @@ type Knowledge struct {
 	// DescriptionSpecified distinguishes an explicitly supplied empty description
 	// from an omitted field in partial update requests.
 	DescriptionSpecified bool `json:"-" gorm:"-"`
-	// Source of the knowledge (e.g. URL address for url type, "manual" for manual type)
+	// Source of the knowledge: a URL for anything ingested from one, or the
+	// literal "manual" when the caller recorded no provenance. Manual entries
+	// can carry a URL too — see ManualKnowledgePayload.Source.
 	Source string `json:"source"             gorm:"type:varchar(2048)"`
 	// Channel indicates through which channel the knowledge was ingested (web, api, browser_extension, wechat, etc.)
 	Channel string `json:"channel"            gorm:"type:varchar(50);default:'web'"`
@@ -325,11 +327,17 @@ type ManualKnowledgeMetadata struct {
 
 // ManualKnowledgePayload represents the payload for manual knowledge operations.
 type ManualKnowledgePayload struct {
-	Title         string                     `json:"title"`
-	Content       string                     `json:"content"`
-	Status        string                     `json:"status"`
-	TagIDs        []string                   `json:"tag_ids"`
-	Channel       string                     `json:"channel"`
+	Title   string   `json:"title"`
+	Content string   `json:"content"`
+	Status  string   `json:"status"`
+	TagIDs  []string `json:"tag_ids"`
+	Channel string   `json:"channel"`
+	// Source records where the content came from when the caller knows it —
+	// the upstream article URL for something pasted out of a reader, for
+	// example. Empty means "no provenance recorded" and the row keeps the
+	// literal "manual" marker. Stored verbatim; validating that it is
+	// well-formed is the service's job, not the type's.
+	Source        string                     `json:"source,omitempty"`
 	ProcessConfig *KnowledgeProcessOverrides `json:"process_config,omitempty"`
 }
 

@@ -759,6 +759,14 @@ func (s *knowledgeService) CreateKnowledgeFromManual(ctx context.Context,
 		return nil, werrors.NewValidationError("标题包含非法字符或超出长度限制")
 	}
 
+	source, err := sanitizeManualSource(payload.Source)
+	if err != nil {
+		return nil, err
+	}
+	if source == "" {
+		source = types.KnowledgeTypeManual
+	}
+
 	status := strings.ToLower(strings.TrimSpace(payload.Status))
 	if status == "" {
 		status = types.ManualKnowledgeStatusDraft
@@ -794,7 +802,7 @@ func (s *knowledgeService) CreateKnowledgeFromManual(ctx context.Context,
 		Channel:          defaultChannel(channel),
 		Title:            title,
 		Description:      "",
-		Source:           types.KnowledgeTypeManual,
+		Source:           source,
 		ParseStatus:      types.ManualKnowledgeStatusDraft,
 		EnableStatus:     "disabled",
 		CreatedAt:        now,
@@ -1022,6 +1030,13 @@ func (s *knowledgeService) UpdateManualKnowledge(ctx context.Context,
 		return nil, werrors.NewValidationError("标题包含非法字符或超出长度限制")
 	}
 
+	// Empty means "caller didn't mention provenance" — distinct from an
+	// explicit blank, which clears it. The assignment below decides.
+	updatedSource, err := sanitizeManualSource(payload.Source)
+	if err != nil {
+		return nil, err
+	}
+
 	status := strings.ToLower(strings.TrimSpace(payload.Status))
 	if status == "" {
 		status = types.ManualKnowledgeStatusDraft
@@ -1064,7 +1079,7 @@ func (s *knowledgeService) UpdateManualKnowledge(ctx context.Context,
 	existing.FileName = ensureManualFileName(existing.Title)
 	existing.FileType = types.KnowledgeTypeManual
 	existing.Type = types.KnowledgeTypeManual
-	existing.Source = types.KnowledgeTypeManual
+	existing.Source = resolveManualSource(existing.Source, updatedSource)
 	existing.EnableStatus = "disabled"
 	existing.UpdatedAt = time.Now()
 	existing.EmbeddingModelID = kb.EmbeddingModelID

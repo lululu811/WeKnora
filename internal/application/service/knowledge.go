@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"reflect"
 	"sort"
 	"strings"
@@ -90,7 +91,59 @@ const (
 	manualContentMaxLength = 200000
 	manualFileExtension    = ".md"
 	faqImportBatchSize     = 50 // 每批处理的FAQ条目数
+
+	// manualSourceMaxLength matches the Knowledge.Source column width, so a
+	// value that passes here cannot fail on write.
+	manualSourceMaxLength = 2048
 )
+
+// sanitizeManualSource validates a caller-supplied provenance URL for a manual
+// knowledge entry. Unlike utils.IsValidURL — which gates URLs the server will
+// itself fetch or rewrite, and so also admits resource:// and the storage://
+// family — this is a link the *reader* will click. Only http(s) is allowed.
+//
+// An empty string is valid and means "caller recorded no provenance"; callers
+// substitute the "manual" marker in that case.
+func sanitizeManualSource(raw string) (string, error) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return "", nil
+	}
+	if len(trimmed) > manualSourceMaxLength {
+		return "", werrors.NewValidationError(
+			fmt.Sprintf("来源链接过长（最多%d个字符）", manualSourceMaxLength))
+	}
+	lower := strings.ToLower(trimmed)
+	if !strings.HasPrefix(lower, "http://") && !strings.HasPrefix(lower, "https://") {
+		return "", werrors.NewValidationError("来源链接必须以 http:// 或 https:// 开头")
+	}
+	// url.Parse on a scheme-prefixed string keeps "://"-less junk like
+	// "https://" itself from sliding through; Host is what separates a real
+	// URL from the prefix alone.
+	u, err := url.Parse(trimmed)
+	if err != nil || u.Host == "" {
+		return "", werrors.NewValidationError("来源链接格式不正确")
+	}
+	return trimmed, nil
+}
+
+// resolveManualSource decides what Knowledge.Source becomes on update.
+//
+// Provenance survives an edit: rewriting an article's body says nothing about
+// where the article came from, so dropping Source here would throw away the
+// one field still pointing at the original. An incoming value always wins —
+// that is how a caller corrects a bad link. The literal "manual" is the
+// "nothing recorded" marker rather than a value worth keeping, so a legacy row
+// still reads as unmarked instead of preserving the placeholder.
+func resolveManualSource(existing, incoming string) string {
+	if incoming != "" {
+		return incoming
+	}
+	if existing == "" || existing == types.KnowledgeTypeManual {
+		return types.KnowledgeTypeManual
+	}
+	return existing
+}
 
 // NewKnowledgeService creates a new knowledge service instance
 func NewKnowledgeService(
