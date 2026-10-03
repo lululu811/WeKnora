@@ -6,7 +6,7 @@ export default {
     loading: '読み込み中…',
     pickHint: '左から記事を選択してください',
     vault: { off: 'vault が未設定のため画像が表示されない場合があります' },
-    list: { loading: '記事を読み込み中…', empty: 'このナレッジベースには WeChat 記事がありません' },
+    list: { show: 'リストを表示', hide: 'リストを隠す', loading: '記事を読み込み中…', empty: 'このナレッジベースには WeChat 記事がありません' },
     item: { indexing: '索引中' },
     scope: { doc: 'この記事のみ', kb: 'ナレッジベース全体' },
     chat: { empty: 'この記事について質問するか、「ナレッジベース全体」に切り替えて横断検索。', placeholder: 'この記事について質問（Enter で送信）' },

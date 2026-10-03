@@ -6,7 +6,7 @@ export default {
     loading: '载入中…',
     pickHint: '从左侧选择一篇文章',
     vault: { off: '未配置 vault，图片可能无法显示' },
-    list: { loading: '载入文章…', empty: '该知识库还没有公众号文章' },
+    list: { show: '显示列表', hide: '隐藏列表', loading: '载入文章…', empty: '该知识库还没有公众号文章' },
     item: { indexing: '索引中' },
     scope: { doc: '只问这一篇', kb: '问整个知识库' },
     chat: { empty: '就这篇文章提问，或切到「问整个知识库」做跨篇检索。', placeholder: '针对这篇文章提问，Enter 发送' },

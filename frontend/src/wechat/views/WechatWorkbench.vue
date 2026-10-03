@@ -1,8 +1,8 @@
 <template>
   <div class="wechat-workbench">
     <!-- 左：文章列表 -->
-    <aside class="wb-list">
-      <div class="wb-list__head">
+    <aside class="wb-list" :class="{ 'wb-list--closed': !listOpen }">
+      <div v-if="listOpen" class="wb-list__head">
         <t-select
           v-model="kbId"
           :options="baseOptions"
@@ -37,6 +37,14 @@
 
       <template v-else>
         <header class="wb-head">
+          <t-button
+            class="wb-head__toggle"
+            size="small"
+            variant="text"
+            @click="listOpen = !listOpen"
+          >
+            {{ listOpen ? t('wechat.list.hide') : t('wechat.list.show') }}
+          </t-button>
           <h2 class="wb-head__title">{{ detail.title }}</h2>
           <div class="wb-head__actions">
             <t-tag v-if="!hasVault" theme="warning" variant="light">
@@ -148,6 +156,9 @@ const { t } = useI18n();
 const wb = useWechatWorkbench();
 const chat = useDocumentChat();
 const previewContent = ref<HTMLElement | null>(null);
+// 列表是可折叠侧栏而非常驻第三列：应用本身左侧还有 210px 的全局导航，
+// 内容区只剩 ~1067px，三列会把右栏问答挤没。
+const listOpen = ref(true);
 const readerEl = ref<HTMLElement | null>(null);
 
 const {
@@ -241,6 +252,7 @@ onMounted(async () => {
   border-right: 1px solid var(--td-component-border);
   min-height: 0;
 }
+.wb-list--closed { flex-basis: 0; width: 0; border-right: 0; overflow: hidden; }
 .wb-list__head { padding: 12px; border-bottom: 1px solid var(--td-component-border); }
 .wb-list__body { flex: 1; overflow-y: auto; padding: 6px; }
 .wb-item {
@@ -257,15 +269,16 @@ onMounted(async () => {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
   padding: 12px 16px; border-bottom: 1px solid var(--td-component-border);
 }
+.wb-head__toggle { flex: 0 0 auto; margin-right: 4px; }
 .wb-head__title { margin: 0; font-size: 15px; font-weight: 600; }
 .wb-head__actions { display: flex; align-items: center; gap: 10px; }
 .wb-head__origin { font-size: 13px; color: var(--td-brand-color); }
 .wb-split { flex: 1; display: flex; min-height: 0; }
 .wb-reader {
-  /* 58/42 在只剩 960px 的内容区里会把阅读区压到 230px。改用 minmax 兜底，
-     保证两边都有一个能用的下限，再按比例分配剩下的。 */
+  /* 58/42 在只剩 ~1067px 的内容区里会把阅读区压到 230px。改成 flex:1 1 0
+     加 min-width 下限，按剩余空间平分。 */
   flex: 1 1 0;
-  min-width: 420px;
+  min-width: 340px;
   overflow-y: auto;
   padding: 20px 24px;
   border-right: 1px solid var(--td-component-border);
@@ -274,7 +287,7 @@ onMounted(async () => {
 /* 公众号原文链接是一长串无空格 token，不打断会把整栏撑宽。 */
 .wb-reader__body :deep(a) { overflow-wrap: anywhere; }
 .wb-reader__body :deep(img) { max-width: 100%; height: auto; border-radius: 4px; }
-.wb-chat { flex: 1 1 0; min-width: 340px; display: flex; flex-direction: column; min-height: 0; }
+.wb-chat { flex: 1 1 0; min-width: 300px; display: flex; flex-direction: column; min-height: 0; }
 .wb-chat__scope {
   display: flex; align-items: center; justify-content: space-between;
   padding: 8px 12px; border-bottom: 1px solid var(--td-component-border);
