@@ -4,6 +4,7 @@ export default {
     clear: 'クリア',
     openOriginal: '元の記事を開く ↗',
     loading: '読み込み中…',
+    pickHintClosed: 'リストは折りたたまれています。右上の「リストを表示」から記事を選んでください',
     pickHint: '左から記事を選択してください',
     vault: { off: 'vault が未設定のため画像が表示されない場合があります' },
     list: { show: 'リストを表示', hide: 'リストを隠す', loading: '記事を読み込み中…', empty: 'このナレッジベースには WeChat 記事がありません' },

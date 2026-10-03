@@ -63,7 +63,13 @@ export function useWechatWorkbench() {
       try {
         for (const candidate of ordered.slice(0, 5)) {
           kbId.value = candidate.id;
-          if ((await loadArticles()).length) return;
+          const found = await loadArticles();
+          if (found.length) {
+            // 在这里打开首篇，而不是等调用方的 onMounted —— 探测是异步的，
+            // 挂载那一刻 articles 还是空的，结果就是永远停在空态。
+            await openArticle(found[0].id);
+            return;
+          }
         }
         // 全都没有：停在最后一个试过的库上，列表区显示"该知识库还没有公众号文章"。
       } finally {

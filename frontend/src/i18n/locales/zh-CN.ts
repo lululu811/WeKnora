@@ -4,6 +4,7 @@ export default {
     clear: '清空',
     openOriginal: '查看原文 ↗',
     loading: '载入中…',
+    pickHintClosed: '列表已收起，点右上角「显示列表」选择文章',
     pickHint: '从左侧选择一篇文章',
     vault: { off: '未配置 vault，图片可能无法显示' },
     list: { show: '显示列表', hide: '隐藏列表', loading: '载入文章…', empty: '该知识库还没有公众号文章' },

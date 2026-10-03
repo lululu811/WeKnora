@@ -33,7 +33,9 @@
 
     <!-- 右：原文 + 问答 -->
     <section class="wb-main">
-      <div v-if="!detail" class="wb-hint wb-hint--center">{{ t('wechat.pickHint') }}</div>
+      <div v-if="!detail" class="wb-hint wb-hint--center">
+          {{ listOpen ? t('wechat.pickHint') : t('wechat.pickHintClosed') }}
+        </div>
 
       <template v-else>
         <header class="wb-head">
@@ -267,9 +269,9 @@ async function hydrate() {
 watch([renderedMarkdown, currentId], () => void hydrate(), { flush: 'post' });
 onBeforeUnmount(() => blobUrls.value.forEach((u) => URL.revokeObjectURL(u)));
 
-onMounted(async () => {
-  await loadBases();
-  if (articles.value.length) await openArticle(articles.value[0].id);
+// 首篇由 loadBases 在探测成功后就地打开（探测是异步的，在这里等不到结果）。
+onMounted(() => {
+  void loadBases();
 });
 </script>
 
