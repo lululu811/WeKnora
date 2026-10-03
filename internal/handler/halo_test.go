@@ -67,7 +67,7 @@ func TestHaloArchiveTitleWithoutPeriod(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestHaloArchiveMetadataSatisfiesUpdateConstraints(t *testing.T) {
-	meta := haloArchiveMetadata("600519.SH", "2025-12-31", "annual", "mixed")
+	meta := haloArchiveMetadata("600519.SH", "2025-12-31", "annual", "mixed", "")
 
 	require.LessOrEqual(t, len(meta), 20, "UpdateKnowledge 最多接受 20 个字段")
 	for key, value := range meta {
@@ -85,7 +85,7 @@ func TestHaloArchiveMetadataSatisfiesUpdateConstraints(t *testing.T) {
 }
 
 func TestHaloArchiveMetadataDeclaresLLMScoredDims(t *testing.T) {
-	meta := haloArchiveMetadata("600519.SH", "2025-12-31", "annual", "")
+	meta := haloArchiveMetadata("600519.SH", "2025-12-31", "annual", "", "")
 	// 不声明这一条，检索到该文档的模型读到「护城河 7 分」时无法知道它是算出来的
 	// 还是判出来的。7 个定性维度都是模型给分，必须显式写出来。
 	assert.Equal(t, haloLLMScoredDims, meta[haloMetaLLMDims])
@@ -95,7 +95,7 @@ func TestHaloArchiveMetadataDeclaresLLMScoredDims(t *testing.T) {
 }
 
 func TestHaloArchiveMetadataCarriesIdentityAndCaliber(t *testing.T) {
-	meta := haloArchiveMetadata("600519.SH", "2025-12-31", "annual", "mixed")
+	meta := haloArchiveMetadata("600519.SH", "2025-12-31", "annual", "mixed", "")
 	assert.Equal(t, "600519.SH", meta[haloMetaThscode])
 	assert.Equal(t, "2025-12-31", meta[haloMetaPeriod])
 	assert.Equal(t, "annual", meta[haloMetaReport])
@@ -106,9 +106,40 @@ func TestHaloArchiveMetadataCarriesIdentityAndCaliber(t *testing.T) {
 
 func TestHaloArchiveMetadataOmitsUnknownAssetType(t *testing.T) {
 	// 资产类型未知时宁可不写，也不要写个空串 —— 空串会被读成「已判定为无类型」。
-	meta := haloArchiveMetadata("600519.SH", "2025-12-31", "annual", "")
+	meta := haloArchiveMetadata("600519.SH", "2025-12-31", "annual", "", "")
 	_, exists := meta[haloMetaAssetType]
 	assert.False(t, exists)
+}
+
+// ---------------------------------------------------------------------------
+// 骨架形态标注
+// ---------------------------------------------------------------------------
+
+// skeletonMarkdown 照抄 halo/analyze.py 的 _md_dimension 输出形状：分数槽位包在
+// 代码 span 里，分析槽位不带。
+const skeletonMarkdown = "## 五、低淘汰率\n\n`{{moat_score}}`\n\n分析：{{moat_analysis}}\n"
+
+func TestHaloArchiveMetadataMarksSkeletonWhenSlotsUnfilled(t *testing.T) {
+	meta := haloArchiveMetadata("600519.SH", "2025-12-31", "annual", "mixed", skeletonMarkdown)
+	assert.Equal(t, haloDocFormSkeleton, meta[haloMetaDocForm])
+	// 口径里必须说清槽位不是数据 —— 这条元数据是给检索到该文档的模型看的。
+	assert.Contains(t, meta[haloMetaCaliber], "未填的槽位")
+}
+
+func TestHaloArchiveMetadataMarksFilledWhenNoSlots(t *testing.T) {
+	filled := "## 五、低淘汰率\n\n护城河 7.5 分。\n"
+	meta := haloArchiveMetadata("600519.SH", "2025-12-31", "annual", "mixed", filled)
+	assert.Equal(t, haloDocFormFilled, meta[haloMetaDocForm])
+}
+
+func TestHaloDocFormFieldIsScalar(t *testing.T) {
+	// CustomMetadata 只接受 string/number/bool/null，嵌套结构会被 UpdateKnowledge
+	// 拒掉，而 attachLineage 失败又会让幂等匹配找不到文档。
+	for _, md := range []string{skeletonMarkdown, "普通报告", ""} {
+		meta := haloArchiveMetadata("600519.SH", "2025-12-31", "annual", "mixed", md)
+		_, isString := meta[haloMetaDocForm].(string)
+		assert.True(t, isString, "halo_doc_form 必须是标量字符串")
+	}
 }
 
 // ---------------------------------------------------------------------------

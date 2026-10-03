@@ -21,6 +21,8 @@ type HTTPClient struct {
 	serviceURL string
 	apiKey     string
 	httpClient *http.Client
+	// gate 串行化 /halo/sync。见 Sync 里的说明。
+	gate *syncGate
 }
 
 // NewHTTPClient 创建客户端。serviceURL 为空时读 PYTHON_SERVICE_URL。
@@ -40,6 +42,7 @@ func NewHTTPClient(serviceURL string) *HTTPClient {
 		serviceURL: serviceURL,
 		apiKey:     os.Getenv("WEKNORA_PY_SERVICE_API_KEY"),
 		httpClient: &http.Client{},
+		gate:       newSyncGate(maxConcurrentSync),
 	}
 }
 
@@ -145,8 +148,18 @@ const scoreTimeout = 2 * time.Minute
 
 // Sync 触发一只股票的年报抽取与落表。
 func (c *HTTPClient) Sync(ctx context.Context, thscode, reportType string, force bool) (map[string]any, error) {
+	// 并发保护放在这里而不是 handler 里：/halo/sync 的成本在**巨潮侧**，而它现在
+	// 有两条调用方 —— agent 的 halo.filing.sync 工具与工作台的 /halo/sync HTTP
+	// 端点。只在 handler 加闸门的话，agent 与用户同时点同一只票仍会并发抓两次
+	// PDF，两边都白等 1–3 分钟，还会多消耗一次巨潮的限流额度。
+	release, err := c.gate.acquire(ctx, thscode)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+
 	var out map[string]any
-	err := c.post(ctx, "/halo/sync", SyncRequest{
+	err = c.post(ctx, "/halo/sync", SyncRequest{
 		Thscode:    thscode,
 		ReportType: reportType,
 		Force:      force,

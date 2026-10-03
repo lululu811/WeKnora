@@ -338,7 +338,7 @@ func NewRouter(params RouterParams) *gin.Engine {
 		)
 		RegisterKnowledgeTagRoutes(v1, params.TagHandler, rbacGuards)
 		RegisterKnowledgeRoutes(v1, params.KnowledgeHandler, rbacGuards)
-		// HALO 报告：预览（只读）与归档（写库）。
+		// HALO 报告：预览（只读）、同步（外部副作用）与归档（写库）。
 		//
 		// 必须走 g.apiKeyRoute 而不是裸 v1.POST：/api/v1 上的 API key 闸门对
 		// **未声明策略的路由默认拒绝**（api_key_gate.go: "Absent policy => default
@@ -354,6 +354,11 @@ func NewRouter(params RouterParams) *gin.Engine {
 		if params.HaloHandler != nil {
 			rbacGuards.apiKeyRoute(v1, http.MethodPost, "/halo/report",
 				apiKeyRetrieve(apiKeyFullAccess()), params.HaloHandler.ReportHaloReport)
+			// sync 是写操作（会向巨潮抓 PDF 并落盘），所以按 ingest 归类，与
+			// archive 同级。它不需要 KB 权限：落的是事实库不是知识库。
+			// 并发由 halo.syncGate 兜住（同一标的直接 409，全局并发上限 2）。
+			rbacGuards.apiKeyRoute(v1, http.MethodPost, "/halo/sync",
+				apiKeyIngest(apiKeyFullAccess()), params.HaloHandler.SyncHaloReport)
 			rbacGuards.apiKeyRoute(v1, http.MethodPost, "/halo/archive",
 				apiKeyIngest(apiKeyFullAccess()), params.HaloHandler.ArchiveHaloReport)
 		}

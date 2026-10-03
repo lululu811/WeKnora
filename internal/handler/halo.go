@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -90,6 +91,7 @@ const (
 	haloMetaCutoff    = "halo_data_cutoff"
 	haloMetaAssetType = "halo_asset_type"
 	haloMetaLLMDims   = "halo_ai_scored_dims"
+	haloMetaDocForm   = "halo_doc_form"
 	haloMetaCaliber   = "halo_caliber"
 )
 
@@ -198,7 +200,7 @@ func (h *HaloHandler) ArchiveHaloReport(c *gin.Context) {
 	period, _ := score["period"].(string)
 	assetType, _ := score["asset_type"].(string)
 
-	meta := haloArchiveMetadata(normalizedThscode, period, reportType, assetType)
+	meta := haloArchiveMetadata(normalizedThscode, period, reportType, assetType, markdown)
 	title := haloArchiveTitle(normalizedThscode, period)
 	status := types.ManualKnowledgeStatusDraft
 	if req.Publish {
@@ -271,6 +273,86 @@ func (h *HaloHandler) ArchiveHaloReport(c *gin.Context) {
 			"note": "解析与索引异步进行；parse_status 变为 completed 后才可被检索。",
 		},
 	})
+}
+
+// haloSyncRequest 是 POST /halo/sync 的请求体。
+type haloSyncRequest struct {
+	Thscode string `json:"thscode"`
+	// ReportType 默认 annual —— 年报是唯一含员工人数的口径，而 HALO 的
+	// 资本-劳动力比率要员工数，所以面板同步固定走年报。
+	ReportType string `json:"report_type"`
+	// Force 默认 false。缓存键是 (thscode, report_type, year)，年报一年只变一次，
+	// 所以日常同步几乎必然命中缓存；只有抽取逻辑修好后需要重跑才开。
+	Force bool `json:"force"`
+}
+
+// SyncHaloReport godoc
+//
+// @Summary      同步巨潮年报并把事实落库
+// @Description  抓取年报 PDF → 抽取 → 对账 → 落表。这是 /halo/report 返回
+// @Description  ok=false 时「先同步年报」那一步的 HTTP 出口。
+// @Description  慢：单份年报下载 + 逐页解析约 1–3 分钟，服务端超时给到 10 分钟。
+// @Description  并发保护见 halo.syncGate：同一标的重复触发直接拒绝（不排队），
+// @Description  不同标的全局并发上限 2。
+// @Tags         HALO
+// @Accept       json
+// @Produce      json
+// @Param        request  body      haloSyncRequest  true  "同步参数"
+// @Success      200      {object}  map[string]interface{}
+// @Failure      400      {object}  errors.AppError  "参数错误"
+// @Failure      409      {object}  errors.AppError  "该标的正在同步中"
+// @Security     Bearer
+// @Security     ApiKeyAuth
+// @Router       /halo/sync [post]
+func (h *HaloHandler) SyncHaloReport(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	var req haloSyncRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.Error(errors.NewBadRequestError(err.Error()))
+		return
+	}
+	thscode := strings.TrimSpace(req.Thscode)
+	if thscode == "" {
+		c.Error(errors.NewBadRequestError("thscode 不能为空"))
+		return
+	}
+	reportType := strings.TrimSpace(req.ReportType)
+	if reportType == "" {
+		reportType = "annual"
+	}
+
+	data, err := h.haloClient.Sync(ctx, thscode, reportType, req.Force)
+	if err != nil {
+		// 「同一标的正在同步」不是服务故障，而是并发闸门正常工作。给它 409 与
+		// 独立文案：前端据此可以提示「等上一次跑完」，而不是笼统报「同步失败」。
+		if isSyncInFlight(err) {
+			c.Error(errors.NewConflictError(err.Error()))
+			return
+		}
+		logger.ErrorWithFields(ctx, err, map[string]interface{}{
+			"thscode": secutils.SanitizeForLog(thscode),
+		})
+		c.Error(errors.NewInternalServerError(err.Error()))
+		return
+	}
+
+	// ok=false 不是错误：抓取链路跑通了，但对账存疑或抽取为空时事实并没有落库，
+	// 面板重试取报告仍会拿到 noData。与 /halo/report 同一套约定。
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": data})
+}
+
+// isSyncInFlight 识别并发闸门的拒绝。
+//
+// 靠子串匹配而不是哨兵错误：闸门在 halo 包内、handler 在上层，让下层为一个
+// 纯限流场景反向依赖上层的 errors 包不值得。判据是闸门写进文案的那个短语 ——
+// 换个说法这里就会漏判，所以两边必须一起改。
+func isSyncInFlight(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "正在同步中")
 }
 
 // haloReportRequest 是 POST /halo/report 的请求体。
@@ -365,16 +447,39 @@ func haloArchiveTitle(thscode, period string) string {
 	return "HALO " + thscode + " " + period
 }
 
+// haloDocFormSkeleton / haloDocFormFilled 记录归档正文的形态。
+//
+// 必填的原因：/halo/score 对七个定性维度只吐 `{{xxx_score}}` 槽位，判分是
+// 调用方（agent）的事，而归档这条链路上没有任何代码会填。所以**默认落库的是
+// 骨架**，正文里带着未填的槽位。这些文档会进 RAG 检索被模型当事实引用，模型
+// 若读到「护城河 {{moat_score}}」会当成一个真实的字段值。显式声明形态，让
+// 检索到的模型知道这些槽位是空的。
+const (
+	haloDocFormSkeleton = "skeleton"
+	haloDocFormFilled   = "filled"
+)
+
+// haloSlotRe 匹配未填的判分槽位。必须与 python-service 的 render_markdown
+// 保持一致（见 halo/analyze.py 的 _md_dimension）。
+var haloSlotRe = regexp.MustCompile(`\{\{\s*[a-z_]+_(?:score|analysis)\s*\}\}`)
+
 // haloArchiveMetadata 组装给模型看的血缘。
-func haloArchiveMetadata(thscode, period, reportType, assetType string) map[string]any {
+func haloArchiveMetadata(thscode, period, reportType, assetType, markdown string) map[string]any {
+	docForm := haloDocFormFilled
+	if haloSlotRe.MatchString(markdown) {
+		docForm = haloDocFormSkeleton
+	}
 	meta := map[string]any{
 		haloMetaThscode:   thscode,
 		haloMetaPeriod:    period,
 		haloMetaReport:    reportType,
 		haloMetaGenerated: time.Now().UTC().Format("2006-01-02T15:04:05Z"),
 		haloMetaLLMDims:   haloLLMScoredDims,
+		haloMetaDocForm:   docForm,
 		haloMetaCaliber: "数值由 python-service 的 HALO 评分内核计算，事实来自巨潮年报 PDF " +
-			"与本地 hithink 库；报告期见 halo_period，不要与其他口径混用。",
+			"与本地 hithink 库；报告期见 halo_period，不要与其他口径混用。" +
+			"halo_doc_form=skeleton 表示正文里 {{xxx_score}} / {{xxx_analysis}} 是**未填的槽位**，" +
+			"不是数据：这七个定性维度未被判分，不得据此下任何结论。",
 	}
 	if assetType != "" {
 		meta[haloMetaAssetType] = assetType

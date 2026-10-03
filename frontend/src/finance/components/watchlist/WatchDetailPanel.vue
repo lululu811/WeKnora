@@ -74,6 +74,27 @@
       </div>
     </div>
 
+    <!-- HALO 年报分析入口。
+         放在这里而不是只留在 K 线工作台的工具栏里：那个入口在「菜单自选 →
+         点行 → 打开全功能工作台 → 94vw 模态 → 一排 16px 无文字图标」的最末端，
+         实际没人找得到。本面板已经是「选中一只票之后的操作区」，加一个出口就够。 -->
+    <section class="wl-detail__section wl-detail__halo">
+      <div class="wl-detail__section-head">
+        <h3 class="wl-detail__h3">{{ t('halo.title') }}</h3>
+        <t-button
+          size="small"
+          variant="outline"
+          theme="primary"
+          class="wl-detail__halo-btn"
+          @click="$emit('open-halo')"
+        >
+          <template #icon><t-icon name="article" /></template>
+          {{ t('halo.open') }}
+        </t-button>
+      </div>
+      <p class="wl-detail__hint">{{ t('halo.entryHint') }}</p>
+    </section>
+
     <!-- K 线。选行即看图是本面板存在的理由，所以它常驻在日记上面。 -->
     <section class="wl-detail__section">
       <div class="wl-detail__section-head">
@@ -205,6 +226,7 @@ const emit = defineEmits<{
   (e: 'close'): void
   (e: 'open-workspace'): void
   (e: 'open-conditions'): void
+  (e: 'open-halo'): void
 }>()
 
 const router = useRouter()
@@ -462,6 +484,15 @@ watch(() => props.thscode, () => {
   font-size: var(--app-text-xs);
   padding: 0 4px;
 }
+/* HALO 入口比「全功能工作台」更值得一个完整按钮：它是这份面板里唯一一个
+   「打开一份独立分析」的出口，而工作台按钮只是放大当前视图。 */
+.wl-detail__halo {
+  padding: 8px 10px;
+  border: 1px solid var(--td-border-level-2-color);
+  border-radius: var(--app-radius-sm);
+  background: var(--td-bg-color-secondarycontainer);
+}
+.wl-detail__halo-btn { font-size: var(--app-text-xs); flex: none; }
 .wl-detail__section--diary { flex: 1; }
 .wl-detail__h3 { margin: 0; font-size: var(--app-text-md); font-weight: 600; opacity: 0.75; }
 .wl-detail__hint { font-size: var(--app-text-sm); opacity: 0.6; margin: 0; }

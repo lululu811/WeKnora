@@ -11,7 +11,7 @@ import (
 	"github.com/Tencent/WeKnora/internal/handler"
 )
 
-// TestHaloRoutesRegistered 断言两条 HALO 路由真的挂上了。
+// TestHaloRoutesRegistered 断言三条 HALO 路由真的挂上了。
 //
 // 为什么需要它：未认证探测分不出「路由存在但要鉴权」与「路由根本不存在」——
 // 全局 Auth 中间件在 Gin 的 NoRoute 之前运行，两种情况都返回 401。所以只能
@@ -30,6 +30,7 @@ func TestHaloRoutesRegistered(t *testing.T) {
 
 	for _, want := range []string{
 		http.MethodPost + " /api/v1/halo/report",
+		http.MethodPost + " /api/v1/halo/sync",
 		http.MethodPost + " /api/v1/halo/archive",
 	} {
 		assert.Truef(t, registered[want], "缺路由 %s；已注册的 halo 路由: %v",

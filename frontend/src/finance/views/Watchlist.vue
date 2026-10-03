@@ -242,8 +242,19 @@
         @close="selectedThscode = ''"
         @open-workspace="openFullWorkspace(selectedRow)"
         @open-conditions="openConditions(selectedRow)"
+        @open-halo="openHaloReport(selectedRow)"
       />
     </div>
+
+    <!-- HALO 年报报告。挂在这一层而不是详情面板内部，是为了让面板的选中态与
+         弹窗解耦：面板可以随选中行切换，弹窗则在自己关闭前保持当前标的。
+         与 K 线工作台里那个 HaloReportDialog 是同一组件、同一数据源，只是入口
+         深度不同（这里是 2 步，工作台里是 5 步）。 -->
+    <HaloReportDialog
+      v-if="haloThscode"
+      v-model:visible="haloVisible"
+      :thscode="haloThscode"
+    />
 
     <!-- 条件面板。用 dialog 而不是 popover：里面有两个 t-select，下拉渲染到 body，
          挂在 popover 里会被"点击外部"判成关闭，选中值的一瞬间面板就没了。 -->
@@ -377,6 +388,7 @@ import { useI18n } from 'vue-i18n'
 import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
 import EmptyState from '@/components/EmptyState.vue'
 import WatchDetailPanel from '@/finance/components/watchlist/WatchDetailPanel.vue'
+import HaloReportDialog from '@/finance/components/kline/HaloReportDialog.vue'
 // 异步导入：这个组件（含 klinecharts）约 274 KB / 78 KB gzip，而它只在这个页面
 // 的全功能工作台模态里用得到（见模板里的 v-if="fullWorkspaceVisible"）。静态导入
 // 会把它塞进本路由的 chunk，于是每次打开 /platform/watchlist 都要多下 5.6 倍的
@@ -418,6 +430,20 @@ provideChatKLinePanel(agentWorkspace)
 
 const fullWorkspaceVisible = ref(false)
 const fullWorkspaceTitle = ref('')
+
+/**
+ * HALO 报告弹窗的状态。
+ *
+ * 标的存成独立变量而不是直接读 selectedRow：面板的选中态会随用户在列表里点
+ * 别的行而变，弹窗不该跟着漂 —— 一旦打开就锁定打开时的那只票。
+ */
+const haloVisible = ref(false)
+const haloThscode = ref('')
+
+function openHaloReport(row: WatchRow) {
+  haloThscode.value = row.thscode
+  haloVisible.value = true
+}
 
 function openFullWorkspace(row: WatchRow) {
   const parts = row.thscode.split('.')
