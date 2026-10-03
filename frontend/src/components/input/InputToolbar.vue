@@ -76,6 +76,8 @@ const props = defineProps({
   displayedReasoningLevel: { type: String as PropType<ReasoningLevel>, default: 'off' },
   composerLocked: Boolean,
   selectReasoningLevel: { type: Function as PropType<(level: ReasoningLevel) => void>, required: true },
+  // 弹层互斥仍由父组件裁决（它同时持有模型/mention/智能体选择器的状态）
+  handleReasoningVisibleChange: { type: Function as PropType<(visible: boolean) => void>, required: true },
 
   // ---- 由本组件回写实例的引用 ----
   // 这三个 ref 只是「把元素交还父组件」的单向管道，父组件里它们的声明类型各不相同
@@ -306,7 +308,7 @@ watch(modelButtonRef, (el) => relay(el, props.modelButtonElRef), { immediate: tr
         placement="top-right"
         :disabled="composerLocked"
         :overlay-inner-style="{ padding: '4px', borderRadius: 'var(--app-radius-lg)' }"
-        @update:visible="(v: boolean) => (showReasoningSelector = v)"
+        @visible-change="(v: boolean) => { showReasoningSelector = v; handleReasoningVisibleChange(v) }"
       >
         <button
           type="button"

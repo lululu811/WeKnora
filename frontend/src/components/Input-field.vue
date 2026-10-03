@@ -2806,6 +2806,7 @@ defineExpose({
         :displayed-reasoning-level="displayedReasoningLevel"
         :composer-locked="composerLocked"
         :select-reasoning-level="selectReasoningLevel"
+        :handle-reasoning-visible-change="handleReasoningVisibleChange"
         :toggle-model-selector="toggleModelSelector"
         :agent-mode-button-el-ref="composerRefs.agentModeButtonRef"
         :at-button-el-ref="composerRefs.atButtonRef"
