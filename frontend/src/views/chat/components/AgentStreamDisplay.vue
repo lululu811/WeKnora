@@ -971,16 +971,7 @@ import agentIcon from '@/assets/img/agent.svg';
 import thinkingIcon from '@/assets/img/Frame3718.svg';
 import compactionIcon from '@/assets/img/context-compaction.svg';
 
-interface SessionData {
-  id?: string;
-  assistant_message_id?: string;
-  request_id?: string;
-  debugRequest?: Record<string, unknown>;
-  isAgentMode?: boolean;
-  agentEventStream?: any[];
-  knowledge_references?: any[];
-  [key: string]: unknown;
-}
+import type { PlanStatusItem, SessionData } from './stream/stream.types';
 
 const props = defineProps<{
   session: SessionData;
@@ -2694,7 +2685,7 @@ const getPlanStatusParts = (event: any) => {
 // Get plan status items for display with icons
 const getPlanStatusItems = (event: any) => {
   const parts = getPlanStatusParts(event);
-  const items: Array<{ icon: string; class: string; label: string; count: number }> = [];
+  const items: PlanStatusItem[] = [];
 
   if (parts.inProgress > 0) {
     items.push({
