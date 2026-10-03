@@ -1,5 +1,4 @@
 import { ref, computed, inject, provide, type InjectionKey, type Ref, type ComputedRef } from 'vue';
-import router from '@/router';
 import type { WorkspaceType, PickItem } from '@/components/workspace/types';
 
 export const WORKSPACE_MIN_WIDTH = 450;
@@ -163,10 +162,18 @@ export function createAgentWorkspaceContext(): AgentWorkspaceContext {
     if (sendToChatCallback.value) {
       sendToChatCallback.value(text);
     } else {
-      router.push({
-        path: '/platform/creatChat',
-        query: { q: text },
-      });
+      // 惰性引入应用 router，不能在模块顶层静态 import。
+      // 本文件经 components/MentionedStocksBar.vue 被 @/finance barrel 静态引入；
+      // 一旦静态依赖 '@/router'，router/index.ts 就会在 finance/index.ts 的
+      // registerModule() 执行**之前**求值（ES module 依赖先于模块体），其顶部的
+      // getRegisteredModules() 快照拿到空表，watchlist 路由被永久丢弃 ——
+      // 表现为 /platform/watchlist 全白、Watchlist 代码块从不被请求。
+      void import('@/router').then(({ default: router }) =>
+        router.push({
+          path: '/platform/creatChat',
+          query: { q: text },
+        }),
+      );
     }
   };
 
