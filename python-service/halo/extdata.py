@@ -213,6 +213,32 @@ def fund_flow(code: str, days: int = 60) -> List[Dict[str, Any]]:
     return out
 
 
+def margin_trading(code: str, limit: int = 10) -> List[Dict[str, Any]]:
+    """融资融券明细（日级，datacenter-web 稳定档）。
+
+    字段是东财 RPTA_WEB_RZRQ_GGMX 的原值，单位**元**，这里不做亿元换算 ——
+    换算是展示层的事，取数层多一次换算就多一个口径。
+
+    与 ``fund_flow`` 一样只返回原值、不自行派生「净买入」之类的合成指标：
+    接口给了 rzmre（买入）与 rzche（偿还），相减是调用方的选择，不是取数层的。
+    """
+    rows = datacenter(
+        "RPTA_WEB_RZRQ_GGMX", f'(SCODE="{_bare(code)}")',
+        size=limit, sort=("DATE", "-1"),
+    )
+    out = []
+    for r in rows:
+        out.append({
+            "date": str(r.get("DATE") or "")[:10],
+            "rzye": _f(r.get("RZYE")),      # 融资余额
+            "rzmre": _f(r.get("RZMRE")),    # 融资买入额
+            "rzche": _f(r.get("RZCHE")),    # 融资偿还额
+            "rqye": _f(r.get("RQYE")),      # 融券余额
+            "rzrqye": _f(r.get("RZRQYE")),  # 融资融券余额合计
+        })
+    return out
+
+
 # ---------------------------------------------------------------------------
 # 研报（reportapi）
 # ---------------------------------------------------------------------------

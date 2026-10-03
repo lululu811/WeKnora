@@ -505,6 +505,40 @@ def _md_governance_facts(result: Dict[str, Any]) -> List[str]:
     return L
 
 
+def _md_margin(ext: Dict[str, Any]) -> List[str]:
+    """两融数据（第九章的补充）。
+
+    **只在真取到时渲染**：两融不是判分的必需锚点，缺了不该在报告里占一行
+    「无数据」—— 它与「必须有的锚点缺失」不是一回事，只有后者需要显式标注
+    （那些已经进了 missing_anchors 与附录）。到处都写「无数据」会把真正重要的
+    缺失淹没掉。
+    """
+    rows = [r for r in ((ext.get("datacenter") or {}).get("margin_trading") or [])
+            if r.get("date")]
+    if not rows:
+        return []
+    rows.sort(key=lambda r: r["date"])
+    latest = rows[-1]
+    L = ["### 融资融券（两融）", "",
+         f"> 数据日期：{latest['date']}（东财 datacenter-web，日级）", "",
+         "| 指标 | 数值 |", "|:--|--:|"]
+    for key, label in (("rzye", "融资余额"), ("rqye", "融券余额"), ("rzrqye", "两融合计")):
+        v = latest.get(key)
+        if isinstance(v, (int, float)):
+            L.append(f"| {label} | {v / 1e8:,.2f} 亿 |")
+    L.append("")
+
+    # 窗口内的变化：单点余额看不出资金是在进还是在退，而判分要的正是方向。
+    first = rows[0]
+    if (len(rows) >= 2
+            and isinstance(first.get("rzye"), (int, float))
+            and isinstance(latest.get("rzye"), (int, float))):
+        delta = latest["rzye"] - first["rzye"]
+        L += [f"> 近 {len(rows)} 个交易日融资余额变化：**{delta / 1e8:+,.2f} 亿**"
+              f"（{first['date']} → {latest['date']}）", ""]
+    return L
+
+
 def _md_comprehensive(result: Dict[str, Any], slots: List[Dict[str, Any]]) -> List[str]:
     """第十一章：综合评估与投资建议。
 
@@ -622,6 +656,10 @@ def render_markdown(result: Dict[str, Any]) -> str:
             L += [f"## {heading}", "", "- （该维度未在本次分析中生成槽位。）", ""]
             continue
         L += _md_dimension(slot, heading, intro)
+        if dim == "shareholder":
+            # 两融是股东资金面这一章的事实素材，但**不是**必需锚点 ——
+            # 取不到就不渲染（见 _md_margin 的说明）。
+            L += _md_margin(result.get("external") or {})
         if dim == "risk":
             L += _md_governance_facts(result)
 
@@ -710,6 +748,9 @@ async def fetch_external(code: str, *, with_fund_flow: bool = True) -> Dict[str,
             "holder_trades": extdata.holder_trades(code, limit=5),
             "earnings_forecast": extdata.earnings_forecast(code, limit=3),
             "institution_surveys": extdata.institution_surveys(code, limit=3),
+            # 两融在**稳定档**（datacenter-web），不是易封的 push2 系 ——
+            # 所以它跟股东户数一起放在这一桶，不受资金流那档封禁影响。
+            "margin_trading": extdata.margin_trading(code, limit=10),
         }),
         ("reportapi", "third", lambda: {
             "research_reports": extdata.research_reports(code, limit=8),
