@@ -280,6 +280,13 @@ onMounted(async () => {
 @import '@/components/css/chat-markdown.less';
 @import '@/components/css/chat-message-shared.less';
 @import '@/components/css/chat-citations.less';
+
+// chat-citations.less 里那条是 **mixin**，光 @import 不会产出任何 CSS ——
+// 必须像 botmsg.vue:557 那样在选择器里显式调用，否则引用标签照样是裸文本。
+.wb-turn__a {
+    .chat-markdown-typography();
+    .chat-citation-pills();
+}
 .wechat-workbench {
   display: flex;
   height: 100%;
