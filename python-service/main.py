@@ -52,7 +52,9 @@ _READONLY_STATEMENT = re.compile(
 )
 _FORBIDDEN_SQL = re.compile(
     r"\b(?:ATTACH|DETACH|COPY|EXPORT|IMPORT|INSTALL|LOAD|CREATE|ALTER|DROP|"
-    r"TRUNCATE|DELETE|INSERT|UPDATE|PRAGMA|SET\b|VACUUM|CALL)\b",
+    r"TRUNCATE|DELETE|INSERT|UPDATE|PRAGMA|SET\b|VACUUM|CALL|"
+    r"read_csv|read_parquet|read_json|read_text|read_blob|read_ndjson|glob|sniff_csv|"
+    r"parquet_scan|sqlite_scan|postgres_scan|mysql_scan|iceberg_scan|delta_scan)\b",
     re.IGNORECASE,
 )
 _TRAILING_LIMIT = re.compile(r"\bLIMIT\s+\d+\s*;?\s*$", re.IGNORECASE)

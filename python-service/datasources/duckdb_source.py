@@ -38,7 +38,10 @@ DUCKDB_MEMORY_LIMIT_MB = int(os.getenv("DUCKDB_MEMORY_LIMIT_MB", "2048"))
 
 def _duckdb_config() -> Dict[str, str]:
     """连接配置。**所有** duckdb.connect 都必须走这里，不能各写各的。"""
-    return {"memory_limit": f"{DUCKDB_MEMORY_LIMIT_MB}MB"}
+    return {
+        "memory_limit": f"{DUCKDB_MEMORY_LIMIT_MB}MB",
+        "enable_external_access": "false",
+    }
 
 logger = logging.getLogger(__name__)
 
