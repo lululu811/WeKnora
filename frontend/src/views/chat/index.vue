@@ -258,13 +258,14 @@ import { useSessionActivityStore } from '@/stores/sessionActivity';
 import { provideChatSandboxPanel } from '@/composables/useChatSandboxPanel';
 import SandboxSidePanel from '@/components/chat/SandboxSidePanel.vue';
 import AgentWorkspacePanel from '@/components/workspace/AgentWorkspacePanel.vue';
-import MentionedStocksBar from '@/components/chat/MentionedStocksBar.vue';
-import StockCitationFloat from '@/components/workspace/kline/StockCitationFloat.vue';
-import { KNOWN_STOCK_NAMES, pickPrimaryMention } from '@/utils/stockMentions';
-import { shouldAutoSwitchChart, isStreamedAnswer } from '@/utils/chartAutoSwitch';
-import { provideChatKLinePanel } from '@/composables/useChatKLinePanel';
 import { provideAgentWorkspace } from '@/composables/useAgentWorkspace';
-import { useKLineTickerObserver } from '@/composables/useKLineTickerObserver';
+import {
+    MentionedStocksBar,
+    StockCitationFloat,
+    isStreamedAnswer,
+    provideChatKLinePanel,
+    useFinanceChatIntegration,
+} from '@/finance';
 import BrowserTaskPreview from './components/BrowserTaskPreview.vue';
 import { collectSessionArtifacts, markSessionArtifactDeleted } from '@/utils/sessionArtifacts';
 import { isCollectingSkillArtifacts } from '@/utils/skillArtifacts';
@@ -635,135 +636,25 @@ let fullContent = ref('')
 const scrollContainer = ref(null)
 const composerElement = ref(null)
 
-const stockFloat = ref({
-  visible: false,
-  top: 0,
-  left: 0,
-  thscode: '',
-  name: '',
+// 金融专属的 stockFloat 状态与 handleStockHover 已迁至 useFinanceChatIntegration。
+// 通过解构获得：stockFloat, cancelStockFloatClose, scheduleStockFloatClose。
+
+// resolveStocks + handleOpenStockWorkspace 已迁至 useFinanceChatIntegration。
+
+// 金融专属逻辑（stockFloat、ticker 监听、自动切图、全局 API、sendToChat 桥接）
+// 统一封装在 useFinanceChatIntegration 内部。
+const finance = useFinanceChatIntegration(agentWorkspace, scrollContainer, {
+  currentAssistantMessageId,
+  inputFieldRef,
 });
-let stockFloatCloseTimer = null;
-
-const cancelStockFloatClose = () => {
-  if (stockFloatCloseTimer) {
-    clearTimeout(stockFloatCloseTimer);
-    stockFloatCloseTimer = null;
-  }
-};
-
-const scheduleStockFloatClose = (delay = 200) => {
-  cancelStockFloatClose();
-  stockFloatCloseTimer = setTimeout(() => {
-    stockFloat.value.visible = false;
-  }, delay);
-};
-
-const handleStockHover = (thscode, el) => {
-  cancelStockFloatClose();
-  const rect = el.getBoundingClientRect();
-  const ticker = thscode.split('.')[0];
-  const matchedName = KNOWN_STOCK_NAMES[ticker] || '';
-  stockFloat.value = {
-    visible: true,
-    top: rect.top,
-    left: rect.left + rect.width / 2,
-    thscode,
-    name: matchedName,
-  };
-};
-
-/**
- * 打开 K 线工作台前，先让服务端把候选池过一遍。
- *
- * 候选池来自模型回答里的自由文本抽取，未经任何校验，两类坏东西会混进来：
- *   - 幻觉代码：模型把 600487（亨通光电）写成 688487。后者本地从未发行，
- *     进了池子点下去就是一片黑——图表取不到任何行情。
- *   - name 是代码：抽取正则会把 `600105（600101.SH）` 里的纯数字当股票名，
- *     于是池子出现 "600105 600101.SH" 这种 name 与 code 相同的条目。
- *
- * /api/symbols/resolve 一次查询同时解决两件事：剔掉本地不存在的代码，并用
- * v_symbol 的权威名称覆盖抽取阶段猜出来的名字。
- *
- * 这一步是**增强**不是依赖：接口挂了或超时都退回原始候选池，不阻断用户点开图表。
- */
-const resolveStocks = async (stocks) => {
-  const symbols = stocks.map((s) => `${s.ticker}.${s.exchange}`);
-  try {
-    const res = await fetch('/api/symbols/resolve', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ symbols }),
-    });
-    if (!res.ok) return null;
-    const body = await res.json();
-    const rows = body?.data;
-    if (!Array.isArray(rows) || rows.length !== stocks.length) return null;
-
-    const kept = [];
-    stocks.forEach((s, i) => {
-      const hit = rows[i];
-      if (!hit?.valid) return;
-      kept.push({ ticker: hit.ticker || s.ticker, exchange: hit.exchange || s.exchange, name: hit.name || s.ticker });
-    });
-    // 全部无效时保留原列表：与其什么都不显示，不如让用户点开看到空状态提示。
-    return kept.length > 0 ? kept : null;
-  } catch {
-    return null;
-  }
-};
-
-const handleOpenStockWorkspace = async (stock, allStocks) => {
-  stockFloat.value.visible = false;
-  // 票签点击与正文 ticker 点击共用这个入口，都是用户的显式选择：
-  // 标记之后本轮不再自动切图。
-  agentWorkspace.markUserPick(`${stock.ticker}.${stock.exchange}`);
-  const picks = allStocks && allStocks.length > 0
-    ? allStocks.map((s) => ({ ticker: s.ticker, exchange: s.exchange, name: s.name }))
-    : [{ ticker: stock.ticker, exchange: stock.exchange, name: stock.name }];
-  const activeIdx = Math.max(0, picks.findIndex((p) => p.ticker === stock.ticker));
-
-  // 先按过滤后的列表开面板（不阻塞交互），解析回来后再用权威名称刷新一次。
-  agentWorkspace.open('kline', picks, activeIdx);
-
-  const resolved = await resolveStocks(picks);
-  if (!resolved) return;
-  const stillThere = resolved.findIndex((p) => p.ticker === stock.ticker);
-  agentWorkspace.open(
-    'kline',
-    resolved,
-    stillThere >= 0 ? stillThere : Math.min(activeIdx, resolved.length - 1),
-  );
-};
-
-// 监听 chat 文本中的股票代码：hover 唤出轻量 5 星持股评分卡片，点击打开完整右侧工作台
-useKLineTickerObserver(scrollContainer, {
-  onHover: (thscode, el) => {
-    handleStockHover(thscode, el);
-  },
-  onLeave: () => {
-    scheduleStockFloatClose(200);
-  },
-  onClick: (thscode) => {
-    cancelStockFloatClose();
-    const [ticker, exchange] = thscode.split('.');
-    if (!ticker) return;
-    // 用户显式点了正文里的标的 -> 本轮不再自动切图
-    agentWorkspace.markUserPick(thscode);
-    const matchedName = KNOWN_STOCK_NAMES[ticker] || '';
-    handleOpenStockWorkspace({ ticker, exchange: exchange || 'SH', name: matchedName });
-  },
-});
-
-onMounted(() => {
-  window.__openKLineWorkspace = (ticker = '600519', exchange = 'SH', name = '贵州茅台') => {
-    agentWorkspace.open('kline', [{ ticker, exchange, name }], 0);
-  };
-  agentWorkspace.sendToChatCallback.value = (text) => {
-    if (inputFieldRef.value?.triggerSend) {
-      inputFieldRef.value.triggerSend(text);
-    }
-  };
-});
+const {
+  stockFloat,
+  cancelStockFloatClose,
+  scheduleStockFloatClose,
+  handleOpenStockWorkspace,
+  maybeAutoSwitchChart,
+  resetFinanceForNewTurn,
+} = finance;
 
 const composerHeight = ref(0)
 const scrollbarGutter = ref(0)
@@ -1560,47 +1451,15 @@ const attachSteerFollowUp = async (completedAssistantId) => {
     }
 };
 
-/** 已经为哪条回答自动切过图，避免同一轮重复触发。 */
-const autoSwitchedForMessageId = ref(null)
-
-/**
- * 回答完成后，把右侧 K 线切到这条回答的「主标的」。
- *
- * 三重克制，缺一不可：
- *  1. **只在面板已经打开时切**。面板关着还去开，就是把「看K线」这个决定
- *     替用户做了——那正是刚修掉的 KLineStudioResult 自动开图缺陷。
- *  2. **用户手动选过就不切**。用户的显式选择永远优先于模型的暗示。
- *  3. **每条回答只切一次**。判不出主标的（`pickPrimaryMention` 返回 null）时
- *     什么都不做，宁可空着也不猜。
- */
-const maybeAutoSwitchChart = (message) => {
-    if (!message || message.role !== 'assistant') return
-    // 判定逻辑在 utils/chartAutoSwitch.ts 里，是纯函数、有单测覆盖——
-    // 这几条守卫写错的表现是静默的（要么抢图位，要么永远不联动）。
-    if (!shouldAutoSwitchChart({
-        messageCompleted: Boolean(message.is_completed),
-        panelOpen: agentWorkspace.isOpen.value,
-        userPickedThscode: agentWorkspace.userPickedThscode.value,
-        alreadySwitchedForId: autoSwitchedForMessageId.value,
-        messageId: message.id,
-    })) return
-
-    const text = message.answer || message.content || message.message || ''
-    const primary = pickPrimaryMention(text)
-    // 先记账再判定：即使这条回答判不出主标的，也不该在后续刷新里反复尝试。
-    autoSwitchedForMessageId.value = message.id
-    if (!primary) return
-    if (primary.thscode === agentWorkspace.activeThscode.value) return
-
-    agentWorkspace.setActiveThscode(primary.thscode)
-}
+// autoSwitchedForMessageId 与 maybeAutoSwitchChart 已迁至 useFinanceChatIntegration，
+// 通过解构获得：maybeAutoSwitchChart, resetFinanceForNewTurn。
 
 const sendMsg = async (value, modelId = '', mentionedItems = [], imageFiles = [], attachmentFiles = [], options = {}) => {
     if (composerLocked.value) return
     // 新一轮开始：清掉上一轮的「用户已表态」与「已自动切过」，让本轮的自动
     // 联动重新有机会发生。
     agentWorkspace.resetUserPick()
-    autoSwitchedForMessageId.value = null
+    resetFinanceForNewTurn()
     const reasoningEffort = props.embeddedMode ? undefined : (useSettingsStoreInstance.reasoningEffortOverride || undefined);
     stopStream();
     prepareForNewOutgoingMessage();
@@ -2392,49 +2251,6 @@ onBeforeRouteUpdate((to, from, next) => {
     }
 }
 
-/* Chat 答案里出现的标的（个股 `600519.SH` / 板块 `881101.TI`）会被包成
- * <span class="kline-ticker">；hover 出悬浮卡，click 打开右侧 K 线工作台。
- *
- * 视觉上仍是正文文字，但**给一层浅底色**：完全无装饰时用户看不出这里可交互
- * （hover 才变下划线是"事后提示"，扫读时零线索）。底色只做"标示"，不做"按钮"——
- * 不做等宽字体、不加粗、不上浮，内边距只留到刚好让底色不贴字形。
- * 深色底（K 线画布）不涉及这里：这份样式只作用于聊天正文。 */
-.kline-ticker {
-    cursor: pointer;
-    padding: 0 3px;
-    border-radius: var(--app-radius-xs);
-    background: rgba(0, 82, 217, 0.08);
-    text-underline-offset: 2px;
-    transition: background var(--app-motion-instant) ease;
-
-    /* 深色正文下同一个蓝底几乎看不见，换更亮的蓝并抬高透明度 */
-    :root[theme-mode="dark"] & {
-        background: rgba(96, 165, 250, 0.18);
-    }
-}
-
-.kline-ticker:hover,
-.kline-ticker:focus {
-    /* 悬停时底色加深一档 + 补一条下划线：底色是"这里可点"，下划线是"正要帮你打开" */
-    background: rgba(0, 82, 217, 0.18);
-    text-decoration: underline;
-    text-decoration-thickness: 1px;
-    outline: none;
-
-    :root[theme-mode="dark"] & {
-        background: rgba(96, 165, 250, 0.32);
-    }
-}
-
-.kline-ticker:focus-visible {
-    background: rgba(0, 82, 217, 0.18);
-    text-decoration: underline;
-    text-decoration-thickness: 1px;
-    outline: 2px solid rgba(0, 82, 217, 0.4);
-    outline-offset: 1px;
-
-    :root[theme-mode="dark"] & {
-        background: rgba(96, 165, 250, 0.32);
-    }
-}
+/* .kline-ticker 系列样式已搬至 src/finance/styles/kline-ticker.less，
+ * 由 src/finance/index.ts 作为副作用 import。 */
 </style>
