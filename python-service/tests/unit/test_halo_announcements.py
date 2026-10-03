@@ -47,7 +47,7 @@ def test_render_markdown_renders_announcement_table():
              "doc_type": "PDF", "detail_url": "https://example.com/2"},
         ],
     })
-    assert "## 四、近期公告" in md
+    assert "## 二、消息面（近期公告）" in md
     assert "关于回购公司股份的公告" in md
     assert "2026年半年度报告" in md
     assert "https://example.com/1" in md
@@ -57,7 +57,7 @@ def test_render_markdown_renders_announcement_table():
 def test_render_markdown_states_why_announcements_are_absent():
     """空列表必须说明原因，不能只留一节空白。"""
     md = az.render_markdown({"thscode": "600519.SH", "period": "2025-12-31"})
-    assert "## 四、近期公告" in md
+    assert "## 二、消息面（近期公告）" in md
     assert "未取公告" in md
     assert "include_announcements" in md
 
@@ -65,7 +65,7 @@ def test_render_markdown_states_why_announcements_are_absent():
 def test_render_markdown_survives_missing_announcements_key():
     """缺键与空列表同义 —— 早返回路径不带 announcements，不能因此崩。"""
     md = az.render_markdown({"thscode": "600519.SH"})
-    assert "## 四、近期公告" in md
+    assert "## 二、消息面（近期公告）" in md
 
 
 def test_render_markdown_escapes_pipe_in_title():
@@ -89,17 +89,36 @@ def test_render_markdown_announcement_without_url_is_plain_text():
     assert "[](" not in md
 
 
-def test_section_numbering_stays_contiguous():
-    """插入公告一节后编号必须连续，否则读者会以为中间缺了一节。
+def test_chapters_follow_the_v5_template_shape():
+    """章节形状必须与 halo-skill 的 V5.0 模板一致。
 
-    注意二（成长性）与三（治理诚信事实）是**条件渲染**的 —— 没有财务数据源或没有
-    事实时它们整节不出现。所以这里只断言恒渲染的几节，并断言公告那一节确实在
-    定性维度之前。
+    从模板抄下来的阅读习惯与批注位置要能直接复用，所以顺序与标题都得对得上；
+    这也让「模板里有、报告里没有」这件事一眼可见（那些章节在第十一章列了清单）。
+
+    注意第三章之后的 HALO/成长性各章是**恒渲染**的（拿不到就写不可计算），
+    而治理诚信事实是条件渲染的（没有事实就没有那一节）。
     """
     md = az.render_markdown({"thscode": "600519.SH", "period": "2025-12-31"})
-    for num in ("一、", "四、", "五、", "六、", "七、"):
-        assert f"## {num}" in md, f"缺章节 {num}"
-    assert md.index("## 四、") < md.index("## 五、") < md.index("## 六、") < md.index("## 七、")
+    chapters = [
+        "## 第零章 执行摘要",
+        "## 一、公司概况",
+        "## 二、消息面（近期公告）",
+        "## 三、HALO 六维（Python 计算）",
+        "## 四、成长性（Python 计算）",
+        "## 五、低淘汰率",
+        "## 六、滞胀防御",
+        "## 七、ESG",
+        "## 八、管理层质量",
+        "## 九、股东与资金面",
+        "## 十、风险评估",
+        "## 十一、综合评估与投资建议",
+        "## 附录：数据来源与缺失项汇总",
+    ]
+    positions = []
+    for c in chapters:
+        assert c in md, f"缺章节 {c}"
+        positions.append(md.index(c))
+    assert positions == sorted(positions), "章节顺序必须与模板一致"
 
 
 # ---------------------------------------------------------------------------

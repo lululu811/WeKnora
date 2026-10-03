@@ -262,124 +262,97 @@ def build_ai_slots(
     return slots
 
 
-def render_markdown(result: Dict[str, Any]) -> str:
-    """预渲染报告骨架。
-
-    已算分��分是确定的，直接填；AI 待判分处留槽位标记，并把量化锚点一并
-    写进槽位下方 —— 让人（或 agent）判分时看到依据，而不是凭印象。
-    """
-    L: List[str] = []
+def _md_header(result: Dict[str, Any]) -> List[str]:
+    """报告头。资产类型与判定依据放这里 —— 后面每一章的解读都依赖它。"""
     ths = result.get("thscode", "?")
     period = result.get("period", "?")
-    L.append(f"# {ths} HALO 分析骨架")
-    L.append("")
-    L.append(f"> 报告期：{period} ｜ 行业类型：{result.get('asset_type', '未知')} "
-             f"（判定依据：{result.get('asset_type_basis', '-')}）")
-    L.append("")
+    asset = result.get("asset_type") or "未知"
+    basis = result.get("asset_type_basis") or "-"
+    return [
+        f"# {ths} HALO 滞胀复合分析报告",
+        "",
+        f"> 报告期：{period} ｜ 资产类型：{asset}（判定依据：{basis}）",
+        ">",
+        "> 本报告的数据层由 Python 锁定，分析层待填。**所有缺失项在正文如实标注，"
+        "不做外推或补值。**",
+        "",
+    ]
 
-    halo = result.get("halo")
-    L.append("## 一、HALO 六维（Python 计算）")
-    L.append("")
-    if halo and halo.get("ok"):
-        L.append(f"**HALO 总分：{halo['score']:.2f} / 5.0 —— {halo['rating']}**")
-        L.append("")
-        L.append("| 维度 | 原始值 | 得分 | 权重 |")
-        L.append("|:--|--:|--:|--:|")
-        for name, d in halo["dimensions"].items():
-            raw = "不可计算" if d["raw"] is None else f"{d['raw']:.2f}{d['unit']}"
-            L.append(f"| {name} | {raw} | {d['score']} | {d['weight']} |")
+
+def _md_score_card(result: Dict[str, Any], slots: List[Dict[str, Any]]) -> List[str]:
+    """第零章：核心评分卡片。
+
+    与模板一致是 8 行：HALO 六维 + 成长性 + 6 个定性维度（低淘汰率/滞胀防御/
+    ESG/管理层/股东资金面/风险）。估值那一维不在这张表里 —— 模板把它放在
+    第十一章的估值分析，所以这里也不放，免得同一件事有两个位置。
+
+    Python 能算的两行直接填；定性维度**待判分**就如实写「待判分」，不留空也不填 0：
+    空白会被读成「没有这一项」，0 会被读成「很差」。
+    """
+    halo = result.get("halo") or {}
+    growth = result.get("growth") or {}
+    L = ["## 第零章 执行摘要", "", "### 核心评分卡片", "",
+         "| 评估维度 | 评分 | 评级 | 来源 |", "|:--|:--:|:--|:--|"]
+
+    if halo.get("ok"):
+        L.append(f"| **HALO 六维** | **{halo['score']:.2f}/5.0** | {halo.get('rating') or '—'} | Python 计算 |")
     else:
-        L.append(f"**⚠️ {halo.get('reason', 'HALO 不可计算') if halo else 'HALO 不可计算'}**")
-        L.append("")
-        L.append("按数据铁律不做外推或补值。缺 HALO 总分时，综合评分里的 HALO 一项也无法计算。")
-    L.append("")
+        L.append("| **HALO 六维** | ⚠️ 不可计算 | — | 缺输入，见第三章 |")
 
-    growth = result.get("growth")
     if growth:
-        L.append("## 二、成长性（Python 计算）")
-        L.append("")
-        state = "" if growth["complete"] else f"（缺 {', '.join(growth['missing'])}，已按实际权重归一）"
-        L.append(f"**成长性：{growth['score']:.2f} / 10 —— {growth['rating']}**{state}")
-        L.append("")
-        L.append("| 子项 | 得分 | 依据 |")
-        L.append("|:--|--:|:--|")
-        for name, s in growth["sub_scores"].items():
-            applied = "；".join(s.get("applied", [])) or "—"
-            L.append(f"| {name} | {s['score']} | {applied} |")
-        L.append("")
-
-    facts = result.get("facts") or []
-    if facts:
-        L.append("## 三、治理诚信事实（年报原文抽取）")
-        L.append("")
-        L.append("| 事实 | 值 | 来源页 | 原文 |")
-        L.append("|:--|:--|--:|:--|")
-        for f in facts:
-            v = f.get("value_text") or (
-                f"{f['value']:g} {f.get('unit') or ''}" if f.get("value") is not None else "-"
-            )
-            raw = (f.get("raw_text") or "").replace("|", "／")[:60]
-            L.append(f"| {f['field']} | {v} | p{f.get('source_page', '-')} | {raw} |")
-        L.append("")
-
-    # --- 近期公告 ---
-    #
-    # 恒渲染这一节，即使没取到：报告里「没有公告」和「忘了取」必须看得出区别。
-    # 未开启 include_announcements 时说明原因，而不是留一段空白让人猜。
-    announcements = result.get("announcements") or []
-    L.append("## 四、近期公告")
-    L.append("")
-    if announcements:
-        L.append(f"> 共 {len(announcements)} 条（按披露时间倒序，取自巨潮全类型公告流）。")
-        L.append("")
-        L.append("| 披露日 | 类型 | 标题 |")
-        L.append("|:--|:--|:--|")
-        for a in announcements:
-            # 标题里的 | 会破坏表格，替换成全角；链接用详情页（PDF 直链对未登录
-            # 用户会 302，详情页才是稳的入口）。
-            title = (a.get("title") or "").replace("|", "／")
-            doc_type = (a.get("doc_type") or "-").replace("|", "／")
-            date = a.get("date") or "-"
-            url = a.get("detail_url") or ""
-            cell = f"[{title}]({url})" if url else title
-            L.append(f"| {date} | {doc_type} | {cell} |")
+        L.append(f"| **成长性** | **{growth['score']:.2f}/10** | {growth.get('rating') or '—'} | Python 计算 |")
     else:
-        L.append("- （未取公告。生成报告时需显式开启 include_announcements；"
-                 "它走巨潮，是限速的按需请求。）")
-    L.append("")
+        L.append("| **成长性** | ⚠️ 不可计算 | — | 缺财务数据源 |")
 
-    slots = result.get("ai_slots") or []
-    L.append("## 五、定性维度（待判分）")
-    L.append("")
-    L.append("下列维度的分数需要人工/AI 判断。**量化锚点已算好**，请依据锚点与"
-             "「评分要点」判断，不要凭印象给分；标 `无量化锚点` 的子项只做定性判断。")
-    L.append("")
     for s in slots:
-        mark = "" if s["has_anchor"] else " ⚠️ 无量化锚点"
-        L.append(f"### {s['label']}　`{{{s['dimension']}_score}}`{mark}")
-        L.append("")
-        if s["anchors"]:
-            L.append("量化锚点：")
-            L.append("")
-            for k, v in s["anchors"].items():
-                L.append(f"- `{k}` = {v}")
-        else:
-            L.append("- （无）")
-        L.append("")
-        L.append(f"分析：{{{s['dimension']}_analysis}}")
-        L.append("")
+        if s["dimension"] == "valuation":
+            continue
+        mark = "" if s["has_anchor"] else " ⚠️ 无锚点"
+        L.append(f"| {s['label']}{mark} | 待判分 | — | 需人工/模型给分 |")
 
-    # --- 第十二章：产业链定位 ---
-    # 素材由 Python 备好，**判定由 AI 做**。不移植 halo-skill 的 Serenity：
-    # 它靠「经营范围里有没有某个词」查表拼装，一半字段是全常量（所有公司
-    # 逐字相同），还会把医用敷料公司判成「半导体」。这里给的是真实营收结构
-    # 与毛利率 + 行业归属，AI 读这些比查表可靠得多。
-    segs = result.get("narratives", {}).get("business_segments") or {}
-    L.append("## 六、产业链定位")
-    L.append("")
+    L += [
+        "",
+        "> 标 ⚠️ 的维度量化锚点不全，判分时只做定性判断。综合分要等 7 个定性维度"
+        "（含估值）都给分后才能复算，见第十一章。",
+        "",
+    ]
+    return L
+
+
+def _md_company_profile(result: Dict[str, Any]) -> List[str]:
+    """第一章：公司概况。
+
+    素材由 Python 备好，**判定由 AI 做**。不移植 halo-skill 的 Serenity：
+    它靠「经营范围里有没有某个词」查表拼装，一半字段是全常量（所有公司逐字相同），
+    还会把医用敷料公司判成「半导体」。这里给的是真实营收结构与毛利率 + 行业归属，
+    AI 读这些比查表可靠得多。
+    """
+    L = ["## 一、公司概况", ""]
+
+    ind_map = (result.get("narratives", {}).get("industry_map") or {})
+    if ind_map.get("level1") or ind_map.get("level2"):
+        L += [
+            f"**行业归属**：一级 {ind_map.get('level1') or '—'} ／ "
+            f"二级 {ind_map.get('level2') or '—'}",
+            "",
+        ]
+
+    ext = result.get("external") or {}
+    vault = ((ext.get("datacenter") or {}).get("valuation_percentiles") or {})
+    if vault:
+        L += [
+            "**估值历史分位**：" + "、".join(
+                f"{k.upper()} {v['value']:.1f}（{v['percentile']:.0f}%）"
+                for k, v in vault.items() if v.get("value") is not None
+            ),
+            "",
+        ]
+
+    segs = (result.get("narratives", {}).get("business_segments") or {})
     if segs:
+        L += ["### 主营业务构成", ""]
         for dim, blk in segs.items():
-            L.append(f"### 主营业务构成 · 分{dim}")
+            L.append(f"**分{dim}**")
             L.append("")
             L.append("| 业务 | 收入 | 占比 | 毛利率 |")
             L.append("|:--|--:|--:|--:|")
@@ -391,61 +364,269 @@ def render_markdown(result: Dict[str, Any]) -> str:
                     if x.get("revenue") else f"| {x['segment']} | - | - | - |"
                 )
             L.append("")
-        L.append("> 分行业/分产品/分地区/分销售模式是同一收入的四种切法，各维度内占比"
-                 "之和为 100%，**不可跨维度相加**。")
-        L.append("")
-    ind_map = (result.get("narratives", {}).get("industry_map") or {})
-    if ind_map.get("level1") or ind_map.get("level2"):
-        L.append(f"**行业归属**：一级 {ind_map.get('level1') or '—'} ／ "
-                 f"二级 {ind_map.get('level2') or '—'}")
-        L.append("")
-    ext = result.get("external") or {}
-    vault = ((ext.get("datacenter") or {}).get("valuation_percentiles") or {})
-    if vault:
-        L.append("**估值历史分位**：" + "、".join(
-            f"{k.upper()} {v['value']:.1f}（{v['percentile']:.0f}%）"
-            for k, v in vault.items() if v.get("value") is not None
-        ))
-        L.append("")
+        L += [
+            "> 分行业/分产品/分地区/分销售模式是同一收入的四种切法，各维度内占比之和"
+            "为 100%，**不可跨维度相加**。",
+            "",
+        ]
+    else:
+        L += ["- （年报里没有可用的分部数据。）", ""]
 
-    L.append("**判定**（基于上表真实营收结构与毛利率推断，不要套模板）：")
-    L.append("")
-    L.append("- 产业链位置：`{{chain_position}}`")
-    L.append("- 关键瓶颈：`{{bottleneck}}`")
-    L.append("- 稀缺性评级：`{{scarcity_rating}}`")
-    L.append("- 判定依据：`{{chain_evidence}}`")
-    L.append("")
+    L += [
+        "**产业链定位判定**（基于上表真实营收结构与毛利率推断，不要套模板）：",
+        "",
+        "- 产业链位置：`{{chain_position}}`",
+        "- 关键瓶颈：`{{bottleneck}}`",
+        "- 稀缺性评级：`{{scarcity_rating}}`",
+        "- 判定依据：`{{chain_evidence}}`",
+        "",
+    ]
 
-    ext_section = (result.get("narratives", {}).get("research_reports") or [])
-    if ext_section:
-        L.append("### 附：研报观点（第三方观点，不是事实）")
-        L.append("")
-        for r in ext_section[:6]:
+    reports = (result.get("narratives", {}).get("research_reports") or [])
+    if reports:
+        L += ["### 附：研报观点（第三方观点，不是事实）", ""]
+        for r in reports[:6]:
             L.append(f"- [{r.get('rating_bucket') or '未分类'}] {r.get('org')} "
                      f"{r.get('date')}：{r.get('title')}")
         L.append("")
+    return L
 
-    L.append("## 七、综合评分")
-    L.append("")
-    L.append("先给出九个维度的分数，再由 Python 按权重复算校验：")
-    L.append("")
-    L.append("| 维度 | 分数 | 来源 |")
-    L.append("|:--|--:|:--|")
-    for s in slots:
-        L.append(f"| {s['label']} | {{{s['dimension']}_score}} | 待判 |")
+
+def _md_announcements(result: Dict[str, Any]) -> List[str]:
+    """第二章：消息面（近期公告）。
+
+    恒渲染这一节，即使没取到：报告里「没有公告」和「忘了取」必须看得出区别。
+    未开启 include_announcements 时说明原因，而不是留一段空白让人猜。
+
+    模板这一章还要「利好/利空因素（带日期与来源）」，那需要新闻源 —— 目前没有
+    接入，所以显式写出来，而不是留个空章节。
+    """
+    announcements = result.get("announcements") or []
+    L = ["## 二、消息面（近期公告）", ""]
+    if announcements:
+        L += [f"> 共 {len(announcements)} 条（按披露时间倒序，取自巨潮全类型公告流）。", ""]
+        L += ["| 披露日 | 类型 | 标题 |", "|:--|:--|:--|"]
+        for a in announcements:
+            # 标题里的 | 会破坏表格，替换成全角；链接用详情页（PDF 直链对未登录
+            # 用户会 302，详情页才是稳的入口）。
+            title = (a.get("title") or "").replace("|", "／")
+            doc_type = (a.get("doc_type") or "-").replace("|", "／")
+            date = a.get("date") or "-"
+            url = a.get("detail_url") or ""
+            cell = f"[{title}]({url})" if url else title
+            L.append(f"| {date} | {doc_type} | {cell} |")
+        L.append("")
+    else:
+        L += ["- （未取公告。生成报告时需显式开启 include_announcements；"
+              "它走巨潮，是限速的按需请求。）", ""]
+    L += [
+        "> **利好/利空因素（带日期与来源）尚未接入**：它需要新闻源，而本地没有。"
+        "本节只列公告原文，不做情绪判断 —— 用公告标题猜利好利空是不靠谱的。",
+        "",
+    ]
+    return L
+
+
+def _md_halo(result: Dict[str, Any]) -> List[str]:
+    """第三章：HALO 六维（Python 计算，确定值）。"""
+    halo = result.get("halo")
+    L = ["## 三、HALO 六维（Python 计算）", ""]
     if halo and halo.get("ok"):
+        L += [f"**HALO 总分：{halo['score']:.2f} / 5.0 —— {halo['rating']}**", ""]
+        L += ["| 维度 | 原始值 | 得分 | 权重 |", "|:--|--:|--:|--:|"]
+        for name, d in halo["dimensions"].items():
+            raw = "不可计算" if d["raw"] is None else f"{d['raw']:.2f}{d['unit']}"
+            L.append(f"| {name} | {raw} | {d['score']} | {d['weight']} |")
+        L.append("")
+    else:
+        L += [
+            f"**⚠️ {halo.get('reason', 'HALO 不可计算') if halo else 'HALO 不可计算'}**",
+            "",
+            "按数据铁律不做外推或补值。缺 HALO 总分时，综合评分里的 HALO 一项也无法计算。",
+            "",
+        ]
+    return L
+
+
+def _md_growth(result: Dict[str, Any]) -> List[str]:
+    """第四章：成长性（Python 计算，确定值）。"""
+    growth = result.get("growth")
+    if not growth:
+        return [
+            "## 四、成长性（Python 计算）", "",
+            "**⚠️ 不可计算**：需要本地 financials 数据源提供营收/净利同比等子项。", "",
+        ]
+    state = "" if growth["complete"] else f"（缺 {', '.join(growth['missing'])}，已按实际权重归一）"
+    L = ["## 四、成长性（Python 计算）", "",
+         f"**成长性：{growth['score']:.2f} / 10 —— {growth['rating']}**{state}", ""]
+    L += ["| 子项 | 得分 | 依据 |", "|:--|--:|:--|"]
+    for name, s in growth["sub_scores"].items():
+        applied = "；".join(s.get("applied", [])) or "—"
+        L.append(f"| {name} | {s['score']} | {applied} |")
+    L.append("")
+    return L
+
+
+def _md_dimension(slot: Dict[str, Any], heading: str, intro: str = "") -> List[str]:
+    """一个定性维度 = 一章。
+
+    模板给这 6 个维度各留了一章（五~十），所以这里一章一个槽位，而不是把它们
+    挤在一节里 —— 挤在一起时判分的人要在同一屏里来回对照锚点。
+    """
+    mark = "" if slot["has_anchor"] else " ⚠️ 无量化锚点"
+    L = [f"## {heading}", ""]
+    if intro:
+        L += [intro, ""]
+    L += [f"`{{{{{slot['dimension']}_score}}}}`{mark}", ""]
+    if slot["anchors"]:
+        L += ["量化锚点：", ""]
+        for k, v in slot["anchors"].items():
+            L.append(f"- `{k}` = {v}")
+    else:
+        L.append("- （无）")
+    L += ["", f"分析：{{{{{slot['dimension']}_analysis}}}}", ""]
+    return L
+
+
+def _md_governance_facts(result: Dict[str, Any]) -> List[str]:
+    """治理诚信事实（年报原文抽取）。放在风险评估章里 —— 它是治理风险的事实依据。"""
+    facts = result.get("facts") or []
+    if not facts:
+        return []
+    L = ["### 治理诚信事实（年报原文抽取）", "",
+         "| 事实 | 值 | 来源页 | 原文 |", "|:--|:--|--:|:--|"]
+    for f in facts:
+        v = f.get("value_text") or (
+            f"{f['value']:g} {f.get('unit') or ''}" if f.get("value") is not None else "-"
+        )
+        raw = (f.get("raw_text") or "").replace("|", "／")[:60]
+        L.append(f"| {f['field']} | {v} | p{f.get('source_page', '-')} | {raw} |")
+    L.append("")
+    return L
+
+
+def _md_comprehensive(result: Dict[str, Any], slots: List[Dict[str, Any]]) -> List[str]:
+    """第十一章：综合评估与投资建议。
+
+    综合分不由本报告给出：它是 7 个定性维度收齐后由 Python 复算校验的
+    （容差 0.05 且评级必须同档）。所以这里只列槽位与口径，不猜一个数字出来。
+    """
+    halo = result.get("halo") or {}
+    growth = result.get("growth") or {}
+    L = ["## 十一、综合评估与投资建议", "", "### 11.1 综合评分", "",
+         "先给出下列维度的分数，再由 Python 按权重复算校验：", "",
+         "| 维度 | 分数 | 来源 |", "|:--|--:|:--|"]
+    for s in slots:
+        L.append(f"| {s['label']} | {{{{{s['dimension']}_score}}}} | 待判 |")
+    if halo.get("ok"):
         L.append(f"| HALO 六维 | {halo['score']:.2f} | Python 计算 |")
     if growth:
         L.append(f"| 成长性 | {growth['score']:.2f} | Python 计算 |")
-    L.append("")
-    L.append("声明综合分：`{{comprehensive_score}}` 声明评级：`{{comprehensive_rating}}`")
-    L.append("")
-    L.append("> 复算容差 0.05，且声明评级必须与复算分同档。**用 halo.verify 提交，"
-             "不要自己心算。**")
-    L.append("")
-    L.append("---")
-    L.append("")
-    L.append("*本报告由 Python 锁定数据层，分析层待填。数据缺失项已在正文标注，不作估算。*")
+    L += [
+        "",
+        "声明综合分：`{{comprehensive_score}}` 声明评级：`{{comprehensive_rating}}`",
+        "",
+        "> 复算容差 0.05，且声明评级必须与复算分同档。**用 halo.verify 提交，"
+        "不要自己心算。**",
+        "",
+        "### 11.2 尚未接入的章节",
+        "",
+        "下列模板章节需要本地没有的数据源，**本报告不生成它们**（宁缺勿造）：",
+        "",
+        "| 模板章节 | 缺什么 |",
+        "|:--|:--|",
+        "| 二、利好/利空因素 | 新闻源（东财个股新闻 / 财联社） |",
+        "| 九、北向资金 | 北向持股数据 |",
+        "| 九、融资动态 | 两融明细 |",
+        "| 十、政策与板块舆情风险 | 政策与舆情数据 |",
+        "| 十一、目标价 / DCF | 一致预期 EPS + 估值模型 |",
+        "",
+    ]
+    return L
+
+
+def _md_missing_appendix(result: Dict[str, Any], slots: List[Dict[str, Any]]) -> List[str]:
+    """附录：把缺失项汇总到一处。
+
+    散在正文各处的 `⚠️` 读起来要来回翻；汇总一次，读者才能一眼判断「这份报告
+    的可信边界在哪」。这也是「缺就标缺失」这条规矩的落地形式。
+    """
+    rows: List[str] = []
+    halo = result.get("halo") or {}
+    if not halo.get("ok"):
+        rows.append(f"| HALO 六维 | {halo.get('reason') or '不可计算'} |")
+    growth = result.get("growth")
+    if not growth:
+        rows.append("| 成长性 | 本地 financials 数据源不可用 |")
+    elif not growth.get("complete"):
+        rows.append(f"| 成长性子项 | 缺 {', '.join(growth['missing'])} |")
+    for s in slots:
+        if s["missing_anchors"]:
+            rows.append(f"| {s['label']} 锚点 | 缺 {', '.join(s['missing_anchors'])} |")
+    if not (result.get("announcements") or []):
+        rows.append("| 近期公告 | 未取（include_announcements 未开启）或巨潮无数据 |")
+
+    L = ["## 附录：数据来源与缺失项汇总", "",
+         "- **事实层**：巨潮年报 PDF 抽取（带来源页与原文）",
+         "- **数值层**：本地 hithink 库（三表 / 估值 / 行情）",
+         "- **公告层**：巨潮全类型公告流",
+         "- **判定层**：定性维度由人工/模型判分，Python 只负责复算校验", ""]
+    if rows:
+        L += ["### 本次缺失", "", "| 项 | 说明 |", "|:--|:--|"] + rows + [""]
+    else:
+        L += ["### 本次缺失", "", "- （无：所有必需输入都已取到。）", ""]
+    L += [
+        "---",
+        "",
+        "*本报告由 Python 锁定数据层，分析层待填。数据缺失项已在正文标注，不作估算。*",
+    ]
+    return L
+
+
+def render_markdown(result: Dict[str, Any]) -> str:
+    """预渲染报告骨架，章节形状对齐 halo-skill 的 V5.0 模板。
+
+    分三档，写法上刻意区分开：
+    * **确定值**（HALO 六维、成长性）直接填；
+    * **待判分**的定性维度各占一章，锚点写在旁边，分数留 `{{xxx_score}}` 槽位；
+    * **拿不到**的写清缺什么，并汇总进附录 —— 不留空、不填 0、不外推。
+
+    章节顺序与模板一致（第零章执行摘要 → 一公司概况 → 二消息面 → 三 HALO →
+    四成长性 → 五~十 六个定性维度 → 十一综合评估 → 附录），这样从模板抄下来的
+    阅读习惯与批注位置能直接复用。
+    """
+    slots = result.get("ai_slots") or []
+    by_dim = {s["dimension"]: s for s in slots}
+
+    L: List[str] = []
+    L += _md_header(result)
+    L += _md_score_card(result, slots)
+    L += _md_company_profile(result)
+    L += _md_announcements(result)
+    L += _md_halo(result)
+    L += _md_growth(result)
+
+    # 五~十：六个定性维度各一章。估值那一维不在这里 —— 模板把它放在第十一章。
+    chapters = [
+        ("moat", "五、低淘汰率", "壁垒能否穿越技术迭代与竞争，决定长期持有价值。"),
+        ("stag", "六、滞胀防御", "实物资产与转嫁能力决定通胀环境下的相对表现。"),
+        ("esg", "七、ESG", "环境披露与人均产出，衡量可持续性与合规风险。"),
+        ("management", "八、管理层质量", "资本配置与回报水平反映管理层质量。"),
+        ("shareholder", "九、股东与资金面", "股东结构与资金流向反映筹码稳定性。"),
+        ("risk", "十、风险评估", "硬风险事实优先于财务比率 —— 处罚与内控非标是"
+                                 "已经发生的事，比率只是征兆。"),
+    ]
+    for dim, heading, intro in chapters:
+        slot = by_dim.get(dim)
+        if slot is None:
+            L += [f"## {heading}", "", "- （该维度未在本次分析中生成槽位。）", ""]
+            continue
+        L += _md_dimension(slot, heading, intro)
+        if dim == "risk":
+            L += _md_governance_facts(result)
+
+    L += _md_comprehensive(result, slots)
+    L += _md_missing_appendix(result, slots)
     return "\n".join(L)
 
 

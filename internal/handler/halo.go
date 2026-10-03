@@ -89,7 +89,7 @@ const (
 // haloLLMScoredDims 是**由模型给分**的维度，必须显式声明。
 //
 // 不写这一条，模型读到「护城河 7 分」时无法知道它是算出来的还是判出来的。
-// Python 侧 render_markdown 已经把待判分槽位标成 `{xxx_score}` 占位符，这里
+// Python 侧 render_markdown 已经把待判分槽位标成 `{{xxx_score}}` 占位符，这里
 // 在元数据上再声明一次，是为了让**检索到该文档**的模型也看得到。
 const haloLLMScoredDims = "moat,stag,esg,management,shareholder,valuation,risk"
 
