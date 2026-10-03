@@ -202,8 +202,11 @@ def test_comprehensive_lists_every_slot_including_valuation():
 def test_comprehensive_lists_unimplemented_template_chapters():
     """模板里本地没数据的章节要显式列出来，而不是静默缺席。"""
     body = md_between(az.render_markdown(base_result()), "## 十一、", "## 附录：")
-    for need in ("利好/利空因素", "北向资金", "融资动态", "目标价"):
+    # 这份清单要跟着代码走：某章接上之后就得从这里删掉，否则它自己会变成谎话。
+    # 所以只断言「确实还没接的」。
+    for need in ("利好/利空因素", "政策与板块舆情风险", "目标价"):
         assert need in body, f"第十一章应列出尚未接入的 {need}"
+    assert "HKEX" in body, "北向只剩日频历史没接，要写清是哪一部分"
     assert "宁缺勿造" in body
 
 

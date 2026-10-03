@@ -539,6 +539,47 @@ def _md_margin(ext: Dict[str, Any]) -> List[str]:
     return L
 
 
+def _md_northbound(ext: Dict[str, Any]) -> List[str]:
+    """北向资金（第九章的补充）。
+
+    只渲染**序列完整**的那一档读数；不完整的如实说明它不完整，而不是把残端当数字
+    写出去。实测深股通只回传 35/262 个点、末值 379.75 亿 —— 那个量级对单日深股通
+    净买入是异常的，而读者无从判断它是真的还是残缺序列的残端。
+
+    与两融一样：完全取不到就**不渲染这一节**（它不是必需锚点）。但「取到了却不可信」
+    必须说出来 —— 这两件事不同：前者是缺数据，后者是数据在骗人。
+    """
+    nb = ((ext.get("ths") or {}).get("northbound") or {})
+    lanes = list((nb.get("lanes") or {}).values())
+    if not lanes:
+        return []
+
+    usable = [l for l in lanes if l.get("usable")]
+    unusable = [l for l in lanes if not l.get("usable")]
+    L = ["### 北向资金（当日）", ""]
+
+    if usable:
+        L += [f"> 数据时点：{nb.get('as_of') or '—'}（同花顺，单位亿元）", ""]
+        L += ["| 通道 | 最新累计净买入 | 序列覆盖 |", "|:--|--:|--:|"]
+        for l in usable:
+            cov = (l.get("coverage") or 0) * 100
+            L.append(f"| {l['label']} | {l['latest']:+.2f} 亿 | {cov:.0f}% |")
+        L.append("")
+    else:
+        L += ["**⚠️ 当日北向读数不可用**（没有一档的序列是完整的），故不给数字。", ""]
+
+    for l in unusable:
+        L += [f"- **{l['label']}**：{l.get('reason')} —— 不作为读数。", ""]
+
+    L += [
+        "> 上游背景：北向自 2024-08 起收紧盘中实时披露，同花顺这一路的数据完整性随之"
+        "变差；东财系北向净买额同期也已断供。**权威日频数据在港交所（HKEX）官方日统计**，"
+        "尚未接入。所以本节的数字只能当「当日情绪」，不能当持仓依据。",
+        "",
+    ]
+    return L
+
+
 def _md_comprehensive(result: Dict[str, Any], slots: List[Dict[str, Any]]) -> List[str]:
     """第十一章：综合评估与投资建议。
 
@@ -570,8 +611,7 @@ def _md_comprehensive(result: Dict[str, Any], slots: List[Dict[str, Any]]) -> Li
         "| 模板章节 | 缺什么 |",
         "|:--|:--|",
         "| 二、利好/利空因素 | 新闻源（东财个股新闻 / 财联社） |",
-        "| 九、北向资金 | 北向持股数据 |",
-        "| 九、融资动态 | 两融明细 |",
+        "| 九、北向资金（日频历史） | 港交所 HKEX 官方日统计；同花顺只给当日、且深股通残缺 |",
         "| 十、政策与板块舆情风险 | 政策与舆情数据 |",
         "| 十一、目标价 / DCF | 一致预期 EPS + 估值模型 |",
         "",
@@ -657,9 +697,11 @@ def render_markdown(result: Dict[str, Any]) -> str:
             continue
         L += _md_dimension(slot, heading, intro)
         if dim == "shareholder":
-            # 两融是股东资金面这一章的事实素材，但**不是**必需锚点 ——
-            # 取不到就不渲染（见 _md_margin 的说明）。
-            L += _md_margin(result.get("external") or {})
+            # 两融与北向都是股东资金面这一章的事实素材，但**都不是**必需锚点 ——
+            # 取不到就不渲染（见 _md_margin / _md_northbound 的说明）。
+            ext = result.get("external") or {}
+            L += _md_margin(ext)
+            L += _md_northbound(ext)
         if dim == "risk":
             L += _md_governance_facts(result)
 
@@ -756,6 +798,11 @@ async def fetch_external(code: str, *, with_fund_flow: bool = True) -> Dict[str,
             "research_reports": extdata.research_reports(code, limit=8),
         }),
     ]
+    # 北向资金单独一档：它是**另一个厂商**（同花顺），反爬与东财的 WAF 无关，
+    # 混进东财任一档都会让两边的限速互相牵制。
+    buckets.append(
+        ("ths", "independent", lambda: {"northbound": extdata.northbound_summary()})
+    )
     if with_fund_flow:
         buckets.append(
             ("push2his", "volatile", lambda: {"fund_flow": extdata.fund_flow(code, days=60)})

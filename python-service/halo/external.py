@@ -58,11 +58,17 @@ _UA = (
 
 
 class Subdomain:
-    """东财子域与它们的封禁风险档位。"""
+    """外网 host 与它们的封禁风险档位。
 
-    DATACENTER = "datacenter-web"   # 稳定：治理/风险/估值分位/股东户数
+    名字里的「子域」是历史叫法：最早只有东财的三个子域。同花顺接进来之后，
+    这里的键实际是**按 host 分级**——同花顺的反爬与东财的 WAF 互不相关，
+    混进同一档会让两边的限速互相牵制（一边被限，另一边白等）。
+    """
+
+    DATACENTER = "datacenter-web"   # 稳定：治理/风险/估值分位/股东户数/两融
     PUSH2HIS = "push2his"           # 易封：资金流
     REPORTAPI = "reportapi"         # 第三档：研报
+    THS_HSGT = "ths-hsgt"           # 同花顺：沪深股通实时流向
 
 
 #: (base_url, 最小间隔秒, 备注)
@@ -73,12 +79,19 @@ _TIERS: Dict[str, tuple] = {
     ),
     Subdomain.PUSH2HIS: ("https://push2his.eastmoney.com", 1.0, "易封档，务必串行"),
     Subdomain.REPORTAPI: ("https://reportapi.eastmoney.com", 0.5, "研报"),
+    # 同花顺 data.hexin.cn。限速给到 2s：它不是东财系，实测对非浏览器 UA
+    # 直接 401，属于「一次取不到就别连着打」的那一类，慢一点不吃亏。
+    Subdomain.THS_HSGT: (
+        "https://data.hexin.cn/market/hsgtApi/method/dayChart/", 2.0,
+        "同花顺，独立反爬；非浏览器 UA 会 401",
+    ),
 }
 
 _REFERERS = {
     Subdomain.DATACENTER: "https://data.eastmoney.com/",
     Subdomain.PUSH2HIS: "https://quote.eastmoney.com/",
     Subdomain.REPORTAPI: "https://data.eastmoney.com/report/",
+    Subdomain.THS_HSGT: "https://data.hexin.cn/",
 }
 
 

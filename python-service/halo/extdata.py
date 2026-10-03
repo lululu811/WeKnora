@@ -240,6 +240,72 @@ def margin_trading(code: str, limit: int = 10) -> List[Dict[str, Any]]:
 
 
 # ---------------------------------------------------------------------------
+# 北向资金（同花顺 data.hexin.cn）
+# ---------------------------------------------------------------------------
+
+#: 序列完整性的下限。实测深股通只回传 35/262 个点，而沪股通是满的 —— 用
+#: **覆盖率**而不是硬编码「sgt 不可信」，这样上游恢复时判断会自动跟上，
+#: 也不会把某个档位永久钉死。
+_NORTHBOUND_MIN_COVERAGE = 0.8
+
+
+def hsgt_realtime() -> Dict[str, Any]:
+    """沪深股通当日实时分钟流向。单位**亿元**，原样返回，不做加工。
+
+    返回 ``{"time": [...], "hgt": [...], "sgt": [...]}``。
+
+    这里**不判断完整性**：「多少个点算完整」是解读问题而不是取数问题，交给
+    :func:`northbound_summary`。上游背景（a-stock-data 的实测记录，2026-07）：
+    北向自 2024-08 起收紧盘中实时披露，深股通常只回传零星几个点且末值量级异常。
+    本函数如实返回收到的内容，由调用方决定能不能用。
+    """
+    try:
+        data = fetch_json(Subdomain.THS_HSGT)
+    except ExternalError as exc:
+        logger.warning("北向资金取数失败: %s", exc)
+        return {"time": [], "hgt": [], "sgt": []}
+    if not isinstance(data, dict):
+        return {"time": [], "hgt": [], "sgt": []}
+    return {
+        "time": list(data.get("time") or []),
+        "hgt": list(data.get("hgt") or []),
+        "sgt": list(data.get("sgt") or []),
+    }
+
+
+def northbound_summary() -> Dict[str, Any]:
+    """当日北向资金读数：**只把序列完整的那一档当作可用**。
+
+    为什么不直接取末值：实测（2026-10）深股通只回传 35/262 个点、末值 379.75
+    亿元 —— 那个量级对单日深股通净买入是异常的。把这种数字当读数渲染出去比不渲染
+    更糟：读者无从判断它是真的还是残缺序列的残端。
+
+    所以每一档都带 ``usable`` 与 ``reason``，由渲染层决定怎么说。
+    """
+    raw = hsgt_realtime()
+    times = raw.get("time") or []
+    total = len(times)
+    lanes: Dict[str, Any] = {}
+    for key, label in (("hgt", "沪股通"), ("sgt", "深股通")):
+        series = raw.get(key) or []
+        vals = [v for v in series if isinstance(v, (int, float))]
+        coverage = (len(series) / total) if total else 0.0
+        usable = total > 0 and coverage >= _NORTHBOUND_MIN_COVERAGE and bool(vals)
+        lanes[key] = {
+            "label": label,
+            "latest": vals[-1] if vals else None,
+            "coverage": round(coverage, 3),
+            "points": len(series),
+            "usable": usable,
+            "reason": "" if usable else (
+                f"仅回传 {len(series)}/{total} 个点，序列不完整，末值不可采信"
+                if total else "未取到数据"
+            ),
+        }
+    return {"as_of": times[-1] if times else None, "points": total, "lanes": lanes}
+
+
+# ---------------------------------------------------------------------------
 # 研报（reportapi）
 # ---------------------------------------------------------------------------
 
