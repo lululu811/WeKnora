@@ -767,6 +767,11 @@ func (s *knowledgeService) CreateKnowledgeFromManual(ctx context.Context,
 		source = types.KnowledgeTypeManual
 	}
 
+	vaultPath, err := sanitizeVaultPath(payload.VaultPath)
+	if err != nil {
+		return nil, werrors.NewValidationError(err.Error())
+	}
+
 	status := strings.ToLower(strings.TrimSpace(payload.Status))
 	if status == "" {
 		status = types.ManualKnowledgeStatusDraft
@@ -794,6 +799,7 @@ func (s *knowledgeService) CreateKnowledgeFromManual(ctx context.Context,
 
 	fileName := ensureManualFileName(title)
 	meta := types.NewManualKnowledgeMetadata(cleanContent, status, 1)
+	meta.VaultPath = vaultPath
 
 	knowledge := &types.Knowledge{
 		TenantID:         tenantID,
@@ -1037,6 +1043,11 @@ func (s *knowledgeService) UpdateManualKnowledge(ctx context.Context,
 		return nil, err
 	}
 
+	updatedVaultPath, err := sanitizeVaultPath(payload.VaultPath)
+	if err != nil {
+		return nil, werrors.NewValidationError(err.Error())
+	}
+
 	status := strings.ToLower(strings.TrimSpace(payload.Status))
 	if status == "" {
 		status = types.ManualKnowledgeStatusDraft
@@ -1065,7 +1076,15 @@ func (s *knowledgeService) UpdateManualKnowledge(ctx context.Context,
 		version = 1
 	}
 
+	// VaultPath follows the same rule as Source: an edit of the body says
+	// nothing about which file the entry came from, so an empty incoming
+	// value preserves what is already stored.
 	meta := types.NewManualKnowledgeMetadata(cleanContent, status, version)
+	if updatedVaultPath != "" {
+		meta.VaultPath = updatedVaultPath
+	} else if prior, perr := existing.ManualMetadata(); perr == nil && prior != nil {
+		meta.VaultPath = prior.VaultPath
+	}
 	if err := existing.SetManualMetadata(meta); err != nil {
 		logger.Errorf(ctx, "Failed to set manual metadata during update: %v", err)
 		return nil, err

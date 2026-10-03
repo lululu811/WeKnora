@@ -11,6 +11,20 @@ import (
 
 // KnowledgeService defines the interface for knowledge services.
 type KnowledgeService interface {
+	// VaultAsset resolves a reference relative to a knowledge entry's own
+	// vault file — "images/fig.png" for an entry whose metadata records
+	// vault_path "某公众号/某文/某文.md". It returns the absolute path and the
+	// content type to serve it with.
+	//
+	// The caller never supplies a directory: it sends an entry id, and the
+	// server derives the location from stored metadata. Resolution is
+	// constrained to that one entry's directory and re-checked after symlink
+	// resolution, so neither a "..", an absolute path, nor a link planted in
+	// the vault can widen it. Returns service.ErrVaultNotConfigured when no
+	// vault root is set and service.ErrVaultAssetNotFound for anything that
+	// does not resolve to a readable image.
+	VaultAsset(ctx context.Context, knowledge *types.Knowledge, ref string) (string, string, error)
+
 	// CreateKnowledgeFromFile creates knowledge from a file.
 	// channel identifies the ingestion channel (e.g. "web", "api", "wechat"); empty defaults to "web".
 	CreateKnowledgeFromFile(
