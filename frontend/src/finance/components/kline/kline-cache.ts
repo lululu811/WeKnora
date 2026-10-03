@@ -13,7 +13,7 @@
  *     datafeed.ts 已经踩过的区分（404 = 没这只票；其余 = 链路故障）。
  */
 
-import { isBoardExchange } from '../../../utils/aShareTicker';
+import { isBoardExchange } from '../../utils/aShareTicker';
 import type { KLineData } from './types';
 
 export type KlinePeriod = 'day' | 'week' | 'month';

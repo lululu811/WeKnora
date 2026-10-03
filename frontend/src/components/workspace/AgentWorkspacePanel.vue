@@ -45,7 +45,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import { useAgentWorkspace, WORKSPACE_MIN_WIDTH, WORKSPACE_MAX_WIDTH } from '@/composables/useAgentWorkspace';
+import { useAgentWorkspace, WORKSPACE_MIN_WIDTH, WORKSPACE_MAX_WIDTH } from '@/finance/composables/useAgentWorkspace';
 import { useCurrentWorkbenchComponents } from '@/composables/useWorkbench';
 import { WORKSPACE_COMPONENTS, WORKSPACE_LABELS } from './registry';
 import PanelResizeHandle from '@/components/PanelResizeHandle.vue';

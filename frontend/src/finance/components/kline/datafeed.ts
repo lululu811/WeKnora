@@ -1,6 +1,6 @@
 // 相对路径而不是 `@/utils/...`：这个模块要被 node:test 直接加载（见 datafeed.test.ts），
 // 而 `@` 别名只在打包器里成立 —— kline 目录下的 .ts 全部走相对导入。
-import { isBoardExchange } from '../../../utils/aShareTicker';
+import { isBoardExchange } from '../../utils/aShareTicker';
 import type { DatafeedSubscribeCallback, KLineData, Period, SymbolInfo } from './types';
 
 export type Adjust = 'none' | 'forward' | 'backward';

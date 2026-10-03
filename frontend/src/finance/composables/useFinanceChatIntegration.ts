@@ -28,10 +28,10 @@
  *    在 sendMsg 入口处调用。
  */
 import { ref, onMounted, type Ref } from 'vue';
-import { useKLineTickerObserver } from '@/composables/useKLineTickerObserver';
-import { KNOWN_STOCK_NAMES, pickPrimaryMention } from '@/utils/stockMentions';
-import { shouldAutoSwitchChart } from '@/utils/chartAutoSwitch';
-import type { AgentWorkspaceContext } from '@/composables/useAgentWorkspace';
+import { useKLineTickerObserver } from '@/finance/composables/useKLineTickerObserver';
+import { KNOWN_STOCK_NAMES, pickPrimaryMention } from '@/finance/utils/stockMentions';
+import { shouldAutoSwitchChart } from '@/finance/utils/chartAutoSwitch';
+import type { AgentWorkspaceContext } from '@/finance/composables/useAgentWorkspace';
 
 declare global {
   interface Window {

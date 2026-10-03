@@ -376,17 +376,17 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
 import EmptyState from '@/components/EmptyState.vue'
-import WatchDetailPanel from '@/components/watchlist/WatchDetailPanel.vue'
+import WatchDetailPanel from '@/finance/components/watchlist/WatchDetailPanel.vue'
 // 异步导入：这个组件（含 klinecharts）约 274 KB / 78 KB gzip，而它只在这个页面
 // 的全功能工作台模态里用得到（见模板里的 v-if="fullWorkspaceVisible"）。静态导入
 // 会把它塞进本路由的 chunk，于是每次打开 /platform/watchlist 都要多下 5.6 倍的
 // 体积，哪怕从不打开那个模态。components/workspace/registry.ts 早就是这个写法，
 // 这里跟上。
 const KLineWorkspace = defineAsyncComponent(
-  () => import('@/components/workspace/kline/KLineWorkspace.vue'),
+  () => import('@/finance/components/kline/KLineWorkspace.vue'),
 )
-import { provideAgentWorkspace } from '@/composables/useAgentWorkspace'
-import { provideChatKLinePanel } from '@/composables/useChatKLinePanel'
+import { provideAgentWorkspace } from '@/finance/composables/useAgentWorkspace'
+import { provideChatKLinePanel } from '@/finance/composables/useChatKLinePanel'
 import {
   addCondition,
   addWatchItem,
@@ -407,7 +407,7 @@ import {
   type WatchEvent,
   type WatchItem,
   type WatchState,
-} from '@/api/watchlist'
+} from '@/finance/api/watchlist'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -438,7 +438,7 @@ agentWorkspace.sendToChatCallback.value = (text: string) => {
 }
 
 // ── 自选池组合诊断全景 ───────────────────────────────────────────────
-import { getTradeTarget } from '@/utils/tradeTargets'
+import { getTradeTarget } from '@/finance/utils/tradeTargets'
 
 const diagnosisVisible = ref(false)
 

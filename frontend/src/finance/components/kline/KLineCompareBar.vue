@@ -56,7 +56,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import { useAgentWorkspace } from '@/composables/useAgentWorkspace';
+import { useAgentWorkspace } from '@/finance/composables/useAgentWorkspace';
 import { fetchKline, computeChange, KlineFetchError } from './kline-cache';
 import {
   buildSparklinePath,

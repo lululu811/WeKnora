@@ -49,9 +49,9 @@
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { MessagePlugin } from 'tdesign-vue-next';
-import { useAgentWorkspace } from '@/composables/useAgentWorkspace';
-import { extractMentionedStocks, extractTrackingReason, type MentionedStock } from '@/utils/stockMentions';
-import { addWatchItem } from '@/api/watchlist';
+import { useAgentWorkspace } from '@/finance/composables/useAgentWorkspace';
+import { extractMentionedStocks, extractTrackingReason, type MentionedStock } from '@/finance/utils/stockMentions';
+import { addWatchItem } from '@/finance/api/watchlist';
 
 const props = defineProps<{
   session: any;

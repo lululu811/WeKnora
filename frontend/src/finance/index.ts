@@ -17,7 +17,7 @@ import './styles/kline-ticker.less';
 // 副作用：注册金融专属的 markdown 预处理插件。
 // 顶层 import 保证在任何 markdown 渲染发生之前执行。
 import { registerMarkdownPreprocessor } from '@/utils/markdownPlugins';
-import { injectKLineTickers } from '@/utils/klineTickerInjector';
+import { injectKLineTickers } from '@/finance/utils/klineTickerInjector';
 registerMarkdownPreprocessor({
   name: 'kline-ticker',
   transform: (text) => injectKLineTickers(text),
@@ -48,7 +48,7 @@ registerModule({
   icon: 'watchlist',
   insertAfter: 'toolbox',
   routeName: 'watchlist',
-  routeComponent: () => import('@/views/watchlist/Watchlist.vue'),
+  routeComponent: () => import('@/finance/views/Watchlist.vue'),
 });
 
 // ─────────────────── 反代路由清单 ───────────────────
@@ -60,21 +60,21 @@ export type { FinanceProxyRoute } from './proxyRoutes';
 // ─────────────────── 组件（原地保留，从 barrel re-export）───────────────────
 // 文件位置不变（仍在 src/components/...），但对外入口收敛到 @/finance。
 // 4.6 目录重组时再物理搬迁到 src/finance/components/。
-export { default as MentionedStocksBar } from '@/components/chat/MentionedStocksBar.vue';
-export { default as StockCitationFloat } from '@/components/workspace/kline/StockCitationFloat.vue';
+export { default as MentionedStocksBar } from '@/finance/components/MentionedStocksBar.vue';
+export { default as StockCitationFloat } from '@/finance/components/kline/StockCitationFloat.vue';
 
 // ─────────────────── Composables ───────────────────
 export {
   provideChatKLinePanel,
   useChatKLinePanel,
-} from '@/composables/useChatKLinePanel';
-export type { ChatKLinePanelContext, KLinePick } from '@/composables/useChatKLinePanel';
+} from '@/finance/composables/useChatKLinePanel';
+export type { ChatKLinePanelContext, KLinePick } from '@/finance/composables/useChatKLinePanel';
 
 export { useFinanceChatIntegration } from './composables/useFinanceChatIntegration';
 export type { FinanceChatIntegration, FinanceChatIntegrationDeps } from './composables/useFinanceChatIntegration';
 
 // ─────────────────── Utils（金融专属判定逻辑）───────────────────
-export { KNOWN_STOCK_NAMES, pickPrimaryMention, extractMentionedStocks } from '@/utils/stockMentions';
-export type { MentionedStock, StockMention } from '@/utils/stockMentions';
-export { shouldAutoSwitchChart, isStreamedAnswer } from '@/utils/chartAutoSwitch';
-export type { AutoSwitchContext, ChatRowLike } from '@/utils/chartAutoSwitch';
+export { KNOWN_STOCK_NAMES, pickPrimaryMention, extractMentionedStocks } from '@/finance/utils/stockMentions';
+export type { MentionedStock, StockMention } from '@/finance/utils/stockMentions';
+export { shouldAutoSwitchChart, isStreamedAnswer } from '@/finance/utils/chartAutoSwitch';
+export type { AutoSwitchContext, ChatRowLike } from '@/finance/utils/chartAutoSwitch';

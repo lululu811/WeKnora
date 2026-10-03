@@ -47,7 +47,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { KlineStudioData } from '@/types/tool-results'
-import { useChatKLinePanel } from '@/composables/useChatKLinePanel'
+import { useChatKLinePanel } from '@/finance/composables/useChatKLinePanel'
 
 const props = defineProps<{
   data: KlineStudioData | Record<string, unknown>

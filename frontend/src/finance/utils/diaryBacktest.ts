@@ -1,5 +1,5 @@
-import type { WatchDiary } from '@/api/watchlist'
-import type { KLineData } from '@/components/workspace/kline/types'
+import type { WatchDiary } from '@/finance/api/watchlist'
+import type { KLineData } from '@/finance/components/kline/types'
 
 export interface DiaryOutcome {
   verdict: string

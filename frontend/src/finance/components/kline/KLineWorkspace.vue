@@ -466,9 +466,9 @@
 import { ref, shallowRef, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { Chart } from 'klinecharts';
-import { useAgentWorkspace } from '@/composables/useAgentWorkspace';
+import { useAgentWorkspace } from '@/finance/composables/useAgentWorkspace';
 import { useTheme } from '@/composables/useTheme';
-import { isBoardExchange } from '@/utils/aShareTicker';
+import { isBoardExchange } from '@/finance/utils/aShareTicker';
 import type { Adjust, KLineErrorKind, ZettarancDatafeed } from './datafeed';
 import {
   createCoreChart,
@@ -482,7 +482,7 @@ import {
   drawStopLevel,
   clearTradeTargetOverlays,
 } from './core-chart';
-import { getTradeTarget } from '@/utils/tradeTargets';
+import { getTradeTarget } from '@/finance/utils/tradeTargets';
 import { setZettarancPalette } from './palette';
 import { getKlineChartTheme } from './theme';
 import KLineCompareBar from './KLineCompareBar.vue';

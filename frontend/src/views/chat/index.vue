@@ -258,7 +258,7 @@ import { useSessionActivityStore } from '@/stores/sessionActivity';
 import { provideChatSandboxPanel } from '@/composables/useChatSandboxPanel';
 import SandboxSidePanel from '@/components/chat/SandboxSidePanel.vue';
 import AgentWorkspacePanel from '@/components/workspace/AgentWorkspacePanel.vue';
-import { provideAgentWorkspace } from '@/composables/useAgentWorkspace';
+import { provideAgentWorkspace } from '@/finance/composables/useAgentWorkspace';
 import {
     MentionedStocksBar,
     StockCitationFloat,

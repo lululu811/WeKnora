@@ -57,12 +57,12 @@ import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vu
 import { init, dispose, type Chart } from 'klinecharts'
 import { useI18n } from 'vue-i18n'
 import { useTheme } from '@/composables/useTheme'
-import { getKlineChartTheme } from '@/components/workspace/kline/theme'
-import { setZettarancPalette, zettarancPalette } from '@/components/workspace/kline/palette'
-import { drawAlertLevel, clearAlertOverlays, drawCostLevel, drawStopLevel, clearTradeTargetOverlays } from '@/components/workspace/kline/core-chart'
-import type { KLineData } from '@/components/workspace/kline/types'
-import type { WatchCondition } from '@/api/watchlist'
-import type { TradeTarget } from '@/utils/tradeTargets'
+import { getKlineChartTheme } from '@/finance/components/kline/theme'
+import { setZettarancPalette, zettarancPalette } from '@/finance/components/kline/palette'
+import { drawAlertLevel, clearAlertOverlays, drawCostLevel, drawStopLevel, clearTradeTargetOverlays } from '@/finance/components/kline/core-chart'
+import type { KLineData } from '@/finance/components/kline/types'
+import type { WatchCondition } from '@/finance/api/watchlist'
+import type { TradeTarget } from '@/finance/utils/tradeTargets'
 
 /**
  * 自选侧栏的单标的 K 线图：蜡烛 + 成交量 + MA。

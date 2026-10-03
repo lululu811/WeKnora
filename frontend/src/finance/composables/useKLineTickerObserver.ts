@@ -1,5 +1,5 @@
 import { onBeforeUnmount, watch, type Ref } from 'vue'
-import { bindKLineTickerElements, type KLineTickerHandler } from '@/utils/klineTickerInjector'
+import { bindKLineTickerElements, type KLineTickerHandler } from '@/finance/utils/klineTickerInjector'
 
 /**
  * 监听 root 容器的 DOM 变化，把新增的 `.kline-ticker` 元素绑上 hover/click

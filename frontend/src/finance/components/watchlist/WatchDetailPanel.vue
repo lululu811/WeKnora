@@ -188,10 +188,10 @@ import {
   type WatchCondition,
   type WatchDiary,
   type WatchState,
-} from '@/api/watchlist'
-import { getTradeTarget, saveTradeTarget, type TradeTarget } from '@/utils/tradeTargets'
-import { computeDiaryOutcomes } from '@/utils/diaryBacktest'
-import type { KLineData } from '@/components/workspace/kline/types'
+} from '@/finance/api/watchlist'
+import { getTradeTarget, saveTradeTarget, type TradeTarget } from '@/finance/utils/tradeTargets'
+import { computeDiaryOutcomes } from '@/finance/utils/diaryBacktest'
+import type { KLineData } from '@/finance/components/kline/types'
 
 const props = defineProps<{
   thscode: string

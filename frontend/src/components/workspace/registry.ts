@@ -8,7 +8,7 @@ import type { WorkspaceType } from './types';
  * 避免通用问答场景加载沉重的专业图表或沙箱库。
  */
 export const WORKSPACE_COMPONENTS: Partial<Record<WorkspaceType, Component>> = {
-  kline: defineAsyncComponent(() => import('./kline/KLineWorkspace.vue')),
+  kline: defineAsyncComponent(() => import('@/finance/components/kline/KLineWorkspace.vue')),
 };
 
 /**

@@ -11,7 +11,7 @@
 // 把清单也塞进 python-service 是行不通的：那边没有 user/tenant 概念，DuckDB
 // 还是只读挂载，个人可写状态落到那里等于凭空造一套身份 + 鉴权 + 迁移。
 import { get, post, put, del } from '@/utils/request'
-import { isBoardExchange } from '@/utils/aShareTicker'
+import { isBoardExchange } from '@/finance/utils/aShareTicker'
 
 /** 追踪池的一行（服务端 scoped 到当前 (user, tenant)）。 */
 export interface WatchItem {

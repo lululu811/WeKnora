@@ -87,7 +87,7 @@ import { ref, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { MessagePlugin } from 'tdesign-vue-next'
 
-import { archiveHaloReport, fetchHaloReport, type HaloReport } from '@/api/halo'
+import { archiveHaloReport, fetchHaloReport, type HaloReport } from '@/finance/api/halo'
 import { listKnowledgeBases } from '@/api/knowledge-base'
 import { createChatMarkdownRenderer, renderChatMarkdown } from '@/utils/chatMarkdownRenderer'
 import { sanitizeMarkdownHTML, safeMarkdownToHTML } from '@/utils/security'
