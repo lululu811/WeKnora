@@ -11,7 +11,7 @@ import logging
 import re
 from typing import Any, Dict, List, Optional
 
-from .external import Subdomain, datacenter, fetch_json, ExternalError
+from .external import Subdomain, datacenter, fetch_json, fetch_text, ExternalError
 
 logger = logging.getLogger(__name__)
 
@@ -368,6 +368,104 @@ def stock_news(code: str, limit: int = 20) -> Dict[str, Any]:
         "url": str(a.get("url") or ""),
     } for a in articles]
     return {"items": items, "degraded": False, "reason": ""}
+
+
+# ---------------------------------------------------------------------------
+# 宏观（LPR / PMI）
+# ---------------------------------------------------------------------------
+
+
+def lpr_latest(limit: int = 12) -> Dict[str, Any]:
+    """贷款市场报价利率（LPR）最近若干期。单位 %。
+
+    走 datacenter-web 的 ``RPTA_WEB_RATE`` 报表 —— 结构化接口，比抓页面稳得多，
+    而且直接复用既有的稳定档限速。
+
+    同一报表里混着 2019-08 改革前的**旧贷款基准利率**调整行（LPR 字段为空），
+    按 LPR1Y 非空过滤掉。5 年期品种 2019-08-20 才设立，更早期次的 ``lpr_5y``
+    为 None —— 那是「当时没有这个品种」，不是「没取到」。
+    """
+    rows = datacenter("RPTA_WEB_RATE", "", size=limit,
+                      sort=("TRADE_DATE", "-1"),
+                      columns="TRADE_DATE,LPR1Y,LPR5Y")
+    items = []
+    for r in rows:
+        if r.get("LPR1Y") is None:
+            continue          # 旧基准利率行，不是 LPR
+        items.append({
+            "date": str(r.get("TRADE_DATE") or "")[:10],
+            "lpr_1y": _f(r.get("LPR1Y")),
+            "lpr_5y": _f(r.get("LPR5Y")),
+        })
+    return {"items": items, "source": "eastmoney RPTA_WEB_RATE"}
+
+
+#: 统计局正文里的空白必须**整个删掉**再匹配：正文用全角括号且括号内带空格
+#: （`（ PMI ）为 49.2%`）。只压成单个空格会一条都匹配不到。
+_NBS_SPACE = re.compile(r"[\s\u3000\xa0]+")
+
+
+def nbs_pmi() -> Dict[str, Any]:
+    """国家统计局最新一期采购经理指数（PMI）。单位 %，50 是荣枯线。
+
+    返回 ``{"month", "manufacturing", "non_manufacturing", "composite",
+    "large", "medium", "small", "degraded", "reason"}``。
+
+    **为什么是抓页面**：统计局没有结构化接口。这里只取三个主指标（制造业 /
+    非制造业商务活动 / 综合产出）—— 实测它们版式稳定；企业规模分档统计局用过
+    三种措辞，解析不到就留 None（可选字段，不为了凑数去猜）。
+
+    月频数据，月末发布，比上市公司财报早一个季度反映景气。
+    """
+    try:
+        index_html = fetch_text(Subdomain.NBS)
+    except ExternalError as exc:
+        logger.warning("统计局索引页取数失败：%s", exc)
+        return {"degraded": True, "reason": f"统计局索引页取数失败：{exc}"}
+
+    links = re.findall(r'<a[^>]+href="([^"]+)"[^>]*>\s*([^<]{6,80}?)\s*</a>', index_html)
+    hit = next(((u, t) for u, t in links if "采购经理指数" in t), None)
+    if not hit:
+        return {"degraded": True, "reason": "统计局最新发布页未找到「采购经理指数」条目"}
+    href, title = hit
+
+    try:
+        html = fetch_text(Subdomain.NBS, href.lstrip("./"))
+    except ExternalError as exc:
+        logger.warning("统计局 PMI 正文取数失败：%s", exc)
+        return {"degraded": True, "reason": f"PMI 正文取数失败：{exc}"}
+
+    text = re.sub(r"<(script|style)[^>]*>.*?</\1>", "", html, flags=re.S)
+    text = _NBS_SPACE.sub("", re.sub(r"<[^>]+>", "", text))
+
+    def grab(pattern: str) -> Optional[float]:
+        m = re.search(pattern, text)
+        return float(m.group(1)) if m else None
+
+    out: Dict[str, Any] = {
+        "manufacturing": grab(r"制造业采购经理指数[（(]PMI[)）]为([\d.]+)%"),
+        "non_manufacturing": grab(r"非制造业商务活动指数为([\d.]+)%"),
+        "composite": grab(r"综合PMI产出指数为([\d.]+)%"),
+        "large": grab(r"大型企业PMI为([\d.]+)%"),
+        "medium": grab(r"中型企业PMI为([\d.]+)%"),
+        "small": grab(r"小型企业PMI为([\d.]+)%"),
+    }
+    # 统计局用过三种版式，逐层回退。注意「半拆」那条必须带「分别为」—— 否则
+    # 「中、小型企业PMI分别为」会被误当成单条「中型企业PMI为」。
+    if out["medium"] is None or out["small"] is None:
+        m = re.search(r"大、中、小型企业PMI分别为([\d.]+)%、([\d.]+)%和([\d.]+)%", text)
+        if m:                       # ① 全合并
+            out["large"], out["medium"], out["small"] = (float(x) for x in m.groups())
+        else:
+            m = re.search(r"中、小型企业PMI分别为([\d.]+)%和([\d.]+)%", text)
+            if m:                   # ② 半拆（大型单独给）
+                out["medium"], out["small"] = (float(x) for x in m.groups())
+
+    ym = re.search(r"(\d{4})年(\d{1,2})月", title)
+    out["month"] = f"{ym.group(1)}-{int(ym.group(2)):02d}" if ym else None
+    out["degraded"] = out["manufacturing"] is None
+    out["reason"] = "" if not out["degraded"] else "正文里没有解析出制造业 PMI"
+    return out
 
 
 # ---------------------------------------------------------------------------

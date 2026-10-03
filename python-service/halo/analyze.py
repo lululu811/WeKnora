@@ -639,6 +639,67 @@ def _md_news(ext: Dict[str, Any]) -> List[str]:
     return L
 
 
+def _md_macro(ext: Dict[str, Any]) -> List[str]:
+    """宏观环境锚点（第十章的补充）。
+
+    PMI 与 LPR 是**全市场级**读数（不随标的变），给「宏观与市场风险」这一维提供
+    量化依据。与两融/北向同一条规矩：完全取不到就不渲染这一节。
+
+    PMI 必须给**荣枯线对比** —— 「50.1」这个数本身不说明任何事，50 以上还是
+    以下是它的全部信息。LPR 必须给**变化方向** —— 单点利率看不出在宽松还是收紧。
+    """
+    macro = ((ext.get("macro") or {}).get("pmi") or {})
+    lpr = ((ext.get("datacenter") or {}).get("lpr") or {})
+    pmi_rows = [l for l in ("manufacturing", "non_manufacturing", "composite")
+                if isinstance(macro.get(l), (int, float))]
+    lpr_items = [i for i in (lpr.get("items") or []) if i.get("date")]
+    # 取数失败（degraded）也要渲染：那正是降级标志存在的意义 —— 静默跳过会让
+    # 读者以为「这一节本来就没有」，而实际是「取了但没解析出来」。
+    if not pmi_rows and not lpr_items and not macro.get("degraded"):
+        return []
+
+    L = ["### 宏观环境（锚点）", ""]
+
+    if pmi_rows:
+        month = macro.get("month") or "—"
+        L += [f"**采购经理指数（{month}）**　50 为荣枯线：", "",
+              "| 指标 | 读数 | 相对荣枯线 |", "|:--|--:|:--|"]
+        for key, label in (("manufacturing", "制造业"), ("non_manufacturing", "非制造业商务活动"),
+                           ("composite", "综合产出")):
+            v = macro.get(key)
+            if not isinstance(v, (int, float)):
+                continue
+            L.append(f"| {label} | {v:.1f} | {'扩张' if v >= 50 else '收缩'}"
+                     f"（{v - 50:+.1f}）|")
+        L.append("")
+        sizes = [(k, macro.get(k)) for k in ("large", "medium", "small")]
+        sizes = [(k, v) for k, v in sizes if isinstance(v, (int, float))]
+        if sizes:
+            L += ["企业规模分档：" + "、".join(
+                f"{ {'large': '大型', 'medium': '中型', 'small': '小型'}[k] } {v:.1f}"
+                for k, v in sizes), ""]
+
+    # 降级说明独立渲染，不挂在 pmi_rows 分支上：解析失败时恰恰没有 pmi_rows，
+    # 挂在里面就等于「失败时反而什么都不说」。
+    if macro.get("degraded"):
+        L += [f"> ⚠️ PMI 未取到：{macro.get('reason') or '原因未知'}", ""]
+
+    if lpr_items:
+        lpr_items.sort(key=lambda i: i["date"])
+        latest = lpr_items[-1]
+        prev = lpr_items[-2] if len(lpr_items) >= 2 else None
+        bits = [f"1 年期 {latest['lpr_1y']:.2f}%" if latest.get("lpr_1y") is not None else "1 年期 —"]
+        if latest.get("lpr_5y") is not None:
+            bits.append(f"5 年期 {latest['lpr_5y']:.2f}%")
+        L += [f"**贷款市场报价利率（{latest['date']}）**：" + "、".join(bits), ""]
+        if prev and latest.get("lpr_1y") is not None and prev.get("lpr_1y") is not None:
+            delta = latest["lpr_1y"] - prev["lpr_1y"]
+            trend = "持平" if abs(delta) < 1e-9 else ("下行（宽松）" if delta < 0 else "上行（收紧）")
+            L += [f"> 较上一期（{prev['date']}）{delta:+.2f} 个百分点 —— {trend}。", ""]
+
+    return L
+
+
 def _md_comprehensive(result: Dict[str, Any], slots: List[Dict[str, Any]]) -> List[str]:
     """第十一章：综合评估与投资建议。
 
@@ -766,6 +827,8 @@ def render_markdown(result: Dict[str, Any]) -> str:
             L += _md_margin(ext)
             L += _md_northbound(ext)
         if dim == "risk":
+            # 宏观锚点放在风险章里：它服务的是「宏观与市场风险」那一维。
+            L += _md_macro(result.get("external") or {})
             L += _md_governance_facts(result)
 
     L += _md_comprehensive(result, slots)
@@ -856,6 +919,9 @@ async def fetch_external(code: str, *, with_fund_flow: bool = True) -> Dict[str,
             # 两融在**稳定档**（datacenter-web），不是易封的 push2 系 ——
             # 所以它跟股东户数一起放在这一桶，不受资金流那档封禁影响。
             "margin_trading": extdata.margin_trading(code, limit=10),
+            # LPR 也在这张报表体系里（同一稳定档），所以并进这一桶 ——
+            # 它是月频数据，跟股东户数一样属于「慢变量」。
+            "lpr": extdata.lpr_latest(limit=12),
         }),
         ("reportapi", "third", lambda: {
             "research_reports": extdata.research_reports(code, limit=8),
@@ -870,6 +936,11 @@ async def fetch_external(code: str, *, with_fund_flow: bool = True) -> Dict[str,
     # 并进 datacenter 会让风控期间的限速拖慢稳定的股东户数/两融。
     buckets.append(
         ("news", "independent", lambda: {"stock_news": extdata.stock_news(code, limit=20)})
+    )
+    # 统计局单独一档：政府站点、月频数据，限速给到 3s。它是**全市场级**的宏观
+    # 读数（不随 code 变），但每份报告都要用到，所以跟着一起取。
+    buckets.append(
+        ("macro", "independent", lambda: {"pmi": extdata.nbs_pmi()})
     )
     if with_fund_flow:
         buckets.append(

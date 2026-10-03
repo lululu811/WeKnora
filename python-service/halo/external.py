@@ -70,6 +70,7 @@ class Subdomain:
     REPORTAPI = "reportapi"         # 第三档：研报
     THS_HSGT = "ths-hsgt"           # 同花顺：沪深股通实时流向
     EM_SEARCH = "em-search"         # 东财搜索：个股新闻（JSONP）
+    NBS = "nbs"                     # 国家统计局：PMI 发布页（HTML）
 
 
 #: (base_url, 最小间隔秒, 备注)
@@ -94,6 +95,12 @@ _TIERS: Dict[str, tuple] = {
         "https://search-api-web.eastmoney.com/search/jsonp", 1.0,
         "东财搜索，间歇风控（只回 passportWeb）",
     ),
+    # 国家统计局发布页。限速给到 3s：政府站点不是为高频抓取准备的，而且 PMI
+    # 是月频数据 —— 一天取一次都嫌多，没有任何理由打快。
+    Subdomain.NBS: (
+        "https://www.stats.gov.cn/sj/zxfb/", 3.0,
+        "国家统计局，政府站点，月频数据无需高频",
+    ),
 }
 
 _REFERERS = {
@@ -103,6 +110,7 @@ _REFERERS = {
     Subdomain.THS_HSGT: "https://data.hexin.cn/",
     # 搜索接口必须带 so.eastmoney.com 这个 Referer，否则拿不到文章列表。
     Subdomain.EM_SEARCH: "https://so.eastmoney.com/",
+    Subdomain.NBS: "https://www.stats.gov.cn/",
 }
 
 
@@ -143,7 +151,7 @@ def _min_interval(name: str) -> float:
     return _TIERS[name][1]
 
 
-def fetch_json(
+def _fetch_raw(
     subdomain: str,
     path: str = "",
     params: Optional[Dict[str, Any]] = None,
@@ -151,11 +159,15 @@ def fetch_json(
     timeout: float = 20.0,
     retries: int = 3,
     method: str = "GET",
-) -> Any:
-    """带限速与退避地取一个 JSON。
+) -> str:
+    """带限速与退避地取一段**原始文本**。
 
     重试策略：5xx / 429 / 网络错误退避重试；**403 不重试** —— 那是 IP 级
     封禁信号，继续打只会让封禁更久，重试毫无意义。
+
+    返回原文而不是解析结果，是因为并非所有源都吐 JSON：国家统计局的发布页是
+    HTML。让 fetch_text / fetch_json 共用这一层，限速与封禁语义就只有一份 ——
+    另写一个传输层意味着两套退避策略，而「我到底多久打了多少请求」将无法回答。
     """
     base, _, tier_note = _TIERS[subdomain]
     url = base + path
@@ -247,14 +259,41 @@ def fetch_json(
             time.sleep(backoff)
             continue
 
-        raw = raw.strip()
-        if raw.startswith("{") or raw.startswith("["):
-            return json.loads(raw)
-        if "(" in raw and raw.endswith(")"):     # JSONP 包装
-            return json.loads(raw[raw.index("(") + 1: raw.rindex(")")])
-        return json.loads(raw)
+        return raw
 
     raise ExternalError(f"{subdomain} 重试 {retries} 次仍失败：{last_err}")
+
+
+def fetch_text(
+    subdomain: str,
+    path: str = "",
+    params: Optional[Dict[str, Any]] = None,
+    *,
+    timeout: float = 20.0,
+    retries: int = 3,
+    method: str = "GET",
+) -> str:
+    """取原文（HTML 等非 JSON 源用）。限速与封禁语义与 fetch_json 完全一致。"""
+    return _fetch_raw(subdomain, path, params, timeout=timeout, retries=retries, method=method)
+
+
+def fetch_json(
+    subdomain: str,
+    path: str = "",
+    params: Optional[Dict[str, Any]] = None,
+    *,
+    timeout: float = 20.0,
+    retries: int = 3,
+    method: str = "GET",
+) -> Any:
+    """取一个 JSON（或 JSONP）。括号包装由这里统一剥掉。"""
+    raw = _fetch_raw(subdomain, path, params,
+                     timeout=timeout, retries=retries, method=method).strip()
+    if raw.startswith("{") or raw.startswith("["):
+        return json.loads(raw)
+    if "(" in raw and raw.endswith(")"):     # JSONP 包装
+        return json.loads(raw[raw.index("(") + 1: raw.rindex(")")])
+    return json.loads(raw)
 
 
 def datacenter(report_name: str, filter_: str, *, size: int = 2,
