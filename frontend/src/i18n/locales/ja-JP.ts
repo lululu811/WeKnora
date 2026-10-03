@@ -1,4 +1,16 @@
 export default {
+  wechat: {
+    send: '質問',
+    clear: 'クリア',
+    openOriginal: '元の記事を開く ↗',
+    loading: '読み込み中…',
+    pickHint: '左から記事を選択してください',
+    vault: { off: 'vault が未設定のため画像が表示されない場合があります' },
+    list: { loading: '記事を読み込み中…', empty: 'このナレッジベースには WeChat 記事がありません' },
+    item: { indexing: '索引中' },
+    scope: { doc: 'この記事のみ', kb: 'ナレッジベース全体' },
+    chat: { empty: 'この記事について質問するか、「ナレッジベース全体」に切り替えて横断検索。', placeholder: 'この記事について質問（Enter で送信）' },
+  },
   halo: {
     title: 'HALO 年次報告分析',
     open: 'HALO レポート',
@@ -7261,6 +7273,7 @@ export default {
     knowledgeBase: 'ナレッジベース',
     agents: 'エージェント',
     watchlist: '銘柄ウォッチ',
+    wechat: 'WeChat記事',
     artifacts: '成果物',
     organizations: '共有スペース',
     newChat: '新しいチャット',

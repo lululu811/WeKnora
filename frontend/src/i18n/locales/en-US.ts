@@ -1,4 +1,16 @@
 export default {
+  wechat: {
+    send: 'Ask',
+    clear: 'Clear',
+    openOriginal: 'View original ↗',
+    loading: 'Loading…',
+    pickHint: 'Pick an article on the left',
+    vault: { off: 'Vault not configured — images may not load' },
+    list: { loading: 'Loading articles…', empty: 'No WeChat articles in this knowledge base' },
+    item: { indexing: 'indexing' },
+    scope: { doc: 'This article', kb: 'Whole knowledge base' },
+    chat: { empty: 'Ask about this article, or switch to the whole knowledge base for cross-article search.', placeholder: 'Ask about this article. Enter to send' },
+  },
   halo: {
     title: 'HALO annual-report analysis',
     open: 'HALO report',
@@ -499,6 +511,7 @@ export default {
     knowledgeBase: 'Knowledge Base',
     agents: 'Agents',
     watchlist: 'Watchlist',
+    wechat: 'WeChat Articles',
     artifacts: 'Artifacts',
     organizations: 'Shared Spaces',
     newChat: 'New Chat',

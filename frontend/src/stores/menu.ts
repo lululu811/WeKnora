@@ -13,6 +13,8 @@ interface MenuItem {
   title: string
   titleKey?: string
   icon: string
+  /** 外部模块自带的图标资源 URL；menu.vue 优先用它，其次才按 icon 查内置表。 */
+  iconSrc?: string
   path: string
   childrenPath?: string
   children?: MenuChild[]

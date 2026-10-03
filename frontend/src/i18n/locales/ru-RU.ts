@@ -1,4 +1,16 @@
 export default {
+  wechat: {
+    send: 'Спросить',
+    clear: 'Очистить',
+    openOriginal: 'Открыть оригинал ↗',
+    loading: 'Загрузка…',
+    pickHint: 'Выберите статью слева',
+    vault: { off: 'vault не настроен — изображения могут не загрузиться' },
+    list: { loading: 'Загрузка статей…', empty: 'В этой базе знаний нет статей WeChat' },
+    item: { indexing: 'индексация' },
+    scope: { doc: 'Только эта статья', kb: 'Вся база знаний' },
+    chat: { empty: 'Задайте вопрос об этой статье или переключитесь на «Вся база знаний» для поиска по всем.', placeholder: 'Спросить об этой статье. Enter — отправить' },
+  },
   halo: {
     title: 'HALO: анализ годового отчёта',
     open: 'Отчёт HALO',
@@ -7261,6 +7273,7 @@ export default {
     knowledgeBase: 'База знаний',
     agents: 'Агенты',
     watchlist: 'Отслеживание акций',
+    wechat: 'Статьи WeChat',
     artifacts: 'Артефакты',
     organizations: 'Общие пространства',
     newChat: 'Новый диалог',
