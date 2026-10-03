@@ -14,7 +14,7 @@ import {
   stripIncompleteCitationTag,
   type CitationKnowledgeRef,
 } from './citationMarkdown.ts'
-import { injectKLineTickers } from './klineTickerInjector'
+import { applyMarkdownPreprocessors } from './markdownPlugins'
 
 const STREAMING_IMAGE_PLACEHOLDER =
   '<span class="streaming-image-loading"><span class="streaming-image-loading__skeleton"></span></span>'
@@ -462,9 +462,13 @@ export function renderChatMarkdown(rawMarkdown: unknown, options: RenderChatMark
   const streamingSafeText = options.streaming
     ? stripTrailingStreamingListMarker(stripTrailingStreamingHorizontalRule(rawText))
     : rawText
-  const tickerAnnotated = injectKLineTickers(streamingSafeText)
+  // 应用所有注册的预处理插件（金融模块注册 kline-ticker 等）。
+  // 插件按注册顺序在「streaming 安全处理后、legacy image 处理前」这个固定点执行。
+  const preprocessedText = applyMarkdownPreprocessors(streamingSafeText, {
+    streaming: Boolean(options.streaming),
+  })
   const imageContextSafeText = normalizeLegacyImageContextMarkup(
-    tickerAnnotated,
+    preprocessedText,
     Boolean(options.streaming),
   )
   const citationSafeText = stripIncompleteCitationTag(imageContextSafeText)

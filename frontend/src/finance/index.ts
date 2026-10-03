@@ -14,6 +14,15 @@
 // 副作用：金融专属样式（`.kline-ticker` 等）。Vite 会把 less 文件编译进主 CSS。
 import './styles/kline-ticker.less';
 
+// 副作用：注册金融专属的 markdown 预处理插件。
+// 顶层 import 保证在任何 markdown 渲染发生之前执行。
+import { registerMarkdownPreprocessor } from '@/utils/markdownPlugins';
+import { injectKLineTickers } from '@/utils/klineTickerInjector';
+registerMarkdownPreprocessor({
+  name: 'kline-ticker',
+  transform: (text) => injectKLineTickers(text),
+});
+
 // ─────────────────── 组件（原地保留，从 barrel re-export）───────────────────
 // 文件位置不变（仍在 src/components/...），但对外入口收敛到 @/finance。
 // 4.6 目录重组时再物理搬迁到 src/finance/components/。
