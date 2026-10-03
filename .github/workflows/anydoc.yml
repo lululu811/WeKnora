@@ -6,7 +6,7 @@ name: Anydoc
 
 on:
   push:
-    branches: [main]
+    branches: [main, mine]
     paths:
       - "third_party/anydoc-go/**"
       - "scripts/build-anydoc-lib.sh"

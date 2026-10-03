@@ -11,7 +11,7 @@ name: Go Lint Cache
 
 on:
   push:
-    branches: [main]
+    branches: [main, mine]
     paths:
       - "**/*.go"
       - "**/go.mod"
