@@ -157,8 +157,9 @@ const wb = useWechatWorkbench();
 const chat = useDocumentChat();
 const previewContent = ref<HTMLElement | null>(null);
 // 列表是可折叠侧栏而非常驻第三列：应用本身左侧还有 210px 的全局导航，
-// 内容区只剩 ~1067px，三列会把右栏问答挤没。
-const listOpen = ref(true);
+// 内容区只剩 ~1067px。默认收起 —— 用户要的是「左原文、右提问」两栏，
+// 列表常驻会把问答栏挤出屏幕；需要换文章时再展开。
+const listOpen = ref(false);
 const readerEl = ref<HTMLElement | null>(null);
 
 const {
