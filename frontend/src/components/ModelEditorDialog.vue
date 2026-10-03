@@ -2245,7 +2245,7 @@ const handleCancel = () => {
 }
 
 // 「模型类型」和「模型来源」都是单选，就用同一种按钮。模型来源原本是灰底轨道
-// 的 segmented：#e7e7e7 的轨道在浅色表单里是一整块深灰，白色药丸又浮不起来，
+// 的 segmented：var(--td-border-level-2-color) 的轨道在浅色表单里是一整块深灰，白色药丸又浮不起来，
 // 而且紧挨着的模型类型是另一套长相。取消轨道后两组自然成为一族。
 .model-type-option,
 .source-option {
@@ -2944,6 +2944,8 @@ const handleCancel = () => {
     font-size: var(--app-text-md);
   }
 }
+
+/* TODO 2.2: 1 处色值未收敛（图表/状态/语义不明，保留原值）：fff7ed */
 </style>
 
 <!-- 非 scoped 样式：t-select popup 渲染到 body 下，scoped 样式无法覆盖 -->
@@ -3111,4 +3113,6 @@ const handleCancel = () => {
     }
   }
 }
+
+/* TODO 2.2: 1 处色值未收敛（图表/状态/语义不明，保留原值）：fff7ed */
 </style>

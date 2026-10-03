@@ -901,7 +901,7 @@ onMounted(async () => {
   .provider-card-badge-color(#e55a00);
 }
 .store-card--sqlite .store-card__badge {
-  .provider-card-badge-color(#464646);
+  .provider-card-badge-color(var(--td-gray-color-11));
 }
 
 .store-card__body {
@@ -1158,6 +1158,8 @@ onMounted(async () => {
   &.available { color: var(--td-brand-color); }
   &.unavailable { color: var(--td-error-color); }
 }
+
+/* TODO 2.2: 7 处色值未收敛（图表/状态/语义不明，保留原值）：0052d9, e12626, 0089ff, 07a050, d97706, 6235bb, e55a00 */
 </style>
 
 <!--
@@ -1214,6 +1216,8 @@ onMounted(async () => {
 }
 .vectorstore-drawer--sqlite .setting-drawer__header-icon {
   background: rgba(70, 70, 70, 0.1);
-  color: #464646;
+  color: var(--td-gray-color-11);
 }
+
+/* TODO 2.2: 7 处色值未收敛（图表/状态/语义不明，保留原值）：0052d9, e12626, 0089ff, 07a050, d97706, 6235bb, e55a00 */
 </style>

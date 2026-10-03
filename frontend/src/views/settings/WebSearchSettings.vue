@@ -822,7 +822,7 @@ onMounted(async () => {
   .provider-card-badge-color(#215689);
 }
 .provider-card--ollama .provider-card__badge {
-  .provider-card-badge-color(#464646);
+  .provider-card-badge-color(var(--td-gray-color-11));
 }
 .provider-card--keenable .provider-card__badge {
   .provider-card-badge-color(#149e82);
@@ -1025,6 +1025,8 @@ onMounted(async () => {
     }
   }
 }
+
+/* TODO 2.2: 9 处色值未收敛（图表/状态/语义不明，保留原值）：0052d9, de5833, 0089ff, 4285f4, 6235bb, 2932e1, 215689, 149e82, 2563eb */
 </style>
 
 <!--
@@ -1069,7 +1071,7 @@ onMounted(async () => {
 }
 .websearch-drawer--ollama .setting-drawer__header-icon {
   background: rgba(70, 70, 70, 0.12);
-  color: #464646;
+  color: var(--td-gray-color-11);
 }
 .websearch-drawer--keenable .setting-drawer__header-icon {
   background: rgba(20, 158, 130, 0.12);
@@ -1079,4 +1081,6 @@ onMounted(async () => {
   background: rgba(37, 99, 235, 0.12);
   color: #2563EB;
 }
+
+/* TODO 2.2: 9 处色值未收敛（图表/状态/语义不明，保留原值）：0052d9, de5833, 0089ff, 4285f4, 6235bb, 2932e1, 215689, 149e82, 2563eb */
 </style>

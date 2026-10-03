@@ -1,214 +1,101 @@
 <template>
-    <div class="aside_box" :class="{ 'aside_box--collapsed': uiStore.sidebarCollapsed, 'aside_box--resizing': uiStore.sidebarResizing }">
-        <!-- 展开时：Logo + 搜索/折叠按钮同行 -->
-        <div class="logo_row" v-if="!uiStore.sidebarCollapsed">
-            <div class="logo_box" @click="router.push('/platform/knowledge-bases')" style="cursor: pointer;">
-                <span class="logo logo-text">{{ APP_NAME }}</span>
-                <sup v-if="isLiteEdition" class="lite-badge">Lite</sup>
+    <!--
+        阶段 3.1：menu.vue 现在是「编排层」——持有全部状态与副作用，
+        把结果通过 props 传给 4 个子组件，把交互通过 emit 接回来。
+        数据流与拆分前完全一致；样式集中在 menu/sidebar.less（非 scoped，
+        因为父组件 scoped CSS 无法命中子组件模板内部）。
+    -->
+    <div class="sidebar-host">
+        <SidebarShell
+            :collapsed="uiStore.sidebarCollapsed"
+            :resizing="uiStore.sidebarResizing"
+            :drawer-open="drawerOpen"
+            :app-name="APP_NAME"
+            :is-lite-edition="isLiteEdition"
+            :can-access-all-tenants="canAccessAllTenants"
+            :cmd-mod-key-label="cmdModKeyLabel"
+            :resize-label="t('knowledgeStages.resizeDrawer')"
+            :display-width="uiStore.sidebarDisplayWidth"
+            :collapsed-width="SIDEBAR_COLLAPSED_WIDTH"
+            :max-width="SIDEBAR_MAX_WIDTH"
+            @toggle="onToggleSidebar"
+            @open-search="commandPaletteStore.openPalette('')"
+            @go-home="router.push('/platform/knowledge-bases')"
+            @resize-start="startSidebarResize"
+            @resize="resizeSidebar"
+            @resize-end="uiStore.sidebarResizing = false"
+        >
+            <!-- 上半部分：新对话吸顶 + 知识库/智能体/共享空间/历史会话随滚动一起滚走 -->
+            <div class="menu_top" ref="scrollContainer" @scroll="handleScroll">
+                <SidebarNavList
+                    :items="topMenuItems"
+                    :collapsed="uiStore.sidebarCollapsed"
+                    :current-path="currentpath"
+                    :is-active="isMenuItemActive"
+                    :resolve-icon="resolveNavIcon"
+                    :toolbox-preview="toolboxPreview"
+                    :browser-stack-status="browserStackStatus"
+                    :org-pending-count="orgStore.totalPendingJoinRequestCount"
+                    :cmd-mod-key-label="cmdModKeyLabel"
+                    @select="handleMenuClick"
+                    @hover="mouseenteMenu"
+                    @leave="mouseleaveMenu"
+                    @open-search="commandPaletteStore.openPalette('')"
+                />
+
+                <!-- 历史会话：按来源筛选后统一按日期分组展示 -->
+                <SidebarSessionList
+                    v-if="!uiStore.sidebarCollapsed"
+                    :groups="filteredGroupedSessions"
+                    :booting="sessionListBooting"
+                    :has-any-session="hasAnySession"
+                    :active-bucket="activeBucket"
+                    :show-source-filter="showSessionSourceFilter"
+                    :source-filter-pinned="sessionScopeFilterPinned"
+                    :source-options="sessionSourceOptions"
+                    :active-bucket-key="activeSessionBucketKey"
+                    :batch-mode="batchMode"
+                    :selected-ids="batchSelectedIds"
+                    :active-session-path="currentSecondpath"
+                    :revealed-session-id="revealedSessionId"
+                    :activity-by-id="sessionActivityEntries"
+                    :build-menu-options="buildSessionMenuOptions"
+                    @select-source="switchSessionBucket"
+                    @navigate="gotopage"
+                    @toggle-select="toggleBatchSelect"
+                    @menu-click="handleSessionMenuClick"
+                    @rename-submit="renameSessionTitle"
+                    @hover-in="mouseenteBotDownr"
+                    @hover-out="mouseleaveBotDown"
+                />
             </div>
-            <div class="logo_actions">
-                <t-tooltip placement="bottom">
-                    <template #content>
-                        <span class="cmdk-tip">
-                            <span class="cmdk-tip-label">{{ t('menu.search') }}</span>
-                            <span class="cmdk-tip-keys">{{ cmdModKeyLabel }}K</span>
-                        </span>
-                    </template>
-                    <div class="header-icon-btn" @click="commandPaletteStore.openPalette('')"
-                        :aria-label="t('menu.search')">
-                        <img class="header-icon-img" :src="getImgSrc('search.svg')" alt="">
-                    </div>
-                </t-tooltip>
-                <div class="sidebar-toggle" @click="uiStore.toggleSidebar" :title="t('menu.collapseSidebar')">
-                    <svg viewBox="0 0 20 20" width="18" height="18" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <rect x="1.5" y="1.5" width="17" height="17" rx="3" stroke="currentColor" stroke-width="1.2" />
-                        <line x1="7.5" y1="1.5" x2="7.5" y2="18.5" stroke="currentColor" stroke-width="1.2" />
-                        <line x1="4" y1="7.5" x2="4" y2="12.5" stroke="currentColor" stroke-width="1.2"
-                            stroke-linecap="round" />
-                    </svg>
-                </div>
-            </div>
+
+            <SidebarUserArea
+                :batch-mode="batchMode"
+                :collapsed="uiStore.sidebarCollapsed"
+                :is-all-batch-selected="isAllBatchSelected"
+                :is-batch-indeterminate="isBatchIndeterminate"
+                :batch-display-count="batchDisplayCount"
+                :selected-count="batchSelectedIds.length"
+                :batch-deleting="batchDeleting"
+                @toggle-select-all="toggleBatchSelectAll"
+                @exit-batch="exitBatchMode"
+                @delete-selected="handleInlineBatchDelete"
+            />
+        </SidebarShell>
+
+        <!-- <480px 抽屉开关：与 .aside_box 同级，避免随抽屉一起滑出屏外 -->
+        <div
+            class="sidebar-hamburger"
+            @click="drawerOpen = !drawerOpen"
+            :aria-label="drawerOpen ? t('menu.collapseSidebar') : t('menu.expandSidebar')"
+        >
+            <svg viewBox="0 0 20 20" width="18" height="18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <line x1="3" y1="5.5" x2="17" y2="5.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
+                <line x1="3" y1="10" x2="17" y2="10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
+                <line x1="3" y1="14.5" x2="17" y2="14.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
+            </svg>
         </div>
-        <!-- 折叠时：展开按钮 -->
-        <t-tooltip v-else :content="t('menu.expandSidebar')" placement="right">
-            <div class="menu_item sidebar-toggle-item" @click="uiStore.toggleSidebar">
-                <div class="menu_item-box">
-                    <div class="menu_icon">
-                        <svg class="icon" viewBox="0 0 20 20" width="20" height="20" fill="none"
-                            xmlns="http://www.w3.org/2000/svg">
-                            <rect x="1.5" y="1.5" width="17" height="17" rx="3" stroke="currentColor"
-                                stroke-width="1.2" />
-                            <line x1="7.5" y1="1.5" x2="7.5" y2="18.5" stroke="currentColor" stroke-width="1.2" />
-                            <line x1="5" y1="10" x2="3" y2="8" stroke="currentColor" stroke-width="1.2"
-                                stroke-linecap="round" />
-                            <line x1="5" y1="10" x2="3" y2="12" stroke="currentColor" stroke-width="1.2"
-                                stroke-linecap="round" />
-                        </svg>
-                    </div>
-                </div>
-            </div>
-        </t-tooltip>
-
-        <!-- 空间选择器：仅在用户可切换空间时显示 -->
-        <TenantSelector v-if="canAccessAllTenants && !uiStore.sidebarCollapsed" />
-
-        <!-- 侧栏边缘拖拽调宽，拖窄时自动收缩 -->
-        <PanelResizeHandle edge="right" :label="t('knowledgeStages.resizeDrawer')"
-            :value="uiStore.sidebarDisplayWidth" :min="SIDEBAR_COLLAPSED_WIDTH" :max="SIDEBAR_MAX_WIDTH"
-            @start="startSidebarResize" @resize="resizeSidebar" @end="uiStore.sidebarResizing = false" />
-
-        <!-- 上半部分：新对话吸顶 + 知识库/智能体/共享空间/历史会话随滚动一起滚走 -->
-        <div class="menu_top" ref="scrollContainer" @scroll="handleScroll">
-            <!-- 全局搜索入口：点击打开命令面板（⌘K）。展开态移至顶部 logo_row 的图标按钮；
-                 折叠态在此处保留为图标项 + 深色 tooltip。 -->
-            <div class="menu_box menu_box--cmdk" v-if="uiStore.sidebarCollapsed">
-                <t-tooltip placement="right">
-                    <template #content>
-                        <span class="cmdk-tip">
-                            <span class="cmdk-tip-label">{{ t('menu.search') }}</span>
-                            <span class="cmdk-tip-keys">{{ cmdModKeyLabel }}K</span>
-                        </span>
-                    </template>
-                    <div class="menu_item menu_item--cmdk" @click="commandPaletteStore.openPalette('')">
-                        <div class="menu_item-box">
-                            <div class="menu_icon">
-                                <img class="icon" :src="getImgSrc('search.svg')" alt="">
-                            </div>
-                        </div>
-                    </div>
-                </t-tooltip>
-            </div>
-            <div class="menu_box" :class="{ 'menu_box--sticky': item.children && !uiStore.sidebarCollapsed }"
-                v-for="(item, index) in topMenuItems" :key="index">
-                <t-tooltip :content="item.title" placement="right" :disabled="!uiStore.sidebarCollapsed">
-                    <div @click="handleMenuClick(item.path)" @mouseenter="mouseenteMenu(item.path)"
-                        @mouseleave="mouseleaveMenu(item.path)" :data-guide="`nav-${item.path}`"
-                        :class="['menu_item', item.childrenPath && item.childrenPath == currentpath ? 'menu_item_c_active' : isMenuItemActive(item.path) ? 'menu_item_active' : '']">
-                        <div class="menu_item-box">
-                            <div class="menu_icon">
-                                <img class="icon"
-                                    :src="getImgSrc(item.icon == 'zhishiku' ? knowledgeIcon : item.icon == 'agent' ? agentIcon : item.icon == 'artifact' ? artifactIcon : item.icon == 'toolbox' ? toolboxIcon : item.icon == 'watchlist' ? watchlistIcon : item.icon == 'organization' ? organizationIcon : item.icon == 'logout' ? logoutIcon : item.icon == 'setting' ? settingIcon : prefixIcon)"
-                                    alt="">
-                            </div>
-                            <template v-if="!uiStore.sidebarCollapsed">
-                                <span class="menu_title" :title="item.title">{{ item.title }}</span>
-                                <span v-if="item.path === 'organizations' && orgStore.totalPendingJoinRequestCount > 0"
-                                    class="menu-pending-badge"
-                                    :title="t('organization.settings.pendingJoinRequestsBadge')">{{
-                                        orgStore.totalPendingJoinRequestCount }}</span>
-                                <span v-if="item.path === 'toolbox' && toolboxPreview.length" class="menu-toolbox-stack"
-                                    :title="toolboxPreview.map((tool) => tool.key === 'browserconnection' && browserStackStatus
-                                        ? `${t(tool.title)} (${t(`localBrowser.${browserStackStatus}`)})` : t(tool.title)).join(' · ')">
-                                    <span v-for="tool in toolboxPreview" :key="tool.key" class="menu-toolbox-stack__item">
-                                        <template v-if="tool.key === 'browserconnection'">
-                                            <BrowserIcon width="12" height="12" />
-                                            <i v-if="browserStackStatus" class="menu-toolbox-stack__status"
-                                                :class="`is-${browserStackStatus}`" aria-hidden="true" />
-                                        </template>
-                                        <t-icon v-else :name="tool.icon" size="12px" />
-                                    </span>
-                                </span>
-                            </template>
-                        </div>
-                    </div>
-                </t-tooltip>
-            </div>
-
-            <!-- 历史会话：按来源筛选后统一按日期分组展示 -->
-            <div class="submenu" v-if="!uiStore.sidebarCollapsed">
-                <!-- Stable, always-mounted source filter: reserving its row here
-                     (instead of embedding it in the first date group, which
-                     appears/disappears while a bucket loads) prevents the
-                     top-right control from jumping when switching session type. -->
-                <div v-if="showSessionSourceFilter && !batchMode" class="session-list-scope-header">
-                    <SessionSourceFilter inline :emphasized="sessionScopeFilterPinned" :sources="sessionSourceOptions"
-                        :current="activeSessionBucketKey" @select="switchSessionBucket" />
-                </div>
-                <template v-if="sessionListBooting && !hasAnySession">
-                    <div v-for="n in 4" :key="'skel-' + n" class="submenu_item_p session-chat-row">
-                        <div class="session-list-row session-list-row--flat">
-                            <t-skeleton animation="gradient" class="session-list-row__body"
-                                :row-col="[{ width: '100%', height: '14px' }]" />
-                        </div>
-                    </div>
-                </template>
-
-                <div v-else class="session-filtered-list">
-                    <template
-                        v-if="activeBucket?.loading && !activeBucket.loaded && filteredGroupedSessions.length === 0">
-                        <div v-for="n in 4" :key="'bucket-skel-' + n" class="submenu_item_p session-chat-row">
-                            <div class="session-list-row session-list-row--flat">
-                                <t-skeleton animation="gradient" class="session-list-row__body"
-                                    :row-col="[{ width: '100%', height: '14px' }]" />
-                            </div>
-                        </div>
-                    </template>
-                    <template v-else-if="activeBucket?.loaded && filteredGroupedSessions.length === 0">
-                        <div class="submenu_empty">{{ t('menu.noSessions') }}</div>
-                    </template>
-                    <template v-else>
-                        <template v-for="group in filteredGroupedSessions" :key="group.key">
-                            <div v-if="group.label" class="timeline_header session-list-row session-list-row--flat">
-                                <span class="session-list-row__body">
-                                    <span class="timeline_header-label">{{ group.label }}</span>
-                                </span>
-                            </div>
-                            <div v-for="subitem in group.items" :key="subitem.id"
-                                class="submenu_item_p session-chat-row" :data-session-id="subitem.id" :class="{
-                                    'session-chat-row--active': !batchMode && subitem.path === currentSecondpath,
-                                    'session-chat-row--selected': batchMode && batchSelectedIds.includes(subitem.id),
-                                    'session-chat-row--revealed': revealedSessionId === subitem.id,
-                                }">
-                                <div class="session-list-row session-list-row--flat">
-                                    <div class="session-list-row__body">
-                                        <SessionSidebarRow :item="subitem" :batch-mode="batchMode"
-                                            :running="Boolean(sessionActivityEntries[subitem.id])"
-                                            :active-path="currentSecondpath" :selected-ids="batchSelectedIds"
-                                            :menu-options="buildSessionMenuOptions(subitem)"
-                                            @navigate="gotopage(subitem.path)"
-                                            @toggle-select="toggleBatchSelect(subitem.id)"
-                                            @menu-click="handleSessionMenuClick($event, subitem)"
-                                            @rename-submit="renameSessionTitle(subitem, $event.title)"
-                                            @hover-in="mouseenteBotDownr(subitem.id)" @hover-out="mouseleaveBotDown" />
-                                    </div>
-                                </div>
-                            </div>
-                        </template>
-                        <div v-if="activeBucket?.loading && filteredGroupedSessions.length > 0"
-                            class="session-list-loading session-list-row session-list-row--flat">
-                            <span class="session-list-row__body">
-                                <t-loading size="small" />
-                            </span>
-                        </div>
-                    </template>
-                </div>
-            </div>
-        </div>
-
-        <!-- 批量管理底部操作条：固定在侧栏底部、用户头像上方 -->
-        <div v-if="batchMode && !uiStore.sidebarCollapsed" class="batch-inline-footer">
-            <div class="batch-footer-left">
-                <t-checkbox :checked="isAllBatchSelected" :indeterminate="isBatchIndeterminate"
-                    @change="toggleBatchSelectAll">
-                    {{ t('batchManage.selectAll') }}
-                </t-checkbox>
-            </div>
-            <div class="batch-footer-right">
-                <t-button size="small" variant="text" @click="exitBatchMode">
-                    {{ t('batchManage.cancel') }}
-                </t-button>
-                <t-button size="small" theme="danger" variant="base" :disabled="batchSelectedIds.length === 0"
-                    :loading="batchDeleting" @click="handleInlineBatchDelete">
-                    {{ t('batchManage.delete') }}{{ batchSelectedIds.length > 0 ? `(${batchDisplayCount})` : '' }}
-                </t-button>
-            </div>
-        </div>
-
-        <!-- 下半部分：用户菜单 -->
-        <div class="menu_bottom">
-            <UserMenu />
-        </div>
-
     </div>
 </template>
 
@@ -219,8 +106,6 @@ import { useRoute, useRouter } from 'vue-router';
 import { getSessionsList, batchDelSessions, deleteAllSessions, getSession } from "@/api/chat/index";
 import { useChatResourcesStore } from '@/stores/chatResources';
 import { listAllIMChannels } from '@/api/agent/index';
-import SessionSidebarRow from './SessionSidebarRow.vue';
-import PanelResizeHandle from './PanelResizeHandle.vue';
 import { SIDEBAR_COLLAPSED_WIDTH, SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH } from '@/utils/sidebarWidth';
 import { APP_NAME } from '@/config/appIdentity';
 import {
@@ -231,7 +116,6 @@ import {
     setSessionPinned,
     type SessionMutationDetail,
 } from './sessionMutations';
-import SessionSourceFilter from './SessionSourceFilter.vue';
 import {
     SIDEBAR_BUCKET_PAGE_SIZE,
     applyBucketCountProbe,
@@ -273,19 +157,19 @@ import { useSessionActivityStore } from '@/stores/sessionActivity';
 import { useAuthStore } from '@/stores/auth';
 import { useDeploymentCapabilitiesStore } from '@/stores/deploymentCapabilities';
 import { TOOLBOX_ITEMS, canAccessToolboxSection } from '@/config/toolbox';
-import BrowserIcon from '@/components/icons/BrowserIcon.vue';
 import { useBrowserConnectionStore } from '@/stores/browserConnection';
 import { useOrganizationStore } from '@/stores/organization';
 import { useUIStore } from '@/stores/ui';
 import { useCommandPaletteStore } from '@/stores/commandPalette';
 import { MessagePlugin, DialogPlugin, Icon as TIcon } from "tdesign-vue-next";
-import UserMenu from '@/components/UserMenu.vue';
-import TenantSelector from '@/components/TenantSelector.vue';
 import { useI18n } from 'vue-i18n';
 import { useEditorResourcesStore } from '@/stores/editorResources';
+import SidebarShell from './menu/SidebarShell.vue';
+import SidebarNavList from './menu/SidebarNavList.vue';
+import SidebarSessionList from './menu/SidebarSessionList.vue';
+import SidebarUserArea from './menu/SidebarUserArea.vue';
+import type { MenuItem } from './menu/menuTypes';
 
-const chatResources = useChatResourcesStore();
-const editorResources = useEditorResourcesStore();
 // Platform logos reused from IMChannelsOverviewPanel — keeps the session list
 // visually consistent with the channels admin view.
 import wecomLogo from '@/assets/img/im/wecom.svg';
@@ -319,6 +203,8 @@ const { entries: sessionActivityEntries } = storeToRefs(sessionActivity);
 let sessionActivityTimer: ReturnType<typeof setInterval> | undefined;
 const authStore = useAuthStore();
 const deploymentCapabilities = useDeploymentCapabilitiesStore();
+const chatResources = useChatResourcesStore();
+const editorResources = useEditorResourcesStore();
 const toolboxPreview = computed(() => TOOLBOX_ITEMS.filter((item) => canAccessToolboxSection(item.key, {
     currentTenantRole: authStore.currentTenantRole,
     canAccessAllTenants: authStore.canAccessAllTenants,
@@ -383,7 +269,6 @@ const activeBucket = computed(() => sessionBuckets.value[activeSessionBucketKey.
 const hasAnySession = computed(() =>
     Object.values(sessionBuckets.value).some((bucket) => bucket.items.length > 0),
 );
-type MenuItem = { title: string; icon: string; path: string; childrenPath?: string; children?: any[] };
 const { menuArr, visibleMenuArr } = storeToRefs(usemenuStore);
 let activeSubmenu = ref<string>('');
 const isLiteEdition = ref(false);
@@ -420,25 +305,6 @@ const isInKnowledgeBase = computed<boolean>(() => {
         route.name === 'kbCreatChat' ||
         route.name === 'knowledgeBaseSettings';
 });
-
-// 是否在知识库列表页面
-const isInKnowledgeBaseList = computed<boolean>(() => {
-    return route.name === 'knowledgeBaseList';
-});
-
-// 是否在创建聊天页面
-const isInCreatChat = computed<boolean>(() => {
-    return route.name === 'globalCreatChat' || route.name === 'kbCreatChat';
-});
-
-// 是否在对话详情页
-const isInChatDetail = computed<boolean>(() => route.name === 'chat');
-
-// 是否在智能体列表页面
-const isInAgentList = computed<boolean>(() => route.name === 'agentList');
-
-// 是否在组织列表页面
-const isInOrganizationList = computed<boolean>(() => route.name === 'organizationList');
 
 // 统一的菜单项激活状态判断
 const isMenuItemActive = (itemPath: string): boolean => {
@@ -490,10 +356,6 @@ const BOTTOM_MENU_PATHS = new Set(['settings', 'logout'])
 
 const topMenuItems = computed<MenuItem[]>(() => {
     return (visibleMenuArr.value as unknown as MenuItem[]).filter((item: MenuItem) => !BOTTOM_MENU_PATHS.has(item.path));
-})
-
-const bottomMenuItems = computed<MenuItem[]>(() => {
-    return (visibleMenuArr.value as unknown as MenuItem[]).filter((item: MenuItem) => BOTTOM_MENU_PATHS.has(item.path));
 })
 
 // 当前知识库信息
@@ -1099,6 +961,23 @@ const handleSessionMutation = (event: Event) => {
     }
 };
 
+/* ------------------------------------------------------------------ *
+ * 窄屏（阶段 3.1）
+ *
+ * <768px 收起为图标栏由 CSS 媒体查询负责（几何变化，不碰业务状态）；
+ * <480px 需要一个抽屉开关状态：侧栏整体 translateX(-100%) 移出屏外，
+ * 由汉堡按钮唤出。这里只维护这个 UI 状态，不参与会话数据。
+ * ------------------------------------------------------------------ */
+const drawerOpen = ref(false);
+let narrowQuery: MediaQueryList | undefined;
+const NARROW_DRAWER_QUERY = '(max-width: 480px)';
+
+const onToggleSidebar = () => {
+    uiStore.toggleSidebar();
+    // 抽屉态下点折叠会把抽屉留在屏外且无法再唤出，顺手关掉
+    if (uiStore.sidebarCollapsed) drawerOpen.value = false;
+};
+
 onMounted(async () => {
     sessionActivityTimer = setInterval(() => { void sessionActivity.refresh(); }, 5000);
     const routeName = typeof route.name === 'string' ? route.name : (route.name ? String(route.name) : '')
@@ -1130,6 +1009,13 @@ onMounted(async () => {
     if (deploymentCapabilities.isSupported('organizations') && orgStore.organizations.length === 0) {
         orgStore.fetchOrganizations();
     }
+
+    // 窄屏抽屉：进入窄屏时关掉抽屉，离开窄屏时复位，避免残留状态
+    if (typeof window !== 'undefined' && window.matchMedia) {
+        narrowQuery = window.matchMedia(NARROW_DRAWER_QUERY);
+        const applyNarrow = (e: MediaQueryListEvent) => { if (!e.matches) drawerOpen.value = false; };
+        narrowQuery.addEventListener('change', applyNarrow);
+    }
 });
 
 onUnmounted(() => {
@@ -1137,6 +1023,7 @@ onUnmounted(() => {
     clearTimeout(forkRevealTimer);
     sessionActivity.clear();
     window.removeEventListener(SESSION_MUTATION_EVENT, handleSessionMutation);
+    narrowQuery?.removeEventListener('change', () => {});
 });
 
 watch([() => route.name, () => route.params], (newvalue, oldvalue) => {
@@ -1163,7 +1050,11 @@ watch([() => route.name, () => route.params], (newvalue, oldvalue) => {
     if (newvalue[1].kbId !== oldvalue?.[1]?.kbId) {
         loadCurrentKbInfo((newvalue[1] as any)?.kbId as string);
     }
+
+    // 窄屏抽屉里点了导航项就顺手收起，让会话区露出来
+    if (narrowQuery?.matches) drawerOpen.value = false;
 });
+
 let knowledgeIcon = ref('zhishiku-green.svg');
 let prefixIcon = ref('prefixIcon.svg');
 let logoutIcon = ref('logout.svg');
@@ -1210,6 +1101,41 @@ const getIcon = (path: string) => {
     logoutIcon.value = 'logout.svg';
 }
 getIcon(typeof route.name === 'string' ? route.name as string : (route.name ? String(route.name) : ''))
+
+const getImgSrc = (url: string) => {
+    return new URL(`/src/assets/img/${url}`, import.meta.url).href;
+}
+
+/**
+ * 图标名 → 图片 URL。原模板里是一串内联三元，这里提成函数以便子组件复用，
+ * 映射关系与拆分前逐条一致。
+ */
+const NAV_ICON_FILES: Record<string, string> = {
+    zhishiku: knowledgeIcon.value,
+    agent: agentIcon.value,
+    artifact: artifactIcon.value,
+    toolbox: toolboxIcon.value,
+    watchlist: watchlistIcon.value,
+    organization: organizationIcon.value,
+    logout: logoutIcon.value,
+    setting: settingIcon.value,
+};
+const resolveNavIcon = (icon: string): string => {
+    const file = icon in NAV_ICON_FILES ? NAV_ICON_FILES[icon] : prefixIcon.value;
+    return getImgSrc(file);
+};
+// 路由变化时 getIcon() 会更新这些 ref，映射表跟着刷新，保持与原内联三元一致
+watch([knowledgeIcon, agentIcon, artifactIcon, toolboxIcon, watchlistIcon, organizationIcon, logoutIcon, settingIcon, prefixIcon], () => {
+    NAV_ICON_FILES.zhishiku = knowledgeIcon.value;
+    NAV_ICON_FILES.agent = agentIcon.value;
+    NAV_ICON_FILES.artifact = artifactIcon.value;
+    NAV_ICON_FILES.toolbox = toolboxIcon.value;
+    NAV_ICON_FILES.watchlist = watchlistIcon.value;
+    NAV_ICON_FILES.organization = organizationIcon.value;
+    NAV_ICON_FILES.logout = logoutIcon.value;
+    NAV_ICON_FILES.setting = settingIcon.value;
+});
+
 const handleMenuClick = async (path: string) => {
     if (path === 'knowledge-bases') {
         // 知识库菜单项：如果在知识库内部，跳转到当前知识库文件页；否则跳转到知识库列表
@@ -1278,10 +1204,6 @@ const gotopage = async (path: string) => {
     getIcon(path)
 }
 
-const getImgSrc = (url: string) => {
-    return new URL(`/src/assets/img/${url}`, import.meta.url).href;
-}
-
 const mouseenteMenu = (path: string) => {
 }
 const mouseleaveMenu = (path: string) => {
@@ -1301,763 +1223,17 @@ const resizeSidebar = (delta: number, keyboard: boolean) => {
         uiStore.resizeSidebar(sidebarResizeStartWidth + delta)
     }
 }
-
-
 </script>
-<style lang="less" scoped>
-.aside_box {
-    // 侧栏水平栅格：图标列与文案列统一对齐（Logo / 菜单 / 会话分组 / 会话行）
-    --sidebar-inset-x: 14px;
-    --sidebar-icon-size: 18px;
-    --sidebar-channel-icon: 14px;
-    --sidebar-icon-gap: 8px;
-    --sidebar-text-inset: calc(var(--sidebar-inset-x) + var(--sidebar-icon-size) + var(--sidebar-icon-gap)); // 40px
 
-    min-width: 0;
-    width: var(--sidebar-width, 260px);
-    flex-shrink: 0;
-    padding: 8px 6px 6px;
-    background: var(--td-bg-color-sidebar);
-    box-sizing: border-box;
-    /* Avoid 100vh because <html> carries a `zoom` multiplier for font-size
-       control; 100vh is evaluated against the unscaled viewport and then
-       scaled, so at "large" the sidebar would extend past the window. The
-       ancestor chain (html/body/#app/.main) is already height: 100%. */
-    height: 100%;
-    overflow: visible;
-    display: flex;
-    flex-direction: column;
-    border-right: 1px solid var(--td-component-stroke);
-    box-shadow: 1px 0 0 rgba(0, 0, 0, 0.02);
-    transition: width 0.25s ease, min-width 0.25s ease;
-    position: relative;
-
-    // macOS Wails 桌面：红绿灯位于 HiddenInset 标题栏区域，需让出顶部空间
-    html.wails-desktop & {
-        padding-top: 30px;
-    }
-
-    &--resizing {
-        transition: none;
-    }
-
-    &--collapsed {
-        min-width: 60px;
-        width: 60px;
-        padding: 8px 3px 6px;
-        overflow: visible;
-
-        .menu_item {
-            justify-content: center;
-            padding: 7px 0;
-
-            .menu_item-box {
-                justify-content: center;
-                width: auto;
-            }
-
-            .menu_icon {
-                margin-right: 0;
-            }
-        }
-
-        .menu_bottom {
-            align-items: center;
-        }
-
-        .menu_top {
-            margin-right: 0;
-            padding-right: 0;
-        }
-    }
-
-    .logo_row {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        height: 50px;
-        flex-shrink: 0;
-        padding: 0 10px 0 var(--sidebar-inset-x);
-    }
-
-    .sidebar-toggle {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        width: 18px;
-        height: 18px;
-        flex-shrink: 0;
-        cursor: pointer;
-        color: var(--td-text-color-secondary);
-        border-radius: var(--app-radius-xs);
-        transition: background-color var(--app-motion-base) ease;
-        box-sizing: border-box;
-
-        &:hover {
-            background: var(--td-bg-color-container-hover);
-            color: var(--td-text-color-primary);
-        }
-    }
-
-    .logo_box {
-        display: flex;
-        align-items: center;
-        flex: 1;
-        min-width: 0;
-        overflow: hidden;
-
-        .logo-text {
-            font-family: var(--app-font-display, "Noto Serif SC", "Source Han Serif SC", "Songti SC", serif);
-            font-size: var(--app-text-xl);
-            font-weight: 600;
-            letter-spacing: 0.05em;
-            white-space: nowrap;
-            background: linear-gradient(135deg, var(--td-brand-color) 0%, var(--td-brand-color-hover) 100%);
-            -webkit-background-clip: text;
-            background-clip: text;
-            -webkit-text-fill-color: transparent;
-            user-select: none;
-        }
-
-        .lite-badge {
-            margin-left: 2px;
-            align-self: flex-start;
-            margin-top: 2px;
-            font-size: var(--app-text-2xs);
-            font-weight: 600;
-            color: var(--td-text-color-placeholder);
-            user-select: none;
-            white-space: nowrap;
-        }
-    }
-
-    .menu_top {
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-        overflow-y: auto;
-        overflow-x: hidden;
-        min-height: 0;
-        // 抵消 .aside_box 的右内边距，让滚动条贴近面板右缘；
-        // 等量 padding 补回，保证列表文字位置不变。
-        margin-right: -4px;
-        padding-right: 4px;
-
-        // Claude 风格细滚动条：默认透明，悬浮时显示一条圆角细灰条
-        scrollbar-width: thin;
-        scrollbar-color: transparent transparent;
-        transition: scrollbar-color var(--app-motion-base) ease;
-
-        &::-webkit-scrollbar {
-            width: 6px;
-        }
-
-        &::-webkit-scrollbar-track {
-            background: transparent;
-        }
-
-        &::-webkit-scrollbar-thumb {
-            background-color: transparent;
-            border-radius: var(--app-radius-sm);
-            transition: background-color var(--app-motion-base) ease;
-        }
-
-        &:hover {
-            scrollbar-color: var(--td-scrollbar-color) transparent;
-
-            &::-webkit-scrollbar-thumb {
-                background-color: var(--td-scrollbar-color);
-            }
-        }
-
-        &::-webkit-scrollbar-thumb:hover {
-            background-color: var(--td-scrollbar-hover-color);
-        }
-    }
-
-    .menu_bottom {
-        flex-shrink: 0;
-        display: flex;
-        flex-direction: column;
-    }
-
-    .menu_box {
-        display: flex;
-        flex-direction: column;
-
-        // 「新对话」吸顶：作为滚动容器(.menu_top)的直接子级，滚动时钉在顶部，
-        // 知识库/智能体/共享空间及历史列表一起从其下方滚走。背景遮挡滚动内容。
-        &--sticky {
-            position: sticky;
-            top: 0;
-            z-index: 2;
-            background: var(--td-bg-color-sidebar);
-        }
-    }
-
-
-    .active-upload {
-        color: var(--td-brand-color);
-    }
-
-    .menu_item_active {
-        border-radius: var(--app-radius-xs);
-        background: var(--td-bg-color-secondarycontainer) !important;
-
-        .menu_icon,
-        .menu_title {
-            color: var(--td-brand-color) !important;
-        }
-    }
-
-    .menu_item_c_active {
-
-        .menu_icon,
-        .menu_title {
-            color: var(--td-text-color-primary);
-        }
-    }
-
-    .menu_item {
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        height: 34px;
-        padding: 6px 10px 6px var(--sidebar-inset-x);
-        box-sizing: border-box;
-        margin-bottom: 1px;
-        border-radius: var(--app-radius-xs);
-        transition: background-color var(--app-motion-base) ease;
-
-        .menu_item-box {
-            display: flex;
-            align-items: center;
-        }
-
-        &:hover {
-            border-radius: var(--app-radius-xs);
-            background: var(--td-bg-color-container-hover);
-
-            .menu_icon,
-            .menu_title {
-                color: var(--td-text-color-primary);
-            }
-        }
-    }
-
-    .menu_icon {
-        display: flex;
-        flex: 0 0 var(--sidebar-icon-size);
-        width: var(--sidebar-icon-size);
-        margin-right: var(--sidebar-icon-gap);
-        color: var(--td-text-color-secondary);
-
-        .icon {
-            width: 18px;
-            height: 18px;
-            overflow: hidden;
-        }
-    }
-
-    .menu_title {
-        color: var(--td-text-color-primary);
-        text-overflow: ellipsis;
-        font-family: var(--app-font-family);
-        font-size: var(--app-text-base);
-        font-style: normal;
-        font-weight: 600;
-        line-height: 20px;
-        overflow: hidden;
-        white-space: nowrap;
-        max-width: 120px;
-        flex: 1;
-    }
-
-    .submenu {
-        position: relative;
-        font-family: var(--app-font-family);
-        font-size: var(--app-text-base);
-        font-style: normal;
-        min-width: 0;
-        padding-top: 3px;
-    }
-
-    :deep(.submenu_pin_icon) {
-        color: inherit;
-        font-size: var(--app-text-sm);
-        margin-right: 4px;
-        vertical-align: middle;
-        flex-shrink: 0;
-    }
-
-    .submenu_source_icon {
-        width: 14px;
-        height: 14px;
-        margin-right: 0px;
-        vertical-align: middle;
-        object-fit: contain;
-        flex-shrink: 0;
-        // 默认淡化处理，避免未选中状态下彩色图标与灰色标题不协调；
-        // 悬浮或选中时恢复彩色，交互时才引人注意。
-        filter: grayscale(1);
-        opacity: 0.55;
-        transition: filter var(--app-motion-fast) ease, opacity var(--app-motion-fast) ease;
-    }
-
-    :deep(.submenu_item:hover .submenu_source_icon),
-    :deep(.submenu_item_active .submenu_source_icon) {
-        filter: none;
-        opacity: 1;
-    }
-
-    // 列表行统一栅格：左缘 inset-x + 图标槽 18px + 间距 8px → 文案列与主菜单文字对齐
-    .session-list-row {
-        display: flex;
-        align-items: center;
-        gap: var(--sidebar-icon-gap);
-        padding: 0 10px 0 var(--sidebar-inset-x);
-        min-width: 0;
-        box-sizing: border-box;
-    }
-
-    .session-list-row__icon {
-        flex: 0 0 var(--sidebar-icon-size);
-        width: var(--sidebar-icon-size);
-        height: var(--sidebar-icon-size);
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        flex-shrink: 0;
-    }
-
-    .session-list-row__body {
-        flex: 1 1 auto;
-        min-width: 0;
-        overflow: hidden;
-    }
-
-    // 聊天区分组标题 / 会话行：与「聊天」节标题同列左对齐，不再预留图标槽
-    .session-list-row--flat {
-        padding-left: var(--sidebar-inset-x);
-        gap: 0;
-    }
-
-    .session-list-loading {
-        display: flex;
-        align-items: center;
-        min-height: 26px;
-        color: var(--td-text-color-placeholder);
-    }
-
-    .timeline_header {
-        font-family: var(--app-font-family);
-        font-size: var(--app-text-xs);
-        font-weight: 600;
-        color: var(--td-text-color-disabled);
-        padding-top: 4px;
-        padding-bottom: 1px;
-        margin-top: 0;
-        line-height: 16px;
-        user-select: none;
-    }
-
-    .timeline_header-label {
-        white-space: nowrap;
-    }
-
-    // Stable filter control: always mounted and absolutely pinned to the list's
-    // top-right so it visually sits on the first row (e.g. beside "近30天") and
-    // never jumps when switching session type reloads a bucket. It overlays the
-    // empty right side of the first header row, so it needs no reserved height.
-    .session-list-scope-header {
-        position: absolute;
-        top: 4px;
-        right: 10px;
-        z-index: 2;
-        display: flex;
-        justify-content: flex-end;
-        max-width: calc(100% - var(--sidebar-inset-x) - 10px);
-
-        :deep(.session-source-filter--inline) {
-            flex: 0 1 auto;
-            min-width: 0;
-            max-width: 100%;
-            opacity: 0;
-            transition: opacity var(--app-motion-fast) ease;
-        }
-    }
-
-    .submenu:hover .session-list-scope-header :deep(.session-source-filter--inline),
-    .session-list-scope-header:hover :deep(.session-source-filter--inline),
-    .session-list-scope-header:focus-within :deep(.session-source-filter--inline),
-    .session-list-scope-header :deep(.session-source-filter--inline.session-source-filter--emphasized) {
-        opacity: 1;
-    }
-
-    .submenu_item_p {
-        padding: 0;
-        box-sizing: border-box;
-        min-width: 0;
-        overflow: hidden;
-
-        &.session-chat-row .session-list-row {
-            min-height: 30px;
-            padding-right: 6px;
-            border-radius: var(--app-radius-sm);
-            transition: background var(--app-motion-fast) ease, color var(--app-motion-fast) ease;
-        }
-
-        &.session-chat-row--revealed {
-            animation: session-fork-enter 280ms ease-out both;
-        }
-
-        &.session-chat-row:hover .session-list-row {
-            background: var(--td-bg-color-container-hover);
-
-            :deep(.menu-more) {
-                color: var(--td-text-color-primary);
-            }
-
-        }
-
-        &.session-chat-row--active .session-list-row {
-            background: var(--td-bg-color-container-hover);
-
-            :deep(.submenu_item) {
-                color: var(--td-brand-color);
-            }
-
-            :deep(.menu-more) {
-                color: var(--td-text-color-primary);
-            }
-        }
-
-        &.session-chat-row--selected .session-list-row {
-            background: color-mix(in srgb, var(--td-brand-color) 5%, transparent);
-        }
-    }
-
-    // SessionSidebarRow 为子组件，需 :deep 才能让标题省略号生效
-    :deep(.submenu_item) {
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        color: var(--td-text-color-primary);
-        font-weight: 400;
-        font-size: var(--app-text-base);
-        line-height: 20px;
-        height: 100%;
-        width: 100%;
-        padding: 6px 0;
-        position: relative;
-        min-width: 0;
-        background: transparent;
-
-        .submenu_title {
-            display: flex;
-            align-items: center;
-            flex: 1 1 auto;
-            min-width: 0;
-            overflow: hidden;
-        }
-
-        .session-running-indicator {
-            flex: 0 0 16px;
-            flex-shrink: 0;
-        }
-
-        .submenu_title-text {
-            flex: 1 1 auto;
-            min-width: 0;
-            overflow: hidden;
-            white-space: nowrap;
-            text-overflow: ellipsis;
-        }
-
-        .menu-more-wrap {
-            transition: opacity var(--app-motion-base) ease;
-            flex-shrink: 0;
-        }
-
-        .menu-more {
-            display: inline-block;
-            font-weight: bold;
-            color: var(--td-brand-color);
-        }
-
-        .submenu_title--batch {
-            margin-left: 4px;
-        }
-
-        &.submenu_item_batch {
-            padding-left: 0;
-        }
-    }
-
-    :deep(.submenu_item_batch) {
-        cursor: pointer;
-        user-select: none;
-    }
-
-    .batch-checkbox {
-        flex-shrink: 0;
-    }
-
-}
-
-.batch-inline-footer {
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 6px 12px;
-    border-top: 1px solid var(--td-component-stroke);
-    background: var(--td-bg-color-container);
-
-    .batch-footer-left {
-        display: flex;
-        align-items: center;
-        font-size: var(--app-text-md);
-        color: var(--td-text-color-placeholder);
-    }
-
-    .batch-footer-right {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-    }
-}
-
-.menu_item-box {
-    display: flex;
-    align-items: center;
-    width: 100%;
-    position: relative;
-}
-
-/* Empty state when there are no sessions. */
-.submenu_empty {
-    padding: 24px 14px;
-    text-align: center;
-    font-size: var(--app-text-sm);
-    color: var(--td-text-color-placeholder);
-    user-select: none;
-}
-
-// 顶部 logo_row 右侧的图标按钮组（搜索 + 折叠），与折叠按钮风格一致
-.logo_actions {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    flex-shrink: 0;
-}
-
-.header-icon-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 26px;
-    height: 26px;
-    flex-shrink: 0;
-    cursor: pointer;
-    border-radius: var(--app-radius-sm);
-    color: var(--td-text-color-secondary);
-    transition: background-color var(--app-motion-base) ease;
-    box-sizing: border-box;
-
-    &:hover {
-        background: var(--td-bg-color-container-hover);
-    }
-
-    .header-icon-img {
-        width: 18px;
-        height: 18px;
-        display: block;
-    }
-}
-
-// 深色 tooltip 内容：标签 + 浅灰快捷键内联
-.cmdk-tip {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    white-space: nowrap;
-
-    .cmdk-tip-label {
-        font-size: var(--app-text-md);
-    }
-
-    .cmdk-tip-keys {
-        font-size: var(--app-text-md);
-        opacity: 0.6;
-        letter-spacing: 0.5px;
-    }
-}
-
-.menu-toolbox-stack {
-    display: inline-flex;
-    align-items: center;
-    flex-shrink: 0;
-    margin-left: auto;
-}
-
-.menu-toolbox-stack__item {
-    position: relative;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 20px;
-    height: 20px;
-    box-sizing: border-box;
-    border: 1px solid var(--td-component-stroke);
-    border-radius: 50%;
-    background: var(--td-bg-color-container);
-    color: var(--td-text-color-secondary);
-    rotate: var(--stack-rotate, 0deg);
-    --stack-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
-    animation: menu-toolbox-stack-in 420ms var(--stack-spring) both;
-    animation-delay: var(--stack-delay, 0ms);
-    transition:
-        margin var(--app-motion-slow) var(--stack-spring),
-        rotate var(--app-motion-slow) var(--stack-spring),
-        translate var(--app-motion-slow) var(--stack-spring),
-        color var(--app-motion-base) ease,
-        box-shadow var(--app-motion-base) ease;
-    transition-delay: var(--stack-delay, 0ms);
-
-    & + & {
-        margin-left: -6px;
-    }
-
-    &:nth-child(1) { z-index: 3; --stack-rotate: -10deg; }
-    &:nth-child(2) { z-index: 2; --stack-delay: 50ms; }
-    &:nth-child(3) { z-index: 1; --stack-rotate: 10deg; --stack-delay: 100ms; }
-}
-
-.menu-toolbox-stack__status {
-    position: absolute;
-    right: -1px;
-    bottom: -1px;
-    width: 6px;
-    height: 6px;
-    border-radius: var(--app-radius-pill);
-    box-shadow: 0 0 0 1.5px var(--td-bg-color-container);
-
-    &.is-connected {
-        background: var(--td-success-color);
-    }
-
-    &.is-offline {
-        background: var(--td-warning-color);
-    }
-}
-
-@keyframes menu-toolbox-stack-in {
-    from {
-        opacity: 0;
-        scale: 0.4;
-    }
-}
-
-.menu_item:hover .menu-toolbox-stack__item {
-    color: var(--td-text-color-primary);
-    rotate: 0deg;
-    translate: 0 -1px;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
-}
-
-.menu_item:hover .menu-toolbox-stack__item + .menu-toolbox-stack__item {
-    margin-left: 3px;
-}
-
-@media (prefers-reduced-motion: reduce) {
-    .menu-toolbox-stack__item {
-        animation: none;
-        transition: color var(--app-motion-base) ease;
-    }
-}
-
-.menu-pending-badge {
-    min-width: 18px;
-    height: 18px;
-    padding: 0 5px;
-    margin-left: 6px;
-    border-radius: 9px;
-    background: rgba(250, 173, 20, 0.2);
-    color: var(--td-warning-color);
-    font-size: var(--app-text-sm);
-    font-weight: 600;
-    line-height: 18px;
-    text-align: center;
-    flex-shrink: 0;
-}
-
-.menu_box {
-    position: relative;
-}
-
-@keyframes session-fork-enter {
-    from { opacity: 0; transform: translateX(-10px); }
-    to { opacity: 1; transform: translateX(0); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-    .aside_box .submenu_item_p.session-chat-row--revealed {
-        animation: none;
-    }
-}
-</style>
 <style lang="less">
-// Dark mode: 文字 Logo 使用品牌色渐变，已自适应深色模式，无需 invert filter
+/*
+ * 侧栏样式集中在这里，非 scoped —— 拆分后父组件的 scoped CSS 无法命中
+ * 子组件模板内部。所有选择器锚定在 .aside_box / .sidebar-* 命名空间下。
+ */
+@import './menu/sidebar.less';
+</style>
 
-// Dark mode: 滚动条在深色背景下需要更亮的颜色才看得见
-html[theme-mode="dark"] .aside_box .menu_top:hover {
-    scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
-}
-
-html[theme-mode="dark"] .aside_box .menu_top:hover::-webkit-scrollbar-thumb {
-    background-color: rgba(255, 255, 255, 0.22);
-}
-
-html[theme-mode="dark"] .aside_box .menu_top::-webkit-scrollbar-thumb:hover {
-    background-color: rgba(255, 255, 255, 0.38);
-}
-
-// Dark mode: invert the top search icon button image to match text color
-html[theme-mode="dark"] .aside_box .header-icon-img {
-    filter: invert(1);
-    opacity: 0.55;
-}
-
-html[theme-mode="dark"] .aside_box .header-icon-btn:hover .header-icon-img {
-    opacity: 0.9;
-}
-
-// Dark mode: make SVG icons match text color (loaded via <img>, currentColor won't work)
-html[theme-mode="dark"] .aside_box .menu_icon img.icon {
-    filter: invert(1);
-    opacity: 0.55;
-}
-
-// Hover state: brighter icon like text
-html[theme-mode="dark"] .aside_box .menu_item:hover .menu_icon img.icon {
-    opacity: 0.9;
-}
-
-// menu_item_c_active: text is primary, so icon should match
-html[theme-mode="dark"] .aside_box .menu_item_c_active .menu_icon img.icon {
-    opacity: 0.9;
-}
-
-// Active (green) icons should not be inverted
-html[theme-mode="dark"] .aside_box .menu_item_active .menu_icon img.icon {
-    filter: none;
-    opacity: 1;
-}
-
-// 下拉菜单样式已统一至 @/assets/dropdown-menu.less
-
+<style lang="less">
 // 退出登录确认框样式
 :deep(.t-popconfirm) {
     .t-popconfirm__content {

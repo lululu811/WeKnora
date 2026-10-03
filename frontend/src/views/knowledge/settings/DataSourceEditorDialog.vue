@@ -2048,7 +2048,7 @@ const drawerConfirmText = computed(() => {
 
 .ds-step.active .ds-step-num {
   background: var(--td-brand-color);
-  color: #fff;
+  color: var(--td-text-color-anti);
   border-color: var(--td-brand-color);
 }
 
@@ -2634,7 +2634,7 @@ const drawerConfirmText = computed(() => {
   width: 8px;
   height: 2px;
   border-radius: 1px;
-  background: #fff;
+  background: var(--td-bg-color-container);
 }
 
 .resource-picker__icon {

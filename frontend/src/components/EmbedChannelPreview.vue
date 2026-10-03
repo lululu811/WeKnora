@@ -179,7 +179,7 @@ watch(() => props.visible, async (open) => {
   &__screen {
     flex: 1;
     min-height: 420px;
-    background: #f5f7fa;
+    background: var(--td-bg-color-page);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -190,7 +190,7 @@ watch(() => props.visible, async (open) => {
   width: 100%;
   height: 100%;
   border: none;
-  background: #fff;
+  background: var(--td-bg-color-container);
   display: block;
 }
 
@@ -201,7 +201,7 @@ watch(() => props.visible, async (open) => {
   border: 1px solid var(--td-component-stroke);
   border-radius: var(--app-radius-xl);
   overflow: hidden;
-  background: linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
+  background: linear-gradient(180deg, var(--td-bg-color-page) 0%, var(--td-border-level-2-color) 100%);
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
 }
 
@@ -237,7 +237,7 @@ watch(() => props.visible, async (open) => {
   height: 48px;
   border: none;
   border-radius: 50%;
-  color: #fff;
+  color: var(--td-text-color-anti);
   font-size: var(--app-text-3xl);
   cursor: pointer;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
@@ -257,7 +257,7 @@ watch(() => props.visible, async (open) => {
   max-height: calc(100% - 88px);
   border-radius: var(--app-radius-xl);
   overflow: hidden;
-  background: #fff;
+  background: var(--td-bg-color-container);
   box-shadow: 0 12px 40px rgba(15, 23, 42, 0.18);
   z-index: 2;
   border: 1px solid var(--td-component-stroke);
@@ -321,6 +321,8 @@ watch(() => props.visible, async (open) => {
     top: 80px;
   }
 }
+
+/* TODO 2.2: 3 处色值未收敛（图表/状态/语义不明，保留原值）：ff5f57, febc2e, 28c840 */
 </style>
 
 <!--
@@ -336,4 +338,6 @@ watch(() => props.visible, async (open) => {
     padding: 16px 18px;
   }
 }
+
+/* TODO 2.2: 3 处色值未收敛（图表/状态/语义不明，保留原值）：ff5f57, febc2e, 28c840 */
 </style>

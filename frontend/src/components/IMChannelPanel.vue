@@ -1194,7 +1194,7 @@ onUnmounted(() => {
 
 .im-step.active .im-step-num {
   background: var(--td-brand-color);
-  color: #fff;
+  color: var(--td-text-color-anti);
   border-color: var(--td-brand-color);
 }
 
@@ -1446,7 +1446,7 @@ onUnmounted(() => {
   overflow: hidden;
   // QR code images are always black-on-white; force white background
   // so the code remains scannable in dark mode.
-  background: #fff;
+  background: var(--td-bg-color-container);
 
   .qr-image {
     width: 100%;
@@ -1467,7 +1467,7 @@ onUnmounted(() => {
   justify-content: center;
   gap: 8px;
   background: rgba(0, 0, 0, 0.6);
-  color: #fff;
+  color: var(--td-text-color-anti);
   cursor: pointer;
   font-size: var(--app-text-sm);
 
@@ -1481,6 +1481,8 @@ onUnmounted(() => {
   color: var(--td-text-color-secondary);
   text-align: center;
 }
+
+/* TODO 2.2: 1 处色值未收敛（图表/状态/语义不明，保留原值）：07c160 */
 </style>
 
 <style lang="less">
@@ -1495,4 +1497,6 @@ onUnmounted(() => {
   height: 20px;
   object-fit: contain;
 }
+
+/* TODO 2.2: 1 处色值未收敛（图表/状态/语义不明，保留原值）：07c160 */
 </style>

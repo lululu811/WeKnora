@@ -3528,6 +3528,13 @@ export default {
       editingBadge: 'Editing',
       pageActions: 'Page actions',
       viewTabs: 'Knowledge base views',
+      tabDocuments: 'Documents',
+      tabDocumentsTip: 'View and manage documents in this knowledge base',
+      tabWikiTip: 'Browse the Wiki pages generated from this knowledge base',
+      tabGraph: 'Graph',
+      tabGraphTip: 'View the relationship graph between documents and pages',
+      tabGallery: 'Gallery',
+      tabGalleryTip: 'View image assets in this knowledge base',
       gallery: {
         attr: {
           builtin_caption: 'Caption',

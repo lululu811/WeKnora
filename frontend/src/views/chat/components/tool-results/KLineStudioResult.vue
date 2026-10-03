@@ -158,7 +158,7 @@ const openInPanel = (idx: number) => {
   border: 1px solid var(--td-brand-color);
   border-radius: var(--app-radius-xs);
   background: var(--td-brand-color);
-  color: #fff;
+  color: var(--td-text-color-anti);
   font-size: var(--app-text-sm);
   cursor: pointer;
   transition: background var(--app-motion-fast) ease;

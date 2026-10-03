@@ -38,7 +38,9 @@ defineProps<{ sourceType?: string; fileName: string }>();
     height: 16px;
     border-radius: var(--app-radius-xs);
     background: currentColor;
-    .t-icon { color: #fff; }
+    .t-icon { color: var(--td-bg-color-container); }
   }
 }
+
+/* TODO 2.2: 2 处色值未收敛（图表/状态/语义不明，保留原值）：7885ad, 53978e */
 </style>

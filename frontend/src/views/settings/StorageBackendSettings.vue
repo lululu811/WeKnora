@@ -439,7 +439,7 @@ onMounted(load)
 }
 
 .backend-card--local .backend-card__badge {
-  .provider-card-badge-color(#464646);
+  .provider-card-badge-color(var(--td-gray-color-11));
 }
 .backend-card--minio .backend-card__badge {
   .provider-card-badge-color(#c0382b);
@@ -665,6 +665,8 @@ onMounted(load)
     color: var(--td-error-color);
   }
 }
+
+/* TODO 2.2: 7 处色值未收敛（图表/状态/语义不明，保留原值）：0052d9, c0382b, 0089ff, d97706, e55a00, 07a050, ce1126 */
 </style>
 
 <!--
@@ -677,7 +679,7 @@ onMounted(load)
   box-shadow: inset 0 0 0 1px var(--td-component-stroke);
 }
 
-.storage-backend-drawer--local .setting-drawer__header-icon { background: rgba(70, 70, 70, 0.1); color: #464646; }
+.storage-backend-drawer--local .setting-drawer__header-icon { background: rgba(70, 70, 70, 0.1); color: var(--td-gray-color-11); }
 .storage-backend-drawer--minio .setting-drawer__header-icon { background: rgba(225, 38, 38, 0.12); color: #C0382B; }
 .storage-backend-drawer--cos .setting-drawer__header-icon { background: rgba(0, 82, 217, 0.1); color: #0052D9; }
 .storage-backend-drawer--tos .setting-drawer__header-icon { background: rgba(0, 137, 255, 0.12); color: #0089FF; }
@@ -685,4 +687,6 @@ onMounted(load)
 .storage-backend-drawer--oss .setting-drawer__header-icon { background: rgba(255, 90, 0, 0.12); color: #E55A00; }
 .storage-backend-drawer--ks3 .setting-drawer__header-icon { background: color-mix(in srgb, var(--td-brand-color) 12%, transparent); color: #07A050; }
 .storage-backend-drawer--obs .setting-drawer__header-icon { background: rgba(206, 17, 38, 0.1); color: #CE1126; }
+
+/* TODO 2.2: 7 处色值未收敛（图表/状态/语义不明，保留原值）：0052d9, c0382b, 0089ff, d97706, e55a00, 07a050, ce1126 */
 </style>

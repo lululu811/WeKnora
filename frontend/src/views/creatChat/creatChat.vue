@@ -1,49 +1,14 @@
 <template>
     <div class="dialogue-wrap">
-        <div class="dialogue-answers">
-            <div class="dialogue-title" style="--wails-draggable: drag">
-                <span style="--wails-draggable: drag">{{ $t('createChat.title') }}</span>
-            </div>
-            <!-- 推荐问题 -->
-            <div ref="sqContainerRef" class="suggested-questions-container">
-                <!-- 骨架屏占位 -->
-                <div v-if="sqLoading && suggestedQuestions.length === 0" class="suggested-questions-inner">
-                    <div class="suggested-questions-title"><t-skeleton animation="gradient"
-                            :row-col="[{ width: '120px', height: '14px' }]" /></div>
-                    <div class="suggested-questions-grid">
-                        <div v-for="n in 6" :key="'sq-skel-' + n" class="suggested-question-card sq-card-skeleton">
-                            <t-skeleton animation="gradient"
-                                :row-col="[{ width: '100%', height: '14px', type: 'rect' }]" />
-                        </div>
-                    </div>
-                </div>
-                <transition v-else appear name="sq-slide-fade" mode="out-in" @before-leave="onBeforeLeave"
-                    @after-leave="onAfterLeave" @enter="onEnter" @after-enter="onQuestionsEntered">
-                    <div v-if="suggestedQuestions.length > 0" :key="sqRenderKey" class="suggested-questions-inner">
-                        <div class="suggested-questions-title-row">
-                            <p class="suggested-questions-caption">
-                                <span class="suggested-questions-title">{{ $t('chat.suggestedQuestions') }}</span>
-                                <button type="button" class="suggested-questions-refresh" :disabled="sqLoading"
-                                    :title="$t('chat.refreshSuggestedQuestions')"
-                                    :aria-label="$t('chat.refreshSuggestedQuestions')" @click="fetchSuggestedQuestions">
-                                    <t-icon :name="sqLoading ? 'loading' : 'refresh'"
-                                        :class="{ 'sq-refresh-spin': sqLoading }" />
-                                </button>
-                            </p>
-                        </div>
-                        <div class="suggested-questions-grid">
-                            <div v-for="(item, index) in suggestedQuestions" :key="item.question"
-                                class="suggested-question-card" :class="{ 'sq-card-visible': sqCardsRevealed }"
-                                :style="{ transitionDelay: sqCardsRevealed ? `${index * 50}ms` : '0ms' }"
-                                @click="handleSuggestedQuestionClick(item)">
-                                <span class="suggested-question-text">{{ item.question }}</span>
-                                <span v-if="item.source === 'faq'" class="suggested-question-badge faq">FAQ</span>
-                            </div>
-                        </div>
-                    </div>
-                </transition>
-            </div>
-            <div class="create-chat-composer">
+        <div class="workbench" ref="workbenchRef">
+            <!-- 欢迎语：缩成 composer 上方一行衬线小字 -->
+            <header class="workbench-greeting" data-rise>
+                <h1 class="workbench-greeting__line">{{ greetingLine }}</h1>
+                <p class="workbench-greeting__sub">{{ $t('createChat.workbench.greetingSub') }}</p>
+            </header>
+
+            <!-- 主角：composer 居中偏上 1/3 处，聚焦时珊瑚暖光从下缘晕开 -->
+            <div class="create-chat-composer" :class="{ 'is-focused': composerFocused }" data-rise>
                 <div v-if="hostSandboxEnabled" class="project-dir-bar">
                     <button type="button" class="project-dir-bar__btn"
                         :class="{ 'is-bound': !!selectedProjectDir, 'is-picking': pickingProjectDir }"
@@ -57,7 +22,45 @@
                     <button v-if="selectedProjectDir" type="button" class="project-dir-bar__clear"
                         :aria-label="$t('createChat.clearProject')" @click="clearProjectDir">×</button>
                 </div>
-                <InputField ref="inputFieldRef" @send-msg="sendMsg"></InputField>
+                <div class="create-chat-composer__stage">
+                    <InputField ref="inputFieldRef" @send-msg="sendMsg" />
+                </div>
+            </div>
+
+            <!-- 桌上摊着的便签：继续昨天的工作 -->
+            <section v-if="recentSessions.length > 0" class="workbench-recents" data-rise>
+                <h2 class="workbench-section-title">{{ $t('createChat.workbench.continueTitle') }}</h2>
+                <div class="workbench-recents__grid">
+                    <button v-for="(s, i) in recentSessions" :key="s.id" type="button" class="recent-card"
+                        :style="{ transitionDelay: `${i * 60}ms` }" @click="resumeSession(s.id)">
+                        <span class="recent-card__title">{{ s.title }}</span>
+                        <span v-if="s.preview" class="recent-card__preview">{{ s.preview }}</span>
+                        <span class="recent-card__time">{{ relativeTime(s.updated_at) }}</span>
+                    </button>
+                </div>
+            </section>
+
+            <!-- 推荐问题（保留原有能力，降到次要位置） -->
+            <div v-if="suggestedQuestions.length > 0 || sqLoading" ref="sqContainerRef"
+                class="suggested-questions-container" data-rise>
+                <div class="suggested-questions-title-row">
+                    <p class="suggested-questions-caption">
+                        <span class="suggested-questions-title">{{ $t('chat.suggestedQuestions') }}</span>
+                        <button type="button" class="suggested-questions-refresh" :disabled="sqLoading"
+                            :title="$t('chat.refreshSuggestedQuestions')"
+                            :aria-label="$t('chat.refreshSuggestedQuestions')" @click="fetchSuggestedQuestions">
+                            <t-icon :name="sqLoading ? 'loading' : 'refresh'"
+                                :class="{ 'sq-refresh-spin': sqLoading }" />
+                        </button>
+                    </p>
+                </div>
+                <div class="suggested-questions-grid">
+                    <div v-for="item in suggestedQuestions" :key="item.question" class="suggested-question-card"
+                        @click="handleSuggestedQuestionClick(item)">
+                        <span class="suggested-question-text">{{ item.question }}</span>
+                        <span v-if="item.source === 'faq'" class="suggested-question-badge faq">FAQ</span>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -70,10 +73,10 @@
         @update:visible="(val) => val ? null : uiStore.closeKBEditor()" @success="handleKBEditorSuccess" />
 </template>
 <script setup lang="ts">
-import { ref, watch, onMounted, nextTick, computed } from 'vue';
+import { ref, watch, onMounted, computed } from 'vue';
 import ContextualGuide from '@/components/ContextualGuide.vue';
 import InputField from '@/components/Input-field.vue';
-import { createSessions } from "@/api/chat/index";
+import { createSessions, getSessionsList, getMessageList } from "@/api/chat/index";
 import { pickHostProjectDir } from '@/utils/desktopProjectDir';
 import { projectDirBasename, shouldRenderHostProjectSettings, withOptionalProjectDir } from '@/utils/hostWorkspace';
 import { getSuggestedQuestions } from "@/api/agent/index";
@@ -88,6 +91,8 @@ import { MessagePlugin } from 'tdesign-vue-next';
 import { useI18n } from 'vue-i18n';
 import KnowledgeBaseEditorModal from '@/views/knowledge/KnowledgeBaseEditorModal.vue';
 import { useKnowledgeBaseCreationNavigation } from '@/hooks/useKnowledgeBaseCreationNavigation';
+import { useStaggerRise } from '@/composables/useMotion';
+import { stripMarkdownToPreview, toRelativeTime } from '@/utils/workbenchFormat';
 
 const router = useRouter();
 const route = useRoute();
@@ -115,56 +120,54 @@ const showChatContextualGuide = computed(() => {
     return route.name === 'globalCreatChat' || route.name === 'kbCreatChat';
 });
 
+// ===== 午后的工作室 · 工作台首屏 =====
+const workbenchRef = ref<HTMLElement | null>(null);
+const composerFocused = ref(false);
+const { rise } = useStaggerRise({ stagger: 60, duration: 260, displacement: 12 });
+
+/** 按时段给一句衬线问候（方向 A：欢迎语缩成 composer 上方一行小字）。 */
+const greetingLine = computed(() => {
+    const h = new Date().getHours();
+    const key = h < 6 ? 'night' : h < 12 ? 'morning' : h < 18 ? 'afternoon' : 'evening';
+    return t(`createChat.workbench.greeting.${key}`);
+});
+
+interface RecentSessionCard { id: string; title: string; preview: string; updated_at: string }
+const recentSessions = ref<RecentSessionCard[]>([]);
+const relativeTime = (iso: string) => toRelativeTime(iso, t);
+
+const loadRecentSessions = async () => {
+    try {
+        const res: any = await getSessionsList(1, 3);
+        const rows: any[] = Array.isArray(res?.data) ? res.data : [];
+        const previews = await Promise.all(
+            rows.map((row) =>
+                getMessageList({ session_id: row.id, limit: 1, created_at: '' })
+                    .then((r: any) => stripMarkdownToPreview(r?.data?.[0]?.content || ''))
+                    .catch(() => ''),
+            ),
+        );
+        recentSessions.value = rows.map((row, i) => ({
+            id: row.id,
+            title: row.title || t('createChat.workbench.untitledSession'),
+            preview: previews[i],
+            updated_at: row.updated_at || row.created_at,
+        }));
+    } catch {
+        recentSessions.value = [];
+    }
+};
+
+const resumeSession = (sessionId: string) => {
+    router.push(`/platform/chat/${sessionId}`);
+};
+
 // ===== 推荐问题 =====
 const suggestedQuestions = ref<SuggestedQuestion[]>([]);
 const sqLoading = ref(true);
-const sqCardsRevealed = ref(false);
-const sqRenderKey = ref(0);
 const sqContainerRef = ref<HTMLElement | null>(null);
 let suggestedQuestionsFetchId = 0;
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
-
-// --- 高度平滑过渡钩子 ---
-const onBeforeLeave = () => {
-    const c = sqContainerRef.value;
-    if (!c) return;
-    c.style.height = c.offsetHeight + 'px';
-    c.style.overflow = 'hidden';
-};
-
-const onAfterLeave = () => {
-    const c = sqContainerRef.value;
-    if (!c) return;
-    if (suggestedQuestions.value.length === 0) {
-        requestAnimationFrame(() => { c.style.height = '0px'; });
-        c.addEventListener('transitionend', () => {
-            c.style.height = '';
-            c.style.overflow = '';
-        }, { once: true });
-    }
-};
-
-const onEnter = (el: Element) => {
-    const c = sqContainerRef.value;
-    if (!c) return;
-    const startHeight = c.offsetHeight;
-    c.style.height = 'auto';
-    c.style.overflow = 'hidden';
-    const targetHeight = c.offsetHeight;
-    c.style.height = startHeight + 'px';
-    requestAnimationFrame(() => {
-        c.style.height = targetHeight + 'px';
-    });
-};
-
-const onQuestionsEntered = () => {
-    const c = sqContainerRef.value;
-    if (c) {
-        c.style.height = '';
-        c.style.overflow = '';
-    }
-    nextTick(() => { sqCardsRevealed.value = true; });
-};
 
 const fetchSuggestedQuestions = async () => {
     const fetchId = ++suggestedQuestionsFetchId;
@@ -174,8 +177,6 @@ const fetchSuggestedQuestions = async () => {
         if (!agentId) return;
         const res = await getSuggestedQuestions(agentId, settingsStore.getSuggestedQuestionsParams());
         if (fetchId === suggestedQuestionsFetchId) {
-            sqCardsRevealed.value = false;
-            sqRenderKey.value++;
             suggestedQuestions.value = res?.data?.questions || [];
         }
     } catch (err) {
@@ -212,11 +213,14 @@ watch(
 
 onMounted(() => {
     fetchSuggestedQuestions();
+    loadRecentSessions();
+    // 首次进入：工作台卡片从下方 12px 处依次浮起（stagger 60ms）
+    requestAnimationFrame(() => {
+        if (workbenchRef.value) rise(workbenchRef.value.querySelectorAll('[data-rise]'));
+    });
     const queryQ = route.query.q;
     if (typeof queryQ === 'string' && queryQ.trim()) {
-        nextTick(() => {
-            inputFieldRef.value?.triggerSend(queryQ.trim());
-        });
+        inputFieldRef.value?.triggerSend(queryQ.trim());
     }
 });
 
@@ -224,9 +228,7 @@ watch(
     () => route.query.q,
     (newQ) => {
         if (typeof newQ === 'string' && newQ.trim()) {
-            nextTick(() => {
-                inputFieldRef.value?.triggerSend(newQ.trim());
-            });
+            inputFieldRef.value?.triggerSend(newQ.trim());
         }
     },
 );
@@ -311,7 +313,6 @@ async function openProjectDir() {
         pickingProjectDir.value = false;
     }
 }
-
 </script>
 <style lang="less" scoped>
 .dialogue-wrap {
@@ -319,16 +320,20 @@ async function openProjectDir() {
     display: flex;
     justify-content: center;
     align-items: center;
-    // position: relative;
+    overflow-y: auto;
 }
 
-.dialogue-answers {
+/* 骨架：composer 居中偏上 1/3 处是主角，卡片沉在它下面 */
+.workbench {
     display: flex;
     flex-flow: column;
     align-items: center;
     width: 100%;
     max-width: 960px;
-    gap: 24px;
+    gap: var(--app-space-6);
+    /* 1/3 处：整体重心偏上，桌面留白在下方 */
+    padding: var(--app-space-10) var(--app-space-6) var(--app-space-10);
+    box-sizing: border-box;
 
     :deep(.answers-input) {
         position: static;
@@ -336,18 +341,144 @@ async function openProjectDir() {
     }
 }
 
+/* 欢迎语：衬线一行小字，不再是页面主标题 */
+.workbench-greeting {
+    text-align: center;
+    margin: 0;
+}
+
+.workbench-greeting__line {
+    margin: 0;
+    font-family: var(--app-font-display);
+    /* 展示:正文尺度比 ~2.2:1 —— 正文 14px，欢迎语 28px */
+    font-size: var(--app-text-4xl);
+    font-weight: 600;
+    line-height: 1.3;
+    letter-spacing: 0.01em;
+    color: var(--td-text-color-primary);
+}
+
+.workbench-greeting__sub {
+    margin: var(--app-space-2) 0 0;
+    font-size: var(--app-text-sm);
+    color: var(--td-text-color-secondary);
+}
+
 .create-chat-composer {
+    position: relative;
     display: flex;
     flex-direction: column;
     align-items: stretch;
-    gap: 8px;
+    gap: var(--app-space-2);
     width: 100%;
+}
+
+.create-chat-composer__stage {
+    position: relative;
+    width: 100%;
+}
+
+/* 主视觉：聚焦时一圈极淡的珊瑚暖光从输入框下缘晕开（像台灯亮了） */
+.create-chat-composer__stage::after {
+    content: '';
+    position: absolute;
+    left: 12%;
+    right: 12%;
+    bottom: -18px;
+    height: 56px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity var(--app-motion-slow) ease-out;
+    background: radial-gradient(
+        ellipse at 50% 0%,
+        color-mix(in srgb, var(--td-brand-color) 26%, transparent) 0%,
+        color-mix(in srgb, var(--td-brand-color) 8%, transparent) 42%,
+        transparent 72%
+    );
+    filter: blur(10px);
+}
+
+.create-chat-composer:focus-within .create-chat-composer__stage::after {
+    opacity: 1;
+}
+
+/* 继续昨天的工作：桌上摊着的便签 */
+.workbench-section-title {
+    margin: 0 0 var(--app-space-3);
+    font-size: var(--app-text-2xs);
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--td-text-color-placeholder);
+}
+
+.workbench-recents__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: var(--app-space-4);
+}
+
+.recent-card {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--app-space-1);
+    min-width: 0;
+    padding: var(--app-space-4) var(--app-space-5);
+    border: 1px solid var(--td-component-border);
+    border-radius: var(--app-radius-md);
+    background: var(--td-bg-color-container);
+    text-align: left;
+    cursor: pointer;
+    /* hover 抬起 -2px + 暖光阴影 */
+    transition:
+        transform var(--app-motion-base) cubic-bezier(0.16, 1, 0.3, 1),
+        box-shadow var(--app-motion-base) ease-out,
+        border-color var(--app-motion-base) ease-out;
+
+    &:hover {
+        transform: translateY(-2px);
+        box-shadow: var(--td-shadow-2);
+        border-color: color-mix(in srgb, var(--td-brand-color) 28%, var(--td-component-border));
+    }
+
+    /* 按下 scale(0.98) */
+    &:active {
+        transform: scale(0.98);
+        box-shadow: var(--td-shadow-1);
+    }
+}
+
+.recent-card__title {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--app-font-display);
+    font-size: var(--app-text-base);
+    font-weight: 600;
+    color: var(--td-text-color-primary);
+}
+
+.recent-card__preview {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--app-text-xs);
+    color: var(--td-text-color-secondary);
+}
+
+.recent-card__time {
+    font-family: var(--app-font-family-mono);
+    font-size: var(--app-text-2xs);
+    color: var(--td-text-color-placeholder);
 }
 
 .project-dir-bar {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: var(--app-space-1);
     width: 100%;
     max-width: 960px;
     padding: 0;
@@ -397,101 +528,86 @@ async function openProjectDir() {
     cursor: pointer;
 }
 
-.dialogue-title {
-    display: flex;
-    color: var(--td-text-color-primary);
-    font-family: var(--app-font-family);
-    font-size: var(--app-text-5xl);
-    font-weight: 600;
-    align-items: center;
-    margin-bottom: 0;
-
-    .icon {
-        display: flex;
-        width: 32px;
-        height: 32px;
-        justify-content: center;
-        align-items: center;
-        border-radius: var(--app-radius-sm);
-        background: var(--td-bg-color-container);
-        box-shadow: var(--td-shadow-1);
-        margin-right: 12px;
-
-        .logo_img {
-            height: 24px;
-            width: 24px;
-        }
-    }
-}
-
 @import '../../components/css/suggested-questions.less';
-
-@keyframes skeletonFadeIn {
-    from {
-        opacity: 0;
-    }
-
-    to {
-        opacity: 1;
-    }
-}
 
 .suggested-questions-container {
     max-width: 960px;
     margin: 0;
     padding: 0 16px;
-    transition: height 0.35s @suggested-ease;
 }
 
-.suggested-questions-inner {
-    animation: skeletonFadeIn 0.3s ease-out;
-}
-
-.sq-slide-fade-enter-active {
-    transition: opacity 0.35s @suggested-ease, transform 0.35s @suggested-ease;
-}
-
-.sq-slide-fade-leave-active {
-    transition: opacity var(--app-motion-fast) cubic-bezier(0.4, 0, 1, 1),
-        transform var(--app-motion-fast) cubic-bezier(0.4, 0, 1, 1);
-}
-
-.sq-slide-fade-enter-from {
-    opacity: 0;
-    transform: translateY(10px);
-}
-
-.sq-slide-fade-leave-to {
-    opacity: 0;
-    transform: translateY(-4px);
+.suggested-questions-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--app-space-2);
 }
 
 .suggested-question-card {
-    opacity: 0;
-    transform: translateY(8px) scale(0.97);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    border: 1px solid var(--td-component-border);
+    border-radius: var(--app-radius-md);
+    background: var(--td-bg-color-container);
+    cursor: pointer;
     transition:
-        opacity 0.35s @suggested-ease,
-        transform 0.35s @suggested-ease,
-        background 0.2s @suggested-ease,
-        border-color 0.25s @suggested-ease,
-        box-shadow 0.25s @suggested-ease;
+        background var(--app-motion-fast) ease-out,
+        border-color var(--app-motion-fast) ease-out,
+        transform var(--app-motion-fast) ease-out;
 
-    &.sq-card-skeleton {
-        opacity: 1;
-        transform: none;
+    &:hover {
+        border-color: color-mix(in srgb, var(--td-brand-color) 30%, var(--td-component-border));
+        background: var(--td-bg-color-container-hover);
     }
 
-    &.sq-card-visible {
-        opacity: 1;
-        transform: translateY(0) scale(1);
-    }
-
-    &:not(.sq-card-skeleton):active {
+    &:active {
         transform: scale(0.98);
     }
+}
 
-    &.sq-card-visible:active {
-        transform: scale(0.98);
+.suggested-question-text {
+    font-size: var(--app-text-xs);
+    color: var(--td-text-color-secondary);
+}
+
+.suggested-questions-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--app-space-2);
+}
+
+.suggested-questions-caption {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin: 0;
+}
+
+.suggested-questions-title {
+    font-size: var(--app-text-2xs);
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--td-text-color-placeholder);
+}
+
+.suggested-questions-refresh {
+    border: none;
+    background: transparent;
+    padding: 2px;
+    color: var(--td-text-color-placeholder);
+    cursor: pointer;
+}
+
+.sq-refresh-spin {
+    animation: sqSpin 1s linear infinite;
+}
+
+@keyframes sqSpin {
+    to {
+        transform: rotate(360deg);
     }
 }
 </style>

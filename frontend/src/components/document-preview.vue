@@ -1586,6 +1586,8 @@ onUnmounted(() => {
     }
   }
 }
+
+/* TODO 2.2: 1 处色值未收敛（图表/状态/语义不明，保留原值）：000000 */
 </style>
 
 <!-- highlight.js github.css is a light theme imported globally; its token
@@ -1596,7 +1598,7 @@ onUnmounted(() => {
 <style lang="less">
 html[theme-mode="dark"] {
   .hljs {
-    color: #c9d1d9;
+    color: var(--td-border-level-1-color);
     background: transparent;
   }
   .hljs-doctag,
@@ -1647,7 +1649,7 @@ html[theme-mode="dark"] {
     color: #7ee787;
   }
   .hljs-subst {
-    color: #c9d1d9;
+    color: var(--td-border-level-1-color);
   }
   .hljs-section {
     color: #1f6feb;
@@ -1657,11 +1659,11 @@ html[theme-mode="dark"] {
     color: #f2cc60;
   }
   .hljs-emphasis {
-    color: #c9d1d9;
+    color: var(--td-border-level-1-color);
     font-style: italic;
   }
   .hljs-strong {
-    color: #c9d1d9;
+    color: var(--td-border-level-1-color);
     font-weight: bold;
   }
   .hljs-addition {
@@ -1673,6 +1675,8 @@ html[theme-mode="dark"] {
     background-color: #67060c;
   }
 }
+
+/* TODO 2.2: 14 处色值未收敛（图表/状态/语义不明，保留原值）：000000, ff7b72, d2a8ff, 79c0ff, a5d6ff, ffa657, 8b949e, 7ee787, 1f6feb, f2cc60, aff5b4, 033a16, ffdcd7, 67060c */
 </style>
 
 <style lang="less">
@@ -1697,4 +1701,6 @@ mark.source-locate-mark {
 tr.source-locate-block > td {
   background-color: color-mix(in srgb, var(--app-source-highlight) 45%, transparent) !important;
 }
+
+/* TODO 2.2: 14 处色值未收敛（图表/状态/语义不明，保留原值）：000000, ff7b72, d2a8ff, 79c0ff, a5d6ff, ffa657, 8b949e, 7ee787, 1f6feb, f2cc60, aff5b4, 033a16, ffdcd7, 67060c */
 </style>

@@ -271,7 +271,7 @@ watch(showTooltip, (newVal) => {
   &.tooltip-answer,
   &.tooltip-similar,
   &.tooltip-negative {
-    // 边框和箭头颜色已在主样式中定义为 #e7ebf0
+    // 边框和箭头颜色已在主样式中定义为 var(--td-border-level-1-color)
     // 无需额外覆盖
   }
 }

@@ -10,10 +10,15 @@
 // Shared typography for chat answer markdown (botmsg, AgentStreamDisplay, embed).
 // Tuned against ChatGPT markdown test doc: 16px body, 24px line-height on paragraphs,
 // stepped headings, dotted links, light tables, pill inline code, kbd chips.
+//
+// 方向 A 借用方向 B「主编的长卷」的编辑级回答排版：正文走衬线、16px/1.9 行高的
+// 长文阅读规格。code / pre 在下方各自显式声明 --app-font-family-mono，所以这里的
+// 衬线只作用于散文，不会漏进代码。
 .chat-markdown-typography() {
   font-size: var(--app-text-xl);
+  font-family: var(--app-font-display);
   color: var(--td-text-color-primary);
-  line-height: 1.625;
+  line-height: 1.9;
   letter-spacing: normal;
   -webkit-font-smoothing: antialiased;
 

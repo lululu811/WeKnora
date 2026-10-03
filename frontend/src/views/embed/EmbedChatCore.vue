@@ -466,7 +466,7 @@ watch(
     &--skeleton {
       height: 40px;
       cursor: default;
-      background: linear-gradient(90deg, #f0f0f0 25%, #e6e6e6 50%, #f0f0f0 75%);
+      background: linear-gradient(90deg, var(--td-bg-color-secondarycontainer) 25%, var(--td-gray-color-2) 50%, var(--td-bg-color-secondarycontainer) 75%);
       background-size: 200% 100%;
       animation: sk-shimmer 1.2s ease-in-out infinite;
       border: none;
@@ -572,7 +572,7 @@ watch(
 .sk-line {
   height: 14px;
   border-radius: var(--app-radius-sm);
-  background: linear-gradient(90deg, #f0f0f0 25%, #e6e6e6 50%, #f0f0f0 75%);
+  background: linear-gradient(90deg, var(--td-bg-color-secondarycontainer) 25%, var(--td-gray-color-2) 50%, var(--td-bg-color-secondarycontainer) 75%);
   background-size: 200% 100%;
   animation: sk-shimmer 1.2s ease-in-out infinite;
 }
@@ -614,4 +614,6 @@ watch(
   opacity: 0;
   transform: translateX(-50%) translateY(8px);
 }
+
+/* TODO 2.2: 1 处色值未收敛（图表/状态/语义不明，保留原值）：f0f0f0 */
 </style>

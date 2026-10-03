@@ -1258,7 +1258,7 @@ watch(
     padding: 0 6px;
     border-radius: var(--app-radius-xs);
     background: rgb(0 0 0 / 55%);
-    color: #fff;
+    color: var(--td-text-color-anti);
     font-size: var(--app-text-xs);
     line-height: 18px;
   }

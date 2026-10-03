@@ -3538,7 +3538,7 @@ const getImgSrc = (url: string) => {
     top: -2px;
     right: -2px;
     background: var(--td-brand-color);
-    color: #fff;
+    color: var(--td-text-color-anti);
     font-size: var(--app-text-2xs);
     width: 14px;
     height: 14px;
@@ -3577,7 +3577,7 @@ const getImgSrc = (url: string) => {
     top: -2px;
     right: -2px;
     background: var(--td-brand-color);
-    color: #fff;
+    color: var(--td-text-color-anti);
     font-size: var(--app-text-2xs);
     width: 14px;
     height: 14px;
@@ -3617,7 +3617,7 @@ const getImgSrc = (url: string) => {
     width: 16px;
     height: 16px;
     background: rgba(0, 0, 0, 0.5);
-    color: #fff;
+    color: var(--td-text-color-anti);
     border-radius: 50%;
     display: flex;
     align-items: center;
@@ -3784,7 +3784,7 @@ const getImgSrc = (url: string) => {
 
 .stop-btn, .send-btn {
   background-color: var(--td-brand-color);
-  color: #fff;
+  color: var(--td-text-color-anti);
 
   &:hover:not(.disabled) {
     background-color: var(--td-brand-color-active);
@@ -4227,4 +4227,6 @@ const getImgSrc = (url: string) => {
     text-decoration: underline;
   }
 }
+
+/* TODO 2.2: 4 处色值未收敛（图表/状态/语义不明，保留原值）：0052d9, 9f7aea, 0f766e, b7791f */
 </style>

@@ -640,7 +640,9 @@ onBeforeUnmount(() => {
 }
 
 :deep(.t-loading__gradient-conic) {
-    background: conic-gradient(from 90deg at 50% 50%, #fff 0deg, #676767 360deg) !important;
+    background: conic-gradient(from 90deg at 50% 50%, var(--td-bg-color-container) 0deg, #676767 360deg) !important;
 
 }
+
+/* TODO 2.2: 1 处色值未收敛（图表/状态/语义不明，保留原值）：676767 */
 </style>

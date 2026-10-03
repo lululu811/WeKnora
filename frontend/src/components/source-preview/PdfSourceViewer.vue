@@ -514,7 +514,7 @@ defineExpose({ relocate: () => applyLocate(props.locate) })
   // Block flow with auto margins keeps zoomed pages scrollable to the left.
   margin: 0 auto 12px;
   max-width: none;
-  background: #fff;
+  background: var(--td-bg-color-container);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
   // Text layers size themselves in these units.
   --scale-round-x: 1px;
