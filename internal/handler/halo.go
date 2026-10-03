@@ -60,6 +60,13 @@ type haloArchiveRequest struct {
 	Period          string `json:"period"`
 	ReportType      string `json:"report_type"`
 	Scope           string `json:"scope"`
+	// IncludeExternal 默认 false，但**可以显式打开**。
+	//
+	// 两融（东财稳定档）与北向（同花顺）都挂在 external 上，所以不打开时报告里
+	// 就没有这两节 —— 这是刻意的默认：external 里还包含 push2his（资金流，易封档，
+	// 实测已被 IP 级封禁），归档一次报告不该顺手把请求打到那里去。
+	// 需要那两节的调用方显式传 true，并接受一次外网往返。
+	IncludeExternal bool `json:"include_external"`
 	// Publish 默认 false：归档先落成草稿。
 	//
 	// 报告里约三成内容是 AI 判断（7 个定性维度及其子项），且自带 30 天有效期
@@ -146,18 +153,19 @@ func (h *HaloHandler) ArchiveHaloReport(c *gin.Context) {
 		scope = "consolidated"
 	}
 
-	// include_external 刻意恒为 false：归档不该顺带把请求打到东财的易封子域
-	// （push2his）。要拉外网是**分析时**的按需动作，不是归档的副作用。
-	//
-	// include_announcements 则为 true：公告是报告里「消息面」的背景，而它只多
+	// include_announcements 恒为 true：公告是报告里「消息面」的背景，而它只多
 	// 一次巨潮请求（单页，见 _fetch_announcements）。报告里没有公告那一节会让
 	// 读者以为这只票近期没有公告，而实际是没取 —— 这两件事必须能区分。
+	//
+	// include_external 由调用方决定（默认 false）：它包含 push2his 这一易封档，
+	// 不该是归档的默认副作用；但两融与北向挂在它上面，所以必须留出显式打开的路径，
+	// 否则那两节的渲染代码永远不会被执行。
 	score, err := h.haloClient.Score(ctx, halo.ScoreRequest{
 		Thscode:              thscode,
 		Period:               strings.TrimSpace(req.Period),
 		ReportType:           reportType,
 		Scope:                scope,
-		IncludeExt:           false,
+		IncludeExt:           req.IncludeExternal,
 		IncludeAnnouncements: true,
 	})
 	if err != nil {
@@ -275,6 +283,9 @@ type haloReportRequest struct {
 	// 未传时按 true 处理：面板要展示的就是完整报告，而公告只多一次巨潮请求
 	// （单页）。显式传 false 是给「不想为一次预览打外网」的调用方留的出口。
 	IncludeAnnouncements *bool `json:"include_announcements"`
+	// IncludeExternal 默认 false，理由同归档：external 里有 push2his 易封档，
+	// 而两融/北向要它。需要那两节的调用方显式传 true。
+	IncludeExternal bool `json:"include_external"`
 }
 
 // ReportHaloReport godoc
@@ -324,7 +335,7 @@ func (h *HaloHandler) ReportHaloReport(c *gin.Context) {
 		Period:               strings.TrimSpace(req.Period),
 		ReportType:           reportType,
 		Scope:                scope,
-		IncludeExt:           false,
+		IncludeExt:           req.IncludeExternal,
 		IncludeAnnouncements: withAnnouncements,
 	})
 	if err != nil {

@@ -178,7 +178,10 @@ def test_appendix_lists_halo_and_growth_gaps():
 def test_appendix_reports_nothing_missing_when_complete():
     """全都有时要说「无」，而不是留一张空表 —— 空表看起来像忘了填。"""
     slots = [slot(s["dimension"], s["label"], {"x": 1}) for s in ALL_SLOTS]
-    r = base_result(ai_slots=slots, announcements=[{"title": "t", "date": "d"}])
+    # external 也要给：两融/北向挂在它上面，缺了就会多一行「未取」，
+    # 那样这条测试就不是在测「全都有」了。
+    r = base_result(ai_slots=slots, announcements=[{"title": "t", "date": "d"}],
+                    external={"datacenter": {}})
     md = az.render_markdown(r)
     assert "（无：所有必需输入都已取到。）" in md
 
@@ -186,6 +189,18 @@ def test_appendix_reports_nothing_missing_when_complete():
 def test_appendix_flags_unfetched_announcements():
     md = az.render_markdown(base_result())
     assert "近期公告 | 未取" in md
+
+
+def test_appendix_flags_unfetched_external():
+    """两融/北向挂在 external 上，不取就整节不渲染 —— 必须说一句为什么。
+
+    否则读者会以为这只票没有两融数据，而实际是没去取。这与公告那条同一条规矩：
+    「没有」和「没取」必须能区分。
+    """
+    md = az.render_markdown(base_result())
+    assert "两融 / 北向资金 | 未取" in md
+    with_ext = az.render_markdown(base_result(external={"datacenter": {}}))
+    assert "两融 / 北向资金 | 未取" not in with_ext, "取了就不该再报未取"
 
 
 # ---------------------------------------------------------------------------

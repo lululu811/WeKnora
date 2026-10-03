@@ -366,9 +366,10 @@ func TestArchiveRefusesMarkdownlessResult(t *testing.T) {
 	assert.Empty(t, ks.created)
 }
 
-func TestArchiveRequestsAnnouncementsButNotExternal(t *testing.T) {
-	// 两个 include_* 标志是这次设计的核心取舍，必须钉住：
-	// 公告要（报告里需要，且只多一次巨潮请求）；external 不要（会打东财易封子域）。
+func TestArchiveRequestsAnnouncementsButNotExternalByDefault(t *testing.T) {
+	// 两个 include_* 标志的默认值是核心取舍，必须钉住：
+	// 公告要（报告里需要，且只多一次巨潮请求）；external 默认不要（含 push2his
+	// 易封档，不该是归档的副作用）。
 	stub := newHaloStub(t, map[string]any{
 		"ok": true, "thscode": "600519.SH", "period": "2025-12-31", "markdown": "x",
 	})
@@ -472,10 +473,26 @@ func TestReportDefaultsAnnouncementsOnAndHonoursExplicitOff(t *testing.T) {
 	assert.Equal(t, false, stub.got["include_announcements"], "显式 false 必须被尊重")
 }
 
-func TestReportNeverRequestsExternal(t *testing.T) {
+func TestReportDefaultsToNoExternal(t *testing.T) {
 	stub := newHaloStub(t, map[string]any{"ok": true, "markdown": "x", "thscode": "600519.SH"})
 	doReport(t, reportRouter(&recordingKnowledgeService{}, halo.NewHTTPClient(stub.server.URL)),
 		`{"thscode":"600519"}`)
 	assert.Equal(t, false, stub.got["include_external"],
-		"预览不得打东财易封子域；要拉外网是分析时的显式动作")
+		"默认不打东财易封子域；要拉外网是显式动作")
+}
+
+// 两融与北向挂在 external 上，所以必须留出显式打开的路径 —— 否则那两节的渲染
+// 代码永远不会被执行（默认 false 是对的，但「永远打不开」是另一回事）。
+func TestExternalCanBeOpenedExplicitly(t *testing.T) {
+	stub := newHaloStub(t, map[string]any{"ok": true, "markdown": "x", "thscode": "600519.SH"})
+	r := reportRouter(&recordingKnowledgeService{}, halo.NewHTTPClient(stub.server.URL))
+
+	doReport(t, r, `{"thscode":"600519","include_external":true}`)
+	assert.Equal(t, true, stub.got["include_external"], "预览显式打开必须生效")
+
+	ks := &recordingKnowledgeService{}
+	doArchive(t, archiveRouter(ks, halo.NewHTTPClient(stub.server.URL)),
+		`{"knowledge_base_id":"kb-1","thscode":"600519","include_external":true}`)
+	require.Len(t, ks.created, 1)
+	assert.Equal(t, true, stub.got["include_external"], "归档显式打开必须生效")
 }

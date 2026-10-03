@@ -639,6 +639,10 @@ def _md_missing_appendix(result: Dict[str, Any], slots: List[Dict[str, Any]]) ->
             rows.append(f"| {s['label']} 锚点 | 缺 {', '.join(s['missing_anchors'])} |")
     if not (result.get("announcements") or []):
         rows.append("| 近期公告 | 未取（include_announcements 未开启）或巨潮无数据 |")
+    if result.get("external") is None:
+        # 两融与北向的素材挂在 external 上。不取 external 时它们整节不渲染 ——
+        # 但**必须说一句**，否则读者会以为这只票没有两融数据。
+        rows.append("| 两融 / 北向资金 | 未取（include_external 未开启）|")
 
     L = ["## 附录：数据来源与缺失项汇总", "",
          "- **事实层**：巨潮年报 PDF 抽取（带来源页与原文）",
