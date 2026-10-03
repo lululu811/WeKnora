@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/Tencent/WeKnora/internal/types"
@@ -288,4 +289,151 @@ func (s *knowledgeService) VaultAsset(
 		return "", "", ErrVaultAssetNotFound
 	}
 	return resolveVaultAsset(meta.VaultPath, ref)
+}
+
+// vaultImageMimes maps the extensions the exporter emits to their content type.
+// The allowlist matches vaultAssetExts: only what the asset route can serve is
+// worth resolving, and resolving a .md or .pdf sibling would be pointless work.
+var vaultImageMimes = map[string]string{
+	".png":  "image/png",
+	".jpg":  "image/jpeg",
+	".jpeg": "image/jpeg",
+	".gif":  "image/gif",
+	".webp": "image/webp",
+	".bmp":  "image/bmp",
+	".avif": "image/avif",
+	".svg":  "image/svg+xml",
+}
+
+// vaultImageRefsMaxBytes caps a single image read. A finance article's figures
+// are raster screenshots; anything past this is not one, and reading it would
+// turn a metadata operation into an OOM.
+const vaultImageRefsMaxBytes = 32 << 20
+
+// markdownImageTargetRe matches the *destination* of a markdown image, tolerating
+// the two valid spellings the exporter emits: bare and angle-bracketed.
+// Group 1 is the raw target with any <> stripped.
+var markdownImageTargetRe = regexp.MustCompile(`!\[[^\]]*\]\(\s*(<[^>]*>|[^)\s]+)`)
+
+// htmlImageSrcRe matches src="..." in a bare <img> tag, which some exports emit
+// alongside markdown syntax.
+var htmlImageSrcRe = regexp.MustCompile(`(?i)<img\b[^>]*?\bsrc\s*=\s*["']([^"']+)["']`)
+
+// buildVaultImageResult collects the article's sibling image files into a
+// ReadResult that ImageResolver.ResolveAndStore already knows how to consume.
+//
+// The manual ingestion path only ever called ResolveDataURIImages and
+// ResolveRemoteImages, neither of which recognises a relative reference like
+// `images/fig.png`. That is fine for *reading* — the render-time vault-asset
+// proxy serves those bytes — but it leaves chunks with an empty image_info, so
+// the multimodal engine has nothing to OCR. Filling ImageRefs here reuses the
+// exact machinery the docreader path uses, rather than adding a second way to
+// store images.
+//
+// Returns nil when the entry has no vault path or no resolvable images, which
+// is the common case and must stay a no-op.
+func buildVaultImageResult(markdown, vaultPath string) (*types.ReadResult, error) {
+	if markdown == "" || vaultPath == "" {
+		return nil, nil
+	}
+	if _, err := vaultRoot(); err != nil {
+		// Vault not configured. Not an error: a manual entry without a vault
+		// location is perfectly normal.
+		return nil, nil
+	}
+
+	// Collect candidate refs in document order, de-duplicated.
+	seen := map[string]bool{}
+	var candidates []string
+	add := func(raw string) {
+		ref := strings.TrimSpace(raw)
+		ref = strings.TrimPrefix(ref, "<")
+		ref = strings.TrimSuffix(ref, ">")
+		if ref == "" || seen[ref] {
+			return
+		}
+		seen[ref] = true
+		candidates = append(candidates, ref)
+	}
+	for _, m := range markdownImageTargetRe.FindAllStringSubmatch(markdown, -1) {
+		add(m[1])
+	}
+	for _, m := range htmlImageSrcRe.FindAllStringSubmatch(markdown, -1) {
+		add(m[1])
+	}
+	if len(candidates) == 0 {
+		return nil, nil
+	}
+
+	entryAbs, err := secureJoin(mustVaultRoot(), vaultPath)
+	if err != nil {
+		return nil, err
+	}
+	dir := filepath.Dir(entryAbs)
+
+	refs := make([]types.ImageRef, 0, len(candidates))
+	for _, ref := range candidates {
+		// Absolute URLs and provider:// handles are somebody else's job —
+		// ResolveAndStore skips them too, and reading them here would be
+		// both wasteful and a traversal hazard.
+		if filepath.IsAbs(ref) || strings.Contains(ref, "://") {
+			continue
+		}
+		mime, ok := vaultImageMimes[strings.ToLower(filepath.Ext(ref))]
+		if !ok {
+			continue
+		}
+		abs, err := secureJoin(dir, ref)
+		if err != nil {
+			// Unreadable reference: leave the markdown alone for this one.
+			continue
+		}
+		if !withinDir(dir, abs) {
+			continue
+		}
+		info, err := os.Stat(abs)
+		if err != nil || !info.Mode().IsRegular() || info.Size() > vaultImageRefsMaxBytes {
+			continue
+		}
+		data, err := os.ReadFile(abs)
+		if err != nil {
+			continue
+		}
+		refs = append(refs, types.ImageRef{
+			Filename:    filepath.Base(ref),
+			OriginalRef: ref,
+			MimeType:    mime,
+			ImageData:   data,
+			// Vault figures are content, not chrome. IsOriginal also exempts
+			// them from the icon/size filter, which is what we want for a
+			// chart that happens to be small.
+			IsOriginal: true,
+		})
+	}
+
+	if len(refs) == 0 {
+		return nil, nil
+	}
+	return &types.ReadResult{MarkdownContent: markdown, ImageRefs: refs}, nil
+}
+
+// mustVaultRoot is vaultRoot for callers that have already established that a
+// vault exists.
+func mustVaultRoot() string {
+	root, _ := vaultRoot()
+	return root
+}
+
+// manualVaultPath returns the vault path recorded on a manual knowledge entry,
+// or "" when it has none (hand-typed content) or the metadata is unreadable.
+// A malformed entry must degrade to "no vault" rather than fail ingestion.
+func manualVaultPath(k *types.Knowledge) string {
+	if k == nil || !k.IsManual() {
+		return ""
+	}
+	meta, err := k.ManualMetadata()
+	if err != nil || meta == nil {
+		return ""
+	}
+	return strings.TrimSpace(meta.VaultPath)
 }

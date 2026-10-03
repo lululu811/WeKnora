@@ -1353,6 +1353,34 @@ func (s *knowledgeService) triggerManualProcessing(ctx context.Context,
 			clean = updatedContent
 			resolvedImages = append(resolvedImages, storedImages...)
 		}
+
+		// Sibling images of a vault-sourced entry: `![](images/fig.png)` in a
+		// file that lives next to that images/ directory. Neither resolver
+		// above recognises a relative reference, so without this the chunks
+		// carry an empty image_info and multimodal processing has nothing to
+		// OCR — the article reads fine but its charts are invisible to search.
+		//
+		// buildVaultImageResult does the path work and hands the bytes to the
+		// same ResolveAndStore the docreader path uses, so there is exactly
+		// one way images get into storage.
+		if vaultPath := manualVaultPath(knowledge); vaultPath != "" {
+			if result, err := buildVaultImageResult(clean, vaultPath); err != nil {
+				logger.Warnf(ctx, "vault image scan failed for manual knowledge %s: %v", knowledge.ID, err)
+			} else if result != nil && len(result.ImageRefs) > 0 {
+				storedMD, vaultImages, resolveErr := s.imageResolver.ResolveAndStore(
+					ctx, result, fileSvc, knowledge.TenantID,
+				)
+				if resolveErr != nil {
+					logger.Warnf(ctx, "vault image resolution partially failed for %s: %v", knowledge.ID, resolveErr)
+				}
+				if len(vaultImages) > 0 {
+					logger.Infof(ctx, "Resolved %d vault images for manual knowledge %s",
+						len(vaultImages), knowledge.ID)
+					clean = storedMD
+					resolvedImages = append(resolvedImages, vaultImages...)
+				}
+			}
+		}
 	}
 
 	// Re-claim the body's stored files. This runs after cleanupKnowledgeResources
