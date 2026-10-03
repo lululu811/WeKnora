@@ -51,7 +51,7 @@ import { useI18n } from 'vue-i18n';
 import { MessagePlugin } from 'tdesign-vue-next';
 import { useAgentWorkspace } from '@/finance/composables/useAgentWorkspace';
 import { extractMentionedStocks, extractTrackingReason, type MentionedStock } from '@/finance/utils/stockMentions';
-import { addWatchItem } from '@/finance/api/watchlist';
+import { addWatchItem, distillWatchReason } from '@/finance/api/watchlist';
 
 const props = defineProps<{
   session: any;
@@ -96,6 +96,31 @@ const handleClickStock = (stock: MentionedStock) => {
  */
 const pooledCodes = ref<Set<string>>(new Set());
 
+/**
+ * 先问模型要一句理由，拿不到再退回机械抽取。
+ *
+ * 顺序是刻意的：LLM 蒸馏出来的是「为什么值得跟」，机械抽取取的是「最后一次
+ * 提及所在的那一段」——而模型写股票分析收尾常常是一张汇总清单，抽出来就是
+ * 「⭐ 万科A —— 地产板块龙头，放量突破」，复述信号、不给理由；引出句更糟，
+ * 存进去的是「好，数据回来了，给你掰开了揉碎了聊」。
+ *
+ * 但模型调用会失败：没配模型、配额耗尽、超时。所以蒸馏是**增强**不是依赖 ——
+ * 它自己吞掉所有错误并回落到机械抽取，入池这个动作永远不会因为它而失败。
+ */
+const resolveNote = async (stock: MentionedStock): Promise<string> => {
+  const fallback = () => extractTrackingReason(rawContent.value, stock.thscode)
+  try {
+    const res = await distillWatchReason({
+      thscode: stock.thscode,
+      name: stock.name,
+      conversation: rawContent.value,
+    });
+    return res.reason?.trim() || fallback();
+  } catch {
+    return fallback();
+  }
+};
+
 const handleAddToPool = async (stock: MentionedStock) => {
   if (pooledCodes.value.has(stock.thscode)) return;
   try {
@@ -109,7 +134,7 @@ const handleAddToPool = async (stock: MentionedStock) => {
       //
       // 抽不到就传空串：note 允许为空，用户可以之后手写。宁可空着，
       // 也不要存一段不相干的话——那比空更难被发现。
-      note: extractTrackingReason(rawContent.value, stock.thscode),
+      note: await resolveNote(stock),
     });
     // created=false 说明它本来就在池子里（服务端顺手刷新了名称）——照实说，
     // 而不是让用户以为自己刚做了一件没发生过的事。

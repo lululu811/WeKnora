@@ -140,3 +140,41 @@ test('带后缀的写法不会被裸码规则重复匹配到错误位置', () =>
   assert.ok(reason.includes('交付量'), `实际：${reason}`)
   assert.ok(!reason.includes('我们来看看'))
 })
+
+/**
+ * 图表锚点标签的回归测试。
+ *
+ * 现场翻车的那条 note：
+ *   新强联(300850.SZ) 当前收盘价@<anchor kind="level" value="31.81"
+ *   label="当前价31.81"...
+ * 锚点标签是给 K 线图定位用的，note 存成原文之后又被 varchar(200) 从中间
+ * 切断，于是备注栏里出现一串半截的 XML。它不会报错，只会安静地坏掉。
+ */
+test('把图表锚点标签换成可读文字，不让原始标签进 note', () => {
+  const text = [
+    '新强联(300850.SZ) 当前收盘价@<anchor kind="level" value="31.81" label="当前价31.81"/>，量能未跟上。',
+  ].join('\n')
+
+  const reason = extractTrackingReason(text, '300850.SZ')
+  assert.ok(!reason.includes('<anchor'), `不该留下标签本体，实际：${reason}`)
+  assert.ok(!reason.includes('kind='), `不该留下属性，实际：${reason}`)
+  // 「价位 @xx」写法用裸值，比 label 自然
+  assert.ok(reason.includes('31.81'), `应保留价位，实际：${reason}`)
+  assert.ok(!/\/\s*$/.test(reason), `不该留下自闭合尾巴，实际：${reason}`)
+})
+
+test('没有 @ 前缀时用 label 作为可读文本', () => {
+  const text = '新强联(300850.SZ) 上方<anchor kind="level" value="72.4" label="第一目标"/>是第一目标位。'
+  const reason = extractTrackingReason(text, '300850.SZ')
+  assert.ok(reason.includes('第一目标'), `应取 label，实际：${reason}`)
+  assert.ok(!reason.includes('<anchor'))
+})
+
+test('note 长度按服务端列宽（200）截断，而不是 500', () => {
+  const long = '新强联(300850.SZ) ' + '逻辑连贯的判断依据。'.repeat(60)
+  const reason = extractTrackingReason(long, '300850.SZ')
+  assert.ok(
+    reason.length <= 200,
+    `超出 varchar(200) 会被服务端静默切断，实际长度：${reason.length}`,
+  )
+})

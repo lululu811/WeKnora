@@ -120,6 +120,32 @@ export function removeWatchItem(thscode: string) {
   )
 }
 
+/**
+ * 把整段对话蒸馏成一句「为什么跟这只票」。
+ *
+ * 机械抽取（extractTrackingReason）取的是「最后一次提及所在段落」，而模型写
+ * 股票分析的结构通常是「引出 → 展开 → 结论 → 汇总清单」，抽出来的往往是清单
+ * 行——「⭐ 万科A —— 地产板块龙头，放量突破」——它复述信号，不给理由；或者引出
+ * 句「好，数据回来了，给你掰开了揉碎了聊」，纯口语废话。两者读起来都像备注，
+ * 所以极难被发现。
+ *
+ * 服务端是尽力而为的：模型不可用、配额耗尽、抽取不出来，一律返回 200 + 空
+ * reason（`source` 会说明原因），**不抛错**。调用方必须把它当增强而非依赖。
+ *
+ * @returns reason 为空串表示「服务端没给出理由」，调用方应回退到机械抽取。
+ */
+export async function distillWatchReason(payload: {
+  thscode: string;
+  name?: string;
+  conversation: string;
+}): Promise<{ reason: string; source: 'llm' | 'none' | 'unavailable' }> {
+  const res = await post<{
+    success: boolean;
+    data: { reason: string; source: 'llm' | 'none' | 'unavailable' };
+  }>('/api/v1/watchlist/reason', payload)
+  return res?.data ?? { reason: '', source: 'unavailable' }
+}
+
 export function updateWatchItem(
   thscode: string,
   patch: { name?: string; sort_order?: number; state?: WatchState; note?: string },

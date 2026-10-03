@@ -651,6 +651,7 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	// watch handler, for the same dig-cycle reason as the job above. Both
 	// handlers still share watchContext, so the auth rule is stated once.
 	must(container.Provide(handler.NewStockWatchDiaryHandler))
+	must(container.Provide(handler.NewStockWatchReasonHandler))
 	must(container.Provide(func(
 		s *service.TenantSkillService, agents interfaces.AgentShareService,
 	) *handler.SkillHandler {

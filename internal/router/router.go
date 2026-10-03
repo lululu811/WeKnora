@@ -87,6 +87,11 @@ type RouterParams struct {
 	// produces the same type is a dependency cycle, and that fails at boot.
 	// A nil here simply means the diary routes are not registered.
 	StockWatchDiaryHandler *handler.StockWatchDiaryHandler
+	// StockWatchReasonHandler distills a watchlist note via a one-shot model
+	// call. Separate for the same dig reason as the diary handler, plus the
+	// fact that only this one route needs a model dependency. Nil means the
+	// route is simply not registered.
+	StockWatchReasonHandler *handler.StockWatchReasonHandler
 	// HaloHandler is the analysis stack's HTTP surface (currently just the
 	// report archive). Nil means the route is not registered, matching the
 	// diary handler's contract above: a deployment without the finance stack
@@ -387,6 +392,7 @@ func NewRouter(params RouterParams) *gin.Engine {
 		RegisterUserFavoriteRoutes(v1, params.UserFavoriteHandler, rbacGuards)
 		RegisterStockWatchRoutes(v1, params.StockWatchHandler, rbacGuards)
 		RegisterStockWatchDiaryRoutes(v1, params.StockWatchDiaryHandler, rbacGuards)
+		RegisterStockWatchReasonRoutes(v1, params.StockWatchReasonHandler, rbacGuards)
 		RegisterSkillRoutes(v1, params.SkillHandler, rbacGuards)
 		RegisterOrganizationRoutes(v1, params.OrganizationHandler, rbacGuards)
 		RegisterIMChannelRoutes(v1, params.IMHandler, rbacGuards)

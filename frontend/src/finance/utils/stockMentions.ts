@@ -233,11 +233,15 @@ export function extractMentionedStocks(text: string): MentionedStock[] {
  * 也好过让用户面对一个空输入框猜该填什么。
  *
  * 抽不出（非空但完全找不到这只票）返回空串，由调用方决定是否提示。
+ *
+ * maxLen 默认 200 = 服务端 `stock_watch.note` 的列宽。两者必须一致：前端按
+ * 500 截，服务端按 200 再截一次，切口不落在句读上，note 就会在半句话甚至
+ * 半个标签里断掉。
  */
 export function extractTrackingReason(
   text: string,
   thscode: string,
-  maxLen = 500,
+  maxLen = 200,
 ): string {
   if (!text || !thscode) return ''
 
@@ -362,13 +366,52 @@ function lastMentionIndex(text: string, thscode: string): number {
 }
 
 /**
+ * 图表锚点标签 → 可读文本。
+ *
+ * 正文里的 `<anchor kind="level" value="72.4" label="第一目标"/>` 是给 K 线图
+ * 用的定位标记，界面上会渲染成图上的圈号。抽取理由时它必须换成文字，否则
+ * note 里会躺着一段 `<anchor kind="level" value="31.81" label="当前价31.81"...`
+ * 这样的原始标签——而 note 落库是 varchar(200)，正好把标签从中间切断。
+ *
+ * 取值优先级：label（人写的说明）→ value/from~to（裸数据）→ 整段丢弃。
+ * 紧跟在 `@` 后面的是「价位 @xx」的写法，此时用裸值比用 label 自然：
+ * `当前收盘价@<anchor value="31.81" label="当前价31.81"/>` 读作
+ * 「当前收盘价@31.81」，而不是「当前收盘价@当前价31.81」。
+ */
+const ANCHOR_TAG_RE = /@?\s*<anchor\b([^>]*?)\/>/g
+const ANCHOR_ATTR_RE = /(\w+)\s*=\s*"([^"]*)"/g
+
+function anchorAttrs(body: string): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const m of body.matchAll(ANCHOR_ATTR_RE)) out[m[1]] = m[2]
+  return out
+}
+
+function readableAnchor(body: string, atPrefix: boolean): string {
+  const a = anchorAttrs(body)
+  if (atPrefix) return a.value ?? a.from ?? ''
+  if (a.label) return a.label
+  if (a.value) return a.value
+  if (a.from && a.to) return `${a.from} ~ ${a.to}`
+  if (a.from) return a.from
+  return ''
+}
+
+function inlineAnchorTags(raw: string): string {
+  return raw.replace(ANCHOR_TAG_RE, (_all, body: string) => {
+    const atPrefix = /^\s*@/.test(_all)
+    return readableAnchor(body, atPrefix)
+  })
+}
+
+/**
  * 去掉 markdown 记号与多余空白，并硬截到 maxLen。
  *
  * 截断按**字符**而不是 grapheme：note 落库后由服务端按 rune 计长，
  * 这里只需要保证不会超得离谱，且 emoji 被从中间劈开不会造成任何问题。
  */
 function cleanReason(raw: string, maxLen: number): string {
-  const text = raw
+  const text = inlineAnchorTags(raw)
     // 代码围栏：连同 ``` 一起删掉，围栏里是给终端看的内容。
     .replace(/```[a-zA-Z]*\n?/g, '')
     // 行内记号：保留文字，去掉渲染用的符号。

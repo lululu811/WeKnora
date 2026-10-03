@@ -85,3 +85,25 @@ func RegisterStockWatchDiaryRoutes(
 	watch.POST("/:thscode/diaries/accept", g.Viewer(), h.AcceptStockWatchDiary)
 	watch.POST("/:thscode/diaries/ignore", g.Viewer(), h.IgnoreStockWatchDiary)
 }
+
+// RegisterStockWatchReasonRoutes wires the note-distillation endpoint.
+//
+// It is a separate handler for the same reason the diary handler is: dig
+// rejects a provider that both consumes and produces a type, so the
+// StockWatchHandler cannot grow a new constructor argument that another
+// registered handler also depends on. It also keeps the CRUD surface free of a
+// model dependency it would only use on one route.
+//
+// Route shape: POST /watchlist/reason is a static segment on a method whose only
+// other routes are POST "" and POST /:thscode/conditions. Same reasoning as
+// "/events" applies a fortiori — "reason" can never match a thscode, since a
+// thscode is six digits and a dot (types.IsValidStockWatchCode).
+func RegisterStockWatchReasonRoutes(
+	r *gin.RouterGroup, h *handler.StockWatchReasonHandler, g *rbacGuards,
+) {
+	if h == nil {
+		return
+	}
+	watch := r.Group("/watchlist")
+	watch.POST("/reason", g.Viewer(), h.DistillWatchReason)
+}
