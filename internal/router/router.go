@@ -2,6 +2,7 @@ package router
 
 import (
 	"context"
+	"net/http"
 	"os"
 	"strings"
 	"time"
@@ -339,12 +340,22 @@ func NewRouter(params RouterParams) *gin.Engine {
 		RegisterKnowledgeRoutes(v1, params.KnowledgeHandler, rbacGuards)
 		// HALO 报告：预览（只读）与归档（写库）。
 		//
-		// 归档不套 rbacGuards：handler 内部走的是 KB 路由同一套访问校验
-		// （resolveHandlerKBAccessFor + access.RequireKBWrite），再套一层会让
-		// 「谁有权写这个知识库」有两个说法。预览不碰知识库，只需认证。
+		// 必须走 g.apiKeyRoute 而不是裸 v1.POST：/api/v1 上的 API key 闸门对
+		// **未声明策略的路由默认拒绝**（api_key_gate.go: "Absent policy => default
+		// deny"），而且那条检查在 FullAccess 之前 —— 连全权限的 key 也照样 403。
+		// 这是实测出来的：裸注册时用 X-API-Key 打 /halo/report 得到
+		// 403 "API key scope does not allow this operation"，而 JWT 会话不受影响，
+		// 所以浏览器里看不出问题，只有 CLI / MCP / 脚本调用方会撞上。
+		//
+		// 策略沿用 KB 路由的惯例：读用 apiKeyRetrieve，写用 apiKeyIngest，
+		// 两者都接受「全权限 key」或「带对应能力的 key」。
+		// KB 级别的权限仍由 handler 内的 resolveHandlerKBAccessFor +
+		// access.RequireKBWrite 判定，这里只解决「这条路由允不允许 API key 进」。
 		if params.HaloHandler != nil {
-			v1.POST("/halo/report", params.HaloHandler.ReportHaloReport)
-			v1.POST("/halo/archive", params.HaloHandler.ArchiveHaloReport)
+			rbacGuards.apiKeyRoute(v1, http.MethodPost, "/halo/report",
+				apiKeyRetrieve(apiKeyFullAccess()), params.HaloHandler.ReportHaloReport)
+			rbacGuards.apiKeyRoute(v1, http.MethodPost, "/halo/archive",
+				apiKeyIngest(apiKeyFullAccess()), params.HaloHandler.ArchiveHaloReport)
 		}
 		RegisterFAQRoutes(v1, params.FAQHandler, rbacGuards)
 		RegisterChunkRoutes(v1, params.ChunkHandler, rbacGuards)
