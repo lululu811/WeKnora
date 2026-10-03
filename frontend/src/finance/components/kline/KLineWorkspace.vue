@@ -4,7 +4,7 @@
     <div class="kline-workspace__picks-bar" v-if="workspace.picks.value.length > 0">
       <div class="picks-bar__label">
         <t-icon name="chart-bar" size="14px" />
-        <span>候选池 ({{ workspace.picks.value.length }})</span>
+        <span>{{ t('kline.picksBar', { count: workspace.picks.value.length }) }}</span>
       </div>
       <div class="picks-bar__list" role="tablist">
         <button
@@ -22,14 +22,14 @@
           <span class="tab__tag" v-if="pick.pattern">{{ pick.pattern }}</span>
         </button>
       </div>
-      <div class="picks-bar__hint">[↑/↓] 键快速切股</div>
+      <div class="picks-bar__hint">{{ t('kline.picksHint') }}</div>
     </div>
 
     <!-- 2. 行情概览与战法状态概括条 (Quote & Z-Status Strip) -->
     <div class="kline-workspace__quote-strip">
       <div class="quote-strip__left">
         <!-- 股票代码与名称（点击可快捷搜索切换） -->
-        <button type="button" class="quote__symbol-btn" @click="showSearchModal = !showSearchModal" title="点击搜索切换股票">
+        <button type="button" class="quote__symbol-btn" @click="showSearchModal = !showSearchModal" :title="t('kline.searchSwitch')">
           <span class="quote__name">{{ currentStockName }}</span>
           <span class="quote__symbol">{{ currentTicker }}.{{ currentExchange }}</span>
           <t-icon name="search" size="13px" class="search-hint-icon" />
@@ -57,27 +57,27 @@
         <span
           class="status-pill"
           :class="latestQuote.brickScore > 0 ? 'is-bull' : latestQuote.brickScore < 0 ? 'is-bear' : 'is-neutral'"
-          title="同花顺知行砖型图 连续红绿砖数砖战法"
+          :title="t('kline.zxBrickTitle')"
         >
-          🧱 ZX砖型: {{ latestQuote.brickText }}
+          🧱 {{ t('kline.zxBrickLabel') }}: {{ latestQuote.brickText }}
         </span>
 
         <!-- 双线多空（DEMA10 vs LongBBI） -->
         <span
           class="status-pill"
           :class="latestQuote.aboveYellow && latestQuote.whiteAboveYellow ? 'is-bull' : !latestQuote.aboveYellow ? 'is-bear' : 'is-neutral'"
-          :title="`快线 DEMA10(${latestQuote.whiteVal.toFixed(2)}) 与 大哥线 LongBBI(${latestQuote.yellowVal.toFixed(2)}) 的相对位置`"
+          :title="t('kline.dualLineTitle', { white: latestQuote.whiteVal.toFixed(2), yellow: latestQuote.yellowVal.toFixed(2) })"
         >
-          {{ !latestQuote.aboveYellow ? '跌破大哥线(严守止损)' : latestQuote.whiteAboveYellow ? '快线在大哥线上(顺大势)' : '碗内回踩(蓄势)' }}
+          {{ !latestQuote.aboveYellow ? t('kline.dualLineBelow') : latestQuote.whiteAboveYellow ? t('kline.dualLineAbove') : t('kline.dualLineRetrace') }}
         </span>
 
         <!-- BBI牵牛绳 -->
         <span
           class="status-pill"
           :class="latestQuote.aboveBbi ? 'is-bull' : 'is-bear'"
-          title="收盘价与BBI多空平衡线关系"
+          :title="t('kline.bbiTitle')"
         >
-          {{ latestQuote.aboveBbi ? '🐂 站上BBI' : '🐻 跌破BBI' }}
+          {{ latestQuote.aboveBbi ? t('kline.aboveBBI') : t('kline.belowBBI') }}
         </span>
 
         <!-- 当前光标命中的形态反哺提问 -->
@@ -85,18 +85,18 @@
           v-if="activePatternNames.length > 0"
           type="button"
           class="status-pill is-pattern-ask"
-          :title="`点击直接向 AI 深度解析形态：${activePatternNames.join('、')}`"
+          :title="t('kline.patternAskTitle', { patterns: activePatternNames.join('、') })"
           @click="handleAskPattern(activePatternNames[0])"
         >
           <t-icon name="chat" size="12px" />
-          形态: {{ activePatternNames.join('、') }}（向AI提问）
+          {{ t('kline.patternLabel') }}: {{ activePatternNames.join('、') }}{{ t('kline.patternAskSuffix') }}
         </button>
       </div>
 
       <!-- 右侧辅助行情指标 -->
       <div class="quote-strip__metrics" v-if="latestQuote">
-        <span class="metric-item">量: <strong>{{ formatVolume(latestQuote.volume) }}</strong></span>
-        <span class="metric-item">额: <strong>{{ formatTurnover(latestQuote.turnover) }}</strong></span>
+        <span class="metric-item">{{ t('kline.volumeLabel') }} <strong>{{ formatVolume(latestQuote.volume) }}</strong></span>
+        <span class="metric-item">{{ t('kline.turnoverLabel') }} <strong>{{ formatTurnover(latestQuote.turnover) }}</strong></span>
       </div>
 
       <!-- 周期与复权。这两组是低频操作（切股票时基本不用动），原先和主图/副图
@@ -104,7 +104,7 @@
            右端后，工具栏只剩真正高频的主图/副图切换。 -->
       <div class="quote-strip__right">
         <div class="strip-ctl">
-          <span class="strip-ctl__label">周期</span>
+          <span class="strip-ctl__label">{{ t('kline.period') }}</span>
           <button
             v-for="(p, idx) in PERIODS"
             :key="p.timespan"
@@ -117,7 +117,7 @@
           </button>
         </div>
         <div class="strip-ctl">
-          <span class="strip-ctl__label">复权</span>
+          <span class="strip-ctl__label">{{ t('kline.adjust') }}</span>
           <!-- 板块/指数只有不复权裸行情（index.duckdb 里没有 *_qfq/_hfq），三个档位
                当前是等价的。置灰 + 写明口径，而不是让按钮点得动却没反应。 -->
           <button
@@ -127,12 +127,12 @@
             class="strip-ctl__btn"
             :class="{ 'is-active': adjust === opt.value }"
             :disabled="isBoard"
-            :title="isBoard ? '板块/指数为不复权口径：本地只有裸行情，没有复权数据' : undefined"
+            :title="isBoard ? t('kline.boardAdjustTitle') : undefined"
             @click="adjust = opt.value"
           >
             {{ opt.label }}
           </button>
-          <span v-if="isBoard" class="strip-ctl__note">板块不复权</span>
+          <span v-if="isBoard" class="strip-ctl__note">{{ t('kline.boardNoAdjust') }}</span>
         </div>
       </div>
     </div>
@@ -145,7 +145,7 @@
           <input
             v-model="searchQuery"
             type="text"
-            placeholder="输入股票代码/名称/拼音 (如 600519、宁德时代)"
+            :placeholder="t('kline.searchPlaceholder')"
             class="search-modal__input"
             autofocus
             @input="handleSearchInput"
@@ -156,8 +156,8 @@
           </button>
         </div>
         <div class="search-modal__results">
-          <div v-if="isSearching" class="search-loading">正在搜索...</div>
-          <div v-else-if="searchResults.length === 0 && searchQuery" class="search-empty">未匹配到相关标的</div>
+          <div v-if="isSearching" class="search-loading">{{ t('kline.searching') }}</div>
+          <div v-else-if="searchResults.length === 0 && searchQuery" class="search-empty">{{ t('kline.noMatch') }}</div>
           <div
             v-for="item in searchResults"
             :key="`${item.ticker}-${item.exchange}`"
@@ -168,7 +168,7 @@
                  两者的图上能力不同（板块无复权、无形态），不标就得点进去才发现。 -->
             <span class="search-item__main">
               <span class="search-item__name">{{ item.name }}</span>
-              <span v-if="isBoardExchange(item.exchange)" class="search-item__tag">板块</span>
+              <span v-if="isBoardExchange(item.exchange)" class="search-item__tag">{{ t('kline.board') }}</span>
             </span>
             <span class="search-item__code">{{ item.ticker }}.{{ item.exchange }}</span>
           </div>
@@ -181,7 +181,7 @@
     <div class="kline-workspace__toolbar">
       <!-- 主图指标 -->
       <div class="toolbar__group">
-        <span class="group__label">主图:</span>
+        <span class="group__label">{{ t('kline.mainChart') }}</span>
         <button
           v-for="preset in MAIN_PRESETS"
           :key="preset.id"
@@ -199,7 +199,7 @@
 
       <!-- 副图指标 -->
       <div class="toolbar__group">
-        <span class="group__label">副图:</span>
+        <span class="group__label">{{ t('kline.subChart') }}</span>
         <button
           v-for="sub in SUB_PRESETS"
           :key="sub.id"
@@ -221,10 +221,10 @@
           type="button"
           class="toolbar__btn feature-btn"
           :class="{ 'is-active': isTD9Enabled }"
-          title="神奇九转：连续 9 根 K 线的变盘倒数。红色数字在上方代表上涨序列、绿色在下方代表下跌序列，走到 9 时变盘概率最高"
+          :title="t('kline.td9Title')"
           @click="toggleTD9"
         >
-          九转序列
+          {{ t('kline.td9') }}
         </button>
         <LayerFilterDropdown
           :selection="bubbleSelection"
@@ -233,10 +233,10 @@
           v-model:enabled="isPatternsEnabled"
           :open="openLayerPanel === 'bubbles'"
           @update:open="(v) => (openLayerPanel = v ? 'bubbles' : null)"
-          title="形态气泡"
+          :title="t('kline.patternBubbles')"
           :options="bubbleOptions"
-          :empty-text="isBoard ? '板块不提供形态识别' : '本图没有识别到形态'"
-          hint="按类型勾选。战法标注来自 Z 哥战法，蜡烛形态来自 TA-Lib。括号里是「勾中/全部」。"
+          :empty-text="isBoard ? t('kline.boardNoPattern') : t('kline.noPatternDetected')"
+          :hint="t('kline.patternBubbleHint')"
         >
           <button
             type="button"
@@ -244,10 +244,10 @@
             :class="{ 'is-active': isPatternsEnabled && bubbleOnCount > 0 }"
             :disabled="isBoard"
             :title="isBoard
-              ? '板块不提供形态识别：形态来自只对个股落库的 candle/指标列，本地没有板块级形态数据'
-              : '形态气泡：在 K 线上标出识别出的蜡烛形态。点开可以按类型勾选要显示哪几种'"
+              ? t('kline.boardNoPatternDetail')
+              : t('kline.patternBubbleBtnTitle')"
           >
-            形态气泡<span class="feature-count">({{ bubbleOnCount }}/{{ bubbleOptions.length }})</span>
+            {{ t('kline.patternBubbleLabel') }}<span class="feature-count">({{ bubbleOnCount }}/{{ bubbleOptions.length }})</span>
           </button>
         </LayerFilterDropdown>
         <LayerFilterDropdown
@@ -257,10 +257,10 @@
           v-model:enabled="isChartPatternsEnabled"
           :open="openLayerPanel === 'outline'"
           @update:open="(v) => (openLayerPanel = v ? 'outline' : null)"
-          title="形态轮廓"
+          :title="t('kline.patternOutline')"
           :options="outlineOptions"
-          :empty-text="isBoard ? '板块不提供形态识别' : '本图没有识别到形态'"
-          hint="自动数浪只是一种可能的数法，请当作参考而非结论。"
+          :empty-text="isBoard ? t('kline.boardNoPattern') : t('kline.noPatternDetected')"
+          :hint="t('kline.patternOutlineHint')"
         >
           <button
             type="button"
@@ -268,23 +268,23 @@
             :class="{ 'is-active': isChartPatternsEnabled && outlineOnCount > 0 }"
             :disabled="isBoard"
             :title="isBoard
-              ? '板块不提供形态识别：几何形态与波浪依赖只对个股落库的指标列，本地没有板块级形态数据'
-              : '形态轮廓：把几何形态（头肩顶/双底/三角/楔形/旗形）与艾略特波浪画成轮廓——顶点连成折线，颈线与目标位画成虚线。点开可以选要画哪一种'"
+              ? t('kline.boardNoPatternOutlineDetail')
+              : t('kline.patternOutlineBtnTitle')"
           >
-            形态轮廓<span class="feature-count">({{ outlineOnCount }}/{{ outlineOptions.length }})</span>
+            {{ t('kline.patternOutlineLabel') }}<span class="feature-count">({{ outlineOnCount }}/{{ outlineOptions.length }})</span>
           </button>
         </LayerFilterDropdown>
         <!-- 只有一句说明，不隐藏按钮：用户需要知道"这个功能存在，但对板块当前不可用"，
              而不是让它凭空消失（消失会被当成 bug 或被误读成"识别失败"）。 -->
-        <span v-if="isBoard" class="feature-note">板块不提供形态识别</span>
+        <span v-if="isBoard" class="feature-note">{{ t('kline.boardNoPattern') }}</span>
         <button
           type="button"
           class="toolbar__btn feature-btn"
           :class="{ 'is-active': isLevelsEnabled }"
-          title="关键位：在现价上下标出最近的两个支撑与两个阻力（枢轴点 / 斐波那契 / 摆动高低点 / 整数关口，重合的合并）。觉得画面太满时可以关掉"
+          :title="t('kline.levelsTitle')"
           @click="toggleLevels"
         >
-          关键位
+          {{ t('kline.levelsLabel') }}
         </button>
       </div>
 
@@ -292,7 +292,7 @@
 
       <!-- 交易员画线工具箱 -->
       <div class="toolbar__group drawing-group">
-        <span class="group__label">画线:</span>
+        <span class="group__label">{{ t('kline.drawing') }}</span>
         <button
           type="button"
           class="toolbar__btn"
@@ -359,7 +359,7 @@
       <button
         type="button"
         class="toolbar__icon-btn"
-        :title="workspace.isCollapsed.value ? '展开工作台' : '折叠工作台（保留当前股票）'"
+        :title="workspace.isCollapsed.value ? t('kline.expandWorkspace') : t('kline.collapseWorkspace')"
         @click="workspace.toggleCollapsed()"
       >
         <t-icon :name="workspace.isCollapsed.value ? 'chevron-left' : 'chevron-right'" size="16px" />
@@ -390,12 +390,8 @@
            幻觉出的代码段（如把 600487 写成 688487）在本地从未发行。 -->
       <div v-if="noDataSymbol" class="kline-workspace__empty">
         <div class="empty__icon">📉</div>
-        <p class="empty__title">本地无 {{ noDataSymbol }} 的行情数据</p>
-        <p class="empty__hint">
-          该代码不在本地代码表中（v_symbol），或本地行情尚未同步到它。<br />
-          如果这是模型提到的代码，它很可能是<b>幻觉出的不存在的代码</b>；<br />
-          代码格式为 6 位数字 + 交易所后缀（.SH / .SZ / .BJ）。
-        </p>
+        <p class="empty__title">{{ t('kline.noData', { symbol: noDataSymbol }) }}</p>
+        <p class="empty__hint" v-html="t('kline.noDataHint')" />
       </div>
 
       <!-- 5c. 取数失败状态
@@ -406,17 +402,9 @@
            让人以为是数据没同步，排查方向整个跑偏。 -->
       <div v-else-if="loadError" class="kline-workspace__empty is-error">
         <div class="empty__icon">⚠️</div>
-        <p class="empty__title">{{ loadError.symbol }} 行情查询失败</p>
-        <p v-if="loadError.kind === 'request'" class="empty__hint">
-          {{ loadError.message }}<br />
-          服务端<b>明确拒绝</b>了这次请求（标的类型或参数不被支持），所以<b>重试不会有不同结果</b>。<br />
-          这不是数据缺失，也不是取数链路故障——请改用支持的标的或去掉不支持的参数。
-        </p>
-        <p v-else class="empty__hint">
-          {{ loadError.message }}<br />
-          这是<b>取数链路</b>的问题，不是这只票没有行情数据——数据可能完好。<br />
-          可稍后重试；若持续失败，请检查 python-service 容器与 nginx 代理。
-        </p>
+        <p class="empty__title">{{ t('kline.queryFailed', { symbol: loadError.symbol }) }}</p>
+        <p v-if="loadError.kind === 'request'" class="empty__hint" v-html="t('kline.requestRejectedHint', { message: loadError.message })" />
+        <p v-else class="empty__hint" v-html="t('kline.fetchPathIssueHint', { message: loadError.message })" />
       </div>
     </div>
 
@@ -424,7 +412,7 @@
     <div class="kline-workspace__actions">
       <span class="actions__title">
         <t-icon name="chat" size="14px" />
-        <span>继续向 Agent 提问:</span>
+        <span>{{ t('kline.askAgent') }}</span>
       </span>
       <div class="actions__chips">
         <button
@@ -432,21 +420,21 @@
           class="action-chip"
           @click="handleActionAsk('valuation')"
         >
-          分析基本面与估值
+          {{ t('kline.actionValuation') }}
         </button>
         <button
           type="button"
           class="action-chip"
           @click="handleActionAsk('strategy')"
         >
-          测算防守位与试仓策略
+          {{ t('kline.actionStrategy') }}
         </button>
         <button
           type="button"
           class="action-chip"
           @click="handleActionAsk('report')"
         >
-          查阅最新研报与核心逻辑
+          {{ t('kline.actionReport') }}
         </button>
         <button
           v-if="activePatternNames.length > 0"
@@ -455,7 +443,7 @@
           @click="handleAskPattern(activePatternNames[0])"
         >
           <t-icon name="lightbulb" size="13px" />
-          深度解析形态【{{ activePatternNames.join('、') }}】
+          {{ t('kline.actionPatternDeep', { patterns: activePatternNames.join('、') }) }}
         </button>
       </div>
     </div>
@@ -615,13 +603,13 @@ const bubbleOptions = computed<LayerOption[]>(() => [
     value,
     label: meta.label,
     desc: meta.desc,
-    group: '战法标注',
+    group: t('kline.groupTactics'),
   })),
   ...candleCatalog.value.map((c) => ({
     value: c.key,
     label: c.name,
     desc: c.desc,
-    group: '蜡烛形态',
+    group: t('kline.groupCandle'),
   })),
 ]);
 
@@ -666,17 +654,17 @@ let searchDebounceTimer: any = null;
 // 组件本身不持有标的，所以换票后重新打开自然是新标的。
 const showHaloReport = ref(false);
 
-const ADJUST_OPTIONS: Array<{ value: Adjust; label: string }> = [
-  { value: 'forward', label: '前复权' },
-  { value: 'none', label: '不复权' },
-  { value: 'backward', label: '后复权' },
-];
+const ADJUST_OPTIONS = computed(() => [
+  { value: 'forward' as Adjust, label: t('kline.adjustForward') },
+  { value: 'none' as Adjust, label: t('kline.adjustNone') },
+  { value: 'backward' as Adjust, label: t('kline.adjustBackward') },
+]);
 
-const PERIODS: Period[] = [
-  { multiplier: 1, timespan: 'day', text: '日K' },
-  { multiplier: 1, timespan: 'week', text: '周K' },
-  { multiplier: 1, timespan: 'month', text: '月K' },
-];
+const PERIODS = computed<Period[]>(() => [
+  { multiplier: 1, timespan: 'day', text: t('kline.periodDay') },
+  { multiplier: 1, timespan: 'week', text: t('kline.periodWeek') },
+  { multiplier: 1, timespan: 'month', text: t('kline.periodMonth') },
+]);
 
 const currentTicker = computed(() => {
   const p = workspace.activePick.value;
@@ -704,15 +692,15 @@ const filteredAnnotations = computed(() => {
 
 const formatVolume = (vol: number) => {
   if (!vol || !Number.isFinite(vol)) return '0';
-  if (vol >= 100000000) return (vol / 100000000).toFixed(2) + '亿手';
-  if (vol >= 10000) return (vol / 10000).toFixed(2) + '万手';
-  return vol.toFixed(0) + '手';
+  if (vol >= 100000000) return (vol / 100000000).toFixed(2) + t('kline.unitYiShou');
+  if (vol >= 10000) return (vol / 10000).toFixed(2) + t('kline.unitWanShou');
+  return vol.toFixed(0) + t('kline.unitShou');
 };
 
 const formatTurnover = (amount: number) => {
   if (!amount || !Number.isFinite(amount)) return '0';
-  if (amount >= 100000000) return (amount / 100000000).toFixed(2) + '亿';
-  if (amount >= 10000) return (amount / 10000).toFixed(2) + '万';
+  if (amount >= 100000000) return (amount / 100000000).toFixed(2) + t('kline.unitYi');
+  if (amount >= 10000) return (amount / 10000).toFixed(2) + t('kline.unitWan');
   return amount.toFixed(0);
 };
 
@@ -838,7 +826,7 @@ const handleDataLoaded = (dataList: KLineData[]) => {
   const aboveYellow = close >= yellowVal;
   const aboveBbi = close >= bbiVal;
 
-  let brickText = brick ? brick.countText : '震荡';
+  let brickText = brick ? brick.countText : t('kline.oscillation');
   let brickScore = brick ? (brick.direction === 'up' ? brick.stepCount : -brick.stepCount) : 0;
 
   latestQuote.value = {
@@ -969,7 +957,7 @@ const initChart = () => {
   const handle = createCoreChart({
     container: chartContainer.value,
     symbol,
-    period: PERIODS[periodIdx.value],
+    period: PERIODS.value[periodIdx.value],
     adjust: adjust.value,
     // 画布**固定深色**，不跟随平台主题。这是"浅色外壳 + 深色画布"的关键。
     //
@@ -1153,7 +1141,7 @@ watch([currentTicker, currentExchange, adjust, periodIdx], async () => {
     // 复权档位要显式推给 datafeed：它只在构造时读过一次 adjust，
     // `swapSymbol` 不会带过去（此前点复权按钮只换了高亮，请求仍按旧的档位发）。
     datafeedRef.value.setAdjust(adjust.value);
-    await swapSymbol(chartInstance.value, datafeedRef.value, symbol, PERIODS[periodIdx.value]);
+    await swapSymbol(chartInstance.value, datafeedRef.value, symbol, PERIODS.value[periodIdx.value]);
     await loadAnnotations();
   } catch (err) {
     loadError.value = {

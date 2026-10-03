@@ -279,7 +279,7 @@
         <p v-else class="wl-cond__empty">{{ t('watchlist.condEmpty') }}</p>
 
         <div class="wl-cond-presets">
-          <span class="wl-cond-presets__title">常用预设:</span>
+          <span class="wl-cond-presets__title"> {{ t('watchlist.commonPresets') }}: </span>
           <button type="button" class="wl-preset-btn" @click="applyPreset('ma20')">
             {{ t('watchlist.presetCondMa20') }}
           </button>
@@ -332,25 +332,25 @@
       <div class="wl-diag-body">
         <div class="wl-diag-metrics">
           <div class="wl-diag-metric-card">
-            <span class="wl-diag-metric-card__lbl">总跟踪标的</span>
-            <span class="wl-diag-metric-card__val">{{ rows.length }} 只</span>
+            <span class="wl-diag-metric-card__lbl"> {{ t('watchlist.totalTracked') }} </span>
+            <span class="wl-diag-metric-card__val">{{ t('watchlist.diagCount', { count: rows.length }) }}</span>
           </div>
           <div class="wl-diag-metric-card">
-            <span class="wl-diag-metric-card__lbl">当前持仓组合</span>
-            <span class="wl-diag-metric-card__val">{{ countHolding }} 只</span>
+            <span class="wl-diag-metric-card__lbl"> {{ t('watchlist.currentPortfolio') }} </span>
+            <span class="wl-diag-metric-card__val">{{ t('watchlist.diagCount', { count: countHolding }) }}</span>
           </div>
           <div class="wl-diag-metric-card is-triggered">
-            <span class="wl-diag-metric-card__lbl">今日触发预警</span>
-            <span class="wl-diag-metric-card__val">{{ countTriggered }} 只</span>
+            <span class="wl-diag-metric-card__lbl"> {{ t('watchlist.todayAlerts') }} </span>
+            <span class="wl-diag-metric-card__val">{{ t('watchlist.diagCount', { count: countTriggered }) }}</span>
           </div>
           <div class="wl-diag-metric-card">
-            <span class="wl-diag-metric-card__lbl">重点观察池</span>
-            <span class="wl-diag-metric-card__val">{{ countObserving }} 只</span>
+            <span class="wl-diag-metric-card__lbl"> {{ t('watchlist.watchPool') }} </span>
+            <span class="wl-diag-metric-card__val">{{ t('watchlist.diagCount', { count: countObserving }) }}</span>
           </div>
         </div>
 
         <div class="wl-diag-summary">
-          <h4 class="wl-diag-h4">组合行情速览</h4>
+          <h4 class="wl-diag-h4"> {{ t('watchlist.portfolioOverview') }} </h4>
           <div class="wl-diag-tags">
             <div
               v-for="r in rows.slice(0, 10)"
@@ -363,13 +363,13 @@
                 {{ r.quote ? `${(r.quote.change_pct ?? 0) >= 0 ? '+' : ''}${(r.quote.change_pct ?? 0).toFixed(2)}%` : '—' }}
               </span>
             </div>
-            <span v-if="rows.length > 10" class="wl-diag-more">等共 {{ rows.length }} 只标的</span>
+            <span v-if="rows.length > 10" class="wl-diag-more">{{ t('watchlist.diagMore', { count: rows.length }) }}</span>
           </div>
         </div>
 
         <div class="wl-diag-prompt-box">
           <p class="wl-diag-prompt-box__desc">
-            🚀 准备将自选池全景数据（持仓标的与盈亏比、今日触发预警明细、重点观察池、日内表现）结构化打包至 AI 对话，为您生成专属的《组合复盘与攻防配置研报》。
+            {{ t('watchlist.diagDesc') }}
           </p>
           <t-button theme="primary" size="large" block class="wl-diag-launch-btn" @click="launchAiPortfolioReport">
             <template #icon><t-icon name="chat" /></template>

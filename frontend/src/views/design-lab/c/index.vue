@@ -7,13 +7,13 @@
             <div class="lab-desk">
                 <!-- 今日特惠印章：真实内容 = 当前知识库列表的第一个 -->
                 <div class="lab-stamp" aria-hidden="true">
-                    <span class="lab-stamp-top">今日热门</span>
+                    <span class="lab-stamp-top"> {{ t('lab.todayHot') }} </span>
                     <span class="lab-stamp-name">{{ stampKbName }}</span>
-                    <span v-if="knowledgeBases.length" class="lab-stamp-bottom">知识库</span>
+                    <span v-if="knowledgeBases.length" class="lab-stamp-bottom"> {{ t('lab.knowledgeBase') }} </span>
                 </div>
 
                 <div class="lab-desk-center">
-                    <h1 class="lab-greeting">周末市集开张啦</h1>
+                    <h1 class="lab-greeting"> {{ t('lab.weekendMarket') }} </h1>
                     <p class="lab-greeting-sub">
                         {{ selectedAgent ? `摊主「${selectedAgent.name}」等着接单` : '点个招牌选摊主，或者直接下单' }}
                     </p>
@@ -31,8 +31,8 @@
                         </div>
                     </template>
                     <div v-else-if="agents.length === 0" class="lab-stall is-skeleton pos-1">
-                        <span class="lab-stall-name">摊主还没出摊</span>
-                        <span class="lab-stall-open">先随便逛逛</span>
+                        <span class="lab-stall-name"> {{ t('lab.vendorNotOpen') }} </span>
+                        <span class="lab-stall-open"> {{ t('lab.browseAround') }} </span>
                     </div>
                     <button v-for="(agent, i) in displayAgents" v-else :key="agent.id" type="button"
                         class="lab-stall" :class="[`pos-${(i % 6) + 1}`, {
@@ -64,13 +64,13 @@
 
                     <div v-if="messagesLoading" class="lab-making">
                         <span class="lab-making-icon"><t-icon name="tools" /></span>
-                        <span>摊主正在制作，马上就好…</span>
+                        <span> {{ t('lab.vendorPreparing') }} </span>
                     </div>
                     <div v-else-if="messagesError" class="lab-conv-status">
                         <span>会话消息加载失败（{{ messagesError }}）</span>
-                        <button type="button" class="lab-retry" @click="reloadMessages">重试</button>
+                        <button type="button" class="lab-retry" @click="reloadMessages"> {{ t('common.retry') }} </button>
                     </div>
-                    <div v-else-if="displayMessages.length === 0" class="lab-conv-status">这个摊位还没有订单，开个头吧。
+                    <div v-else-if="displayMessages.length === 0" class="lab-conv-status">{{ t('lab.noOrders') }}
                     </div>
                     <template v-else>
                         <template v-for="msg in displayMessages" :key="msg.id">
@@ -106,6 +106,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import LabChrome from '../shared/LabChrome.vue'
 import type { LabState } from '../shared/types'
 import {
@@ -116,6 +117,8 @@ import {
 } from '../shared/useLabData'
 import LabComposerC from './LabComposerC.vue'
 import LabAnswerBody from '../a/LabAnswerBody.vue'
+
+const { t } = useI18n()
 
 const state = ref<LabState>('empty')
 

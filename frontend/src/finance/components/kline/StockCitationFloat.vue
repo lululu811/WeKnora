@@ -31,14 +31,14 @@
           >
             {{ quote.pctChange >= 0 ? '+' : '' }}{{ quote.pctChange.toFixed(2) }}%
           </span>
-          <span v-else class="stock-float__change is-unknown">涨跌幅无数据</span>
+          <span v-else class="stock-float__change is-unknown"> {{ t('stockCitation.noChangeData') }} </span>
         </div>
       </div>
 
       <!-- 评分卡片：五分制战法持股星级与标签 -->
       <div v-if="loading" class="stock-float__loading">
         <div class="stock-float__spinner" />
-        <span>正在分析战法指标与量化结构...</span>
+        <span> {{ t('stockCitation.analyzing') }} </span>
       </div>
 
       <!-- 查不到 / 数据不足：显式说明，绝不渲染空白卡片 -->
@@ -47,7 +47,7 @@
       </div>
 
       <div v-else-if="insufficient" class="stock-float__notice is-warn">
-        <p class="notice__title">数据不足，暂不给战法评级</p>
+        <p class="notice__title"> {{ t('stockCitation.insufficientData') }} </p>
         <p v-if="scoreResultOrNull" class="notice__desc">{{ scoreResultOrNull }}</p>
       </div>
 
@@ -74,10 +74,10 @@
              不用 0 顶替 —— 亏损股的 PE 为负、破净股的 PB 为 0，
              拿 0 填进去会让「算不出来」和「真的等于零」长得一样。 -->
         <div v-if="valuation" class="stock-float__valuation">
-          <span class="valuation__label">估值</span>
+          <span class="valuation__label"> {{ t('stockCitation.valuation') }} </span>
           <span class="valuation__item">
             <span class="valuation__key">PE<small>TTM</small></span>
-            <span class="valuation__num">{{ fmtRatio(valuation.peTtm, '亏损') }}</span>
+            <span class="valuation__num">{{ fmtRatio(valuation.peTtm, t('stockCitation.loss')) }}</span>
           </span>
           <span class="valuation__item">
             <span class="valuation__key">PB<small>MRQ</small></span>
@@ -95,25 +95,23 @@
         <!-- 资金面：近 30 个自然日的异动统计。窗口内全空是**结论**
              （这只票近期没异动），不是数据缺失，所以整块不渲染。 -->
         <div v-if="capital" class="stock-float__capital">
-          <span class="capital__label">资金面<small>近30日</small></span>
+          <span class="capital__label"> {{ t('stockCitation.capitalFlow') }} <small>{{ t('stockCitation.last30Days') }}</small></span>
           <span class="capital__tags">
             <span
               v-if="capital.limitUpCount > 0"
               class="capital__chip is-up"
-              :title="capital.lastLimitUpDate
-                ? `最近涨停 ${capital.lastLimitUpDate}${capital.maxContinueDays > 1 ? ` · 最高 ${capital.maxContinueDays} 连板` : ''}`
-                : undefined"
+              :title="capital.lastLimitUpDate ? t('stockCitation.limitUpTitle', { date: capital.lastLimitUpDate, days: capital.maxContinueDays }) : undefined"
             >
-              涨停 ×{{ capital.limitUpCount }}<template v-if="capital.maxContinueDays > 1"> · {{ capital.maxContinueDays }}板</template>
+              {{ t('stockCitation.limitUpCount', { count: capital.limitUpCount }) }}<template v-if="capital.maxContinueDays > 1"> · {{ t('stockCitation.continuousBoard', { days: capital.maxContinueDays }) }}</template>
             </span>
             <span v-if="capital.limitBreakCount > 0" class="capital__chip is-break">
-              炸板 ×{{ capital.limitBreakCount }}
+              {{ t('stockCitation.limitBreakCount', { count: capital.limitBreakCount }) }}
             </span>
             <span v-if="capital.dragonCount > 0" class="capital__chip is-dragon">
-              龙虎榜 ×{{ capital.dragonCount }}<template v-if="capital.dragonNetValue != null"> · 净{{ capital.dragonNetValue >= 0 ? '买' : '卖' }}{{ fmtYi(capital.dragonNetValue) }}</template>
+              {{ t('stockCitation.dragonCount', { count: capital.dragonCount }) }}<template v-if="capital.dragonNetValue != null"> · {{ fmtNetYi(capital.dragonNetValue) }}</template>
             </span>
             <span v-if="capital.hotRank != null" class="capital__chip is-hot">
-              热度榜 第{{ capital.hotRank }}名
+              {{ t('stockCitation.hotRank', { rank: capital.hotRank }) }}
             </span>
           </span>
         </div>
@@ -127,7 +125,7 @@
             class="sector-chip"
             :class="`is-${s.tag}`"
           >{{ s.name }}</span>
-          <span v-if="hiddenSectors > 0" class="sector-chip is-more" :title="`另有 ${hiddenSectors} 个特色指数标签未展示`">
+          <span v-if="hiddenSectors > 0" class="sector-chip is-more" :title="t('stockCitation.moreSectors', { count: hiddenSectors })">
             +{{ hiddenSectors }}
           </span>
         </div>
@@ -143,11 +141,11 @@
             >{{ r.value >= 0 ? '+' : '' }}{{ r.value.toFixed(2) }}%</span>
           </span>
           <span v-if="volRatio != null" class="range-item">
-            <span class="range-item__label">量比</span>
+            <span class="range-item__label"> {{ t('stockCitation.volRatio') }} </span>
             <span class="range-item__value is-plain">{{ volRatio.toFixed(2) }}</span>
           </span>
           <span v-if="amplitude != null" class="range-item">
-            <span class="range-item__label">振幅</span>
+            <span class="range-item__label"> {{ t('stockCitation.amplitude') }} </span>
             <span class="range-item__value is-plain">{{ amplitude.toFixed(2) }}%</span>
           </span>
         </div>
@@ -157,7 +155,7 @@
              数字的出处表名 —— 悬浮框里每个数字都能追回到源表。 -->
         <div class="stock-float__quality">
           <span class="quality__tag">
-            {{ scoreResult.quality.bars }} 根 K 线 · 截至 {{ scoreResult.quality.asOf }}
+            {{ t('stockCitation.barsAsOf', { bars: scoreResult.quality.bars, asOf: scoreResult.quality.asOf }) }}
           </span>
           <span
             v-for="(note, i) in scoreResult.quality.notes"
@@ -168,7 +166,7 @@
             {{ sourceLine }}
           </span>
           <span v-if="profileUnavailable.length" class="quality__note">
-            以下数据源本次不可用：{{ profileUnavailable.join('、') }}
+            {{ t('stockCitation.sourcesUnavailable') }}{{ profileUnavailable.join('、') }}
           </span>
           <!-- "本来就没有"与"这次没查到"是两件事：前者重试无用，不该说成故障。 -->
           <span v-if="profileUnsupported.length" class="quality__note">
@@ -191,13 +189,13 @@
 
       <!-- 底部操作栏 -->
       <div class="stock-float__footer">
-        <span class="stock-float__hint">同花顺知行量化指标引擎</span>
+        <span class="stock-float__hint"> {{ t('stockCitation.engine') }} </span>
         <button
           type="button"
           class="stock-float__action-btn"
           @click="handleOpenWorkspace"
         >
-          进入完整K线工作台 →
+          {{ t('stockCitation.openWorkspace') }}
         </button>
       </div>
     </div>
@@ -206,6 +204,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { fetchKline, computeChange, KlineFetchError } from './kline-cache';
 import {
   calcStockHoldingScore,
@@ -220,6 +219,8 @@ import {
   setCachedProfile,
   type StockProfile,
 } from './stock-profile';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   visible: boolean;
@@ -299,9 +300,18 @@ function fmtRatio(v: number | null, lossLabel?: string): string {
 /** 金额转成「亿 / 万」，龙虎榜净买额动辄上亿。 */
 function fmtYi(v: number): string {
   const abs = Math.abs(v);
-  if (abs >= 1e8) return `${(abs / 1e8).toFixed(2)}亿`;
-  if (abs >= 1e4) return `${(abs / 1e4).toFixed(0)}万`;
+  if (abs >= 1e8) return t('stockCitation.amountYi', { value: (abs / 1e8).toFixed(2) });
+  if (abs >= 1e4) return t('stockCitation.amountWan', { value: (abs / 1e4).toFixed(0) });
   return abs.toFixed(0);
+}
+
+/** 龙虎榜净买卖额（带方向）。 */
+function fmtNetYi(v: number): string {
+  const abs = Math.abs(v);
+  const direction = v >= 0 ? t('stockCitation.netBuy') : t('stockCitation.netSell');
+  if (abs >= 1e8) return t('stockCitation.netAmountYi', { direction, value: (abs / 1e8).toFixed(2) });
+  if (abs >= 1e4) return t('stockCitation.netAmountWan', { direction, value: (abs / 1e4).toFixed(0) });
+  return `${direction}${abs.toFixed(0)}`;
 }
 
 /**
@@ -344,9 +354,9 @@ const rangeItems = computed(() => {
   const r = scoreResult.value?.range;
   if (!r) return [] as Array<{ label: string; value: number }>;
   const out: Array<{ label: string; value: number }> = [];
-  if (r.ret5 != null) out.push({ label: '5日', value: r.ret5 });
-  if (r.ret20 != null) out.push({ label: '20日', value: r.ret20 });
-  if (r.ret60 != null) out.push({ label: '60日', value: r.ret60 });
+  if (r.ret5 != null) out.push({ label: t('stockCitation.range5d'), value: r.ret5 });
+  if (r.ret20 != null) out.push({ label: t('stockCitation.range20d'), value: r.ret20 });
+  if (r.ret60 != null) out.push({ label: t('stockCitation.range60d'), value: r.ret60 });
   return out;
 });
 const hasRange = computed(() => rangeItems.value.length > 0);
@@ -359,8 +369,8 @@ const scoreResultOrNull = computed(() => {
   const q = dataQualitySnapshot.value;
   if (!q) return '';
   const reasons: string[] = [];
-  if (q.bars < 24) reasons.push(`仅有 ${q.bars} 根 K 线，牵牛绳所需的 24 根不足`);
-  if (q.yellowDegraded) reasons.push(`大哥线需要 114 根才能算出标准四均线`);
+  if (q.bars < 24) reasons.push(t('stockCitation.barsInsufficient', { bars: q.bars }));
+  if (q.yellowDegraded) reasons.push(t('stockCitation.yellowDegraded'));
   return reasons.join('；');
 });
 
@@ -460,7 +470,7 @@ const loadStockData = async (symbolStr: string) => {
 
     const change = computeChange(dataList);
     if (!change) {
-      loadError.value = '查不到该标的的行情数据';
+      loadError.value = t('stockCitation.noQuoteData');
       return;
     }
     quote.value = { close: change.close, pctChange: change.pctChange };
@@ -482,9 +492,9 @@ const loadStockData = async (symbolStr: string) => {
     //   transient = 链路/服务故障（502、超时、非 JSON），数据本身可能是好的。
     // 混成一句「查询失败」会让服务挂掉被误读成"这只票没数据"。
     if (err instanceof KlineFetchError) {
-      loadError.value = err.kind === 'no-data' ? '查不到该标的的行情数据' : `行情查询失败：${err.message}`;
+      loadError.value = err.kind === 'no-data' ? t('stockCitation.noQuoteData') : t('stockCitation.queryFailedDetail', { message: err.message });
     } else {
-      loadError.value = `行情查询失败${err instanceof Error && err.message ? `：${err.message}` : ''}`;
+      loadError.value = err instanceof Error && err.message ? t('stockCitation.queryFailedDetail', { message: err.message }) : t('stockCitation.queryFailed');
     }
     console.warn('[StockCitationFloat] failed to load stock kline data:', err);
   } finally {

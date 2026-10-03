@@ -5,7 +5,7 @@
       <section class="greeting-card">
         <div class="greeting-text">
           <h1 class="greeting-title">{{ greetingText }}，{{ userName }}</h1>
-          <p class="greeting-subtitle">让今天的知识，成为明天的智慧</p>
+          <p class="greeting-subtitle"> {{ t('welcome.slogan') }} </p>
         </div>
         <div class="greeting-date">
           <span class="date-text">{{ currentDate }}</span>
@@ -18,55 +18,55 @@
           <div class="stat-icon">💬</div>
           <div class="stat-content">
             <div class="stat-value">{{ stats.conversations }}</div>
-            <div class="stat-label">今日对话</div>
+            <div class="stat-label"> {{ t('welcome.todayChats') }} </div>
           </div>
         </div>
         <div class="stat-card">
           <div class="stat-icon">📚</div>
           <div class="stat-content">
             <div class="stat-value">{{ stats.knowledgeBases }}</div>
-            <div class="stat-label">知识库</div>
+            <div class="stat-label"> {{ t('welcome.knowledgeBases') }} </div>
           </div>
         </div>
         <div class="stat-card">
           <div class="stat-icon">📄</div>
           <div class="stat-content">
             <div class="stat-value">{{ stats.documents }}</div>
-            <div class="stat-label">文档总数</div>
+            <div class="stat-label"> {{ t('welcome.totalDocs') }} </div>
           </div>
         </div>
         <div class="stat-card">
           <div class="stat-icon">✨</div>
           <div class="stat-content">
             <div class="stat-value">{{ stats.insights }}</div>
-            <div class="stat-label">知识洞察</div>
+            <div class="stat-label"> {{ t('welcome.insights') }} </div>
           </div>
         </div>
       </section>
 
       <!-- 快捷入口 -->
       <section class="quick-actions">
-        <h2 class="section-title">开始探索</h2>
+        <h2 class="section-title"> {{ t('welcome.startExploring') }} </h2>
         <div class="actions-grid">
           <button class="action-card primary" @click="$router.push('/platform/creatChat')">
             <div class="action-icon">🗨️</div>
             <div class="action-text">
-              <div class="action-title">新对话</div>
-              <div class="action-desc">与 AI 助手开始新的知识探索</div>
+              <div class="action-title"> {{ t('welcome.newChat') }} </div>
+              <div class="action-desc"> {{ t('welcome.newChatDesc') }} </div>
             </div>
           </button>
           <button class="action-card" @click="$router.push('/platform/knowledge-bases')">
             <div class="action-icon">📚</div>
             <div class="action-text">
-              <div class="action-title">浏览知识库</div>
-              <div class="action-desc">管理和探索你的知识资产</div>
+              <div class="action-title"> {{ t('welcome.browseKB') }} </div>
+              <div class="action-desc"> {{ t('welcome.browseKBDesc') }} </div>
             </div>
           </button>
           <button class="action-card" @click="$router.push('/platform/agents')">
             <div class="action-icon">🤖</div>
             <div class="action-text">
-              <div class="action-title">智能体</div>
-              <div class="action-desc">定制化 AI 助手满足特定需求</div>
+              <div class="action-title"> {{ t('welcome.agents') }} </div>
+              <div class="action-desc"> {{ t('welcome.agentsDesc') }} </div>
             </div>
           </button>
         </div>
@@ -84,8 +84,10 @@
 
 <script setup lang="ts">
 import { computed, ref, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 
+const { t } = useI18n()
 const authStore = useAuthStore()
 
 // 问候语（根据时间）

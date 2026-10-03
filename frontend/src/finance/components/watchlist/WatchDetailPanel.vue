@@ -27,49 +27,49 @@
             <span v-if="tradeTarget?.cost" class="wl-targets-item__v" :class="costPnlClass">
               ¥{{ tradeTarget.cost.toFixed(2) }} ({{ costPnlText }})
             </span>
-            <span v-else class="wl-targets-item__empty">未设置</span>
+            <span v-else class="wl-targets-item__empty"> {{ t('watchDetail.notSet') }} </span>
           </div>
           <div class="wl-targets-item">
             <span class="wl-targets-item__k">{{ t('watchlist.targetStop') }}:</span>
             <span v-if="tradeTarget?.stopLoss" class="wl-targets-item__v is-stop">
               ¥{{ tradeTarget.stopLoss.toFixed(2) }} ({{ stopLossPnlText }})
             </span>
-            <span v-else class="wl-targets-item__empty">未设置</span>
+            <span v-else class="wl-targets-item__empty"> {{ t('watchDetail.notSet') }} </span>
           </div>
         </div>
         <t-button size="small" variant="text" theme="primary" class="wl-targets-card__edit-btn" @click="startEditTarget">
           <template #icon><t-icon name="edit" /></template>
-          {{ tradeTarget?.cost || tradeTarget?.stopLoss ? t('common.edit') || '修改' : t('watchlist.setTarget') }}
+          {{ tradeTarget?.cost || tradeTarget?.stopLoss ? t('common.edit') : t('watchlist.setTarget') }}
         </t-button>
       </div>
 
       <div v-else class="wl-targets-card__form">
         <div class="wl-targets-form__row">
-          <span class="wl-targets-form__lbl">成本:</span>
+          <span class="wl-targets-form__lbl"> {{ t('watchDetail.cost') }}: </span>
           <t-input-number
             v-model="editCost"
             :decimal-places="2"
             :min="0"
             :step="0.1"
             size="small"
-            placeholder="成本价"
+            :placeholder="t('watchDetail.costPlaceholder')"
             class="wl-targets-form__input"
           />
-          <span class="wl-targets-form__lbl">止损:</span>
+          <span class="wl-targets-form__lbl"> {{ t('watchDetail.stopLoss') }}: </span>
           <t-input-number
             v-model="editStop"
             :decimal-places="2"
             :min="0"
             :step="0.1"
             size="small"
-            placeholder="止损线"
+            :placeholder="t('watchDetail.stopPlaceholder')"
             class="wl-targets-form__input"
           />
         </div>
         <div class="wl-targets-form__actions">
-          <t-button size="small" theme="primary" @click="handleSaveTarget">{{ t('common.save') || '保存' }}</t-button>
-          <t-button size="small" variant="text" @click="handleClearTarget">{{ t('common.clear') || '清空' }}</t-button>
-          <t-button size="small" variant="text" @click="editingTarget = false">{{ t('common.cancel') || '取消' }}</t-button>
+          <t-button size="small" theme="primary" @click="handleSaveTarget">{{ t('common.save') }}</t-button>
+          <t-button size="small" variant="text" @click="handleClearTarget">{{ t('common.clear') }}</t-button>
+          <t-button size="small" variant="text" @click="editingTarget = false">{{ t('common.cancel') }}</t-button>
         </div>
       </div>
     </div>
@@ -117,8 +117,8 @@
       <div class="wl-detail__section-head">
         <h3 class="wl-detail__h3">{{ t('watchlist.detailDiary') }}</h3>
         <!-- 胜率统计徽章 -->
-        <span v-if="backtestSummary.totalBuys > 0" class="wl-diary__stats-badge" title="基于过去真实K线复盘：买点后5日最高涨幅达标率">
-          买点胜率 {{ backtestSummary.winRate }}% ({{ backtestSummary.wins }}/{{ backtestSummary.totalBuys }}) · 冲高+{{ backtestSummary.avgMaxGain }}%
+        <span v-if="backtestSummary.totalBuys > 0" class="wl-diary__stats-badge" :title="t('watchlist.backtestBadgeTitle')">
+          {{ t('watchlist.backtestBadgeText', { winRate: backtestSummary.winRate, wins: backtestSummary.wins, total: backtestSummary.totalBuys, maxGain: backtestSummary.avgMaxGain }) }}
         </span>
       </div>
 

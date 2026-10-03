@@ -10,8 +10,8 @@
     >
       <span class="compare-bar__caret" :class="{ 'is-open': expanded }" aria-hidden="true">▸</span>
       <span class="compare-bar__title">{{ summaryText }}</span>
-      <span v-if="loadingCount > 0" class="compare-bar__loading">加载中 {{ loadingCount }}</span>
-      <span class="compare-bar__hint">{{ expanded ? '收起' : '展开' }}</span>
+      <span v-if="loadingCount > 0" class="compare-bar__loading">{{ t('klineCompare.loading', { count: loadingCount }) }}</span>
+      <span class="compare-bar__hint">{{ expanded ? t('klineCompare.collapse') : t('klineCompare.expand') }}</span>
     </button>
 
     <ul v-if="expanded" class="compare-bar__list">
@@ -24,7 +24,7 @@
         <button
           type="button"
           class="compare-row__btn"
-          :title="`切换到 ${row.name} (${row.thscode})`"
+          :title="t('klineCompare.switchTo', { name: row.name, thscode: row.thscode })"
           @click="emit('select', row.thscode)"
         >
           <span class="compare-row__name">{{ row.name }}</span>
@@ -56,6 +56,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useAgentWorkspace } from '@/finance/composables/useAgentWorkspace';
 import { fetchKline, computeChange, KlineFetchError } from './kline-cache';
 import {
@@ -67,6 +68,7 @@ import {
 } from './compare-bar';
 
 const workspace = useAgentWorkspace();
+const { t } = useI18n();
 
 // 默认收起（Q14b）：多标的是常见场景，但常驻展开会吃掉主图的高度。
 const expanded = ref(false);

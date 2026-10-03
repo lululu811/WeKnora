@@ -3,8 +3,8 @@
         <LabChrome badge="方向 A · 午后的工作室" v-model="state" />
 
         <!-- Q12 实物对比：暗色基底切换（仅暗色模式生效，dev 工具常显） -->
-        <div class="lab-darkbase" role="radiogroup" aria-label="暗色基底">
-            <span class="lab-darkbase-label">暗色基底</span>
+        <div class="lab-darkbase" role="radiogroup" aria-:label="t('lab.darkBase')">
+            <span class="lab-darkbase-label"> {{ t('lab.darkBase') }} </span>
             <div class="lab-darkbase-switch">
                 <button type="button" class="lab-darkbase-btn" :class="{ 'is-active': darkBase === 'warm' }"
                     role="radio" :aria-checked="darkBase === 'warm'"
@@ -17,13 +17,13 @@
 
         <!-- ============ 空态：工作台首屏 ============ -->
         <div v-if="state === 'empty'" class="lab-empty">
-            <h1 class="lab-greeting">下午好，今天想研究点什么？</h1>
+            <h1 class="lab-greeting"> {{ t('lab.afternoonGreeting') }} </h1>
             <div class="lab-empty-composer">
                 <LabComposerA fly-to="down" @send="handleSendFromEmpty" />
             </div>
 
             <section class="lab-recent">
-                <p class="lab-recent-label">继续昨天的工作</p>
+                <p class="lab-recent-label"> {{ t('lab.continueYesterday') }} </p>
                 <div v-if="sessionsLoading" class="lab-recent-grid">
                     <div v-for="n in 3" :key="n" class="lab-recent-card is-skeleton">
                         <t-skeleton animation="gradient"
@@ -31,8 +31,8 @@
                     </div>
                 </div>
                 <div v-else-if="sessionsError" class="lab-recent-fallback">
-                    <span>最近会话加载失败</span>
-                    <button type="button" class="lab-retry" @click="loadAll">重试</button>
+                    <span> {{ t('lab.recentLoadFailed') }} </span>
+                    <button type="button" class="lab-retry" @click="loadAll"> {{ t('common.retry') }} </button>
                 </div>
                 <div v-else-if="recentSessions.length === 0" class="lab-recent-fallback">
                     还没有历史会话，从上方开始第一段研究吧。
@@ -41,7 +41,7 @@
                     <button v-for="(s, i) in recentSessions" :key="s.id" type="button" class="lab-recent-card"
                         :style="{ '--i': i }" @click="state = 'conversation'">
                         <span class="lab-recent-title">{{ s.title }}</span>
-                        <span class="lab-recent-preview">{{ s.preview || '（暂无消息预览）' }}</span>
+                        <span class="lab-recent-preview">{{ s.preview || '（' + t('lab.noPreview') + '）' }}</span>
                         <span class="lab-recent-time">{{ labRelativeTime(s.updated_at) }}</span>
                     </button>
                 </div>
@@ -59,10 +59,10 @@
                             :row-col="[{ width: '40%', height: '14px' }, { width: '90%', height: '14px' }, { width: '75%', height: '14px' }]" />
                     </div>
                     <div v-else-if="messagesError" class="lab-conv-status">
-                        <span>会话消息加载失败（{{ messagesError }}）</span>
-                        <button type="button" class="lab-retry" @click="reloadMessages">重试</button>
+                        <span>{{ t('lab.messagesLoadFailed') }}</span>
+                        <button type="button" class="lab-retry" @click="reloadMessages">{{ t('common.retry') }}</button>
                     </div>
-                    <div v-else-if="displayMessages.length === 0" class="lab-conv-status">这个会话还没有消息。</div>
+                    <div v-else-if="displayMessages.length === 0" class="lab-conv-status"> {{ t('lab.noMessages') }} </div>
                     <template v-else>
                         <template v-for="msg in displayMessages" :key="msg.id">
                             <!-- 用户消息：右对齐窄条 -->
@@ -84,7 +84,7 @@
             </div>
             <div class="lab-conv-composer">
                 <div class="lab-conv-composer-inner">
-                    <LabComposerA fly-to="up" placeholder="继续追问…" @send="handleSend" />
+                    <LabComposerA fly-to="up" :placeholder="t('lab.continueAsk')" @send="handleSend" />
                 </div>
             </div>
         </div>
@@ -93,6 +93,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import LabChrome from '../shared/LabChrome.vue'
 import type { LabState } from '../shared/types'
 import {
@@ -102,6 +103,8 @@ import {
 } from '../shared/useLabData'
 import LabComposerA from './LabComposerA.vue'
 import LabAnswerBody from './LabAnswerBody.vue'
+
+const { t } = useI18n()
 
 const state = ref<LabState>('empty')
 

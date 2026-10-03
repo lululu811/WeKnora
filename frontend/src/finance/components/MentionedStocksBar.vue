@@ -3,7 +3,7 @@
     <div class="stocks-bar__inner">
       <div class="stocks-bar__label">
         <span class="stocks-bar__icon">📈</span>
-        <span class="stocks-bar__title">本轮提及个股</span>
+        <span class="stocks-bar__title">{{ t('mentionedStocks.title') }}</span>
         <span class="stocks-bar__count">({{ mentionedStocks.length }})</span>
       </div>
 
@@ -19,12 +19,12 @@
             :aria-pressed="st.thscode === activeThscode"
             @click="handleClickStock(st)"
             :title="st.thscode === activeThscode
-              ? `右侧工作台正在显示 ${st.name} (${st.thscode})`
-              : `点击在右侧工作台查看 ${st.name} (${st.thscode}) 的知行战法K线与砖型图`"
+              ? t('mentionedStocks.viewingTitle', { name: st.name, thscode: st.thscode })
+              : t('mentionedStocks.viewTitle', { name: st.name, thscode: st.thscode })"
           >
             <span class="stock-chip__name">{{ st.name }}</span>
             <span class="stock-chip__code">{{ st.thscode }}</span>
-            <span class="stock-chip__action">{{ st.thscode === activeThscode ? '正在查看' : 'K线诊断 →' }}</span>
+            <span class="stock-chip__action">{{ st.thscode === activeThscode ? t('mentionedStocks.viewing') : t('mentionedStocks.viewKline') }}</span>
           </button>
 
           <!-- 进池 = 加入个股追踪。chip 上已经有 thscode/name/exchange，直接调用

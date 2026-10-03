@@ -8,8 +8,8 @@
                 <button type="button" class="lab-composer-b-tool" title="@ 知识库（小样占位）">¶</button>
                 <button type="button" class="lab-composer-b-tool" title="附件（小样占位）">※</button>
             </div>
-            <button type="button" class="lab-composer-b-send" :disabled="!text.trim()" title="发送（Enter）"
-                @click="send">付印</button>
+            <button type="button" class="lab-composer-b-send" :disabled="!text.trim()" :title="t('lab.sendEnter')"
+                @click="send"> {{ t('lab.print') }} </button>
         </div>
         <!-- 落版动效：发送那一刻文字像铅字被压印进长卷 -->
         <div v-if="flightText" class="lab-composer-b-flight" :class="`fly-${flyTo}`" aria-hidden="true">{{ flightText }}
@@ -28,6 +28,9 @@
 // and emits plain text via `send`; the parent appends it to the local
 // message list as a new 章节 (no backend call).
 import { nextTick, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const props = withDefaults(defineProps<{
     placeholder?: string

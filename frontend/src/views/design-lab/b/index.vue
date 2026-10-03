@@ -6,11 +6,11 @@
         <div v-if="state === 'empty'" class="lab-empty">
             <header class="lab-masthead">
                 <div class="lab-masthead-top">
-                    <span class="lab-masthead-brand">WEKNORA · 研究晨报</span>
+                    <span class="lab-masthead-brand">{{ t('lab.morningBrief') }}</span>
                     <span class="lab-masthead-date">{{ todayLine }}</span>
                 </div>
                 <div class="lab-rule-double" aria-hidden="true"></div>
-                <h1 class="lab-headline">今天想研究点什么？</h1>
+                <h1 class="lab-headline">{{ t('lab.whatToResearch') }}</h1>
             </header>
 
             <div class="lab-empty-composer">
@@ -19,7 +19,7 @@
 
             <section class="lab-issues">
                 <div class="lab-section-head">
-                    <span class="lab-section-label">往期目录</span>
+                    <span class="lab-section-label"> {{ t('lab.pastIssues') }} </span>
                     <span class="lab-section-rule" aria-hidden="true"></span>
                 </div>
                 <div v-if="sessionsLoading" class="lab-issue-list">
@@ -29,8 +29,8 @@
                     </div>
                 </div>
                 <div v-else-if="sessionsError" class="lab-issues-fallback">
-                    <span>往期目录加载失败</span>
-                    <button type="button" class="lab-retry" @click="loadAll">重试</button>
+                    <span> {{ t('lab.pastIssuesFailed') }} </span>
+                    <button type="button" class="lab-retry" @click="loadAll">{{ t('common.retry') }}</button>
                 </div>
                 <div v-else-if="recentSessions.length === 0" class="lab-issues-fallback">
                     还没有往期研究，从上方写下第一问吧。
@@ -54,7 +54,7 @@
             <div ref="scrollEl" class="lab-conv-scroll">
                 <article class="lab-doc">
                     <header class="lab-doc-head">
-                        <p class="lab-doc-kicker">研究长卷 · RESEARCH DISPATCH</p>
+                        <p class="lab-doc-kicker">{{ t('lab.researchDispatch') }}</p>
                         <h1 class="lab-doc-title">{{ sessionTitle || '未命名研究' }}</h1>
                         <p class="lab-doc-meta">共 {{ chapterCount }} 章 · 参考来源 {{ allReferences.length }} 条</p>
                         <div class="lab-rule-double" aria-hidden="true"></div>
@@ -66,9 +66,9 @@
                     </div>
                     <div v-else-if="messagesError" class="lab-doc-status">
                         <span>会话消息加载失败（{{ messagesError }}）</span>
-                        <button type="button" class="lab-retry" @click="reloadMessages">重试</button>
+                        <button type="button" class="lab-retry" @click="reloadMessages">{{ t('common.retry') }}</button>
                     </div>
-                    <div v-else-if="displayMessages.length === 0" class="lab-doc-status">这个会话还没有消息。</div>
+                    <div v-else-if="displayMessages.length === 0" class="lab-doc-status"> {{ t('lab.noMessages') }} </div>
 
                     <template v-else>
                         <template v-for="msg in displayMessages" :key="msg.id">
@@ -110,7 +110,7 @@
                         <!-- 文末「参考来源」章：脚注编号 [n]，悬停原位展开来源卡 -->
                         <footer v-if="allReferences.length" class="lab-references">
                             <div class="lab-rule-double" aria-hidden="true"></div>
-                            <p class="lab-section-label">参考来源</p>
+                            <p class="lab-section-label"> {{ t('lab.references') }} </p>
                             <ol class="lab-ref-list">
                                 <li v-for="(r, i) in allReferences" :key="i" class="lab-ref">
                                     <span class="lab-ref-no">[{{ i + 1 }}]</span>
@@ -118,7 +118,7 @@
                                     <div class="lab-ref-card" role="tooltip">
                                         <p class="lab-ref-card-title">{{ refTitle(r) }}</p>
                                         <p v-if="refSnippet(r)" class="lab-ref-card-snippet">{{ refSnippet(r) }}</p>
-                                        <p v-else class="lab-ref-card-snippet">（无摘录内容）</p>
+                                        <p v-else class="lab-ref-card-snippet"> {{ t('lab.noExcerpts') }} </p>
                                     </div>
                                 </li>
                             </ol>
@@ -137,6 +137,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import LabChrome from '../shared/LabChrome.vue'
 import type { LabState } from '../shared/types'
 import {
@@ -146,6 +147,8 @@ import {
 } from '../shared/useLabData'
 import LabComposerB from './LabComposerB.vue'
 import LabAnswerBody from '../a/LabAnswerBody.vue'
+
+const { t } = useI18n()
 
 const state = ref<LabState>('empty')
 
