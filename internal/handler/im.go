@@ -483,6 +483,11 @@ func (h *IMHandler) IMCallback(c *gin.Context) {
 
 	// Process message asynchronously
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				logger.Errorf(asyncCtx, "[IM] HandleMessage panic for channel %s: %v", channelID, r)
+			}
+		}()
 		if err := h.imService.HandleMessage(asyncCtx, msg, channelID); err != nil {
 			logger.Errorf(asyncCtx, "[IM] Handle message error for channel %s: %v", channelID, err)
 		}

@@ -3,13 +3,13 @@ package im
 import (
 	"context"
 	"fmt"
-	"sync"
-	"sync/atomic"
-	"time"
-
 	"github.com/Tencent/WeKnora/internal/logger"
 	"github.com/Tencent/WeKnora/internal/types"
 	"github.com/redis/go-redis/v9"
+	"runtime"
+	"sync"
+	"sync/atomic"
+	"time"
 )
 
 const (
@@ -257,7 +257,21 @@ func (q *qaQueue) runWorker(id int) {
 		}
 
 		q.activeWorkers.Add(1)
-		q.handler(req)
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					buf := make([]byte, 4096)
+					n := runtime.Stack(buf, false)
+					logger.Errorf(req.ctx, "[IM] Worker panic recovered: worker=%d user=%s err=%v\nstack:\n%s",
+						id, req.msg.UserID, r, string(buf[:n]))
+					_ = req.adapter.SendReply(req.ctx, req.msg, &ReplyMessage{
+						Content: "处理您的消息时发生内部错误，请稍后重试。",
+						IsFinal: true,
+					})
+				}
+			}()
+			q.handler(req)
+		}()
 		q.activeWorkers.Add(-1)
 		q.totalProcessed.Add(1)
 		q.releaseGlobalGate()
