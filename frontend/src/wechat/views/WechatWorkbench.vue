@@ -1,7 +1,7 @@
 <template>
   <div class="wechat-workbench">
     <!-- 左：文章列表 -->
-    <aside class="wb-list" :style="{ width: `${listWidth}px` }">
+    <aside class="wb-list">
       <div class="wb-list__head">
         <t-select
           v-model="kbId"
@@ -131,7 +131,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 import { renderChatMarkdown } from '@/utils/chatMarkdownRenderer';
@@ -141,9 +141,9 @@ import { highlightRanges } from '@/utils/sourceLocatorDom';
 
 import { useWechatWorkbench } from '../composables/useWechatWorkbench';
 import { useDocumentChat } from '../composables/useDocumentChat';
+import { hydrateVaultImages } from '../utils/vaultImageAuth';
 
 const { t } = useI18n();
-const listWidth = ref(280);
 
 const wb = useWechatWorkbench();
 const chat = useDocumentChat();
@@ -206,6 +206,16 @@ function locate(ref: any) {
 
 watch(currentId, () => chat.resetLive());
 
+// 正文是 v-html 渲染的，图片不会自动经过 hydrate；每次换文章或重新渲染后
+// 都要补一次。hydrate 自身幂等，重复调用不会重复请求。
+const blobUrls = ref<string[]>([]);
+async function hydrate() {
+  blobUrls.value.forEach((u) => URL.revokeObjectURL(u));
+  blobUrls.value = await hydrateVaultImages(previewContent.value);
+}
+watch([renderedMarkdown, currentId], () => void hydrate(), { flush: 'post' });
+onBeforeUnmount(() => blobUrls.value.forEach((u) => URL.revokeObjectURL(u)));
+
 onMounted(async () => {
   await loadBases();
   if (articles.value.length) await openArticle(articles.value[0].id);
@@ -220,7 +230,12 @@ onMounted(async () => {
   background: var(--td-bg-color-page);
 }
 .wb-list {
-  flex: 0 0 auto;
+  /* 不能只写 width + flex:0 0 auto —— flex-basis:auto 时内容会赢过 width，
+     长标题把这一列撑到 337px，阅读区被挤到只剩 230px（标题被压成一列）。
+     固定 basis 并允许收缩才稳。 */
+  flex: 0 0 260px;
+  width: 260px;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   border-right: 1px solid var(--td-component-border);
@@ -247,12 +262,19 @@ onMounted(async () => {
 .wb-head__origin { font-size: 13px; color: var(--td-brand-color); }
 .wb-split { flex: 1; display: flex; min-height: 0; }
 .wb-reader {
-  flex: 1 1 58%; overflow-y: auto; padding: 20px 24px; min-width: 0;
+  /* 58/42 在只剩 960px 的内容区里会把阅读区压到 230px。改用 minmax 兜底，
+     保证两边都有一个能用的下限，再按比例分配剩下的。 */
+  flex: 1 1 0;
+  min-width: 420px;
+  overflow-y: auto;
+  padding: 20px 24px;
   border-right: 1px solid var(--td-component-border);
 }
-.wb-reader__body { max-width: 760px; }
+.wb-reader__body { max-width: 780px; margin: 0 auto; }
+/* 公众号原文链接是一长串无空格 token，不打断会把整栏撑宽。 */
+.wb-reader__body :deep(a) { overflow-wrap: anywhere; }
 .wb-reader__body :deep(img) { max-width: 100%; height: auto; border-radius: 4px; }
-.wb-chat { flex: 1 1 42%; display: flex; flex-direction: column; min-width: 320px; min-height: 0; }
+.wb-chat { flex: 1 1 0; min-width: 340px; display: flex; flex-direction: column; min-height: 0; }
 .wb-chat__scope {
   display: flex; align-items: center; justify-content: space-between;
   padding: 8px 12px; border-bottom: 1px solid var(--td-component-border);
