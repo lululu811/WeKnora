@@ -642,6 +642,7 @@ import ChatCitationFloat from '@/components/ChatCitationFloat.vue';
 import picturePreview from '@/components/picture-preview.vue';
 import ChatArtifactsDrawer from './ChatArtifactsDrawer.vue';
 import { isCollectingSkillArtifacts } from '@/utils/skillArtifacts';
+import { resolveExtensionDisplayType } from '@/utils/toolDisplayTypeMappers';
 import { useArtifactArriveMotion } from '@/composables/useArtifactArriveMotion';
 import { useChatSandboxPanel } from '@/composables/useChatSandboxPanel';
 import { persistedAssistantId } from '@/utils/steerStreamFork';
@@ -1210,12 +1211,9 @@ const resolveToolDisplayType = (event: any): DisplayType | undefined => {
   if (event?.tool_name === 'read_skill' && event?.success !== false) {
     return 'read_skill'
   }
-  // 2026-10-01：kline_studio.show 随独立服务一起下线，只剩 screener。
-  // display_type 相应从 'kline_studio' 改为 'kline_picks'（见 tool-results.ts）。
-  if (event?.tool_name === 'zettaranc.screener' && event?.success !== false) {
-    return 'kline_picks'
-  }
-  return undefined
+  // 通用逻辑无法判定的（如金融模块的 zettaranc.screener → kline_picks），
+  // 交给第三方模块注册的 mapper 处理。分发函数不再知道任何具体工具名。
+  return resolveExtensionDisplayType(event) as DisplayType | undefined
 };
 
 const WIKI_EDIT_TOOL_NAMES = new Set([

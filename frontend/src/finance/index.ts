@@ -23,6 +23,19 @@ registerMarkdownPreprocessor({
   transform: (text) => injectKLineTickers(text),
 });
 
+// 副作用：注册金融专属的「事件 → display_type」映射。
+// `AgentStreamDisplay.vue` 的通用分发函数不再知道 `zettaranc.screener`，
+// 而是在自己无法判定时查这个注册表。
+import { registerToolDisplayTypeMapper } from '@/utils/toolDisplayTypeMappers';
+registerToolDisplayTypeMapper((event) => {
+  // 2026-10-01：kline_studio.show 随独立服务一起下线，只剩 screener。
+  // display_type 从 'kline_studio' 改为 'kline_picks'（见 tool-results.ts）。
+  if (event?.tool_name === 'zettaranc.screener' && event?.success !== false) {
+    return 'kline_picks';
+  }
+  return undefined;
+});
+
 // ─────────────────── 组件（原地保留，从 barrel re-export）───────────────────
 // 文件位置不变（仍在 src/components/...），但对外入口收敛到 @/finance。
 // 4.6 目录重组时再物理搬迁到 src/finance/components/。
