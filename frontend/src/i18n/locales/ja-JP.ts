@@ -1061,6 +1061,8 @@ export default {
       incremental: '増分',
       full: '全量'
     }
+  ,
+    resumeFailed: '再開に失敗しました',
   },
   ollama: {
     unknown: '不明',
@@ -3826,6 +3828,8 @@ export default {
       thisYear: '{month}/{day} {time}',
       otherYear: '{year}/{month}/{day} {time}'
     }
+  ,
+    imageReadFailed: '画像の読み込みに失敗しました',
   },
   knowledgeEditor: {
     titleCreate: 'ナレッジベースを作成',
@@ -4825,7 +4829,20 @@ export default {
       toggleOn: 'Web検索を有効化',
       toggleOff: 'Web検索を無効化',
       notConfigured: 'Web検索エンジンが未設定です'
-    }
+    ,
+      label: 'ウェブ検索',
+  }
+  ,
+    imageUpload: {
+      label: '画像をアップロード',
+      tooltip: '分析用に画像をアップロード',
+    },
+    fileUpload: {
+      label: 'ファイルをアップロード',
+      tooltip: 'ファイルをアップロード',
+      tooMany: 'ファイル数が上限を超えています',
+      tooLarge: 'ファイルサイズが上限を超えています',
+    },
   },
   manualEditor: {
     defaultTitlePrefix: '新規ドキュメント',
@@ -4932,6 +4949,8 @@ export default {
   },
   file: {
     upload: 'ファイルをアップロード'
+  ,
+    downloadFailed: 'ダウンロードに失敗しました。後でもう一度お試しください',
   },
   mentionDetail: {
     readOnlyFromAgent: 'この会話内でのみ読み取り専用。ナレッジベース一覧には表示されません',
@@ -5631,7 +5650,9 @@ export default {
       paddleocrVlEndpointPlaceholder: '例: http://your-paddleocr-vl:8080',
       paddleocrVlEndpointHint: 'PaddleOCR-VLパイプラインサービスのベースURLです。末尾に/layout-parsingを付ける必要はありません',
       paddleocrVlCloudTokenPlaceholder: 'PaddleOCR-VL AI Studio Token'
-    },
+    ,
+      checking: '確認中...',
+  },
     weknoraCloud: {
       title: 'WeKnora Cloud',
       description: 'WeKnora CloudのAPPIDとAPPSECRETを設定します。この認証情報はモデルサービスとドキュメント解析エンジンで使用されます。',
@@ -6979,6 +7000,9 @@ export default {
       sharedAt: '共有日時',
       lastUpdated: '最終更新'
     }
+  ,
+    selectKnowledgeBase: 'ナレッジベースを選択してください',
+    tagDeleteDesc: 'タグ「{name}」を削除してもよろしいですか？このタグ下のすべてのFAQも削除されます',
   },
   resourceOrigin: {
     mine: '自分',
@@ -7411,6 +7435,31 @@ export default {
       date: '直近取引日',
       actions: '操作'
     }
+  ,
+    backtestBadgeText: 'バックテスト勝率 {winRate}% ({wins}/{total}勝、平均最大上昇率+{maxGain}%)',
+    backtestBadgeTitle: '過去の買いシグナルに基づく客観的なバックテスト統計',
+    commonPresets: 'よく使われるプリセット',
+    currentPortfolio: '現在の保有',
+    diagCount: '{count}銘柄',
+    diagDesc: 'テクニカル分析、資金構造、財務リスクを組み合わせてリスクリワードを評価',
+    diagMore: '他 {count} 銘柄、クリックで詳細レポートを表示',
+    diagnosisTitle: 'ポートフォリオAI診断',
+    drawChannel: '価格チャネル',
+    drawClear: '描画をクリア',
+    drawFibo: 'フィボナッチ',
+    drawHorizontal: '水平線',
+    drawTrend: 'トレンドライン',
+    portfolioDiagnosis: 'ポートフォリオ診断',
+    portfolioOverview: 'ポートフォリオ概要',
+    setTarget: '目標を設定',
+    startAiDiagnosis: 'AI詳細診断を開始',
+    targetCleared: '目標価格をクリアしました',
+    targetCost: '目標コスト',
+    targetSaved: '目標価格を保存しました',
+    targetStop: 'ストップロス',
+    todayAlerts: '本日のアラート',
+    totalTracked: '追跡総数',
+    watchPool: '重点観察',
   },
   resourceSort: {
     title: '並び替え',
@@ -7754,6 +7803,54 @@ export default {
     requestRejected: 'Server explicitly rejected this request',
     retryWontHelp: 'Retrying will not yield different results',
     fetchPathIssue: 'This is a data fetch path issue',
+  
+    volumeLabel: '出来高',
+    turnoverLabel: '売買代金',
+    patternLabel: 'チャートパターン',
+    patternAskSuffix: '、Agentに質問',
+    patternAskTitle: '現在のパターンについてAgentに質問：{patterns}',
+    zxBrickLabel: '知行レンガ',
+    zxBrickTitle: '同花順知行レンガ足チャート戦略',
+    dualLineTitle: '白線 DEMA10 ({white}) vs 黄線 LongBBI ({yellow})',
+    dualLineBelow: '黄線の下・弱気',
+    dualLineAbove: '両線上向き・強気',
+    dualLineRetrace: '押し目調整',
+    aboveBBI: 'BBI強気',
+    belowBBI: 'BBI弱気',
+    boardAdjustTitle: 'セクター指数には調整後データがありません',
+    td9Title: 'TDシーケンシャル9転換シグナル',
+    patternBubbleLabel: 'バブル',
+    patternBubbleBtnTitle: 'チャート上に天井・底パターンバブルを表示',
+    patternBubbleHint: 'バブルをクリックして詳細を表示またはAgentに質問',
+    patternOutlineLabel: 'アウトライン',
+    patternOutlineBtnTitle: 'チャート上にパターン構造アウトラインを描画',
+    patternOutlineHint: 'ネックラインとトレンドチャネルを表示',
+    boardNoPattern: 'セクターパターンなし',
+    boardNoPatternDetail: 'セクター指数はパターン認識を提供していません',
+    boardNoPatternOutlineDetail: 'セクター指数はパターン輪郭を提供していません',
+    noPatternDetected: 'パターンは検出されませんでした',
+    expandWorkspace: 'ワークスペースを展開',
+    collapseWorkspace: 'ワークスペースを折りたたむ',
+    requestRejectedHint: 'サーバーにリクエストが拒否されました：{message}',
+    fetchPathIssueHint: 'データ取得パスの異常：{message}',
+    noDataHint: '相場データがありません',
+    periodDay: '日足',
+    periodWeek: '週足',
+    periodMonth: '月足',
+    adjustNone: '補正なし',
+    adjustForward: '前補正',
+    adjustBackward: '後補正',
+    unitShou: '株(手)',
+    unitWanShou: '万株(手)',
+    unitYiShou: '億株(手)',
+    unitWan: '万',
+    unitYi: '億',
+    levelsLabel: 'キーレベル',
+    levelsTitle: '支持線と抵抗線',
+    groupCandle: 'ローソク足',
+    groupTactics: '戦略',
+    oscillation: 'もみ合い',
+    actionPatternDeep: 'パターン構造の詳細分析',
   },
   stockCitation: {
     noChangeData: 'No change data',
@@ -7764,14 +7861,49 @@ export default {
     volRatio: 'Volume Ratio',
     amplitude: 'Amplitude',
     engine: 'THS ZX Quantitative Engine',
+  
+    amountWan: '{value}万',
+    amountYi: '{value}億',
+    barsAsOf: '{bars}本の足 · {asOf}時点',
+    barsInsufficient: 'ローソク足が24本未満({bars}本)',
+    continuousBoard: '{days}日連続ストップ高',
+    dragonCount: '龍虎ランキング{count}回',
+    hotRank: '注目度第{rank}位',
+    last30Days: '直近30日',
+    limitBreakCount: 'ストップ高崩れ{count}回',
+    limitUpCount: 'ストップ高{count}回',
+    limitUpTitle: '最新ストップ高: {date}、連続: {days}日',
+    loss: '赤字',
+    moreSectors: '他{count}セクター',
+    netAmountWan: '{direction}{value}万',
+    netAmountYi: '{direction}{value}億',
+    netBuy: '純買い',
+    netSell: '純売り',
+    noQuoteData: '相場データなし',
+    openWorkspace: 'ワークスペースを開く',
+    queryFailed: '照会に失敗しました',
+    queryFailedDetail: '照会失敗: {message}',
+    range20d: '20日',
+    range5d: '5日',
+    range60d: '60日',
+    sourcesUnavailable: '利用不可のデータソース: ',
+    yellowDegraded: '黄ライン劣化',
   },
   watchDetail: {
     notSet: 'Not set',
     cost: 'Cost',
     stopLoss: 'Stop Loss',
+  
+    costPlaceholder: '目標コスト価格',
+    stopPlaceholder: 'ストップロス価格',
   },
   mentionedStocks: {
     title: 'Stocks Mentioned',
+  
+    viewKline: 'ローソク足を見る',
+    viewTitle: '{name} ({thscode}) のチャートに切り替え',
+    viewing: '表示中',
+    viewingTitle: '現在表示中: {name} ({thscode})',
   },
   welcome: {
     slogan: 'Let today\'s knowledge become tomorrow\'s wisdom',
@@ -7814,8 +7946,19 @@ export default {
     composerPlaceholder: 'Ask something…',
     print: 'Print',
     sendEnter: 'Send (Enter)',
-    noPreview: 'No preview',
     browseOrAsk: 'Browse around, or ask something…',
   },
 
+  klineCompare: {
+    loading: '読み込み中 ({count})',
+    collapse: '折りたたむ',
+    expand: '展開する',
+    switchTo: '{name} ({thscode}) のチャートに切り替え',
+  },
+  samples: {
+    markdown: 'Markdown ドキュメント',
+    faq: 'FAQ',
+    chapter: '複数章のドキュメント',
+    plain: 'プレーンテキスト段落',
+  },
 }

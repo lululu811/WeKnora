@@ -1061,6 +1061,8 @@ export default {
       incremental: '증분 동기화',
       full: '전체 동기화'
     }
+  ,
+    resumeFailed: '재개 실패',
   },
   ollama: {
     unknown: '알 수 없음',
@@ -3825,6 +3827,8 @@ export default {
       thisYear: '{month}월 {day}일 {time}',
       otherYear: '{year}년 {month}월 {day}일 {time}'
     }
+  ,
+    imageReadFailed: '이미지 읽기 실패',
   },
   knowledgeEditor: {
     titleCreate: '지식베이스 생성',
@@ -4824,7 +4828,20 @@ export default {
       toggleOn: '웹 검색 켜기',
       toggleOff: '웹 검색 끄기',
       notConfigured: '웹 검색 엔진이 구성되지 않았습니다'
-    }
+    ,
+      label: '웹 검색',
+  }
+  ,
+    imageUpload: {
+      label: '이미지 업로드',
+      tooltip: '분석용 이미지 업로드',
+    },
+    fileUpload: {
+      label: '파일 업로드',
+      tooltip: '파일 업로드',
+      tooMany: '파일 수가 제한을 초과했습니다',
+      tooLarge: '파일 크기가 제한을 초과했습니다',
+    },
   },
   manualEditor: {
     defaultTitlePrefix: '새 문서',
@@ -4931,6 +4948,8 @@ export default {
   },
   file: {
     upload: '파일 업로드'
+  ,
+    downloadFailed: '다운로드 실패, 나중에 다시 시도해 주세요',
   },
   mentionDetail: {
     readOnlyFromAgent: '이 대화에서는 읽기 전용이며 지식베이스 목록에는 표시되지 않습니다.',
@@ -5630,7 +5649,9 @@ export default {
       paddleocrVlEndpointPlaceholder: '예: http://your-paddleocr-vl:8080',
       paddleocrVlEndpointHint: 'PaddleOCR-VL 전체 서비스(pipeline) 주소를 입력하세요. /layout-parsing 접미사는 불필요합니다',
       paddleocrVlCloudTokenPlaceholder: 'PaddleOCR-VL AI Studio Token'
-    },
+    ,
+      checking: '확인 중...',
+  },
     weknoraCloud: {
       title: 'WeKnora Cloud',
       description: 'WeKnora Cloud APPID 및 APPSECRET 자격 증명을 설정합니다. 자격 증명은 모델 서비스와 문서 파싱 엔진에 사용됩니다.',
@@ -6978,6 +6999,9 @@ export default {
       sharedAt: '공유일시',
       lastUpdated: '마지막 업데이트'
     }
+  ,
+    selectKnowledgeBase: '지식 베이스를 선택하세요',
+    tagDeleteDesc: '"{name}" 태그를 삭제하시겠습니까? 이 태그에 속한 모든 FAQ도 함께 삭제됩니다',
   },
   resourceOrigin: {
     mine: '내 생성',
@@ -7410,6 +7434,31 @@ export default {
       date: '최근 거래일',
       actions: '작업'
     }
+  ,
+    backtestBadgeText: '백테스트 승률 {winRate}% ({wins}/{total}승, 평균 최대 상승폭+{maxGain}%)',
+    backtestBadgeTitle: '과거 매수 신호 기반 객관적 백테스트 통계',
+    commonPresets: '자주 쓰는 프리셋',
+    currentPortfolio: '현재 보유',
+    diagCount: '{count}개 종목',
+    diagDesc: '기술적 분석, 자금 구조, 재무 위험을 종합 평가',
+    diagMore: '외 {count}개 종목, 클릭하여 전체 보고서 보기',
+    diagnosisTitle: '포트폴리오 AI 진단',
+    drawChannel: '가격 채널',
+    drawClear: '그리기 지우기',
+    drawFibo: '피보나치',
+    drawHorizontal: '수평선',
+    drawTrend: '추세선',
+    portfolioDiagnosis: '포트폴리오 진단',
+    portfolioOverview: '포트폴리오 개요',
+    setTarget: '목표 설정',
+    startAiDiagnosis: 'AI 심층 진단 시작',
+    targetCleared: '목표가가 초기화되었습니다',
+    targetCost: '목표 매수가',
+    targetSaved: '목표가가 저장되었습니다',
+    targetStop: '손절 기준',
+    todayAlerts: '오늘의 경보',
+    totalTracked: '총 추적 수',
+    watchPool: '중점 관찰',
   },
   resourceSort: {
     title: '정렬',
@@ -7753,6 +7802,54 @@ export default {
     requestRejected: 'Server explicitly rejected this request',
     retryWontHelp: 'Retrying will not yield different results',
     fetchPathIssue: 'This is a data fetch path issue',
+  
+    volumeLabel: '거래량',
+    turnoverLabel: '거래대금',
+    patternLabel: '패턴',
+    patternAskSuffix: ', Agent에게 질문',
+    patternAskTitle: '현재 패턴에 대해 Agent에게 질문: {patterns}',
+    zxBrickLabel: '지행 벽돌',
+    zxBrickTitle: '동화순 지행 벽돌 차트 전략',
+    dualLineTitle: '백선 DEMA10 ({white}) vs 황선 LongBBI ({yellow})',
+    dualLineBelow: '황선 아래 · 약세',
+    dualLineAbove: '양선 상승 · 강세',
+    dualLineRetrace: '눌림목 조정',
+    aboveBBI: 'BBI 강세',
+    belowBBI: 'BBI 약세',
+    boardAdjustTitle: '업종 지수는 수정주가 데이터를 제공하지 않습니다',
+    td9Title: 'TD9 시퀀스 반전 신호',
+    patternBubbleLabel: '버블',
+    patternBubbleBtnTitle: '차트에 고점/저점 패턴 버블 표시',
+    patternBubbleHint: '버블을 클릭하여 패턴 세부 정보를 보거나 Agent에게 질문',
+    patternOutlineLabel: '윤곽선',
+    patternOutlineBtnTitle: '차트에 패턴 구조 윤곽선 그리기',
+    patternOutlineHint: '넥라인 및 추세 채널 표시',
+    boardNoPattern: '업종 패턴 없음',
+    boardNoPatternDetail: '업종 지수는 패턴 인식을 제공하지 않습니다',
+    boardNoPatternOutlineDetail: '업종 지수는 패턴 윤곽을 제공하지 않습니다',
+    noPatternDetected: '패턴이 감지되지 않음',
+    expandWorkspace: '작업공간 펼치기',
+    collapseWorkspace: '작업공간 접기',
+    requestRejectedHint: '서버에서 요청을 거부했습니다: {message}',
+    fetchPathIssueHint: '데이터 경로 이상: {message}',
+    noDataHint: '시세 데이터 없음',
+    periodDay: '일봉',
+    periodWeek: '주봉',
+    periodMonth: '월봉',
+    adjustNone: '미수정',
+    adjustForward: '수정(선행)',
+    adjustBackward: '수정(후행)',
+    unitShou: '주(手)',
+    unitWanShou: '만주(手)',
+    unitYiShou: '억주(手)',
+    unitWan: '만',
+    unitYi: '억',
+    levelsLabel: '핵심 레벨',
+    levelsTitle: '지지선 및 저항선',
+    groupCandle: '캔들',
+    groupTactics: '전략',
+    oscillation: '박스권',
+    actionPatternDeep: '패턴 구조 심층 분석',
   },
   stockCitation: {
     noChangeData: 'No change data',
@@ -7763,14 +7860,49 @@ export default {
     volRatio: 'Volume Ratio',
     amplitude: 'Amplitude',
     engine: 'THS ZX Quantitative Engine',
+  
+    amountWan: '{value}만',
+    amountYi: '{value}억',
+    barsAsOf: '{bars}개 봉 · {asOf} 기준',
+    barsInsufficient: '봉 부족(24개 미만: {bars}개)',
+    continuousBoard: '{days}연속 상한가',
+    dragonCount: '용호방 {count}회',
+    hotRank: '인기 순위 {rank}위',
+    last30Days: '최근 30일',
+    limitBreakCount: '상한가 이탈 {count}회',
+    limitUpCount: '상한가 {count}회',
+    limitUpTitle: '최근 상한가: {date}, 연속: {days}일',
+    loss: '손실',
+    moreSectors: '외 {count}개 업종',
+    netAmountWan: '{direction}{value}만',
+    netAmountYi: '{direction}{value}억',
+    netBuy: '순매수 ',
+    netSell: '순매도 ',
+    noQuoteData: '시세 데이터 없음',
+    openWorkspace: '작업공간 열기',
+    queryFailed: '조회 실패',
+    queryFailedDetail: '조회 실패: {message}',
+    range20d: '20일',
+    range5d: '5일',
+    range60d: '60일',
+    sourcesUnavailable: '사용 불가한 데이터 소스: ',
+    yellowDegraded: '황선 저하',
   },
   watchDetail: {
     notSet: 'Not set',
     cost: 'Cost',
     stopLoss: 'Stop Loss',
+  
+    costPlaceholder: '목표 매수가',
+    stopPlaceholder: '손절가',
   },
   mentionedStocks: {
     title: 'Stocks Mentioned',
+  
+    viewKline: 'K선 보기',
+    viewTitle: '{name} ({thscode}) 차트로 전환',
+    viewing: '보기 중',
+    viewingTitle: '현재 보기 중: {name} ({thscode})',
   },
   welcome: {
     slogan: 'Let today\'s knowledge become tomorrow\'s wisdom',
@@ -7813,8 +7945,19 @@ export default {
     composerPlaceholder: 'Ask something…',
     print: 'Print',
     sendEnter: 'Send (Enter)',
-    noPreview: 'No preview',
     browseOrAsk: 'Browse around, or ask something…',
   },
 
+  klineCompare: {
+    loading: '로딩 중 ({count})',
+    collapse: '접기',
+    expand: '펼치기',
+    switchTo: '{name} ({thscode}) 차트로 전환',
+  },
+  samples: {
+    markdown: 'Markdown 문서',
+    faq: 'FAQ',
+    chapter: '다중 챕터 문서',
+    plain: '일반 텍스트 단락',
+  },
 }

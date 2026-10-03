@@ -1739,6 +1739,10 @@ onUnmounted(() => {
 .wl-diag-metric-card {
   display: flex;
   flex-direction: column;
+  // grid 拉伸让 4 张卡等高，但卡内若顶对齐，标签换行数不同的卡其数值会错位
+  // （en 下 "Current Portfolio" 换行、"Today Alerts" 不换行）。
+  // space-between 把数值钉到卡底，让 4 个数值共用一条基线。
+  justify-content: space-between;
   gap: 4px;
   padding: 10px 12px;
   border: 1px solid var(--td-border-level-1-color);
@@ -1748,6 +1752,8 @@ onUnmounted(() => {
   &__lbl {
     font-size: var(--app-text-xs);
     color: var(--td-text-color-secondary);
+    // 标签允许折行，但不让长 token 在词中间断开
+    overflow-wrap: break-word;
   }
 
   &__val {

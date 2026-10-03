@@ -1061,6 +1061,8 @@ export default {
       incremental: '增量同步',
       full: '全量同步'
     }
+  ,
+    resumeFailed: '恢复失败',
   },
   ollama: {
     unknown: '未知',
@@ -3828,6 +3830,8 @@ export default {
       thisYear: '{month}月{day}日 {time}',
       otherYear: '{year}年{month}月{day}日 {time}'
     }
+  ,
+    imageReadFailed: '图片读取失败',
   },
   knowledgeEditor: {
     titleCreate: '新建知识库',
@@ -4827,7 +4831,20 @@ export default {
       toggleOn: '开启网络搜索',
       toggleOff: '关闭网络搜索',
       notConfigured: '未配置网络搜索引擎'
-    }
+    ,
+      label: '网络搜索',
+  }
+  ,
+    imageUpload: {
+      label: '上传图片',
+      tooltip: '上传图片分析',
+    },
+    fileUpload: {
+      label: '上传文件',
+      tooltip: '上传文件',
+      tooMany: '文件数量超出限制',
+      tooLarge: '文件大小超出限制',
+    },
   },
   manualEditor: {
     defaultTitlePrefix: '新建文档',
@@ -4934,6 +4951,8 @@ export default {
   },
   file: {
     upload: '上传文件'
+  ,
+    downloadFailed: '下载失败，请稍后重试',
   },
   mentionDetail: {
     readOnlyFromAgent: '仅在此对话中只读，不显示在知识库列表中',
@@ -5633,7 +5652,9 @@ export default {
       paddleocrVlEndpointPlaceholder: '如 http://your-paddleocr-vl:8080',
       paddleocrVlEndpointHint: '填写 PaddleOCR-VL 完整服务（pipeline）地址，无需 /layout-parsing 后缀',
       paddleocrVlCloudTokenPlaceholder: 'PaddleOCR-VL 飞桨星河社区 Token'
-    },
+    ,
+      checking: '正在检测...',
+  },
     weknoraCloud: {
       title: 'WeKnora Cloud',
       description: '配置 WeKnora Cloud 的 APPID 和 APPSECRET 凭证。凭证用于模型服务和文档解析引擎。',
@@ -6981,6 +7002,9 @@ export default {
       sharedAt: '共享于',
       lastUpdated: '最后更新'
     }
+  ,
+    selectKnowledgeBase: '请选择知识库',
+    tagDeleteDesc: '确定删除标签"{name}"？该标签下的所有 FAQ 将被一并删除',
   },
   resourceOrigin: {
     mine: '我创建',
@@ -7413,6 +7437,31 @@ export default {
       date: '最新交易日',
       actions: '操作'
     }
+  ,
+    backtestBadgeText: '回测胜率 {winRate}% ({wins}/{total}胜，平均最大涨幅+{maxGain}%)',
+    backtestBadgeTitle: '基于历史买点信号的客观回测统计（持有至止盈止损或20个交易日）',
+    commonPresets: '常用预设',
+    currentPortfolio: '当前持仓',
+    diagCount: '{count}只',
+    diagDesc: '结合行情技术形态、筹码结构与财务风险，综合评估自选池风险收益比',
+    diagMore: '还有 {count} 只标的，点击可查看完整诊断报告',
+    diagnosisTitle: '投资组合全景AI诊断',
+    drawChannel: '价格通道',
+    drawClear: '清空画线',
+    drawFibo: '斐波那契',
+    drawHorizontal: '水平线',
+    drawTrend: '趋势线段',
+    portfolioDiagnosis: '组合诊断',
+    portfolioOverview: '组合概览',
+    setTarget: '设置目标',
+    startAiDiagnosis: '启动AI深度诊断',
+    targetCleared: '目标价已清除',
+    targetCost: '目标成本',
+    targetSaved: '目标价已保存',
+    targetStop: '防守止损',
+    todayAlerts: '今日预警',
+    totalTracked: '追踪总数',
+    watchPool: '重点观察',
   },
   resourceSort: {
     title: '排序',
@@ -7756,6 +7805,54 @@ export default {
     requestRejected: '服务端明确拒绝了这次请求',
     retryWontHelp: '重试不会有不同结果',
     fetchPathIssue: '这是取数链路的问题',
+  
+    volumeLabel: '成交量',
+    turnoverLabel: '成交额',
+    patternLabel: '形态',
+    patternAskSuffix: '，向 Agent 提问',
+    patternAskTitle: '点击向 Agent 提问当前形态：{patterns}',
+    zxBrickLabel: '知行砖',
+    zxBrickTitle: '同花顺知行砖型图 连续红绿砖数砖战法',
+    dualLineTitle: '白线 DEMA10 ({white}) vs 黄线 LongBBI ({yellow})',
+    dualLineBelow: '黄线下方·空头',
+    dualLineAbove: '双线上行·多头',
+    dualLineRetrace: '回踩整理',
+    aboveBBI: 'BBI多头',
+    belowBBI: 'BBI空头',
+    boardAdjustTitle: '板块指数无复权数据',
+    td9Title: '神奇九转序列：连续9天同向收盘后的转折信号',
+    patternBubbleLabel: '气泡',
+    patternBubbleBtnTitle: '在图表上显示顶底形态气泡',
+    patternBubbleHint: '点击气泡可查看形态详情或向 Agent 提问',
+    patternOutlineLabel: '轮廓',
+    patternOutlineBtnTitle: '在图表上绘制形态结构轮廓线',
+    patternOutlineHint: '展示形态的颈线与趋势通道',
+    boardNoPattern: '板块无形态',
+    boardNoPatternDetail: '板块指数不提供形态识别',
+    boardNoPatternOutlineDetail: '板块指数不提供形态轮廓',
+    noPatternDetected: '未检测到形态',
+    expandWorkspace: '展开工作台',
+    collapseWorkspace: '折叠工作台',
+    requestRejectedHint: '服务端明确拒绝了请求：{message}',
+    fetchPathIssueHint: '取数链路异常：{message}',
+    noDataHint: '暂无行情数据',
+    periodDay: '日K',
+    periodWeek: '周K',
+    periodMonth: '月K',
+    adjustNone: '不复权',
+    adjustForward: '前复权',
+    adjustBackward: '后复权',
+    unitShou: '手',
+    unitWanShou: '万手',
+    unitYiShou: '亿手',
+    unitWan: '万',
+    unitYi: '亿',
+    levelsLabel: '关键位',
+    levelsTitle: '支撑位与阻力位',
+    groupCandle: 'K线',
+    groupTactics: '战法',
+    oscillation: '震荡',
+    actionPatternDeep: '深入分析形态结构',
   },
   stockCitation: {
     noChangeData: '涨跌幅无数据',
@@ -7766,14 +7863,49 @@ export default {
     volRatio: '量比',
     amplitude: '振幅',
     engine: '同花顺知行量化指标引擎',
+  
+    amountWan: '{value}万',
+    amountYi: '{value}亿',
+    barsAsOf: '{bars}根K线 · 截至{asOf}',
+    barsInsufficient: 'K线不足24根({bars}根)',
+    continuousBoard: '{days}连板',
+    dragonCount: '龙虎榜{count}次',
+    hotRank: '热度第{rank}',
+    last30Days: '近30日',
+    limitBreakCount: '炸板{count}次',
+    limitUpCount: '涨停{count}次',
+    limitUpTitle: '最近涨停: {date}，连板: {days}天',
+    loss: '亏损',
+    moreSectors: '还有{count}个板块',
+    netAmountWan: '{direction}{value}万',
+    netAmountYi: '{direction}{value}亿',
+    netBuy: '净买入',
+    netSell: '净卖出',
+    noQuoteData: '暂无行情数据',
+    openWorkspace: '打开工作台',
+    queryFailed: '查询失败',
+    queryFailedDetail: '查询失败: {message}',
+    range20d: '近20日',
+    range5d: '近5日',
+    range60d: '近60日',
+    sourcesUnavailable: '数据源不可用: ',
+    yellowDegraded: '黄线降级',
   },
   watchDetail: {
     notSet: '未设置',
     cost: '成本',
     stopLoss: '止损',
+  
+    costPlaceholder: '目标成本价 (元)',
+    stopPlaceholder: '止损价 (元)',
   },
   mentionedStocks: {
     title: '本轮提及个股',
+  
+    viewKline: '看K线',
+    viewTitle: '切换主图到 {name} ({thscode})',
+    viewing: '正在查看',
+    viewingTitle: '当前主图已是 {name} ({thscode})',
   },
   welcome: {
     slogan: '让今天的知识，成为明天的智慧',
@@ -7816,8 +7948,19 @@ export default {
     composerPlaceholder: '问点什么…',
     print: '付印',
     sendEnter: '发送（Enter）',
-    noPreview: '暂无消息预览',
     browseOrAsk: '先逛逛，或者直接问点什么…',
   },
 
+  klineCompare: {
+    loading: '加载中 ({count})',
+    collapse: '点击折叠',
+    expand: '点击展开',
+    switchTo: '切换主图到 {name} ({thscode})',
+  },
+  samples: {
+    markdown: 'Markdown 文档',
+    faq: '问答对 FAQ',
+    chapter: '多章节长文',
+    plain: '纯文本段落',
+  },
 }

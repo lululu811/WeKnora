@@ -35,6 +35,11 @@ const i18n = createI18n({
   // We render them via v-html with our own sanitization, so silence vue-i18n's HTML warning
   // to avoid flooding the console and slowing renders during history loads.
   warnHtmlMessage: false,
+  missing: (locale, key) => {
+    if (import.meta.env.DEV) {
+      console.warn(`[i18n] Missing translation key "${key}" for locale "${locale}"`)
+    }
+  },
   messages
 })
 

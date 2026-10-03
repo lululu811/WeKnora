@@ -1061,6 +1061,8 @@ export default {
       incremental: 'Инкрементная',
       full: 'Полная'
     }
+  ,
+    resumeFailed: 'Сбой возобновления',
   },
   ollama: {
     unknown: 'Неизвестно',
@@ -3826,6 +3828,8 @@ export default {
       thisYear: '{day}.{month} {time}',
       otherYear: '{day}.{month}.{year} {time}'
     }
+  ,
+    imageReadFailed: 'Не удалось прочитать изображение',
   },
   knowledgeEditor: {
     titleCreate: 'Создать базу знаний',
@@ -4825,7 +4829,20 @@ export default {
       toggleOn: 'Включить веб-поиск',
       toggleOff: 'Выключить веб-поиск',
       notConfigured: 'Веб-поиск не настроен'
-    }
+    ,
+      label: 'Поиск в Интернете',
+  }
+  ,
+    imageUpload: {
+      label: 'Загрузить изображение',
+      tooltip: 'Загрузить изображение для анализа',
+    },
+    fileUpload: {
+      label: 'Загрузить файл',
+      tooltip: 'Загрузить файл',
+      tooMany: 'Превышено количество файлов',
+      tooLarge: 'Файл слишком большой',
+    },
   },
   manualEditor: {
     defaultTitlePrefix: 'Новый документ',
@@ -4932,6 +4949,8 @@ export default {
   },
   file: {
     upload: 'Загрузить файл'
+  ,
+    downloadFailed: 'Сбой загрузки, повторите попытку позже',
   },
   mentionDetail: {
     readOnlyFromAgent: 'Только чтение (от агента)',
@@ -5631,7 +5650,9 @@ export default {
       paddleocrVlEndpointPlaceholder: 'напр. http://your-paddleocr-vl:8080',
       paddleocrVlEndpointHint: 'Адрес полного сервиса PaddleOCR-VL (pipeline); суффикс /layout-parsing не требуется',
       paddleocrVlCloudTokenPlaceholder: 'Токен PaddleOCR-VL AI Studio'
-    },
+    ,
+      checking: 'Проверка...',
+  },
     weknoraCloud: {
       title: 'WeKnora Cloud',
       description: 'Настройте учётные данные APPID и APPSECRET для WeKnora Cloud. Данные используются для модельных сервисов и движка парсинга документов.',
@@ -6979,6 +7000,9 @@ export default {
       sharedAt: 'Дата общего доступа',
       lastUpdated: 'Последнее обновление'
     }
+  ,
+    selectKnowledgeBase: 'Выберите базу знаний',
+    tagDeleteDesc: 'Удалить тег "{name}"? Все FAQ с этим тегом также будут удалены',
   },
   resourceOrigin: {
     mine: 'Мои',
@@ -7411,6 +7435,31 @@ export default {
       date: 'Последняя сделка',
       actions: 'Действия'
     }
+  ,
+    backtestBadgeText: 'Винрейт бэктеста {winRate}% ({wins}/{total} побед, ср. макс. рост +{maxGain}%)',
+    backtestBadgeTitle: 'Статистика бэктеста на основе исторических сигналов покупки',
+    commonPresets: 'Общие пресеты',
+    currentPortfolio: 'Текущий портфель',
+    diagCount: '{count} акций',
+    diagDesc: 'Комплексная оценка соотношения риск/прибыль портфеля',
+    diagMore: 'Еще {count} акций, нажмите для полного отчета',
+    diagnosisTitle: 'AI-диагностика портфеля',
+    drawChannel: 'Ценовой канал',
+    drawClear: 'Очистить рисунки',
+    drawFibo: 'Фибоначчи',
+    drawHorizontal: 'Горизонтальная линия',
+    drawTrend: 'Линия тренда',
+    portfolioDiagnosis: 'Диагностика портфеля',
+    portfolioOverview: 'Обзор портфеля',
+    setTarget: 'Установить цели',
+    startAiDiagnosis: 'Запустить глубокую диагностику AI',
+    targetCleared: 'Целевые цены сброшены',
+    targetCost: 'Целевая стоимость',
+    targetSaved: 'Целевые цены сохранены',
+    targetStop: 'Стоп-лосс',
+    todayAlerts: 'Оповещения сегодня',
+    totalTracked: 'Всего отслеживается',
+    watchPool: 'Пул наблюдения',
   },
   resourceSort: {
     title: 'Сортировка',
@@ -7754,6 +7803,54 @@ export default {
     requestRejected: 'Server explicitly rejected this request',
     retryWontHelp: 'Retrying will not yield different results',
     fetchPathIssue: 'This is a data fetch path issue',
+  
+    volumeLabel: 'Объем',
+    turnoverLabel: 'Оборот',
+    patternLabel: 'Паттерн',
+    patternAskSuffix: ', спросить Agent',
+    patternAskTitle: 'Спросить Agent о текущем паттерне: {patterns}',
+    zxBrickLabel: 'Кирпич ZX',
+    zxBrickTitle: 'Стратегия кирпичного графика THS Zhixing',
+    dualLineTitle: 'Белая DEMA10 ({white}) vs Желтая LongBBI ({yellow})',
+    dualLineBelow: 'Ниже желтой · Медвежий',
+    dualLineAbove: 'Обе растут · Бычий',
+    dualLineRetrace: 'Откат и консолидация',
+    aboveBBI: 'BBI Бычий',
+    belowBBI: 'BBI Медвежий',
+    boardAdjustTitle: 'Для индексов секторов нет скорректированных данных',
+    td9Title: 'Сигнал разворота девятикратной последовательности TD9',
+    patternBubbleLabel: 'Пузыри',
+    patternBubbleBtnTitle: 'Показать пузыри паттернов вершин/оснований на графике',
+    patternBubbleHint: 'Нажмите на пузырь для просмотра деталей паттерна или вопроса Agent',
+    patternOutlineLabel: 'Контур',
+    patternOutlineBtnTitle: 'Нарисовать контуры структуры паттерна на графике',
+    patternOutlineHint: 'Показать линии шеи и каналы тренда',
+    boardNoPattern: 'Нет паттернов сектора',
+    boardNoPatternDetail: 'Индексы секторов не поддерживают распознавание паттернов',
+    boardNoPatternOutlineDetail: 'Индексы секторов не поддерживают контуры паттернов',
+    noPatternDetected: 'Паттерны не обнаружены',
+    expandWorkspace: 'Развернуть рабочую область',
+    collapseWorkspace: 'Свернуть рабочую область',
+    requestRejectedHint: 'Сервер отклонил запрос: {message}',
+    fetchPathIssueHint: 'Ошибка пути получения данных: {message}',
+    noDataHint: 'Рыночные данные отсутствуют',
+    periodDay: 'День',
+    periodWeek: 'Неделя',
+    periodMonth: 'Месяц',
+    adjustNone: 'Без коррекции',
+    adjustForward: 'Прямая',
+    adjustBackward: 'Обратная',
+    unitShou: ' лот.',
+    unitWanShou: '0 тыс. лот.',
+    unitYiShou: '00 млн лот.',
+    unitWan: '0 тыс.',
+    unitYi: '00 млн',
+    levelsLabel: 'Ключевые уровни',
+    levelsTitle: 'Уровни поддержки и сопротивления',
+    groupCandle: 'Свечи',
+    groupTactics: 'Тактика',
+    oscillation: 'Боковик',
+    actionPatternDeep: 'Глубокий анализ паттернов',
   },
   stockCitation: {
     noChangeData: 'No change data',
@@ -7764,14 +7861,49 @@ export default {
     volRatio: 'Volume Ratio',
     amplitude: 'Amplitude',
     engine: 'THS ZX Quantitative Engine',
+  
+    amountWan: '{value}0 тыс.',
+    amountYi: '{value}00 млн',
+    barsAsOf: '{bars} свечей · По состоянию на {asOf}',
+    barsInsufficient: 'Недостаточно свечей (<24: {bars})',
+    continuousBoard: '{days} подряд планок вверх',
+    dragonCount: 'Список лидеров {count} раз',
+    hotRank: 'Рейтинг популярности №{rank}',
+    last30Days: 'Последние 30 дней',
+    limitBreakCount: 'Срыв планки {count} раз',
+    limitUpCount: 'Планка вверх {count} раз',
+    limitUpTitle: 'Последняя планка: {date}, серия: {days}д',
+    loss: 'Убыток',
+    moreSectors: 'Еще {count} секторов',
+    netAmountWan: '{direction}{value}0 тыс.',
+    netAmountYi: '{direction}{value}00 млн',
+    netBuy: 'Чистая покупка ',
+    netSell: 'Чистая продажа ',
+    noQuoteData: 'Рыночные данные отсутствуют',
+    openWorkspace: 'Открыть рабочую область',
+    queryFailed: 'Сбой запроса',
+    queryFailedDetail: 'Сбой запроса: {message}',
+    range20d: '20д',
+    range5d: '5д',
+    range60d: '60д',
+    sourcesUnavailable: 'Источники недоступны: ',
+    yellowDegraded: 'Желтая линия деградирована',
   },
   watchDetail: {
     notSet: 'Not set',
     cost: 'Cost',
     stopLoss: 'Stop Loss',
+  
+    costPlaceholder: 'Целевая цена покупки',
+    stopPlaceholder: 'Цена стоп-лосса',
   },
   mentionedStocks: {
     title: 'Stocks Mentioned',
+  
+    viewKline: 'Свечной график',
+    viewTitle: 'Переключить график на {name} ({thscode})',
+    viewing: 'Просмотр',
+    viewingTitle: 'В настоящее время отображается {name} ({thscode})',
   },
   welcome: {
     slogan: 'Let today\'s knowledge become tomorrow\'s wisdom',
@@ -7814,8 +7946,19 @@ export default {
     composerPlaceholder: 'Ask something…',
     print: 'Print',
     sendEnter: 'Send (Enter)',
-    noPreview: 'No preview',
     browseOrAsk: 'Browse around, or ask something…',
   },
 
+  klineCompare: {
+    loading: 'Загрузка ({count})',
+    collapse: 'Свернуть',
+    expand: 'Развернуть',
+    switchTo: 'Переключить график на {name} ({thscode})',
+  },
+  samples: {
+    markdown: 'Документ Markdown',
+    faq: 'Вопросы и ответы FAQ',
+    chapter: 'Многоглавный документ',
+    plain: 'Простой текст',
+  },
 }

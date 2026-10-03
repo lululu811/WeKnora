@@ -193,7 +193,7 @@ export function collectLocaleKeys(root: unknown): Set<string> {
 
 function isAuditableSourceFile(path: string): boolean {
   if (!SOURCE_EXTENSIONS.test(path)) return false
-  if (path.includes('/i18n/locales/')) return false
+  if (path.includes('/i18n/')) return false
   if (TEST_FILE_PATTERN.test(path)) return false
   return true
 }
@@ -452,6 +452,28 @@ export function findUsedKeysMissingInLocales(
 
   failures.sort()
   return failures
+}
+
+/**
+ * Detect keys referenced in app code that do not exist in the reference locale bundle.
+ * Skips non-i18n static literals (e.g. assets ending with image extensions, non-dotted words).
+ */
+export function findCodeKeysMissingInReferenceLocale(
+  usage: I18nUsage,
+  referenceKeys: Set<string>,
+  allowedNamespaces?: string[],
+): string[] {
+  const missing: string[] = []
+  for (const key of usage.staticKeys) {
+    if (!key.includes('.')) continue
+    if (key.endsWith('.svg') || key.endsWith('.png') || key.endsWith('.jpg')) continue
+    if (allowedNamespaces && !allowedNamespaces.includes(key.split('.')[0])) continue
+    if (!referenceKeys.has(key)) {
+      missing.push(key)
+    }
+  }
+  missing.sort()
+  return missing
 }
 
 export type LocaleMessageEntry = {

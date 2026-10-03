@@ -13,22 +13,25 @@ import {
   diffLocaleKeys,
   findAllLocaleMessageCompileErrors,
   findUsedKeysMissingInLocales,
+  findCodeKeysMissingInReferenceLocale,
   getLocaleValueAtPath,
   rebuildPrunedLocales,
   type LocaleName,
+  type I18nUsage,
 } from './localeKeyAudit.ts'
 
 const REFERENCE_LOCALE: LocaleName = 'en-US'
 
 let localeKeysByName: Record<LocaleName, Set<string>>
 let referencedKeys: Set<string>
+let appUsage: I18nUsage
 
 before(() => {
-  const usage = collectI18nUsageFromSources()
+  appUsage = collectI18nUsageFromSources()
   localeKeysByName = Object.fromEntries(
     Object.entries(LOCALE_BUNDLES).map(([name, bundle]) => [name, collectLocaleKeys(bundle)]),
   ) as Record<LocaleName, Set<string>>
-  referencedKeys = collectReferencedLocaleKeys(LOCALE_BUNDLES[REFERENCE_LOCALE], usage)
+  referencedKeys = collectReferencedLocaleKeys(LOCALE_BUNDLES[REFERENCE_LOCALE], appUsage)
 })
 
 test('locale bundles expose the same translation keys', () => {
@@ -63,6 +66,22 @@ test('installer command progress messages resolve in the settings namespace', ()
 test('referenced i18n keys used in app code exist in every locale', () => {
   const failures = findUsedKeysMissingInLocales(referencedKeys, localeKeysByName)
   assert.deepEqual(failures, [], failures.slice(0, 20).join('\n'))
+})
+
+test('all finance keys referenced in code exist in every locale bundle', () => {
+  const financeNamespaces = ['kline', 'klineCompare', 'stockCitation', 'watchlist', 'watchDetail', 'mentionedStocks']
+  const financeUsed = Array.from(appUsage.staticKeys).filter(
+    (k) => financeNamespaces.some((ns) => k.startsWith(`${ns}.`)) && !k.endsWith('.svg') && !k.endsWith('.png'),
+  )
+  const failures = findUsedKeysMissingInLocales(financeUsed, localeKeysByName)
+  assert.deepEqual(failures, [], failures.slice(0, 20).join('\n'))
+
+  const missingInReference = findCodeKeysMissingInReferenceLocale(
+    appUsage,
+    localeKeysByName[REFERENCE_LOCALE],
+    financeNamespaces,
+  )
+  assert.deepEqual(missingInReference, [], missingInReference.join('\n'))
 })
 
 const PARSER_ENGINE_NAMES = [

@@ -493,6 +493,31 @@ export default {
       date: 'Last trade date',
       actions: 'Actions'
     }
+  ,
+    backtestBadgeText: 'Backtest Win Rate {winRate}% ({wins}/{total}, avg max gain +{maxGain}%)',
+    backtestBadgeTitle: 'Backtest statistics based on historical buy signals',
+    commonPresets: 'Common Presets',
+    currentPortfolio: 'Current Portfolio',
+    diagCount: '{count} stocks',
+    diagDesc: 'Comprehensive assessment of portfolio risk/reward ratio',
+    diagMore: '{count} more stocks, click to view full report',
+    diagnosisTitle: 'Portfolio AI Diagnosis',
+    drawChannel: 'Price Channel',
+    drawClear: 'Clear Drawings',
+    drawFibo: 'Fibonacci',
+    drawHorizontal: 'Horizontal Line',
+    drawTrend: 'Trend Line',
+    portfolioDiagnosis: 'Portfolio Diagnosis',
+    portfolioOverview: 'Portfolio Overview',
+    setTarget: 'Set Targets',
+    startAiDiagnosis: 'Start AI Deep Diagnosis',
+    targetCleared: 'Target prices cleared',
+    targetCost: 'Target Cost',
+    targetSaved: 'Target prices saved',
+    targetStop: 'Stop Loss',
+    todayAlerts: 'Today Alerts',
+    totalTracked: 'Total Tracked',
+    watchPool: 'Watch Pool',
   },
   menu: {
     sessionInProgress: 'Conversation in progress',
@@ -1158,6 +1183,9 @@ export default {
     filesSkippedNoEngine: '{count} file(s) skipped due to no available parser engine',
     deleteSuccess: 'Knowledge deleted successfully!',
     chunkLoadFailed: 'Failed to load chunks'
+  ,
+    selectKnowledgeBase: 'Please select a knowledge base',
+    tagDeleteDesc: 'Are you sure you want to delete tag "{name}"? All FAQs under this tag will also be deleted',
   },
   uploadConfirm: {
     documentSummary: 'Document summary',
@@ -2240,7 +2268,9 @@ export default {
       paddleocrVlEndpointPlaceholder: 'e.g. http://your-paddleocr-vl:8080',
       paddleocrVlEndpointHint: 'Base URL of the full PaddleOCR-VL pipeline service; no /layout-parsing suffix needed',
       paddleocrVlCloudTokenPlaceholder: 'PaddleOCR-VL AI Studio Token'
-    },
+    ,
+      checking: 'Checking...',
+  },
     storageBackend: {
       description: 'Manage the storage instances used for files and images; multiple instances of the same type can be configured.',
       empty: 'No storage instances configured yet',
@@ -2866,6 +2896,8 @@ export default {
   },
   file: {
     upload: 'Upload File'
+  ,
+    downloadFailed: 'Download failed, please try again later',
   },
   manualEditor: {
     placeholders: {
@@ -2989,7 +3021,9 @@ export default {
       toggleOn: 'Enable Web Search',
       toggleOff: 'Disable Web Search',
       notConfigured: 'Web search engine not configured'
-    },
+    ,
+      label: 'Web Search',
+  },
     knowledgeBase: 'Knowledge Base',
     knowledgeBaseWithCount: 'Knowledge Base ({count})',
     notConfigured: 'Not configured',
@@ -3028,6 +3062,17 @@ export default {
     modelLockedByAgent: 'Model selection is locked by the current agent',
     imageUploadDisabledByAgent: 'Image upload is not enabled for this agent',
     goToAgentSettings: 'Go to agent settings'
+  ,
+    imageUpload: {
+      label: 'Upload image',
+      tooltip: 'Upload image for analysis',
+    },
+    fileUpload: {
+      label: 'Upload file',
+      tooltip: 'Upload file',
+      tooMany: 'Too many files',
+      tooLarge: 'File too large',
+    },
   },
   createChat: {
     workbench: {
@@ -4193,6 +4238,8 @@ export default {
     klineStudio: {
       openInPanel: 'Open in side panel'
     }
+  ,
+    imageReadFailed: 'Failed to read image',
   },
   tenant: {
     title: 'Workspace Information',
@@ -7014,6 +7061,8 @@ export default {
       deletion_failed: 'Deletion failed; see server logs',
       ingest_failed: 'Ingest failed; see server logs'
     }
+  ,
+    resumeFailed: 'Failed to resume',
   },
   integrations: {
     cli: {
@@ -7754,6 +7803,54 @@ export default {
     requestRejected: 'Server explicitly rejected this request',
     retryWontHelp: 'Retrying will not yield different results',
     fetchPathIssue: 'This is a data fetch path issue',
+  
+    volumeLabel: 'Volume',
+    turnoverLabel: 'Turnover',
+    patternLabel: 'Pattern',
+    patternAskSuffix: ', ask Agent',
+    patternAskTitle: 'Ask Agent about current pattern: {patterns}',
+    zxBrickLabel: 'ZX Brick',
+    zxBrickTitle: 'THS Zhixing Brick Chart Strategy',
+    dualLineTitle: 'White DEMA10 ({white}) vs Yellow LongBBI ({yellow})',
+    dualLineBelow: 'Below Yellow · Bearish',
+    dualLineAbove: 'Both Rising · Bullish',
+    dualLineRetrace: 'Pullback Consolidation',
+    aboveBBI: 'BBI Bullish',
+    belowBBI: 'BBI Bearish',
+    boardAdjustTitle: 'Sector indices do not have adjusted data',
+    td9Title: 'Demar 9 Turn Sequence Reversal Signal',
+    patternBubbleLabel: 'Bubbles',
+    patternBubbleBtnTitle: 'Show top/bottom pattern bubbles on chart',
+    patternBubbleHint: 'Click bubble to view pattern details or ask Agent',
+    patternOutlineLabel: 'Outline',
+    patternOutlineBtnTitle: 'Draw pattern structural outlines on chart',
+    patternOutlineHint: 'Display pattern necklines and trend channels',
+    boardNoPattern: 'No Sector Patterns',
+    boardNoPatternDetail: 'Sector indices do not provide pattern recognition',
+    boardNoPatternOutlineDetail: 'Sector indices do not provide pattern outlines',
+    noPatternDetected: 'No Pattern Detected',
+    expandWorkspace: 'Expand Workspace',
+    collapseWorkspace: 'Collapse Workspace',
+    requestRejectedHint: 'Request rejected by server: {message}',
+    fetchPathIssueHint: 'Data pipeline issue: {message}',
+    noDataHint: 'No market data available',
+    periodDay: 'Day',
+    periodWeek: 'Week',
+    periodMonth: 'Month',
+    adjustNone: 'None',
+    adjustForward: 'Forward',
+    adjustBackward: 'Backward',
+    unitShou: ' lots',
+    unitWanShou: '0k lots',
+    unitYiShou: '00M lots',
+    unitWan: '0k',
+    unitYi: '00M',
+    levelsLabel: 'Key Levels',
+    levelsTitle: 'Support and Resistance Levels',
+    groupCandle: 'Candles',
+    groupTactics: 'Tactics',
+    oscillation: 'Oscillating',
+    actionPatternDeep: 'Deep Pattern Analysis',
   },
   stockCitation: {
     noChangeData: 'No change data',
@@ -7764,14 +7861,49 @@ export default {
     volRatio: 'Volume Ratio',
     amplitude: 'Amplitude',
     engine: 'THS ZX Quantitative Engine',
+  
+    amountWan: '{value}0k',
+    amountYi: '{value}00M',
+    barsAsOf: '{bars} bars · As of {asOf}',
+    barsInsufficient: 'Insufficient bars (<24: {bars})',
+    continuousBoard: '{days} consecutive limit-up',
+    dragonCount: 'Dragon/Tiger list {count}x',
+    hotRank: 'Hot rank #{rank}',
+    last30Days: 'Last 30 days',
+    limitBreakCount: 'Limit break {count}x',
+    limitUpCount: 'Limit up {count}x',
+    limitUpTitle: 'Latest limit-up: {date}, streak: {days}d',
+    loss: 'Loss',
+    moreSectors: '{count} more sectors',
+    netAmountWan: '{direction}{value}0k',
+    netAmountYi: '{direction}{value}00M',
+    netBuy: 'Net buy ',
+    netSell: 'Net sell ',
+    noQuoteData: 'No quote data',
+    openWorkspace: 'Open Workspace',
+    queryFailed: 'Query failed',
+    queryFailedDetail: 'Query failed: {message}',
+    range20d: '20d',
+    range5d: '5d',
+    range60d: '60d',
+    sourcesUnavailable: 'Sources unavailable: ',
+    yellowDegraded: 'Yellow line degraded',
   },
   watchDetail: {
     notSet: 'Not set',
     cost: 'Cost',
     stopLoss: 'Stop Loss',
+  
+    costPlaceholder: 'Target cost price',
+    stopPlaceholder: 'Stop loss price',
   },
   mentionedStocks: {
     title: 'Stocks Mentioned',
+  
+    viewKline: 'View K-Line',
+    viewTitle: 'Switch chart to {name} ({thscode})',
+    viewing: 'Viewing',
+    viewingTitle: 'Currently viewing {name} ({thscode})',
   },
   welcome: {
     slogan: 'Let today\'s knowledge become tomorrow\'s wisdom',
@@ -7814,8 +7946,19 @@ export default {
     composerPlaceholder: 'Ask something…',
     print: 'Print',
     sendEnter: 'Send (Enter)',
-    noPreview: 'No preview',
     browseOrAsk: 'Browse around, or ask something…',
   },
 
+  klineCompare: {
+    loading: 'Loading ({count})',
+    collapse: 'Click to collapse',
+    expand: 'Click to expand',
+    switchTo: 'Switch chart to {name} ({thscode})',
+  },
+  samples: {
+    markdown: 'Markdown Document',
+    faq: 'Q&A FAQ',
+    chapter: 'Multi-chapter Document',
+    plain: 'Plain Text Paragraph',
+  },
 }
