@@ -221,7 +221,7 @@ def test_comprehensive_lists_unimplemented_template_chapters():
     # 所以只断言「确实还没接的」。
     for need in ("政策与板块舆情风险", "目标价"):
         assert need in body, f"第十一章应列出尚未接入的 {need}"
-    assert "HKEX" in body, "北向只剩日频历史没接，要写清是哪一部分"
+    assert "HKEX" not in body, "北向日频已接入（港交所），不该还列在清单里"
     assert "宁缺勿造" in body
 
 

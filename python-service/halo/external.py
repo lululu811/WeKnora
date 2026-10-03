@@ -72,6 +72,7 @@ class Subdomain:
     EM_SEARCH = "em-search"         # 东财搜索：个股新闻（JSONP）
     NBS = "nbs"                     # 国家统计局：PMI 发布页（HTML）
     THS_BASIC = "ths-basic"         # 同花顺 F10：机构一致预期 EPS（GBK）
+    HKEX = "hkex"                   # 港交所：每日统计（北向权威日频，JS 数据文件）
 
 
 #: (base_url, 最小间隔秒, 备注)
@@ -108,6 +109,12 @@ _TIERS: Dict[str, tuple] = {
         "https://basic.10jqka.com.cn/new/", 2.0,
         "同花顺 F10，独立反爬",
     ),
+    # 港交所每日统计。官方站点、日频数据，限速给到 2s —— 没必要打快，
+    # 而且按日期回退找最近交易日时是连续几个请求。
+    Subdomain.HKEX: (
+        "https://www.hkex.com.hk/chi/csm/DailyStat/", 2.0,
+        "港交所官方，日频，按日期回退找交易日",
+    ),
 }
 
 _REFERERS = {
@@ -119,6 +126,7 @@ _REFERERS = {
     Subdomain.EM_SEARCH: "https://so.eastmoney.com/",
     Subdomain.NBS: "https://www.stats.gov.cn/",
     Subdomain.THS_BASIC: "https://basic.10jqka.com.cn/",
+    Subdomain.HKEX: "https://www.hkex.com.hk/",
 }
 
 

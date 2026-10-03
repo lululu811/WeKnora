@@ -743,6 +743,72 @@ def _md_valuation(ext: Dict[str, Any]) -> List[str]:
     return L
 
 
+def _md_northbound_daily(result: Dict[str, Any]) -> List[str]:
+    """沪深股通**日频**数据（港交所官方），第九章的补充。
+
+    与 _md_northbound（同花顺当日分钟）互补：那个是「当日情绪」，这个是**权威日频**
+    —— 北向自 2024-08 收紧盘中披露后，日频只剩港交所这一路。
+
+    最有用的一条是**本标的是否在北向十大活跃股里**：外资当天大额买卖这只票是实打实
+    的信号，而且该列表由港交所按成交额排，不含任何主观判断。
+    """
+    daily = ((result.get("external") or {}).get("hkex") or {}).get("northbound_daily") or {}
+    markets = daily.get("markets") or {}
+    if not markets and not daily.get("degraded"):
+        return []
+
+    L = ["### 沪深股通日频（港交所官方）", ""]
+    if not markets:
+        L += [f"- （未取到：{daily.get('reason') or '原因未知'}）", ""]
+        return L
+
+    north = {m: d for m, d in markets.items() if "Northbound" in m}
+    if not north:
+        L += ["- （当日没有北向数据。）", ""]
+        return L
+
+    as_of = daily.get("as_of") or "—"
+    L += [f"> 数据日期：{as_of}（港交所每日统计，单位亿元）", "",
+          "| 通道 | 成交额 |", "|:--|--:|"]
+    total = 0.0
+    for market, label in (("SSE Northbound", "沪股通"), ("SZSE Northbound", "深股通")):
+        block = north.get(market) or {}
+        value = (block.get("totals") or {}).get("Total Turnover")
+        if isinstance(value, (int, float)):
+            total += value
+            L.append(f"| {label} | {value / 1e8:,.2f} |")
+    if total:
+        L.append(f"| **北向合计** | **{total / 1e8:,.2f}** |")
+    L.append("")
+
+    # 本标的是否在北向十大活跃股里 —— 这是本节最该被看到的信息。
+    bare = str(result.get("thscode") or "").split(".")[0]
+    hit = None
+    rows = []
+    for market, label in (("SSE Northbound", "沪股通"), ("SZSE Northbound", "深股通")):
+        for a in (north.get(market) or {}).get("top10") or []:
+            if a.get("code") == bare:
+                hit = (label, a)
+            rows.append((label, a))
+
+    if hit:
+        label, a = hit
+        L += [f"**⚠️ 本标的出现在北向十大活跃股：{label}第 {a.get('rank')} 名，"
+              f"成交 {((a.get('turnover') or 0) / 1e8):,.2f} 亿元。**", ""]
+
+    if rows:
+        L += ["**北向十大活跃股**（按成交额，★ 为本标的）：", "",
+              "| 通道 | 排名 | 代码 | 名称 | 成交额(亿) |", "|:--|--:|:--|:--|--:|"]
+        for label, a in rows:
+            star = "★ " if a.get("code") == bare else ""
+            turnover = a.get("turnover")
+            cell = f"{turnover / 1e8:,.2f}" if isinstance(turnover, (int, float)) else "—"
+            L.append(f"| {label} | {a.get('rank')} | {star}{a.get('code')} | "
+                     f"{a.get('name')} | {cell} |")
+        L.append("")
+    return L
+
+
 def _md_comprehensive(result: Dict[str, Any], slots: List[Dict[str, Any]]) -> List[str]:
     """第十一章：综合评估与投资建议。
 
@@ -777,7 +843,7 @@ def _md_comprehensive(result: Dict[str, Any], slots: List[Dict[str, Any]]) -> Li
         "| 模板章节 | 缺什么 |",
         "|:--|:--|",
         "| 二、利好/利空**分类** | 分类已留给 AI；缺的是财联社等第二新闻源（当前只有东财） |",
-        "| 九、北向资金（日频历史） | 港交所 HKEX 官方日统计；同花顺只给当日、且深股通残缺 |",
+
         "| 十、政策与板块舆情风险 | 政策与舆情数据 |",
         "| 十一、目标价 / DCF | 一致预期 EPS + 估值模型 |",
         "",
@@ -872,6 +938,7 @@ def render_markdown(result: Dict[str, Any]) -> str:
             ext = result.get("external") or {}
             L += _md_margin(ext)
             L += _md_northbound(ext)
+            L += _md_northbound_daily(result)
         if dim == "risk":
             # 宏观锚点放在风险章里：它服务的是「宏观与市场风险」那一维。
             L += _md_macro(result.get("external") or {})
@@ -992,6 +1059,10 @@ async def fetch_external(code: str, *, with_fund_flow: bool = True) -> Dict[str,
     # 它是模板 11.3 估值分析的输入，但**不随 code 之外的参数变化**。
     buckets.append(
         ("ths-basic", "independent", lambda: {"consensus_eps": extdata.consensus_eps(code)})
+    )
+    # 港交所北向日频。**不随标的变**（全市场级），但每份报告都要用到。
+    buckets.append(
+        ("hkex", "independent", lambda: {"northbound_daily": extdata.hkex_northbound()})
     )
     if with_fund_flow:
         buckets.append(

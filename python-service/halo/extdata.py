@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+from datetime import date, timedelta
 from typing import Any, Dict, List, Optional
 
 from .external import Subdomain, datacenter, fetch_json, fetch_text, ExternalError
@@ -536,6 +537,146 @@ def consensus_eps(code: str, max_years: int = 4) -> Dict[str, Any]:
         return {"items": [], "degraded": True,
                 "reason": "一致预期表里没有解析出任何年份行"}
     return {"items": items[:max_years], "degraded": False, "reason": ""}
+
+
+# ---------------------------------------------------------------------------
+# 沪深股通日频（港交所官方每日统计）
+# ---------------------------------------------------------------------------
+
+#: 港交所对「不可用」用的哨兵值。每日额度余额（DQB）未披露时填 999,999,999 ——
+#: 那不是「额度还剩 999,999,999 百万」，而是「没有」。naive 解析会把它当读数
+#: 渲染出去，所以必须在取数层就换成 None。
+_HKEX_SENTINEL = 999_999_999
+
+
+def _hkex_number(raw: Any) -> Optional[float]:
+    """港交所单元格 → 数字；哨兵值与畸形值都返回 None。"""
+    text = str(raw if raw is not None else "").replace(",", "").strip()
+    if not text:
+        return None
+    try:
+        value = float(text)
+    except ValueError:
+        return None
+    return None if value == _HKEX_SENTINEL else value
+
+
+def _parse_hkex_js(text: str) -> List[Dict[str, Any]]:
+    """把 ``tabData = [...]`` 解成 Python 结构。文件带 BOM，且是 JS 字面量不是 JSON。"""
+    body = (text or "").lstrip("\ufeff").strip()
+    start, end = body.find("["), body.rfind("]")
+    if start < 0 or end <= start:
+        return []
+    try:
+        parsed = json.loads(body[start:end + 1])
+    except ValueError:
+        return []
+    return parsed if isinstance(parsed, list) else []
+
+
+def hkex_northbound(max_lookback: int = 7) -> Dict[str, Any]:
+    """沪深股通**日频**数据（港交所官方每日统计）—— 北向的权威源。
+
+    北向自 2024-08 收紧盘中披露后，同花顺的分钟序列只剩「当日情绪」；权威日频在
+    港交所，这就是那个源。
+
+    文件是 ``data_tab_daily_YYYYMMDDc.js``，**按日期逐个回退**找最近一个有数据的
+    交易日（周末与假期当天没有文件）。周末直接跳过，不浪费一次请求。
+
+    两个实测过的坑：
+    * **同一文件里单位不统一**：``tradingTable`` 的成交额是**百万元**，而
+      ``top10Table`` 是**元**。这里统一换算成**元**再交给调用方 —— 换算只在取数层
+      做一次，别让每个调用方各换一次。
+    * **哨兵值 999,999,999**（见 ``_HKEX_SENTINEL``）。
+
+    取不到时返回 ``{"degraded": True, "reason": ...}``，不返回半份数据。
+    """
+    today = date.today()
+    for back in range(max_lookback):
+        day = today - timedelta(days=back)
+        if day.weekday() >= 5:            # 周六日没有文件，别浪费请求
+            continue
+        try:
+            text = fetch_text(Subdomain.HKEX, f"data_tab_daily_{day.strftime('%Y%m%d')}c.js")
+        except ExternalError:
+            continue
+        blocks = [b for b in _parse_hkex_js(text) if b.get("tradingDay") == 1]
+        if _has_northbound_turnover(blocks):
+            return _summarize_hkex(blocks)
+    return {"degraded": True,
+            "reason": f"最近 {max_lookback} 天没有港交所北向成交额"
+                      f"（假期文件存在但北向 tradingDay=0、数值为「-」，已跳过）",
+            "as_of": None, "markets": {}}
+
+
+def _has_northbound_turnover(blocks: List[Dict[str, Any]]) -> bool:
+    """至少要有一个**北向**市场给出了成交额。
+
+    为什么不能只看「有没有 tradingDay=1 的块」：A 股休市而港股开市的日子（如
+    2026-10-02 国庆假期），同一个文件里**北向块 tradingDay=0、数值是「-」，
+    而南向块 tradingDay=1、数值是 0.00**。只按 tradingDay 过滤会停在这种日子上，
+    产出「as_of 是假期、北向全空」的假读数 —— 比取不到更糟。
+    """
+    for blk in blocks:
+        if "Northbound" not in str(blk.get("market") or ""):
+            continue
+        for content in blk.get("content") or []:
+            table = content.get("table") or {}
+            if str(table.get("classname")) != "tradingTable":
+                continue
+            rows = table.get("tr") or []
+            cells = rows[0].get("td") if rows else None
+            if cells and _hkex_number(cells[0][0] if cells[0] else None) is not None:
+                return True
+    return False
+
+
+def _summarize_hkex(blocks: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """把港交所的四张市场表压成报告要用的形状。单位统一为**元**。"""
+    markets: Dict[str, Any] = {}
+    as_of = None
+    for blk in blocks:
+        market = str(blk.get("market") or "").strip()
+        if not market:
+            continue
+        as_of = as_of or blk.get("date")
+        tables = {}
+        for content in blk.get("content") or []:
+            table = content.get("table") or {}
+            tables[str(table.get("classname") or "")] = table
+
+        trading = tables.get("tradingTable") or {}
+        # tradingTable 是**纵向**键值：schema 的列名与 tr 的行一一对应。
+        schema = (trading.get("schema") or [[]])[0]
+        totals: Dict[str, Any] = {}
+        for name, row in zip(schema, trading.get("tr") or []):
+            cells = row.get("td") or []
+            raw = cells[0][0] if cells and cells[0] else None
+            value = _hkex_number(raw)
+            # 百万元 → 元（见 docstring 的单位说明）。
+            totals[str(name)] = None if value is None else value * 1_000_000
+
+        top10 = tables.get("top10Table") or {}
+        actives = []
+        for row in top10.get("tr") or []:
+            # **td 是「一个含多格的列表」**（`td: [["1","603259","藥明康德","…"]]`），
+            # 不是「多个单格列表」。按后者解析每行只取到 1 格，长度判断直接跳过 ——
+            # 表现是「十大活跃股永远是 0 只」而没有任何报错。
+            td = row.get("td") or []
+            cells = [str(x) for x in ((td[0] if td else []) or [])]
+            if len(cells) < 4:
+                continue
+            actives.append({
+                "rank": str(cells[0]).strip(),
+                "code": str(cells[1]).strip(),
+                # 港交所的股票名后面拖着一串全角空格，必须去掉。
+                "name": str(cells[2]).replace("\u3000", " ").strip(),
+                "turnover": _hkex_number(cells[-1]),   # 已是元
+            })
+
+        markets[market] = {"totals": totals, "top10": actives}
+    return {"degraded": not markets, "reason": "" if markets else "文件解析后没有市场数据",
+            "as_of": as_of, "markets": markets}
 
 
 # ---------------------------------------------------------------------------
