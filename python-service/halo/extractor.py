@@ -251,22 +251,23 @@ def normalize_to_yuan(value: Any, unit: Optional[str]) -> Optional[float]:
     """把金额折算到「元」。
 
     人数（``person``）原样返回——它不是金额，不存在量纲折算。
-    ``unit`` 未知或为 ``None`` 时**按 1:1 处理**并在调用方留日志：多数年报默认
-    就是「单位：元」，而「猜错量纲」比「默认元」危险得多（会差 1e4~1e8 倍）。
+    ``unit`` 缺失时返回 None（按 AGENTS.md 不变量：缺失单位声明跳过该页，不外推
+    为 1:1，避免 1e4~1e8 倍量纲错误进入后续打分）。
     """
-    if value is None:
+    if value is None or unit is None:
         return None
     try:
         val = float(value)
     except (TypeError, ValueError):
         return None
-    if unit is None or unit == UNIT_CNY:
+    if unit == UNIT_CNY:
         return val
     mult = UNIT_MULTIPLIER.get(unit)
     if mult is None:
-        if unit != UNIT_PERSON:
-            logger.warning("未知单位 %r，按 1:1 处理（未折算）", unit)
-        return val
+        if unit == UNIT_PERSON:
+            return val
+        logger.warning("未知单位 %r，跳过折算", unit)
+        return None
     return val * mult
 
 
@@ -524,6 +525,8 @@ def _scan_page(
             value = found[1]
             resolved_unit = current_unit
             out_value = normalize_to_yuan(value, resolved_unit)
+            if out_value is None:
+                continue
         else:
             # 人数不参与金额形态判定：「在职员工的数量合计 34,992」是 5 位纯
             # 整数，按金额判据（无小数点且 < 6 位）会被误判成「不是金额」。

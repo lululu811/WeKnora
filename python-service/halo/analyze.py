@@ -1141,7 +1141,7 @@ async def fetch_external(code: str, *, with_fund_flow: bool = True) -> Dict[str,
         )
     for name, tier, fn in buckets:
         try:
-            out[name] = fn()
+            out[name] = await asyncio.to_thread(fn)
             # ok 必须反映「取到了没有」，而不是「这次调用有没有抛」。
             #
             # 子域失败时 fetch 是**降级成空值**而不是抛异常的（见 extdata 各函数），

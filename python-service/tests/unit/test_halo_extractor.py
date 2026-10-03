@@ -80,9 +80,9 @@ class TestUnitNormalization:
         """人数乘任何系数都是错的。"""
         assert ex.normalize_to_yuan(34992, ex.UNIT_PERSON) == 34992.0
 
-    def test_unknown_unit_defaults_to_1to1(self):
-        """多数年报默认就是「单位：元」。猜错量纲比默认元危险得多（差 1e4~1e8）。"""
-        assert ex.normalize_to_yuan(100.0, None) == 100.0
+    def test_unknown_unit_returns_none(self):
+        """缺失单位声明时不外推按元处理，返回 None 避免 1e4~1e8 错误量纲进入打分。"""
+        assert ex.normalize_to_yuan(100.0, None) is None
 
     def test_detect_unit_variants(self):
         assert ex.detect_unit("单位：元") == ex.UNIT_CNY
@@ -340,6 +340,7 @@ class TestNoteNumberColumn:
     """
 
     NOTE_NUMBER_PAGE = """贵州茅台酒股份有限公司2025 年年度报告
+单位：元
 57 / 143
 存货 10 61,427,421,796.18 54,343,285,157.47
 固定资产 19 22,488,122,304.35 21,871,446,747.14
@@ -407,6 +408,7 @@ class TestCrossPageScope:
     P59 = """59 / 143
 母公司资产负债表
 2025 年 12 月 31 日
+单位：元
 存货 57,457,249,539.17 54,343,285,157.47
 """
 
@@ -417,7 +419,7 @@ class TestCrossPageScope:
 
     def test_single_page_call_falls_back_to_consolidated(self):
         """单页调用（不传状态）时行为不变 —— 兼容原有调用方。"""
-        facts = ex.extract_by_rule(60, self.P60)
+        facts = ex.extract_by_rule(60, self.P60, unit=ex.UNIT_CNY)
         assert _by_field(facts)[("total_assets", SCOPE_CONSOLIDATED)].value == \
             pytest.approx(195350142529.19)
 
@@ -431,7 +433,7 @@ class TestCrossPageScope:
 
     def test_scope_argument_lets_caller_thread_state(self):
         """单页入口也能由调用方显式续接状态（pipeline 侧按页序传）。"""
-        facts = ex.extract_by_rule(60, self.P60, scope=SCOPE_PARENT)
+        facts = ex.extract_by_rule(60, self.P60, scope=SCOPE_PARENT, unit=ex.UNIT_CNY)
         assert _by_field(facts)[("total_assets", SCOPE_PARENT)].value == \
             pytest.approx(195350142529.19)
 
@@ -499,10 +501,10 @@ class TestCrossPageScope:
         assert f.unit == ex.UNIT_CNY_10K
         assert f.value == pytest.approx(224881200.0)   # 22488.12 * 1e4
 
-    def test_no_unit_declaration_anywhere_stays_none(self):
-        """整段都没有单位声明时保持 None（按元处理），不编一个单位出来。"""
+    def test_no_unit_declaration_anywhere_skips_amount(self):
+        """整段都没有单位声明时，金额科目跳过抽取，不瞎猜单位。"""
         facts, _, unit = ex.extract_pages([(1, "固定资产 1,234.56 0.00\n")])
-        assert _by_field(facts)[("fixed_assets", SCOPE_CONSOLIDATED)].unit is None
+        assert len(facts) == 0
         assert unit is None
 
 
