@@ -700,6 +700,49 @@ def _md_macro(ext: Dict[str, Any]) -> List[str]:
     return L
 
 
+def _md_valuation(ext: Dict[str, Any]) -> List[str]:
+    """第十一章的估值分析（11.2）。
+
+    一致预期 EPS 是**输入**，不是估值结论 —— 所以这里只给机构预期与区间，并把
+    **机构数一起列出来**：1-2 家机构的「一致预期」不是一致预期，均值单独看会
+    被当成权威数字。
+
+    目标价 / DCF 仍未接入：那需要一个折现率假设与估值模型，属于判定而不是取数。
+    这里不猜一个目标价出来 —— 缺什么就说什么。
+    """
+    eps = ((ext.get("ths-basic") or {}).get("consensus_eps") or {})
+    items = eps.get("items") or []
+    if not items and not eps.get("degraded"):
+        return []
+
+    L = ["### 11.2 估值分析（机构一致预期 EPS）", ""]
+    if items:
+        L += ["| 年度 | 预测机构数 | 一致预期 EPS | 区间（最小 ~ 最大） |",
+              "|:--|--:|--:|:--|"]
+        for i in items:
+            mean = i.get("mean")
+            lo, hi = i.get("low"), i.get("high")
+            rng = f"{lo} ~ {hi}" if lo is not None and hi is not None else "—"
+            L.append(f"| {i.get('year') or '—'} | {i.get('analysts') or '—'} | "
+                     f"{mean if mean is not None else '—'} | {rng} |")
+        L.append("")
+        thin = [i for i in items
+                if isinstance(i.get("analysts"), int) and i["analysts"] < 3]
+        if thin:
+            years = "、".join(str(i.get("year")) for i in thin)
+            L += [f"> ⚠️ {years} 的预测机构数不足 3 家，那不是一致预期，只是个别机构"
+                  f"的观点，不要当权威数字用。", ""]
+    else:
+        L += [f"- （未取到一致预期：{eps.get('reason') or '原因未知'}）", ""]
+
+    L += [
+        "> **目标价 / DCF 尚未接入**：一致预期 EPS 只是输入，估值还需要折现率假设"
+        "与估值模型 —— 那是判定而不是取数，本报告不替你猜一个目标价。",
+        "",
+    ]
+    return L
+
+
 def _md_comprehensive(result: Dict[str, Any], slots: List[Dict[str, Any]]) -> List[str]:
     """第十一章：综合评估与投资建议。
 
@@ -724,7 +767,10 @@ def _md_comprehensive(result: Dict[str, Any], slots: List[Dict[str, Any]]) -> Li
         "> 复算容差 0.05，且声明评级必须与复算分同档。**用 halo.verify 提交，"
         "不要自己心算。**",
         "",
-        "### 11.2 尚未接入的章节",
+    ]
+    L += _md_valuation(result.get("external") or {})
+    L += [
+        "### 11.3 尚未接入的章节",
         "",
         "下列模板章节需要本地没有的数据源，**本报告不生成它们**（宁缺勿造）：",
         "",
@@ -941,6 +987,11 @@ async def fetch_external(code: str, *, with_fund_flow: bool = True) -> Dict[str,
     # 读数（不随 code 变），但每份报告都要用到，所以跟着一起取。
     buckets.append(
         ("macro", "independent", lambda: {"pmi": extdata.nbs_pmi()})
+    )
+    # 一致预期 EPS 也在同花顺（basic 主机，与北向的 data 主机不同档）。
+    # 它是模板 11.3 估值分析的输入，但**不随 code 之外的参数变化**。
+    buckets.append(
+        ("ths-basic", "independent", lambda: {"consensus_eps": extdata.consensus_eps(code)})
     )
     if with_fund_flow:
         buckets.append(

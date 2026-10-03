@@ -36,12 +36,20 @@ _RATING_KEYWORDS = (
 
 
 def _bare(code: str) -> str:
-    """东财报表的 SECURITY_CODE 是 **6 位**（600519），不是带后缀的 600519.SH。
+    """取**纯 6 位**代码：东财报表的 SECURITY_CODE 与同花顺 F10 的 URL 路径都要它。
 
-    与本项目其它地方「thscode 统一存带后缀」的约定相反：本地 DuckDB 要带
-    后缀，东财 filter 不带。传错不报错，只是安静地查不到任何行。
+    与本项目其它地方「thscode 统一存带后缀」的约定相反：本地 DuckDB 要带后缀，
+    这些外网接口不要。传错**不报错**，只是安静地查不到任何行 —— 所以归一化必须
+    在这里做，而不是指望每个调用方都记得。
+
+    支持三种写法：``600519`` / ``600519.SH``（后缀）/ ``SH600519``（前缀）。
+    原先只做 ``split(".")[0]``，于是前缀写法会原样传下去并查空。
     """
-    return (code or "").split(".")[0]
+    text = code or ""
+    match = re.search(r"\d{6}", text)
+    if match:
+        return match.group(0)
+    return text.split(".")[0]
 
 
 def _f(v: Any) -> Optional[float]:
@@ -466,6 +474,68 @@ def nbs_pmi() -> Dict[str, Any]:
     out["degraded"] = out["manufacturing"] is None
     out["reason"] = "" if not out["degraded"] else "正文里没有解析出制造业 PMI"
     return out
+
+
+# ---------------------------------------------------------------------------
+# 机构一致预期 EPS（同花顺 F10）
+# ---------------------------------------------------------------------------
+
+
+def consensus_eps(code: str, max_years: int = 4) -> Dict[str, Any]:
+    """机构一致预期 EPS（同花顺 F10 的 ``worth.html``）。
+
+    返回 ``{"items": [{"year", "analysts", "low", "mean", "high", "industry_avg"}],
+    "degraded": bool, "reason": str}``。
+
+    三个坑，都实测过：
+    * URL 路径只认**纯 6 位**代码 —— 带 SH/SZ 前缀不报错，安静地 404 到空表；
+    * 页面是 **GBK**，必须指定编码：按 UTF-8 解会把表头（「年度」「预测机构数」）
+      整片吞掉而数字还在，表现为「表能读到但列名对不上」，比整页失败更难查；
+    * 用正则解析表格而**不引入 lxml/bs4** —— ``pd.read_html`` 会把「零依赖服务」
+      这条性质破坏掉，而这个表的结构足够简单（一列一个值）。
+
+    ``analysts`` 必须一起给出来：1-2 家机构的「一致预期」不是一致预期。渲染层据此
+    标注可信度，而不是把均值当权威数字。
+    """
+    try:
+        html = fetch_text(Subdomain.THS_BASIC, f"{_bare(code)}/worth.html", encoding="gbk")
+    except ExternalError as exc:
+        logger.warning("一致预期取数失败 %s: %s", code, exc)
+        return {"items": [], "degraded": True, "reason": f"取数失败：{exc}"}
+
+    target = None
+    for table in re.findall(r"<table[^>]*>.*?</table>", html, re.S):
+        if "预测机构数" in table or "每股收益" in table:
+            target = table
+            break
+    if target is None:
+        return {"items": [], "degraded": True,
+                "reason": "页面里没有找到一致预期表（可能已改版）"}
+
+    items = []
+    for row in re.findall(r"<tr[^>]*>(.*?)</tr>", target, re.S):
+        cells = [_strip_tags(c) for c in re.findall(r"<t[dh][^>]*>(.*?)</t[dh]>", row, re.S)]
+        # 表头行第一格是「年度」，用四位年份把它与数据行分开。
+        if len(cells) < 5 or not re.fullmatch(r"\d{4}", cells[0]):
+            continue
+        analysts = None
+        try:
+            analysts = int(re.sub(r"[^\d]", "", cells[1]))
+        except (TypeError, ValueError):
+            pass
+        items.append({
+            "year": cells[0],
+            "analysts": analysts,
+            "low": _f(cells[2]),
+            "mean": _f(cells[3]),
+            "high": _f(cells[4]),
+            "industry_avg": _f(cells[5]) if len(cells) > 5 else None,
+        })
+
+    if not items:
+        return {"items": [], "degraded": True,
+                "reason": "一致预期表里没有解析出任何年份行"}
+    return {"items": items[:max_years], "degraded": False, "reason": ""}
 
 
 # ---------------------------------------------------------------------------

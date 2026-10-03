@@ -71,6 +71,7 @@ class Subdomain:
     THS_HSGT = "ths-hsgt"           # 同花顺：沪深股通实时流向
     EM_SEARCH = "em-search"         # 东财搜索：个股新闻（JSONP）
     NBS = "nbs"                     # 国家统计局：PMI 发布页（HTML）
+    THS_BASIC = "ths-basic"         # 同花顺 F10：机构一致预期 EPS（GBK）
 
 
 #: (base_url, 最小间隔秒, 备注)
@@ -101,6 +102,12 @@ _TIERS: Dict[str, tuple] = {
         "https://www.stats.gov.cn/sj/zxfb/", 3.0,
         "国家统计局，政府站点，月频数据无需高频",
     ),
+    # 同花顺 F10。与 ths-hsgt 同厂商但不同主机（basic vs data），各有各的反爬，
+    # 所以各占一档。限速 2s 同 ths-hsgt 的理由。
+    Subdomain.THS_BASIC: (
+        "https://basic.10jqka.com.cn/new/", 2.0,
+        "同花顺 F10，独立反爬",
+    ),
 }
 
 _REFERERS = {
@@ -111,6 +118,7 @@ _REFERERS = {
     # 搜索接口必须带 so.eastmoney.com 这个 Referer，否则拿不到文章列表。
     Subdomain.EM_SEARCH: "https://so.eastmoney.com/",
     Subdomain.NBS: "https://www.stats.gov.cn/",
+    Subdomain.THS_BASIC: "https://basic.10jqka.com.cn/",
 }
 
 
@@ -159,6 +167,7 @@ def _fetch_raw(
     timeout: float = 20.0,
     retries: int = 3,
     method: str = "GET",
+    encoding: str = "utf-8",
 ) -> str:
     """带限速与退避地取一段**原始文本**。
 
@@ -207,7 +216,10 @@ def _fetch_raw(
                 body = resp.read()
                 if resp.headers.get("Content-Encoding", "").lower() == "gzip":
                     body = gzip.decompress(body)
-                raw = body.decode("utf-8", "ignore")
+                # 编码必须能指定：同花顺 F10 是 GBK，按 UTF-8 解会把中文
+                # （表头「年度」「预测机构数」）整片吞掉，而数字还在 ——
+                # 表现为「表能读到但列名对不上」，比整页失败更难查。
+                raw = body.decode(encoding, "ignore")
         except urllib.error.HTTPError as exc:
             if exc.code == 403:
                 # 封禁信号：明确抛出，让调用方走降级，而不是重试加重封禁
@@ -272,9 +284,11 @@ def fetch_text(
     timeout: float = 20.0,
     retries: int = 3,
     method: str = "GET",
+    encoding: str = "utf-8",
 ) -> str:
     """取原文（HTML 等非 JSON 源用）。限速与封禁语义与 fetch_json 完全一致。"""
-    return _fetch_raw(subdomain, path, params, timeout=timeout, retries=retries, method=method)
+    return _fetch_raw(subdomain, path, params, timeout=timeout, retries=retries,
+                      method=method, encoding=encoding)
 
 
 def fetch_json(

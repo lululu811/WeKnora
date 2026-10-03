@@ -181,6 +181,6 @@ def test_unimplemented_list_no_longer_claims_news_is_missing():
         "halo": {"ok": False, "reason": "x"}, "growth": None, "facts": [],
         "announcements": [], "ai_slots": ALL_SLOTS, "narratives": {},
     })
-    body = md[md.index("### 11.2 尚未接入的章节"):md.index("## 附录：")]
+    body = md[md.index("### 11.3 尚未接入的章节"):md.index("## 附录：")]
     assert "财联社" in body, "缺的是第二新闻源"
     assert "| 二、利好/利空因素 | 新闻源" not in body, "不该再说整个第二章没接"
