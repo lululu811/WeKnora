@@ -392,3 +392,90 @@ func TestArchivePublishFlag(t *testing.T) {
 	require.Len(t, ks.created, 1)
 	assert.Equal(t, types.ManualKnowledgeStatusPublish, ks.created[0].Status)
 }
+
+// ---------------------------------------------------------------------------
+// 预览端点：与归档的区别是「没数据不算错误」
+// ---------------------------------------------------------------------------
+
+func reportRouter(ks interfaces.KnowledgeService, client *halo.HTTPClient) *gin.Engine {
+	gin.SetMode(gin.TestMode)
+	h := NewHaloHandler(ks, &fakeKBService{}, nil, nil, client)
+	r := gin.New()
+	r.Use(middleware.ErrorHandler())
+	r.Use(func(c *gin.Context) {
+		c.Set(types.TenantIDContextKey.String(), uint64(10000))
+		c.Next()
+	})
+	r.POST("/halo/report", h.ReportHaloReport)
+	return r
+}
+
+func doReport(t *testing.T, r *gin.Engine, body string) (int, map[string]any) {
+	t.Helper()
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/halo/report", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+	var out map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &out)
+	return w.Code, out
+}
+
+func TestReportReturnsPayloadForPanel(t *testing.T) {
+	stub := newHaloStub(t, map[string]any{
+		"ok": true, "thscode": "600519.SH", "period": "2025-12-31",
+		"asset_type": "mixed", "markdown": "# HALO 600519.SH\n\n正文",
+		"ai_slots": []any{},
+	})
+	ks := &recordingKnowledgeService{}
+	code, out := doReport(t, reportRouter(ks, halo.NewHTTPClient(stub.server.URL)),
+		`{"thscode":"600519"}`)
+
+	require.Equal(t, http.StatusOK, code)
+	data := out["data"].(map[string]any)
+	assert.Equal(t, "# HALO 600519.SH\n\n正文", data["markdown"])
+	assert.Equal(t, "mixed", data["asset_type"])
+	assert.Empty(t, ks.created, "预览不得写知识库")
+}
+
+func TestReportTreatsNoDataAsSuccessNotError(t *testing.T) {
+	// 与归档相反：归档必须拒绝（它要写库），预览必须让前端拿到 ok=false 去显示
+	// 「先同步年报」，而不是弹一个失败提示。
+	stub := newHaloStub(t, map[string]any{
+		"ok": false, "thscode": "600519.SH",
+		"reason": "600519.SH 没有已落库的年报事实。先调用 halo.filing.sync。",
+	})
+	code, out := doReport(t, reportRouter(&recordingKnowledgeService{}, halo.NewHTTPClient(stub.server.URL)),
+		`{"thscode":"600519"}`)
+
+	require.Equal(t, http.StatusOK, code, "没数据不是 HTTP 错误")
+	data := out["data"].(map[string]any)
+	assert.Equal(t, false, data["ok"])
+	assert.Contains(t, data["reason"], "没有已落库的年报事实")
+}
+
+func TestReportRejectsEmptyThscode(t *testing.T) {
+	stub := newHaloStub(t, map[string]any{"ok": true})
+	code, _ := doReport(t, reportRouter(&recordingKnowledgeService{}, halo.NewHTTPClient(stub.server.URL)),
+		`{"thscode":"   "}`)
+	assert.Equal(t, http.StatusBadRequest, code)
+}
+
+func TestReportDefaultsAnnouncementsOnAndHonoursExplicitOff(t *testing.T) {
+	stub := newHaloStub(t, map[string]any{"ok": true, "markdown": "x", "thscode": "600519.SH"})
+	r := reportRouter(&recordingKnowledgeService{}, halo.NewHTTPClient(stub.server.URL))
+
+	doReport(t, r, `{"thscode":"600519"}`)
+	assert.Equal(t, true, stub.got["include_announcements"], "未传时默认取公告")
+
+	doReport(t, r, `{"thscode":"600519","include_announcements":false}`)
+	assert.Equal(t, false, stub.got["include_announcements"], "显式 false 必须被尊重")
+}
+
+func TestReportNeverRequestsExternal(t *testing.T) {
+	stub := newHaloStub(t, map[string]any{"ok": true, "markdown": "x", "thscode": "600519.SH"})
+	doReport(t, reportRouter(&recordingKnowledgeService{}, halo.NewHTTPClient(stub.server.URL)),
+		`{"thscode":"600519"}`)
+	assert.Equal(t, false, stub.got["include_external"],
+		"预览不得打东财易封子域；要拉外网是分析时的显式动作")
+}

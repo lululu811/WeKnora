@@ -337,10 +337,13 @@ func NewRouter(params RouterParams) *gin.Engine {
 		)
 		RegisterKnowledgeTagRoutes(v1, params.TagHandler, rbacGuards)
 		RegisterKnowledgeRoutes(v1, params.KnowledgeHandler, rbacGuards)
-		// HALO 报告归档。不套 rbacGuards：handler 内部走的是 KB 路由同一套
-		// 访问校验（resolveHandlerKBAccessFor + access.RequireKBWrite），再套一层
-		// 会让「谁有权写这个知识库」有两个说法。
+		// HALO 报告：预览（只读）与归档（写库）。
+		//
+		// 归档不套 rbacGuards：handler 内部走的是 KB 路由同一套访问校验
+		// （resolveHandlerKBAccessFor + access.RequireKBWrite），再套一层会让
+		// 「谁有权写这个知识库」有两个说法。预览不碰知识库，只需认证。
 		if params.HaloHandler != nil {
+			v1.POST("/halo/report", params.HaloHandler.ReportHaloReport)
 			v1.POST("/halo/archive", params.HaloHandler.ArchiveHaloReport)
 		}
 		RegisterFAQRoutes(v1, params.FAQHandler, rbacGuards)

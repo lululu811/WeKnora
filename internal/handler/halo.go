@@ -265,6 +265,84 @@ func (h *HaloHandler) ArchiveHaloReport(c *gin.Context) {
 	})
 }
 
+// haloReportRequest 是 POST /halo/report 的请求体。
+type haloReportRequest struct {
+	Thscode    string `json:"thscode"`
+	Period     string `json:"period"`
+	ReportType string `json:"report_type"`
+	Scope      string `json:"scope"`
+	// IncludeAnnouncements 用指针是为了区分「没传」与「显式传 false」。
+	// 未传时按 true 处理：面板要展示的就是完整报告，而公告只多一次巨潮请求
+	// （单页）。显式传 false 是给「不想为一次预览打外网」的调用方留的出口。
+	IncludeAnnouncements *bool `json:"include_announcements"`
+}
+
+// ReportHaloReport godoc
+//
+// @Summary      取 HALO 报告（渲染，不落库）
+// @Description  取该股票的评分结果与预渲染 markdown，供工作台面板展示。
+// @Description  只读：不写知识库，因此不做 KB 访问校验，只依赖路由上的认证。
+// @Tags         HALO
+// @Accept       json
+// @Produce      json
+// @Param        request  body      haloReportRequest  true  "查询参数"
+// @Success      200      {object}  map[string]interface{}
+// @Failure      400      {object}  errors.AppError  "参数错误或该股票无年报事实"
+// @Security     Bearer
+// @Security     ApiKeyAuth
+// @Router       /halo/report [post]
+func (h *HaloHandler) ReportHaloReport(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	var req haloReportRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.Error(errors.NewBadRequestError(err.Error()))
+		return
+	}
+	thscode := strings.TrimSpace(req.Thscode)
+	if thscode == "" {
+		c.Error(errors.NewBadRequestError("thscode 不能为空"))
+		return
+	}
+
+	reportType := strings.TrimSpace(req.ReportType)
+	if reportType == "" {
+		reportType = "annual"
+	}
+	scope := strings.TrimSpace(req.Scope)
+	if scope == "" {
+		scope = "consolidated"
+	}
+	withAnnouncements := true
+	if req.IncludeAnnouncements != nil {
+		withAnnouncements = *req.IncludeAnnouncements
+	}
+
+	// external 恒为 false，与归档一致：预览报告不该把请求打到东财的易封子域。
+	data, err := h.haloClient.Score(ctx, halo.ScoreRequest{
+		Thscode:              thscode,
+		Period:               strings.TrimSpace(req.Period),
+		ReportType:           reportType,
+		Scope:                scope,
+		IncludeExt:           false,
+		IncludeAnnouncements: withAnnouncements,
+	})
+	if err != nil {
+		logger.ErrorWithFields(ctx, err, map[string]interface{}{"thscode": secutils.SanitizeForLog(thscode)})
+		c.Error(errors.NewInternalServerError(err.Error()))
+		return
+	}
+
+	// 「没数据」是正常情况而不是错误：面板要据此显示「先同步年报」，而不是弹一个
+	// 失败提示。所以这里仍返回 200，把 ok/reason 原样交给前端判断 —— 与工具侧
+	// 「明确区分没数据和服务挂了」是同一条规矩。归档那条路径必须拒绝（它要写库），
+	// 预览这条不必。
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    data,
+	})
+}
+
 // haloArchiveTitle 是确定性的标题。
 //
 // 确定性有两个用处：人一眼能看出是哪只票哪一期；幂等匹配时它可以作为元数据
