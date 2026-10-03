@@ -113,16 +113,18 @@ class TestFilterSql:
         "算不出"变成"零负债"。"""
         sql = filters.build_risk_filter_sql()
         assert "COALESCE" not in sql.upper()
+        assert "period_end_ms DESC, period ASC" in sql
+        assert "ORDER BY period DESC" not in sql
         for col in ("debt_ratio", "current_ratio", "receivable_ratio"):
             assert col in sql
         # 零分母保护
         assert sql.count("> 0") >= 3
-
     def test_profit_sql_takes_only_the_latest_period(self):
         sql = filters.build_profit_filter_sql()
         assert "ROW_NUMBER() OVER" in sql
+        assert "period_end_ms DESC, period ASC" in sql
+        assert "ORDER BY period DESC" not in sql
         assert "parent_holder_net_profit" in sql
-
     def test_st_sql_matches_both_st_and_star_st(self):
         sql = filters.build_st_names_sql()
         assert "%ST%" in sql

@@ -125,7 +125,7 @@ def build_risk_filter_sql() -> str:
         WITH ranked AS (
             SELECT thscode, period, total_debt, total_current_assets, assets_total,
                    accounts_receivable, holder_equity_total,
-                   ROW_NUMBER() OVER (PARTITION BY thscode ORDER BY period DESC) AS rn
+                   ROW_NUMBER() OVER (PARTITION BY thscode ORDER BY period_end_ms DESC, period ASC) AS rn
             FROM v_balance_sheet
         )
         SELECT thscode,
@@ -148,7 +148,7 @@ def build_profit_filter_sql() -> str:
     return """
         WITH ranked AS (
             SELECT thscode, period, parent_holder_net_profit, operating_income,
-                   ROW_NUMBER() OVER (PARTITION BY thscode ORDER BY period DESC) AS rn
+                   ROW_NUMBER() OVER (PARTITION BY thscode ORDER BY period_end_ms DESC, period ASC) AS rn
             FROM v_income_statement
         )
         SELECT thscode,
