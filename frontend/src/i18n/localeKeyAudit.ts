@@ -115,6 +115,13 @@ const EXTRA_PREFIXES = [
   // knowledgeEditor.wikiBrowser.gallery.attr.builtin_caption …, and
   // everything else falls back to the contract wording.
   'knowledgeEditor.wikiBrowser.gallery.attr.',
+  // Reasoning-effort selector labels are composed at runtime by
+  // levelLabelKey()/levelDescriptionKey() (utils/reasoningEffort.ts), so no
+  // static `$t('…')` literal exists for the audit to find. Registered as a
+  // whole prefix: without it these keys read as uncovered and can be pruned
+  // from the locale bundles, and the chat input bar then renders the raw
+  // "model.reasoning.levels.auto" instead of a translated label.
+  'model.reasoning.',
 ] as const
 
 /** Keys that must survive pruning even when static analysis misses them. */
