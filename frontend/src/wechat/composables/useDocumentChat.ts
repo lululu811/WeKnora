@@ -105,7 +105,9 @@ export function useDocumentChat() {
       // 关掉 agent：这一栏要做的是"就着这篇文章问答"，不是"让 agent 去做事"。
       agent_enabled: false,
       method: 'POST',
-      url: `/api/v1/knowledge-chat/${sid}`,
+      // 只给基路径。useStream 内部会拼 `/${session_id}`（streame.ts:83-86），
+      // 这里再带一次就成了 /knowledge-chat/{sid}/{sid}，直接 404。
+      url: '/api/v1/knowledge-chat',
     });
   }
 
