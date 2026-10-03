@@ -225,8 +225,15 @@ export function ensureTemplates(): void {
   })
 }
 
-/** 记录当前挂在图上的主/副图指标名，供 swapIndicators 做差集。 */
-const installedIndicators = new WeakMap<Chart, { main: string[]; sub: string[] }>()
+/**
+ * 记录当前挂在图上的主/副图指标名，供 swapIndicators 做差集。
+ *
+ * 副图必须额外记住每个指标的 paneId：klinecharts v9+ 的 `removeIndicator`
+ * 签名是 `(paneId, name?)`，第一个参数是 paneId 而不是指标名。如果只传指标名，
+ * 会被当作 paneId 查找，命中不了任何 pane，于是副图指标「删不掉」—— 多次点击
+ * 副图切换后，旧指标层层叠加、永远不消失（issue: 副图多轮叠加 bug）。
+ */
+const installedIndicators = new WeakMap<Chart, { main: string[]; sub: { name: string; paneId: string }[] }>()
 
 export interface CoreChartHandle {
   chart: Chart;
@@ -290,13 +297,17 @@ export function createCoreChart(options: {
   for (const name of options.mainIndicators.slice(1)) {
     chart.createIndicator(name, false, { id: 'candle_pane' })
   }
+  // 副图：`createIndicator(name, true)` 会新建一个 pane 并返回该 pane 的 id。
+  // 必须立刻记下 paneId —— 后面 `removeIndicator(paneId)` 只认 paneId，不认指标名。
+  const subWithPaneIds: { name: string; paneId: string }[] = []
   for (const name of options.subIndicators) {
-    chart.createIndicator(name, true)
+    const paneId = chart.createIndicator(name, true)
+    if (paneId) subWithPaneIds.push({ name, paneId })
   }
   // 记下初始配置，swapIndicators 才能算出差集。
   installedIndicators.set(chart, {
     main: [...options.mainIndicators],
-    sub: [...options.subIndicators],
+    sub: subWithPaneIds,
   })
 
   void loadInto(chart, datafeed, options.symbol, options.period)
@@ -500,15 +511,25 @@ export function swapIndicators(
     chart.createIndicator(name, false, { id: 'candle_pane' })
   }
 
-  // 副图：差集增删
-  const nextSub = new Set(subIndicators)
-  const prevSub = new Set(current.sub)
-  for (const name of current.sub) {
-    if (!nextSub.has(name)) chart.removeIndicator(name)
+  // 副图：差集增删，但删除时必须传 paneId 而不是指标名 ——
+  // `removeIndicator(paneId, name?)` 只认 paneId，传错就是 no-op，旧 pane 会一直叠在图上。
+  const nextSubNames = new Set(subIndicators)
+  const prevSubByName = new Map(current.sub.map((s) => [s.name, s.paneId]))
+  // 先删除不在新配置里的旧副图
+  for (const { name, paneId } of current.sub) {
+    if (!nextSubNames.has(name)) chart.removeIndicator(paneId)
   }
+  // 再按差集新增副图，并立即捕获它们的 paneId
+  const nextSub: { name: string; paneId: string }[] = []
   for (const name of subIndicators) {
-    if (!prevSub.has(name)) chart.createIndicator(name, true)
+    const existingPaneId = prevSubByName.get(name)
+    if (existingPaneId) {
+      nextSub.push({ name, paneId: existingPaneId })
+    } else {
+      const paneId = chart.createIndicator(name, true)
+      if (paneId) nextSub.push({ name, paneId })
+    }
   }
 
-  installedIndicators.set(chart, { main: [...mainIndicators], sub: [...subIndicators] })
+  installedIndicators.set(chart, { main: [...mainIndicators], sub: nextSub })
 }
