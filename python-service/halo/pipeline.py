@@ -266,7 +266,9 @@ def sync_filing(
     """抓取 → 解析 → 抽取 → 合并 → 对账 → 落表。**同步**，请用 ``sync_filing_async``。"""
     source = source or CninfoSource()
     dest_dir = dest_dir or default_dest_dir()
-    bare_code = code            # 巨潮只认 6 位
+    # bare_code 只取 6 位 —— 巨潮 orgId 映射表里根本没有 `.SH`/`.SZ` 后缀，
+    # 留着它 fallback_orgid 会拼出 `gssh0600570.SH` 这种错 orgId，导致查无公告。
+    bare_code = code.split(".")[0]
     code = normalize_thscode(code)
 
     # 先定位再决定要不要下载：只有真的没有缓存时才付出下载+解析的代价。
