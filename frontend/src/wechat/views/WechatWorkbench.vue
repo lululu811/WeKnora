@@ -96,7 +96,7 @@
               <div v-if="!allTurns.length" class="wb-hint">{{ t('wechat.chat.empty') }}</div>
               <div v-for="turn in allTurns" :key="turn.id" class="wb-turn">
                 <div class="wb-turn__q">{{ turn.question }}</div>
-                <div class="wb-turn__a" v-html="renderTurn(turn.answer)"></div>
+                <div class="wb-turn__a" v-html="renderTurn(turn.answer, turn.references, !turn.done)"></div>
                 <div v-if="turn.references.length" class="wb-turn__refs">
                   <button
                     v-for="(r, i) in turn.references"
@@ -142,7 +142,8 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 
-import { renderChatMarkdown } from '@/utils/chatMarkdownRenderer';
+import { createChatMarkdownRenderer, renderChatMarkdown } from '@/utils/chatMarkdownRenderer';
+import { sanitizeMarkdownHTML, safeMarkdownToHTML } from '@/utils/security';
 import { renderDocumentPreviewMarkdown } from '@/utils/documentPreviewMarkdown';
 import { findMarkdownSourceRange } from '@/utils/markdownSourceLocate';
 import { highlightRanges } from '@/utils/sourceLocatorDom';
@@ -182,9 +183,27 @@ const allTurns = computed(() =>
   chat.liveTurn.value ? [...chat.turns.value, chat.liveTurn.value] : chat.turns.value,
 );
 
-function renderTurn(markdown: string): string {
+// renderChatMarkdown 的 escapeMarkdown / sanitizeHtml 都是**必填的函数**，
+// 不是开关：传布尔值进去渲染器会拿它当函数调，抛
+// "t.escapeMarkdown is not a function"，而这个异常发生在 computed 里，会把整个
+// 视图掀掉 —— 表现是问完一句整页空白，比没有回答还糟。
+const chatMarkdownRenderer = createChatMarkdownRenderer();
+
+function renderTurn(markdown: string, references: any[] = [], streaming = false): string {
   if (!markdown) return '';
-  return renderChatMarkdown(markdown, { renderer: 'chat', escapeMarkdown: true } as any);
+  try {
+    return renderChatMarkdown(markdown, {
+      renderer: chatMarkdownRenderer,
+      escapeMarkdown: safeMarkdownToHTML,
+      sanitizeHtml: sanitizeMarkdownHTML,
+      streaming,
+      knowledgeReferences: references as any,
+    });
+  } catch (e) {
+    // 兜底：渲染器出错时退回纯文本，宁可样式差一点也别让整页消失。
+    console.error('[wechat] answer render failed, falling back to plain text', e);
+    return `<p>${markdown.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]!))}</p>`;
+  }
 }
 
 /**

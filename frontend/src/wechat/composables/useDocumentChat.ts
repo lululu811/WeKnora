@@ -9,6 +9,8 @@ export interface Turn {
   question: string;
   answer: string;
   references: any[];
+  /** 还在流式生成中。渲染器据此决定要不要按「可能截断的半截 Markdown」处理。 */
+  done: boolean;
   error?: string;
 }
 
@@ -67,7 +69,7 @@ export function useDocumentChat() {
     if (!question || busy.value) return;
 
     const sid = await ensureSession();
-    const turn: Turn = { id: `t${Date.now()}`, question, answer: '', references: [] };
+    const turn: Turn = { id: `t${Date.now()}`, question, answer: '', references: [], done: false };
     liveTurn.value = turn;
 
     stream.onChunk((data: any) => {
@@ -83,9 +85,13 @@ export function useDocumentChat() {
         }
         case 'error':
           turn.error = data?.data?.error || data?.error || '生成失败';
+          turn.done = true;
+          turns.value = [...turns.value, turn];
+          liveTurn.value = null;
           break;
         case 'complete':
         case 'stop':
+          turn.done = true;
           turns.value = [...turns.value, turn];
           liveTurn.value = null;
           break;
