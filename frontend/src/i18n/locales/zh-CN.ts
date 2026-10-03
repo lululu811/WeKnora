@@ -29,6 +29,7 @@ export default {
     syncDone: '年报已同步，正在重新生成报告',
     syncFailed: '同步年报失败',
     retry: '重试',
+    launchFullReport: '让 agent 生成完整报告',
     skeletonNotice:
       '本面板只呈现评分内核算出的数据层与量化锚点。7 个定性维度（护城河 / 滞胀防御 / ESG / 管理层 / 股东资金面 / 估值 / 风险）需由模型判分，此处不提供结论；需要完整分析请在会话中让 agent 执行 halo.analyze。',
     scoreCard: '核心评分',

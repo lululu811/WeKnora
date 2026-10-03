@@ -372,6 +372,7 @@
       v-if="currentTicker && currentExchange"
       v-model:visible="showHaloReport"
       :thscode="`${currentTicker}.${currentExchange}`"
+      :name="currentStockName"
     />
 
     <!-- 4b. 多标的对比条。只在意一组多只票时出现，默认收起成一行摘要。

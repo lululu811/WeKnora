@@ -124,15 +124,53 @@
       <div class="wl-body__table">
         <div class="watchlist-tabs" v-if="rows.length">
           <t-radio-group v-model="activeTab" variant="default-filled" size="small">
-            <t-radio-button value="all">{{ t('watchlist.tabAll') }} ({{ rows.length }})</t-radio-button>
-            <t-radio-button value="triggered">
-              <span class="wl-tab-triggered" :class="{ 'has-count': countTriggered > 0 }">
-                🎯 {{ t('watchlist.tabTriggered') }} ({{ countTriggered }})
+            <t-radio-button value="all">
+              <span class="wl-tab">
+                <svg class="wl-tab__icon" viewBox="0 0 14 14" aria-hidden="true">
+                  <path d="M2.5 3.5h9M2.5 7h9M2.5 10.5h6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" />
+                </svg>
+                {{ t('watchlist.tabAll') }} ({{ rows.length }})
               </span>
             </t-radio-button>
-            <t-radio-button value="holding">💼 {{ t('watchlist.tabHolding') }} ({{ countHolding }})</t-radio-button>
-            <t-radio-button value="observing">🔍 {{ t('watchlist.tabObserving') }} ({{ countObserving }})</t-radio-button>
-            <t-radio-button value="dropped">📦 {{ t('watchlist.tabDropped') }} ({{ countDropped }})</t-radio-button>
+            <t-radio-button value="triggered">
+              <!-- has-count 的样式此前根本没有定义，这个高亮一直是死的 -->
+              <span class="wl-tab wl-tab--triggered" :class="{ 'has-count': countTriggered > 0 }">
+                <svg class="wl-tab__icon" viewBox="0 0 14 14" aria-hidden="true">
+                  <circle cx="7" cy="7" r="4.2" stroke="currentColor" stroke-width="1.3" />
+                  <circle cx="7" cy="7" r="1.4" fill="currentColor" />
+                  <path d="M7 .9v2.2M7 10.9v2.2M.9 7h2.2M10.9 7h2.2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" />
+                </svg>
+                {{ t('watchlist.tabTriggered') }} ({{ countTriggered }})
+              </span>
+            </t-radio-button>
+            <t-radio-button value="holding">
+              <span class="wl-tab">
+                <svg class="wl-tab__icon" viewBox="0 0 14 14" aria-hidden="true">
+                  <rect x="1.6" y="3.6" width="10.8" height="8" rx="1.4" stroke="currentColor" stroke-width="1.3" />
+                  <path d="M5.2 3.6V2.8a1 1 0 011-1h1.6a1 1 0 011 1v.8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" />
+                  <path d="M1.6 7.4h10.8" stroke="currentColor" stroke-width="1.3" />
+                </svg>
+                {{ t('watchlist.tabHolding') }} ({{ countHolding }})
+              </span>
+            </t-radio-button>
+            <t-radio-button value="observing">
+              <span class="wl-tab">
+                <svg class="wl-tab__icon" viewBox="0 0 14 14" aria-hidden="true">
+                  <path d="M1.2 7S3.7 3.1 7 3.1 12.8 7 12.8 7 10.3 10.9 7 10.9 1.2 7 1.2 7z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" />
+                  <circle cx="7" cy="7" r="1.8" stroke="currentColor" stroke-width="1.3" />
+                </svg>
+                {{ t('watchlist.tabObserving') }} ({{ countObserving }})
+              </span>
+            </t-radio-button>
+            <t-radio-button value="dropped">
+              <span class="wl-tab">
+                <svg class="wl-tab__icon" viewBox="0 0 14 14" aria-hidden="true">
+                  <rect x="1.6" y="3.2" width="10.8" height="8.4" rx="1.3" stroke="currentColor" stroke-width="1.3" />
+                  <path d="M1.6 5.9h10.8M5.3 3.2v2.7" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" />
+                </svg>
+                {{ t('watchlist.tabDropped') }} ({{ countDropped }})
+              </span>
+            </t-radio-button>
           </t-radio-group>
         </div>
         <t-table row-key="thscode" class="watchlist-table" :data="filteredRows" :columns="columns"
@@ -254,6 +292,7 @@
       v-if="haloThscode"
       v-model:visible="haloVisible"
       :thscode="haloThscode"
+      :name="haloName"
     />
 
     <!-- 条件面板。用 dialog 而不是 popover：里面有两个 t-select，下拉渲染到 body，
@@ -439,6 +478,11 @@ const fullWorkspaceTitle = ref('')
  */
 const haloVisible = ref(false)
 const haloThscode = ref('')
+
+const haloName = computed(() => {
+  const r = rows.value.find((x) => x.thscode === haloThscode.value)
+  return r ? displayName(r) : ""
+})
 
 function openHaloReport(row: WatchRow) {
   haloThscode.value = row.thscode
@@ -1707,6 +1751,50 @@ onUnmounted(() => {
 
 .watchlist-tabs {
   margin-bottom: 12px;
+
+  /* TDesign 的 filled 分段控件给外层 .t-radio-group 上了 padding + 一层底色，
+     而选中态的 __bg-block 又内缩 2px。结果就是整行首尾各漏出一条底色——
+     截图里那两道「白边」。这里把外层 padding 归零、底色透明，让选中底色
+     紧贴按钮边界。 */
+  :deep(.t-radio-group--filled) {
+    padding: 0;
+    background-color: transparent;
+  }
+
+  :deep(.t-radio-group--filled .t-radio-group__bg-block) {
+    left: 0;
+    top: 0;
+    height: 100%;
+  }
+
+  :deep(.t-radio-group--filled .t-radio-button) {
+    border-radius: var(--app-radius-sm);
+  }
+}
+
+/* chip 内部排版：图标随字号走，与文字基线对齐 */
+.wl-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+
+  &__icon {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+    opacity: 0.75;
+  }
+
+  /* 今日有触发时给一点警示色。这个 class 一直在模板里绑着，
+     样式却从来没写过——高亮是死的。 */
+  &--triggered.has-count {
+    color: var(--td-warning-color);
+    font-weight: 500;
+
+    .wl-tab__icon {
+      opacity: 1;
+    }
+  }
 }
 
 :deep(.wl-workspace-dialog) {

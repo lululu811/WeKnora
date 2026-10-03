@@ -29,6 +29,7 @@ export default {
     syncDone: 'Annual report synced, regenerating the report',
     syncFailed: 'Failed to sync the annual report',
     retry: 'Retry',
+    launchFullReport: 'Have the agent generate the full report',
     skeletonNotice:
       'This panel shows only the data layer computed by the scoring kernel and its quantitative anchors. The seven qualitative dimensions (moat / stagflation defence / ESG / management / shareholder & flow / valuation / risk) are scored by a model and carry no conclusion here; for a full analysis ask the agent to run halo.analyze in a session.',
     scoreCard: 'Core scores',

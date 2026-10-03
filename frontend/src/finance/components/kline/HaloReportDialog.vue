@@ -69,6 +69,15 @@
           {{ t('halo.skeletonNotice') }}
         </p>
 
+        <!-- 免责声明说的正是「这一步要交给 agent」。面板手里已经有标的和锚点，
+             与其把这句话留给用户自己去执行，不如直接给一个入口。 -->
+        <div class="halo-sec__sync">
+          <t-button size="small" variant="outline" @click="launchFullReport()">
+            <template #icon><t-icon name="chat" /></template>
+            {{ t('halo.launchFullReport') }}
+          </t-button>
+        </div>
+
         <!-- 核心评分 -->
         <section class="halo-sec">
           <h4 class="halo-sec__h">{{ t('halo.scoreCard') }}</h4>
@@ -94,6 +103,20 @@
           <p v-if="!growthOk && report.growth?.missing?.length" class="halo-sec__hint is-warn">
             {{ t('halo.growthMissing', { keys: report.growth.missing.join('、') }) }}
           </p>
+
+          <!-- 部分不可计算时的同步入口。
+               原来「同步年报并重试」只挂在 report.ok === false 那一个分支上
+               （整份报告全空）。但更常见的是报告能出、只是某个分项缺输入——
+               六维要 fixed_assets / inventory / employees 这类年报事实，
+               没同步过就永远是「不可计算」。那种情况下 ok 仍是 true，
+               界面上一个可点的入口都没有，人只能退回聊天框找 agent，
+               恰好违背了上面那句注释的意图。 -->
+          <div v-if="needsSync" class="halo-sec__sync">
+            <p class="halo-sec__hint is-warn">{{ t('halo.syncCostHint') }}</p>
+            <t-button size="small" theme="primary" :loading="syncing" :disabled="syncing" @click="syncAndReload()">
+              {{ syncing ? t('halo.syncing') : t('halo.syncAndRetry') }}
+            </t-button>
+          </div>
         </section>
 
         <!-- HALO 六维明细 -->
@@ -136,7 +159,7 @@
             <tbody>
               <tr v-for="(g, key) in growthSubs" :key="key">
                 <td>{{ growthSubLabel(g.key) }}</td>
-                <td class="num mono">{{ fmtNumber(g.raw) }}{{ g.unit }}</td>
+                <td class="num mono">{{ fmtAnchor(g.raw) }}{{ g.unit }}</td>
                 <td class="num mono">{{ (g.weight * 100).toFixed(0) }}%</td>
                 <td class="num mono">{{ g.score.toFixed(2) }}</td>
               </tr>
@@ -249,6 +272,7 @@
 <script setup lang="ts">
 import { computed, ref, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 import { MessagePlugin } from 'tdesign-vue-next'
 
 import {
@@ -285,11 +309,42 @@ import { sanitizeMarkdownHTML, safeMarkdownToHTML } from '@/utils/security'
  */
 const props = defineProps<{
   thscode: string
+  /** 标的名称。有它时生成的提问会带上名字，读起来比裸代码自然。 */
+  name?: string
 }>()
 
 const visible = defineModel<boolean>('visible', { required: true })
 
 const { t } = useI18n()
+const router = useRouter()
+
+/**
+ * 一键开出会话，让 agent 跑 halo.analyze 出完整报告。
+ *
+ * 这个面板按设计只呈现数据层：六个数值维度是 Python 算的，剩七个定性维度
+ * 在 /halo/score 这条链路上只产出 `{{xxx_score}}` 槽位，没有代码会填——
+ * 判分是 agent 的职责。面板顶部那句免责声明说的就是这件事。
+ *
+ * 那句话原本只是文字，用户读完之后得自己退回新对话、重打一遍标的、
+ * 再说出「halo.analyze」这个内部工具名。既然面板手里已经有标的、报告期
+ * 和全部量化锚点，就该由它把这一步接上，而不是把话留给用户。
+ *
+ * 落点是 /platform/creatChat?q=... —— 与 Watchlist.vue 里
+ * `agentWorkspace.sendToChatCallback` 用的是同一条既有通道，没有另造一条。
+ */
+function launchFullReport() {
+  const subject = props.name ? `${props.name} (${props.thscode})` : props.thscode
+  const period = report.value?.period
+  visible.value = false
+  void router.push({
+    path: '/platform/creatChat',
+    query: {
+      q: `请对 ${subject}${period ? ` 的 ${period} 年报` : ''} 执行 halo.analyze，生成完整分析报告。` +
+         `我已经看过面板里的六维与成长性评分，这一步要的是护城河/滞胀防御/ESG/管理层/` +
+         `股东资金面/估值/风险这七个定性维度的判分与结论。`,
+    },
+  })
+}
 
 const markdownRenderer = createChatMarkdownRenderer()
 
@@ -316,6 +371,9 @@ const assetTypeLabel = computed(() => {
 
 const haloOk = computed(() => report.value?.halo?.ok === true && typeof report.value.halo.score === 'number')
 const growthOk = computed(() => typeof report.value?.growth?.score === 'number')
+
+/** 报告能出、但有分项因缺输入而算不出来 —— 需要给出同步入口。 */
+const needsSync = computed(() => !!report.value && (!haloOk.value || !growthOk.value))
 
 /** HALO 六维的展示色。阈值与 Python 侧 rating_5 对齐。 */
 const haloScoreClass = computed(() => {
@@ -610,6 +668,8 @@ watch(
 .halo-sec__h { margin: 0; font-size: var(--app-text-md); font-weight: 600; }
 .halo-sec__hint { margin: 0; font-size: var(--app-text-sm); color: var(--td-text-color-secondary); line-height: 1.6; }
 .halo-sec__hint.is-warn { color: var(--td-warning-color); }
+/* 部分不可计算时的同步入口：文案在上、按钮在下，和整份全空那处的排布一致 */
+.halo-sec__sync { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; margin-top: 2px; }
 
 /* ── 核心评分卡 ── */
 .halo-scores { display: flex; gap: 12px; flex-wrap: wrap; }
