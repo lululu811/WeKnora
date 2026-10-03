@@ -26,7 +26,7 @@ services:
       # For remote deployment, set this to the remote App's service port.
       - APP_PORT=${APP_BACKEND_PORT:-8080}
       - APP_SCHEME=${APP_SCHEME:-http}
-      # nginx 反代 python-service 的目标（仅 finance profile 需要）。
+      # nginx 反代 python-service 的目标（默认已启动）。
       # 默认就是 compose 服务名；覆盖它才能把前端指向另一个 python-service。
       - PYTHON_SERVICE_HOST=${PYTHON_SERVICE_HOST:-python-service}
       - PYTHON_SERVICE_PORT=${PYTHON_SERVICE_PORT:-50052}
@@ -1058,11 +1058,9 @@ services:
   # Python Service for DuckDB and Zettaranc Analysis
   # ===========================================================================
   python-service:
-    # 投研栈（python-service + hithink/halo/zettaranc 工具链）默认不启动。
-    # 启用：docker compose --profile finance up -d
-    # 不启用不影响 app：Go 侧工具注册是懒加载，缺库时只是调用失败，不会启动崩溃。
-    profiles:
-      - finance
+    # 投研栈（python-service + hithink/halo/zettaranc 工具链）默认启动。
+    # 前端 /api/quotes、/api/kline 等金融路由均反代到本服务。
+    # 不启动不影响 app：Go 侧工具注册是懒加载，缺库时只是调用失败，不会启动崩溃。
     build:
       context: ./python-service
       dockerfile: Dockerfile
