@@ -156,7 +156,18 @@ def main() -> int:
         help=f"每篇至少几张 ≥{BIG_IMAGE_BYTES//1024}KB 的图（默认 8）",
     )
     ap.add_argument("--limit", type=int, default=None, help="只处理大图最多的前 N 篇")
-    ap.add_argument("--concurrency", type=int, default=2, help="并发重跑数（默认 2，别开太高）")
+    ap.add_argument(
+        "--concurrency",
+        type=int,
+        default=1,
+        help=(
+            "同时触发重跑的文章数（默认 1）。注意这不是 VLM 调用并发 —— 每篇文章"
+            "入库时会把它全部图片一次性入队，真正的闸门在模型参数的 max_concurrency"
+            "（types/model.go:152，只作用于后台摄取调用）。两者相乘才是瞬时请求数："
+            "concurrency=2 × 每篇 20+ 张图 = 40+ 并发，实测直接把上游打到 429。"
+            "先用模型层那个闸门，这里保持 1 即可。"
+        ),
+    )
     ap.add_argument("--yes", action="store_true", help="真的执行（默认 dry-run）")
     args = ap.parse_args()
 
@@ -223,6 +234,10 @@ def main() -> int:
     print(f"  psql -c \"SELECT chunk_type, count(*) FROM chunks c JOIN knowledges k"
           f" ON k.id=c.knowledge_id WHERE k.knowledge_base_id='{args.kb_id}'"
           f" AND c.deleted_at IS NULL GROUP BY 1;\"")
+    print()
+    print("如果日志里大量出现 \"VLM request: API request failed with status 429\"，")
+    print("说明模型参数的 max_concurrency 太小或没设 —— 那才是真正的限流闸门，")
+    print("比这里的 --concurrency 更靠前。")
     if errors:
         print("\n错误：")
         for e in errors[:10]:
