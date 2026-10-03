@@ -1321,6 +1321,10 @@ async def analyze(
     try:
         src = get_financials_source()
         if src is not None:
+            # 同比的「上期」子查询必须取 fiscal_year - 1。这里曾经和当期用了
+            # 完全相同的 WHERE 与参数，于是 prev == cur，(x/x-1)*100 恒等于
+            # 0.0 —— 营收/利润同比永远显示 0%，成长性被稳定算成 4.50 弱。
+            # 参数列表仍是 4 组，年份差在 SQL 里做。
             yoy = await src.execute(
                 """
                 SELECT
@@ -1329,13 +1333,13 @@ async def analyze(
                       AND fiscal_year=? LIMIT 1) AS cur_rev,
                   (SELECT operating_income FROM v_income_statement
                     WHERE thscode=? AND period='annual' AND fiscal_period='FY'
-                      AND fiscal_year=? LIMIT 1) AS prev_rev,
+                      AND fiscal_year=? - 1 LIMIT 1) AS prev_rev,
                   (SELECT net_profit FROM v_income_statement
                     WHERE thscode=? AND period='annual' AND fiscal_period='FY'
                       AND fiscal_year=? LIMIT 1) AS cur_np,
                   (SELECT net_profit FROM v_income_statement
                     WHERE thscode=? AND period='annual' AND fiscal_period='FY'
-                      AND fiscal_year=? LIMIT 1) AS prev_np
+                      AND fiscal_year=? - 1 LIMIT 1) AS prev_np
                 """,
                 [thscode, int(period[:4])] * 4,
             )
