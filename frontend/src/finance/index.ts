@@ -51,6 +51,12 @@ registerModule({
   routeComponent: () => import('@/views/watchlist/Watchlist.vue'),
 });
 
+// ─────────────────── 反代路由清单 ───────────────────
+// 导出给 vite.config.ts 用的反代路径常量数组。vite 端已经从该数组动态构造
+// proxy 规则，nginx 端仍靠正则 + 手动同步（见 nginx.conf 注释）。
+export { FINANCE_PROXY_ROUTES, FINANCE_PROXY_ROUTES_REGEX } from './proxyRoutes';
+export type { FinanceProxyRoute } from './proxyRoutes';
+
 // ─────────────────── 组件（原地保留，从 barrel re-export）───────────────────
 // 文件位置不变（仍在 src/components/...），但对外入口收敛到 @/finance。
 // 4.6 目录重组时再物理搬迁到 src/finance/components/。

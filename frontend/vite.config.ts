@@ -6,6 +6,7 @@ import { createRequire } from 'node:module'
 import { defineConfig, type Plugin } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import vueJsx from '@vitejs/plugin-vue-jsx'
+import { FINANCE_PROXY_ROUTES } from './src/finance/proxyRoutes';
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const require = createRequire(import.meta.url)
@@ -150,44 +151,17 @@ export default defineConfig({
         timeout: 3_600_000,
         proxyTimeout: 3_600_000,
       },
-      '/api/kline': {
-        target: process.env.VITE_PY_SERVICE_TARGET || 'http://localhost:50052',
-        changeOrigin: true,
-      },
-      '/api/annotate': {
-        target: process.env.VITE_PY_SERVICE_TARGET || 'http://localhost:50052',
-        changeOrigin: true,
-      },
-      // 形态识别（几何形态 + 波浪）也走 python-service。
-      // 不加这条会落到下面那个泛化的 '/api' 规则上、被转到 Go 应用，而那条链路
-      // 需要鉴权 —— 表现为图表静默拿不到形态，没有任何报错。
-      '/api/chart-pattern': {
-        target: process.env.VITE_PY_SERVICE_TARGET || 'http://localhost:50052',
-        changeOrigin: true,
-      },
-      '/api/indicators': {
-        target: process.env.VITE_PY_SERVICE_TARGET || 'http://localhost:50052',
-        changeOrigin: true,
-      },
-      '/api/symbols': {
-        target: process.env.VITE_PY_SERVICE_TARGET || 'http://localhost:50052',
-        changeOrigin: true,
-      },
-      // 自选页的批量行情快照，与 /api/kline 同一类：只读行情，浏览器直连
-      // python-service（生产环境对应 nginx.conf 里那条直通正则的白名单）。
-      '/api/quotes': {
-        target: process.env.VITE_PY_SERVICE_TARGET || 'http://localhost:50052',
-        changeOrigin: true,
-      },
-      // 悬浮卡的个股/板块速览。**这条之前漏了**，于是 dev 下它落到泛化的 '/api'
-      // 规则被转到 Go 应用、拿到 401（卡片对画像失败是静默的，所以只表现为
-      // "画像那几块不显示"，没有任何报错）。生产 nginx 的白名单里有它，dev 也必须有：
-      // 这份列表与 nginx.conf 里 `location ~ ^/api/(kline|annotate|indicators|symbols|
-      // stock-profile|quotes|chart-pattern)` 必须一致。
-      '/api/stock-profile': {
-        target: process.env.VITE_PY_SERVICE_TARGET || 'http://localhost:50052',
-        changeOrigin: true,
-      },
+      // 金融模块反代：从 `src/finance/proxyRoutes.ts` 单一真相源动态构造。
+      // 任何新增路由都先在该文件加一条，vite 这边自动跟随。
+      ...Object.fromEntries(
+        FINANCE_PROXY_ROUTES.map((route) => [
+          route,
+          {
+            target: process.env.VITE_PY_SERVICE_TARGET || 'http://localhost:50052',
+            changeOrigin: true,
+          },
+        ]),
+      ),
       '/api': {
         target: DEV_PROXY_TARGET,
         changeOrigin: true,
