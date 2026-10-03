@@ -420,10 +420,11 @@ def _md_announcements(result: Dict[str, Any]) -> List[str]:
         L += ["- （未取公告。生成报告时需显式开启 include_announcements；"
               "它走巨潮，是限速的按需请求。）", ""]
     L += [
-        "> **利好/利空因素（带日期与来源）尚未接入**：它需要新闻源，而本地没有。"
-        "本节只列公告原文，不做情绪判断 —— 用公告标题猜利好利空是不靠谱的。",
+        "> 本节只列**公告原文**，不做情绪判断 —— 用公告标题猜利好利空是不靠谱的。"
+        "消息面的分类见下面的个股新闻与判定槽位。",
         "",
     ]
+    L += _md_news(result.get("external") or {})
     return L
 
 
@@ -580,6 +581,64 @@ def _md_northbound(ext: Dict[str, Any]) -> List[str]:
     return L
 
 
+def _md_news(ext: Dict[str, Any]) -> List[str]:
+    """第二章的个股新闻 + 利好/利空判定槽位。
+
+    Python 只提供新闻原文（标题/摘要/日期/来源），**分类由 AI 做** ——
+    「利好还是利空」「影响多大」「可信度几星」都是判断而不是事实，用标题正则猜
+    必然出错。这与七维定性维度是同一条分工：Python 锁数据，AI 做判断。
+
+    四种状态分开说，因为它们的下一步动作完全不同：
+    ① 有新闻 → 列表 + 判定槽位；② 被风控（只回 passportWeb）→ 说明是「没搜到」
+    而不是「没有新闻」；③ 真没搜到 → 明说；④ 压根没取 external → 也说清，
+    否则读者会以为这只票消息面平静。
+    """
+    if ext.get("news") is None:
+        return [
+            "### 个股新闻",
+            "",
+            "- （未取。需要 include_external；新闻源在东财搜索，是限速的按需请求。）",
+            "",
+        ]
+
+    news = (ext.get("news") or {}).get("stock_news") or {}
+    items = news.get("items") or []
+    degraded = bool(news.get("degraded"))
+    reason = news.get("reason") or ""
+
+    L = ["### 个股新闻（近 20 条）", ""]
+    if items:
+        L += [f"> 共 {len(items)} 条，按东财搜索返回顺序。", ""]
+        L += ["| 日期 | 来源 | 标题 |", "|:--|:--|:--|"]
+        for n in items:
+            title = (n.get("title") or "").replace("|", "／")
+            url = n.get("url") or ""
+            cell = f"[{title}]({url})" if url else title
+            L.append(f"| {n.get('date') or '-'} | {(n.get('source') or '-')} | {cell} |")
+        L.append("")
+    elif degraded:
+        L += [f"**⚠️ 本次未搜到新闻**：{reason}", ""]
+    else:
+        L += ["- （本次没有搜到该标的的新闻。）", ""]
+
+    L += [
+        "### 利好/利空判定（待填）",
+        "",
+        "**分类由 AI 做**：Python 只给上面的原文。「利好还是利空」「影响多大」"
+        "「可信度几星」都是判断而不是事实，用标题正则猜必然出错。",
+        "",
+        "| # | 类型 | 事件 | 日期 | 影响 | 来源 | 可信度 |",
+        "|:-:|:--|:--|:--|:--|:--|:--|",
+        "{{positive_factors}}",
+        "{{negative_factors}}",
+        "",
+        "> 可信度按来源给：公司公告 > 主流财经媒体 > 自媒体转载。只有单一来源的事件"
+        "不要写成「已确认」；没有事件时留空，不要为了填满表格把旧闻当新闻。",
+        "",
+    ]
+    return L
+
+
 def _md_comprehensive(result: Dict[str, Any], slots: List[Dict[str, Any]]) -> List[str]:
     """第十一章：综合评估与投资建议。
 
@@ -610,7 +669,7 @@ def _md_comprehensive(result: Dict[str, Any], slots: List[Dict[str, Any]]) -> Li
         "",
         "| 模板章节 | 缺什么 |",
         "|:--|:--|",
-        "| 二、利好/利空因素 | 新闻源（东财个股新闻 / 财联社） |",
+        "| 二、利好/利空**分类** | 分类已留给 AI；缺的是财联社等第二新闻源（当前只有东财） |",
         "| 九、北向资金（日频历史） | 港交所 HKEX 官方日统计；同花顺只给当日、且深股通残缺 |",
         "| 十、政策与板块舆情风险 | 政策与舆情数据 |",
         "| 十一、目标价 / DCF | 一致预期 EPS + 估值模型 |",
@@ -806,6 +865,11 @@ async def fetch_external(code: str, *, with_fund_flow: bool = True) -> Dict[str,
     # 混进东财任一档都会让两边的限速互相牵制。
     buckets.append(
         ("ths", "independent", lambda: {"northbound": extdata.northbound_summary()})
+    )
+    # 个股新闻也单独一档：主机不同（search-api-web），而且它**实测过间歇风控** ——
+    # 并进 datacenter 会让风控期间的限速拖慢稳定的股东户数/两融。
+    buckets.append(
+        ("news", "independent", lambda: {"stock_news": extdata.stock_news(code, limit=20)})
     )
     if with_fund_flow:
         buckets.append(

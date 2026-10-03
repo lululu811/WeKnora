@@ -189,7 +189,7 @@ def test_unimplemented_list_drops_what_was_integrated():
         "announcements": [], "ai_slots": ALL_SLOTS, "narratives": {},
     }), "### 11.2 尚未接入的章节", "## 附录：")
     assert "融资动态" not in body, "两融已接入，不该还列在这里"
-    assert "利好/利空因素" in body, "新闻源确实没接"
+    assert "财联社" in body, "新闻源已接，清单里剩的是第二来源"
     assert "HKEX" in body, "北向只剩日频历史没接，要说清是哪一部分"
 
 

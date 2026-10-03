@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 from typing import Any, Dict, List, Optional
@@ -303,6 +304,70 @@ def northbound_summary() -> Dict[str, Any]:
             ),
         }
     return {"as_of": times[-1] if times else None, "points": total, "lanes": lanes}
+
+
+# ---------------------------------------------------------------------------
+# 个股新闻（东财搜索，JSONP）
+# ---------------------------------------------------------------------------
+
+
+def _strip_tags(text: Any) -> str:
+    """去掉新闻标题/摘要里的高亮标签。
+
+    东财在命中关键词处插 ``<em>``，直接渲染会把标签当正文显示出来。
+    """
+    return re.sub(r"<[^>]+>", "", str(text or "")).strip()
+
+
+def stock_news(code: str, limit: int = 20) -> Dict[str, Any]:
+    """东财个股新闻。
+
+    返回 ``{"items": [...], "degraded": bool, "reason": str}``。
+
+    ``degraded`` 是实测过的**间歇风控**：部分住宅 IP 调本接口只拿到 passportWeb
+    （股民资料）而无 cmsArticleWebOld（文章列表）。那不是「这只票没有新闻」，而是
+    「这次没搜到」—— 两者必须能区分，否则报告会把风控说成「消息面平静」。
+
+    接口是 JSONP（``cb=jQuery_news``）；括号包装的解析由 fetch_json 统一处理，
+    这里不必自己剥。
+    """
+    inner = json.dumps({
+        "uid": "", "keyword": _bare(code), "type": ["cmsArticleWebOld"],
+        "client": "web", "clientType": "web", "clientVersion": "curr",
+        "param": {"cmsArticleWebOld": {
+            "searchScope": "default", "sort": "default",
+            "pageIndex": 1, "pageSize": limit, "preTag": "", "postTag": "",
+        }},
+    }, separators=(",", ":"))
+
+    try:
+        resp = fetch_json(Subdomain.EM_SEARCH,
+                          params={"cb": "jQuery_news", "param": inner})
+    except ExternalError as exc:
+        logger.warning("个股新闻取数失败 %s: %s", code, exc)
+        return {"items": [], "degraded": True, "reason": f"取数失败：{exc}"}
+
+    result = (resp or {}).get("result") or {}
+    articles = result.get("cmsArticleWebOld") or []
+    if not articles:
+        keys = sorted(result.keys())
+        if "cmsArticleWebOld" not in keys:
+            # 风控指纹：回了别的板块（通常 passportWeb）却没有文章列表。
+            return {
+                "items": [], "degraded": True,
+                "reason": f"接口只返回 {keys or '空结果'}，未含文章列表"
+                          f"（东财对部分 IP 的间歇风控，非「没有新闻」）",
+            }
+        return {"items": [], "degraded": False, "reason": ""}
+
+    items = [{
+        "title": _strip_tags(a.get("title")),
+        "summary": _strip_tags(a.get("content"))[:200],
+        "date": str(a.get("date") or "")[:16],
+        "source": str(a.get("mediaName") or ""),
+        "url": str(a.get("url") or ""),
+    } for a in articles]
+    return {"items": items, "degraded": False, "reason": ""}
 
 
 # ---------------------------------------------------------------------------

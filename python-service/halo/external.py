@@ -69,6 +69,7 @@ class Subdomain:
     PUSH2HIS = "push2his"           # 易封：资金流
     REPORTAPI = "reportapi"         # 第三档：研报
     THS_HSGT = "ths-hsgt"           # 同花顺：沪深股通实时流向
+    EM_SEARCH = "em-search"         # 东财搜索：个股新闻（JSONP）
 
 
 #: (base_url, 最小间隔秒, 备注)
@@ -85,6 +86,14 @@ _TIERS: Dict[str, tuple] = {
         "https://data.hexin.cn/market/hsgtApi/method/dayChart/", 2.0,
         "同花顺，独立反爬；非浏览器 UA 会 401",
     ),
+    # 东财搜索（个股新闻，JSONP）。给它独立一档而不是并进 datacenter：
+    # 主机不同（search-api-web 与 datacenter-web 是两套 WAF），而且它**实测过
+    # 间歇风控** —— 部分 IP 只回 passportWeb 而无文章列表。并档会让风控期间的
+    # 限速拖慢稳定的股东户数/两融。
+    Subdomain.EM_SEARCH: (
+        "https://search-api-web.eastmoney.com/search/jsonp", 1.0,
+        "东财搜索，间歇风控（只回 passportWeb）",
+    ),
 }
 
 _REFERERS = {
@@ -92,6 +101,8 @@ _REFERERS = {
     Subdomain.PUSH2HIS: "https://quote.eastmoney.com/",
     Subdomain.REPORTAPI: "https://data.eastmoney.com/report/",
     Subdomain.THS_HSGT: "https://data.hexin.cn/",
+    # 搜索接口必须带 so.eastmoney.com 这个 Referer，否则拿不到文章列表。
+    Subdomain.EM_SEARCH: "https://so.eastmoney.com/",
 }
 
 
