@@ -763,7 +763,16 @@ async def fetch_external(code: str, *, with_fund_flow: bool = True) -> Dict[str,
     for name, tier, fn in buckets:
         try:
             out[name] = fn()
-            out["subdomains"][name] = {"tier": tier, "ok": bool(out[name])}
+            # ok 必须反映「取到了没有」，而不是「这次调用有没有抛」。
+            #
+            # 子域失败时 fetch 是**降级成空值**而不是抛异常的（见 extdata 各函数），
+            # 而 bool({"fund_flow": []}) 是 True —— 只看容器非空会把「被封禁」
+            # 报成 ok。这是实测出来的：push2his 被判 IP 级封禁的那次，
+            # subdomains.push2his.ok 报的是 True，与这一栏存在的意义正好相反。
+            out["subdomains"][name] = {
+                "tier": tier,
+                "ok": any(bool(v) for v in (out[name] or {}).values()),
+            }
         except Exception as exc:  # noqa: BLE001 —— 单档失败不牵连其它档
             out["errors"][name] = str(exc)[:200]
             out["subdomains"][name] = {"tier": tier, "ok": False}

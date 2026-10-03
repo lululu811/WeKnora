@@ -152,3 +152,53 @@ def test_margin_rows_without_date_are_skipped():
     body = shareholder_section(md)
     assert "数据日期：2026-09-30" in body
     assert "近 2 个交易日" not in body
+
+
+# ---------------------------------------------------------------------------
+# 子域降级上报：ok 必须反映「取到了没有」
+# ---------------------------------------------------------------------------
+
+
+def test_subdomain_ok_is_false_when_bucket_degraded_to_empty(monkeypatch):
+    """子域失败是降级成空值，不是抛异常 —— ok 不能因此报成功。
+
+    实测场景：push2his 被判 IP 级封禁时，fund_flow 返回 []，而
+    bool({"fund_flow": []}) 是 True，于是 subdomains.push2his.ok 报 True。
+    这一栏存在的意义正是让人判断「哪一档没取到」，报反了就等于没有。
+    """
+    import asyncio
+    from halo import analyze as az
+
+    monkeypatch.setattr(ed, "valuation_percentiles", lambda code: {"pe_ttm": {"value": 22.0}})
+    monkeypatch.setattr(ed, "holder_count", lambda code: {})
+    monkeypatch.setattr(ed, "equity_pledge", lambda code: {})
+    monkeypatch.setattr(ed, "holder_trades", lambda code, limit=5: [])
+    monkeypatch.setattr(ed, "earnings_forecast", lambda code, limit=3: [])
+    monkeypatch.setattr(ed, "institution_surveys", lambda code, limit=3: [])
+    monkeypatch.setattr(ed, "margin_trading", lambda code, limit=10: [])
+    monkeypatch.setattr(ed, "research_reports", lambda code, limit=8: [])
+    monkeypatch.setattr(ed, "fund_flow", lambda code, days=60: [])
+
+    out = asyncio.run(az.fetch_external("600519.SH"))
+
+    assert out["subdomains"]["datacenter"]["ok"] is True, "有估值得分位，这一档算成功"
+    assert out["subdomains"]["push2his"]["ok"] is False, "资金流是空的，必须报 False"
+    assert out["subdomains"]["reportapi"]["ok"] is False, "研报是空的，必须报 False"
+
+
+def test_subdomain_ok_true_only_when_something_came_back(monkeypatch):
+    import asyncio
+    from halo import analyze as az
+
+    for fn, val in (
+        ("valuation_percentiles", {}), ("holder_count", {}), ("equity_pledge", {}),
+        ("holder_trades", []), ("earnings_forecast", []), ("institution_surveys", []),
+        ("margin_trading", [{"date": "2026-09-30"}]),
+    ):
+        monkeypatch.setattr(ed, fn, (lambda v: (lambda *a, **k: v))(val))
+    monkeypatch.setattr(ed, "research_reports", lambda code, limit=8: [])
+    monkeypatch.setattr(ed, "fund_flow", lambda code, days=60: [])
+
+    out = asyncio.run(az.fetch_external("600519.SH"))
+    assert out["subdomains"]["datacenter"]["ok"] is True, "两融取到了就算成功"
+    assert out["subdomains"]["push2his"]["ok"] is False
