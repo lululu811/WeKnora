@@ -40,6 +40,7 @@ var versionedSQLiteTables = []string{
 	"stock_watch_events",
 	"stock_watch_conditions",
 	"stock_watch_notifications",
+	"mcp_metadata",
 }
 
 // versionedSQLiteColumns maps each existing table to the columns that the
@@ -72,8 +73,9 @@ var versionedSQLiteColumns = map[string][]string{
 	"tenant_user_env_vars": {
 		"principal_type", "principal_id", "sandbox_config_id", "skill_id", "name", "value",
 	}, // 000028
-	"stock_watches":      {"state", "note"}, // 000035
-	"stock_watch_events": {"eval_date"},     // 000037
+	"stock_watches":      {"state", "note"},      // 000035
+	"stock_watch_events": {"eval_date"},          // 000037
+	"mcp_services":       {"usage_instructions"}, // 000041
 }
 
 // expectedSQLiteMigrationVersion is the version every SQLite migration run must
@@ -91,7 +93,7 @@ var versionedSQLiteColumns = map[string][]string{
 // migrations directory. The constant stays a constant (readable, greppable,
 // and still the thing the assertions below compare against); what changes is
 // that drifting from disk now fails loudly and names the number to write.
-const expectedSQLiteMigrationVersion = 39
+const expectedSQLiteMigrationVersion = 41
 
 func TestSQLiteMigrationsCreateVersionedSchema(t *testing.T) {
 	repoRoot := sqliteRepoRoot(t)
@@ -133,6 +135,7 @@ func TestSQLiteMigrationsCreateVersionedSchema(t *testing.T) {
 
 	assertSQLiteShareLinkInvitationsWork(t, db)
 	assertSQLiteMCPOAuthPrincipalUpsertWorks(t, db)
+	assertSQLiteTenantMembersPartialUniqueIndex(t, db)
 	require.False(t, sqliteColumnExists(t, db, "knowledges", "tag_id"),
 		"SQLite migrations must drop legacy knowledges.tag_id after multi-tag migration")
 }
@@ -427,6 +430,22 @@ func assertSQLiteMCPOAuthPrincipalUpsertWorks(t *testing.T, db *sql.DB) {
 		"SELECT COUNT(*) FROM mcp_oauth_tokens WHERE tenant_id = 1 AND service_id = 'svc-migration-1'",
 	).Scan(&rowCount))
 	require.Equal(t, 1, rowCount)
+}
+
+func assertSQLiteTenantMembersPartialUniqueIndex(t *testing.T, db *sql.DB) {
+	t.Helper()
+	_, err := db.Exec(
+		"INSERT INTO tenant_members (user_id, tenant_id, role, deleted_at) VALUES ('u-part-1', 99, 'member', '2026-01-01 00:00:00')",
+	)
+	require.NoError(t, err)
+	_, err = db.Exec(
+		"INSERT INTO tenant_members (user_id, tenant_id, role, deleted_at) VALUES ('u-part-1', 99, 'member', NULL)",
+	)
+	require.NoError(t, err, "must allow inserting active member when soft-deleted member exists")
+	_, err = db.Exec(
+		"INSERT INTO tenant_members (user_id, tenant_id, role, deleted_at) VALUES ('u-part-1', 99, 'member', NULL)",
+	)
+	require.Error(t, err, "must reject duplicate active membership")
 }
 
 func copySQLiteMigrationsV4(t *testing.T, repoRoot string) string {
