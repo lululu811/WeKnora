@@ -148,7 +148,7 @@ import { createChatMarkdownRenderer, renderChatMarkdown } from '@/utils/chatMark
 import { sanitizeMarkdownHTML, safeMarkdownToHTML } from '@/utils/security';
 import { renderDocumentPreviewMarkdown } from '@/utils/documentPreviewMarkdown';
 import { findMarkdownSourceRange } from '@/utils/markdownSourceLocate';
-import { highlightRanges } from '@/utils/sourceLocatorDom';
+import { highlightRanges, scrollRectIntoContainer } from '@/utils/sourceLocatorDom';
 
 import { useWechatWorkbench } from '../composables/useWechatWorkbench';
 import { useDocumentChat } from '../composables/useDocumentChat';
@@ -237,27 +237,38 @@ function submit() {
 /**
  * 点引用 → 在左栏定位并高亮。
  *
- * 走的是和聊天页同一条路径（`findMarkdownSourceRange` 按文本匹配），而不是
- * source_locators 的 offset —— 手工知识入库时那张表是 NULL，且高亮的精度
- * 取决于文本匹配本身，不取决于有没有 offset 表。
+ * 走的是和聊天页同一条路径（findMarkdownSourceRange 按文本匹配），而不是
+ * source_locators 的 offset —— 手工知识入库时那张表是 NULL，且高亮精度取决于
+ * 文本匹配本身。
+ *
+ * highlightRanges 返回清理函数，必须留着：CSS Custom Highlight 是全局的，
+ * 不清的话上一次的高亮会一直挂着。切文章时也调一次。
  */
+let clearLocate: (() => void) | null = null;
+
 function locate(ref: any) {
   const root = previewContent.value;
   if (!root) return;
   const snippet: string = ref?.content || ref?.matched_content || '';
   if (!snippet) return;
+
   const match = findMarkdownSourceRange(root, snippet, '');
+  clearLocate?.();
   if (!match) return;
-  highlightRanges(match.ranges?.length ? match.ranges : [match.range]);
-  const el = root.querySelector<HTMLElement>('::highlight(source-locate)');
-  void el; // CSS Custom Highlight 不产生元素，用 getSelection 之外的 API 定位
-  (match.range.startContainer.parentElement as HTMLElement | null)?.scrollIntoView({
-    behavior: 'smooth',
-    block: 'center',
-  });
+
+  clearLocate = highlightRanges(match.ranges?.length ? match.ranges : [match.range]);
+  scrollRectIntoContainer(root, match.range.getBoundingClientRect());
 }
 
-watch(currentId, () => chat.resetLive());
+function clearHighlight() {
+  clearLocate?.();
+  clearLocate = null;
+}
+
+watch(currentId, () => {
+  chat.resetLive();
+  clearHighlight();
+});
 
 // 正文是 v-html 渲染的，图片不会自动经过 hydrate；每次换文章或重新渲染后
 // 都要补一次。hydrate 自身幂等，重复调用不会重复请求。
@@ -282,6 +293,7 @@ onMounted(() => {
 @import '@/components/css/chat-markdown.less';
 @import '@/components/css/chat-message-shared.less';
 @import '@/components/css/chat-citations.less';
+
 
 // chat-citations.less 里那条是 **mixin**，光 @import 不会产出任何 CSS ——
 // 必须像 botmsg.vue:557 那样在选择器里显式调用，否则引用标签照样是裸文本。
@@ -368,3 +380,13 @@ onMounted(() => {
 .wb-hint--center { display: flex; align-items: center; justify-content: center; height: 100%; }
 .wb-hint--err { color: var(--td-error-color); }
 </style>
+
+<!-- CSS Custom Highlight 挂在伪元素上，scoped 的 [data-v-xxx] 对它无效 ——
+     规则必须放在非 scoped 块里，否则高亮注册了却不可见。
+     document-preview.vue:1681 出于同样原因把它放在 scoped 块之外。 -->
+<style>
+::highlight(source-locate) {
+  background-color: color-mix(in srgb, var(--app-source-highlight) 60%, transparent);
+}
+</style>
+
