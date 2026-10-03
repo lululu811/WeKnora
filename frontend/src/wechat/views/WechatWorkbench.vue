@@ -273,7 +273,13 @@ onMounted(async () => {
 });
 </script>
 
-<style scoped>
+<style lang="less" scoped>
+// 引用标签的样式在 chat 那三份 less 里。没有它们，preprocessCitationTags
+// 生成的 <span class="citation"> 会退化成裸文本，答案里就出现一串
+// "标题…"。路径与 botmsg.vue 完全一致。
+@import '@/components/css/chat-markdown.less';
+@import '@/components/css/chat-message-shared.less';
+@import '@/components/css/chat-citations.less';
 .wechat-workbench {
   display: flex;
   height: 100%;

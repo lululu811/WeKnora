@@ -100,14 +100,23 @@ export function useDocumentChat() {
       }
     });
 
-    // 作用域由当前开关决定：锁定这一篇时带 knowledge_ids，扩到全库时只带 KB。
-    const knowledgeIds = scopeToDocument.value && opts.knowledgeId ? [opts.knowledgeId] : undefined;
+    // 作用域怎么表达，是个反直觉的语义：
+    //
+    // 后端 session_knowledge_qa.go 在组装检索目标时写着
+    //   「Skip if this KB is already fully searched without a tag scope」
+    //   if fullKBSet[k.KnowledgeBaseID] && len(tagIDsByKB[...]) == 0 { continue }
+    // 也就是**同时**传 knowledge_base_ids 和属于同一个 KB 的 knowledge_ids 时，
+    // 整库目标优先，文档级过滤被静默丢弃 —— 不报错，只是搜了全库。
+    //
+    // 所以锁定单篇时必须**只传 knowledge_ids、完全不传 knowledge_base_ids**
+    // （qa.go:881 的校验允许 knowledge_ids 单独存在）。
+    const scopedToDoc = scopeToDocument.value && !!opts.knowledgeId;
 
     await stream.startStream({
       session_id: sid,
       query: question,
-      knowledge_base_ids: opts.kbId ? [opts.kbId] : [],
-      knowledge_ids: knowledgeIds,
+      knowledge_base_ids: scopedToDoc ? [] : opts.kbId ? [opts.kbId] : [],
+      knowledge_ids: scopedToDoc ? [opts.knowledgeId!] : undefined,
       // 关掉 agent：这一栏要做的是"就着这篇文章问答"，不是"让 agent 去做事"。
       agent_enabled: false,
       method: 'POST',
