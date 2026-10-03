@@ -1,0 +1,4 @@
+# 占位目录：未设置 WEKNORA_VAULT_HOST_DIR 时 app 挂载到这里。
+# 空目录 + 挂载成功 = vault 功能保持关闭（WEKNORA_VAULT_ROOT 未设时接口返回 501），
+# 其余功能不受影响。
+# 真实资料库请设 WEKNORA_VAULT_HOST_DIR 指向本机目录，不要往这里放内容。

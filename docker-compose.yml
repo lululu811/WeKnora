@@ -74,6 +74,14 @@ services:
       # 容器内 target 固定为 /data/hithink —— Go 侧不直连 .duckdb（只经
       # PYTHON_SERVICE_URL 调 python-service），真正读库的是 python-service。
       - ${HITHINK_DB_DIR:-./.hithink-placeholder}:/data/hithink:rw
+      # 外部只读资料库（vault）：以 markdown 为主、想就地阅读而不复制进 WeKnora
+      # 存储的目录（Obsidian 库、docs 树等）。同样默认挂到仓库内的空占位目录，
+      # 挂载必定成功且功能保持关闭。
+      #
+      # 要启用：设 WEKNORA_VAULT_HOST_DIR 指向本机资料库目录，并把
+      # WEKNORA_VAULT_ROOT 设为容器内路径（本行的 target，默认 /vault）。
+      # 挂 :ro 是硬要求 —— vault 是只读事实源，WeKnora 不应写入。
+      - ${WEKNORA_VAULT_HOST_DIR:-./.vault-placeholder}:/vault:ro
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 30s
