@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 from .external import Subdomain, datacenter, fetch_json, fetch_text, ExternalError
@@ -677,6 +677,118 @@ def _summarize_hkex(blocks: List[Dict[str, Any]]) -> Dict[str, Any]:
         markets[market] = {"totals": totals, "top10": actives}
     return {"degraded": not markets, "reason": "" if markets else "文件解析后没有市场数据",
             "as_of": as_of, "markets": markets}
+
+
+# ---------------------------------------------------------------------------
+# 舆情（互动易问答 / 市场热度）
+# ---------------------------------------------------------------------------
+
+#: 互动易只覆盖深市。实测（2026-10）：沪市代码在第一步能命中公司，但第二步问答
+#: 列表固定返回 0 条 —— 那是**平台不提供**，不是「近期没有问答」。
+_IRM_SHANGHAI_PREFIXES = ("60", "68", "900")
+
+
+def cninfo_irm(code: str, limit: int = 10) -> Dict[str, Any]:
+    """互动易投资者问答（巨潮）。返回 ``{"items", "covered", "reason"}``。
+
+    ``covered`` 区分**「平台不覆盖这个市场」与「近期确实没有问答」**。把前者说成
+    后者，报告会把「查不到」读成「投资者没有关切」—— 而这两件事的结论正好相反。
+
+    两步都是 POST，且**第二步的参数必须在 query string 上、body 为空**，放 body
+    会 HTTP 400（a-stock-data 记了同一条，我这边实测复现）。
+    """
+    bare = _bare(code)
+    try:
+        found = fetch_json(Subdomain.IRM, "index/queryKeyboardInfo",
+                           {"keyWord": bare}, method="POST")
+    except ExternalError as exc:
+        logger.warning("互动易公司检索失败 %s: %s", code, exc)
+        return {"items": [], "covered": False, "reason": f"取数失败：{exc}"}
+
+    hits = (found or {}).get("data") or []
+    if not hits:
+        return {"items": [], "covered": False, "reason": "互动易里没有这家公司的条目"}
+
+    try:
+        page = fetch_json(
+            Subdomain.IRM, "company/question",
+            {"_t": 1, "stockcode": bare, "orgId": hits[0].get("secid"),
+             "pageSize": limit, "pageNum": 1, "keyWord": "", "startDay": "", "endDay": ""},
+            method="POST", params_in="query",
+        )
+    except ExternalError as exc:
+        logger.warning("互动易问答取数失败 %s: %s", code, exc)
+        return {"items": [], "covered": False, "reason": f"问答取数失败：{exc}"}
+
+    rows = (page or {}).get("rows") or []
+    if not rows and bare.startswith(_IRM_SHANGHAI_PREFIXES):
+        return {"items": [], "covered": False,
+                "reason": "互动易只覆盖深市（实测沪市问答固定返回 0 条）；"
+                          "沪市需用上证 e 互动，尚未接入"}
+
+    items = []
+    for it in rows:
+        pub = it.get("pubDate")
+        items.append({
+            "question": _strip_tags(it.get("mainContent"))[:200],
+            "answer": _strip_tags(it.get("attachedContent"))[:300],
+            "answerer": str(it.get("attachedAuthor") or ""),
+            "time": (datetime.fromtimestamp(pub / 1000).strftime("%Y-%m-%d")
+                     if isinstance(pub, (int, float)) else ""),
+        })
+    return {"items": items, "covered": True, "reason": ""}
+
+
+def market_heat(code: str, top: int = 100) -> Dict[str, Any]:
+    """市场热度：同花顺热榜 + 东财人气榜，并标出**本标的是否在榜**。
+
+    「在不在榜」比「榜单内容」更有用：一只票突然进热榜前列本身就是舆情风险的信号，
+    而热榜的概念标签能告诉你市场把它归到哪个题材。
+
+    两个榜都取不到时返回 ``degraded=True``；只取到一个也照常返回（各榜独立）。
+    """
+    bare = _bare(code)
+    out: Dict[str, Any] = {"ths": None, "em": None, "in_ths": None, "in_em": None,
+                           "degraded": False, "reason": ""}
+
+    try:
+        resp = fetch_json(Subdomain.THS_HOT, "stock",
+                          {"stock_type": "a", "type": "hour", "list_type": "normal"})
+        stock_list = (resp or {}).get("data", {}).get("stock_list") or []
+        hit = next((it for it in stock_list if str(it.get("code")) == bare), None)
+        if hit:
+            tag = hit.get("tag") or {}
+            out["in_ths"] = {
+                "rank": hit.get("order"),
+                "heat": hit.get("rate"),
+                "pct": hit.get("rise_and_fall"),
+                "rank_chg": hit.get("hot_rank_chg"),
+                "concepts": list(tag.get("concept_tag") or []),
+                "tag": str(tag.get("popularity_tag") or ""),
+            }
+        out["ths"] = {"total": len(stock_list)}
+    except (ExternalError, AttributeError, TypeError) as exc:
+        logger.warning("同花顺热榜取数失败: %s", exc)
+        out["reason"] = f"同花顺热榜失败：{exc}"
+
+    try:
+        resp = fetch_json(Subdomain.EM_HOT, "getAllCurrentList",
+                          {"appId": "appId01",
+                           "globalId": "786e4c21-70dc-435a-93bb-38",
+                           "marketType": "", "pageNo": 1, "pageSize": top},
+                          method="POST")
+        data = (resp or {}).get("data") or []
+        # 人气榜只给带前缀代码（SH601127），比对要剥前缀。
+        hit = next((it for it in data if str(it.get("sc") or "")[2:] == bare), None)
+        if hit:
+            out["in_em"] = {"rank": hit.get("rk")}
+        out["em"] = {"total": len(data)}
+    except (ExternalError, AttributeError, TypeError) as exc:
+        logger.warning("东财人气榜取数失败: %s", exc)
+        out["reason"] = (out["reason"] + "；" if out["reason"] else "") + f"东财人气榜失败：{exc}"
+
+    out["degraded"] = out["ths"] is None and out["em"] is None
+    return out
 
 
 # ---------------------------------------------------------------------------

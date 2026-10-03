@@ -73,6 +73,9 @@ class Subdomain:
     NBS = "nbs"                     # 国家统计局：PMI 发布页（HTML）
     THS_BASIC = "ths-basic"         # 同花顺 F10：机构一致预期 EPS（GBK）
     HKEX = "hkex"                   # 港交所：每日统计（北向权威日频，JS 数据文件）
+    IRM = "irm"                     # 巨潮互动易：投资者问答（POST，参数在 query）
+    THS_HOT = "ths-hot"             # 同花顺热榜：市场热度 + 概念标签
+    EM_HOT = "em-hot"               # 东财人气榜
 
 
 #: (base_url, 最小间隔秒, 备注)
@@ -115,6 +118,12 @@ _TIERS: Dict[str, tuple] = {
         "https://www.hkex.com.hk/chi/csm/DailyStat/", 2.0,
         "港交所官方，日频，按日期回退找交易日",
     ),
+    Subdomain.IRM: ("https://irm.cninfo.com.cn/newircs/", 1.0, "巨潮互动易，深市问答"),
+    Subdomain.THS_HOT: (
+        "https://dq.10jqka.com.cn/fuyao/hot_list_data/out/hot_list/v1/", 2.0,
+        "同花顺热榜，独立反爬",
+    ),
+    Subdomain.EM_HOT: ("https://emappdata.eastmoney.com/stockrank/", 1.0, "东财人气榜"),
 }
 
 _REFERERS = {
@@ -127,6 +136,9 @@ _REFERERS = {
     Subdomain.NBS: "https://www.stats.gov.cn/",
     Subdomain.THS_BASIC: "https://basic.10jqka.com.cn/",
     Subdomain.HKEX: "https://www.hkex.com.hk/",
+    Subdomain.IRM: "https://irm.cninfo.com.cn/",
+    Subdomain.THS_HOT: "https://dq.10jqka.com.cn/",
+    Subdomain.EM_HOT: "https://emappdata.eastmoney.com/",
 }
 
 
@@ -176,6 +188,7 @@ def _fetch_raw(
     retries: int = 3,
     method: str = "GET",
     encoding: str = "utf-8",
+    params_in: str = "auto",
 ) -> str:
     """带限速与退避地取一段**原始文本**。
 
@@ -188,7 +201,13 @@ def _fetch_raw(
     """
     base, _, tier_note = _TIERS[subdomain]
     url = base + path
-    if params:
+    # params_in：
+    #   "auto"  —— GET 放 query、POST 放 body（多数接口的惯例）
+    #   "query" —— **一律放 query 且 body 为空**
+    #
+    # "query" 不是多余的：互动易的第二步是 POST，但参数必须在 query string 上，
+    # 放 body 会 HTTP 400。这是实测出来的（a-stock-data 也记了同一条）。
+    if params and (params_in == "query" or method == "GET"):
         sep = "&" if "?" in url else "?"
         url = url + sep + urllib.parse.urlencode(params)
 
@@ -210,9 +229,13 @@ def _fetch_raw(
     }
     data = None
     if method == "POST":
-        data = urllib.parse.urlencode(params or {}).encode()
+        if params_in == "query":
+            data = b""                      # body 必须为空，参数在 query 上
+        else:
+            data = urllib.parse.urlencode(params or {}).encode()
         headers["Content-Type"] = "application/x-www-form-urlencoded"
-        url = base + path
+        if params_in != "query":
+            url = base + path
 
     last_err: Optional[str] = None
     disconnects = 0
@@ -293,10 +316,11 @@ def fetch_text(
     retries: int = 3,
     method: str = "GET",
     encoding: str = "utf-8",
+    params_in: str = "auto",
 ) -> str:
     """取原文（HTML 等非 JSON 源用）。限速与封禁语义与 fetch_json 完全一致。"""
     return _fetch_raw(subdomain, path, params, timeout=timeout, retries=retries,
-                      method=method, encoding=encoding)
+                      method=method, encoding=encoding, params_in=params_in)
 
 
 def fetch_json(
@@ -307,10 +331,11 @@ def fetch_json(
     timeout: float = 20.0,
     retries: int = 3,
     method: str = "GET",
+    params_in: str = "auto",
 ) -> Any:
     """取一个 JSON（或 JSONP）。括号包装由这里统一剥掉。"""
-    raw = _fetch_raw(subdomain, path, params,
-                     timeout=timeout, retries=retries, method=method).strip()
+    raw = _fetch_raw(subdomain, path, params, timeout=timeout, retries=retries,
+                     method=method, params_in=params_in).strip()
     if raw.startswith("{") or raw.startswith("["):
         return json.loads(raw)
     if "(" in raw and raw.endswith(")"):     # JSONP 包装

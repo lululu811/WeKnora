@@ -809,6 +809,68 @@ def _md_northbound_daily(result: Dict[str, Any]) -> List[str]:
     return L
 
 
+def _md_sentiment(result: Dict[str, Any]) -> List[str]:
+    """舆情锚点（第十章的补充，服务 10.7 板块舆情风险）。
+
+    三块：**市场热度**（在不在榜 + 概念标签）、**投资者问答**、以及缺失说明。
+
+    「不在榜」也要写出来：一只票没进热榜，本身就是「没有炒作风险」的信号，
+    与「没去查」完全不同 —— 空白读者无法分辨。
+    """
+    ext = result.get("external") or {}
+    heat = (ext.get("heat") or {}).get("market_heat") or {}
+    qa = (ext.get("irm") or {}).get("qa") or {}
+    if not heat and not qa:
+        return []
+
+    L = ["### 市场舆情（锚点）", ""]
+
+    if heat:
+        in_ths, in_em = heat.get("in_ths"), heat.get("in_em")
+        if in_ths or in_em:
+            L += ["**本标的当前在市场热度榜上：**", ""]
+            if in_ths:
+                concepts = "、".join(in_ths.get("concepts") or []) or "—"
+                chg = in_ths.get("rank_chg")
+                chg_text = "" if chg is None else f"，较上一期 {chg:+d} 名" if isinstance(chg, int) else ""
+                L += [f"- 同花顺热榜：第 **{in_ths.get('rank')}** 名"
+                      f"（人气 {in_ths.get('heat')}{chg_text}）"]
+                L += [f"- 市场给它的概念标签：{concepts}"]
+                if in_ths.get("tag"):
+                    L += [f"- 人气标签：{in_ths['tag']}"]
+            if in_em:
+                L += [f"- 东财人气榜：第 **{in_em.get('rank')}** 名"]
+            L += ["", "> 进热榜前列意味着关注度集中：上行时放大涨幅，下行时同样放大跌幅。"
+                      "概念标签反映的是**市场当下的归类**，不等于公司的主营业务。", ""]
+        else:
+            L += ["- 本标的**不在**同花顺热榜 / 东财人气榜上"
+                  "（没有炒作关注度，这本身是个中性偏正的信号）。", ""]
+        if heat.get("degraded") and heat.get("reason"):
+            L += [f"> ⚠️ 热度榜部分取数失败：{heat['reason']}", ""]
+    elif (ext.get("heat") or {}).get("market_heat") is None:
+        L += ["- （市场热度未取：需要 include_external。）", ""]
+
+    if qa:
+        items = qa.get("items") or []
+        if items:
+            L += [f"**投资者问答（互动易，近 {len(items)} 条）**：", "",
+                  "| 日期 | 投资者提问 | 公司回复 |", "|:--|:--|:--|"]
+            for it in items:
+                q = (it.get("question") or "").replace("|", "／")[:60]
+                a = (it.get("answer") or "").replace("|", "／")[:60]
+                L.append(f"| {it.get('time') or '—'} | {q} | {a or '**未回复**'} |")
+            L.append("")
+            L += ["> 未回复的提问本身是信息：它说明公司在回避什么。", ""]
+        elif not qa.get("covered"):
+            L += [f"- （投资者问答不可用：{qa.get('reason') or '原因未知'}）", ""]
+        else:
+            L += ["- （近期没有投资者问答。）", ""]
+    elif (ext.get("irm") or {}).get("qa") is None:
+        L += ["- （投资者问答未取：需要 include_external。）", ""]
+
+    return L
+
+
 def _md_comprehensive(result: Dict[str, Any], slots: List[Dict[str, Any]]) -> List[str]:
     """第十一章：综合评估与投资建议。
 
@@ -844,7 +906,7 @@ def _md_comprehensive(result: Dict[str, Any], slots: List[Dict[str, Any]]) -> Li
         "|:--|:--|",
         "| 二、利好/利空**分类** | 分类已留给 AI；缺的是财联社等第二新闻源（当前只有东财） |",
 
-        "| 十、政策与板块舆情风险 | 政策与舆情数据 |",
+
         "| 十一、目标价 / DCF | 一致预期 EPS + 估值模型 |",
         "",
     ]
@@ -942,6 +1004,7 @@ def render_markdown(result: Dict[str, Any]) -> str:
         if dim == "risk":
             # 宏观锚点放在风险章里：它服务的是「宏观与市场风险」那一维。
             L += _md_macro(result.get("external") or {})
+            L += _md_sentiment(result)
             L += _md_governance_facts(result)
 
     L += _md_comprehensive(result, slots)
@@ -1063,6 +1126,14 @@ async def fetch_external(code: str, *, with_fund_flow: bool = True) -> Dict[str,
     # 港交所北向日频。**不随标的变**（全市场级），但每份报告都要用到。
     buckets.append(
         ("hkex", "independent", lambda: {"northbound_daily": extdata.hkex_northbound()})
+    )
+    # 舆情两档：互动易是**按标的**的（投资者关切），热度榜是**全市场级**的
+    # （在不在榜）。各占一档，因为一个是巨潮、一个是同花顺+东财，互不相关。
+    buckets.append(
+        ("irm", "independent", lambda: {"qa": extdata.cninfo_irm(code, limit=10)})
+    )
+    buckets.append(
+        ("heat", "independent", lambda: {"market_heat": extdata.market_heat(code)})
     )
     if with_fund_flow:
         buckets.append(

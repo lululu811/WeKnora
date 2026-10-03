@@ -219,9 +219,10 @@ def test_comprehensive_lists_unimplemented_template_chapters():
     body = md_between(az.render_markdown(base_result()), "## 十一、", "## 附录：")
     # 这份清单要跟着代码走：某章接上之后就得从这里删掉，否则它自己会变成谎话。
     # 所以只断言「确实还没接的」。
-    for need in ("政策与板块舆情风险", "目标价"):
-        assert need in body, f"第十一章应列出尚未接入的 {need}"
-    assert "HKEX" not in body, "北向日频已接入（港交所），不该还列在清单里"
+    assert "目标价" in body, "目标价/DCF 确实还没接"
+    # 已接入的必须从清单里消失 —— 这份清单要跟着代码走，否则它自己会变成谎话。
+    for done in ("HKEX", "舆情", "融资动态"):
+        assert done not in body, f"{done} 已接入，不该还列在清单里"
     assert "宁缺勿造" in body
 
 
