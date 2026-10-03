@@ -250,7 +250,7 @@ func (s *userService) Login(ctx context.Context, req *types.LoginRequest) (*type
 		logger.Warn(ctx, "User account is disabled")
 		return &types.LoginResponse{
 			Success: false,
-			Message: "Account is disabled",
+			Message: "Invalid email or password",
 		}, nil
 	}
 
