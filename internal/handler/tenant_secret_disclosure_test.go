@@ -10,6 +10,7 @@ import (
 
 	"github.com/Tencent/WeKnora/internal/middleware"
 	"github.com/Tencent/WeKnora/internal/types"
+	"github.com/Tencent/WeKnora/internal/utils"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -163,6 +164,25 @@ func TestGetTenantKVViewerAllowedForNonSecretKey(t *testing.T) {
 }
 
 func TestPutTenantParserConfigAdminPreservesRedactedSecrets(t *testing.T) {
+	// The endpoint below is a real hostname, and every parser-config write goes
+	// through ValidateURLForSSRF, which resolves it. Where that name lands
+	// depends on the machine running the test: on a developer laptop with a TUN
+	// / benchmark-range DNS (Surge, clash, some corporate resolvers) example.com
+	// answers from 198.18.0.0/15 — RFC 2544 benchmarking space — and the guard
+	// correctly refuses it, so the request 400s for a reason that has nothing to
+	// do with what this test is about.
+	//
+	// The test asserts secret preservation, not URL policy. Pinning the host in
+	// the SSRF whitelist short-circuits the DNS walk (see
+	// utils.ValidateURLForSSRF: a whitelisted host returns before resolution).
+	//
+	// SetSSRFWhitelistFromRaw rather than t.Setenv: the whitelist is read once
+	// per process behind a sync.Once, so an env var set by this test would be
+	// ignored whenever another test in the package happened to load it first —
+	// the test would then pass alone and fail in a full-package run.
+	utils.SetSSRFWhitelistFromRaw("example.com")
+	t.Cleanup(func() { utils.SetSSRFWhitelistFromRaw("") })
+
 	tenant := secretTenantFixture()
 	engine := newTenantHandlerTestEngine(t, types.TenantRoleAdmin, tenant)
 
