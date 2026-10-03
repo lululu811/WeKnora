@@ -1,4 +1,25 @@
 export default {
+  halo: {
+    title: 'HALO 연차보고서 분석',
+    open: 'HALO 보고서',
+    refresh: '다시 생성',
+    archive: '지식베이스에 보관',
+    archiving: '보관 중…',
+    close: '닫기',
+    loading: '보고서를 생성하는 중…',
+    loadFailed: '보고서를 불러오지 못했습니다',
+    noDataTitle: '이 종목의 연차보고서 팩트가 아직 동기화되지 않았습니다',
+    noDataHint: '먼저 에이전트에게 halo.filing.sync 실행을 요청하거나 동기화 엔드포인트를 직접 호출하세요.',
+    period: '보고 기간',
+    assetType: '자산 유형',
+    llmNote: '7개 정성 차원(해자/스태그플레이션 방어/ESG/경영진/주주·자금/밸류에이션/리스크)은 모델이 채점하고, 나머지 수치는 채점 커널이 계산합니다. 보고서 유효기간은 30일입니다.',
+    pickKb: '보관 위치',
+    kbPlaceholder: '지식베이스 선택',
+    archiveOk: '초안으로 보관했습니다. 파싱이 끝나면 검색할 수 있습니다',
+    archiveUpdated: '기존 보관 문서를 업데이트했습니다',
+    archiveFailed: '보관 실패',
+    needKb: '먼저 지식베이스를 선택하세요',
+  },
   imageAttr: {
     contain_data_visual: {
       label: '데이터 시각화',

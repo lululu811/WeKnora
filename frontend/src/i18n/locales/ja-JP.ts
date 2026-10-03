@@ -1,4 +1,25 @@
 export default {
+  halo: {
+    title: 'HALO 年次報告分析',
+    open: 'HALO レポート',
+    refresh: '再生成',
+    archive: 'ナレッジベースにアーカイブ',
+    archiving: 'アーカイブ中…',
+    close: '閉じる',
+    loading: 'レポートを生成しています…',
+    loadFailed: 'レポートの読み込みに失敗しました',
+    noDataTitle: 'この銘柄の年次報告ファクトはまだ同期されていません',
+    noDataHint: 'まずエージェントに halo.filing.sync の実行を依頼するか、同期エンドポイントを直接呼び出してください。',
+    period: '報告期',
+    assetType: '資産タイプ',
+    llmNote: '7 つの定性ディメンション（堀／スタグフレーション耐性／ESG／経営陣／株主・資金面／バリュエーション／リスク）はモデルが採点し、その他の数値は採点カーネルが計算します。レポートの有効期間は 30 日です。',
+    pickKb: 'アーカイブ先',
+    kbPlaceholder: 'ナレッジベースを選択',
+    archiveOk: '下書きとしてアーカイブしました。解析完了後に検索できます',
+    archiveUpdated: '既存のアーカイブ文書を更新しました',
+    archiveFailed: 'アーカイブに失敗しました',
+    needKb: '先にナレッジベースを選択してください',
+  },
   imageAttr: {
     contain_data_visual: {
       label: 'データ可視化',

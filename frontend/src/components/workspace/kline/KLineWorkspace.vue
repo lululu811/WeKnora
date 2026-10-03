@@ -341,6 +341,18 @@
 
       <div class="toolbar__spacer" />
 
+      <!-- HALO 年报报告：按当前标的取报告，可归档到知识库。
+           放在折叠按钮左边，与其它「对当前标的做事」的按钮同一区。 -->
+      <button
+        type="button"
+        class="toolbar__icon-btn"
+        :title="t('halo.open')"
+        :disabled="!currentTicker || !currentExchange"
+        @click="showHaloReport = true"
+      >
+        <t-icon name="article" size="16px" />
+      </button>
+
       <!-- 折叠工作台：收成右侧窄边而不是销毁，当前股票/指标/周期全部保留。
            面板再打开时仍是原来那只股票，不用重新选；这正是它取代原来那个
            「× 直接 close」的原因——两个按钮干同一件事会让人分不清。 -->
@@ -353,6 +365,14 @@
         <t-icon :name="workspace.isCollapsed.value ? 'chevron-left' : 'chevron-right'" size="16px" />
       </button>
     </div>
+
+    <!-- HALO 报告对话框。标的由当前 ticker 决定，所以它挂在工作台里而不是聊天页
+         —— 换票后重新打开就是新标的的报告。 -->
+    <HaloReportDialog
+      v-if="currentTicker && currentExchange"
+      v-model:visible="showHaloReport"
+      :thscode="`${currentTicker}.${currentExchange}`"
+    />
 
     <!-- 4b. 多标的对比条。只在意一组多只票时出现，默认收起成一行摘要。
          点击某一行即切换主图到该标的——它同时是「对比」和「切票」两个入口。 -->
@@ -471,6 +491,9 @@ import { MAIN_PRESETS, SUB_PRESETS } from './indicator-meta';
 import { fetchAnnotations, type Annotation, PATTERN_CONFIG } from './annotate-api';
 import { setGlobalOverlayConfig } from './overlay-drawer';
 import LayerFilterDropdown from './LayerFilterDropdown.vue';
+// HALO 年报报告面板。它按当前标的取 /api/v1/halo/report（Go 侧代理，因为
+// python-service 的 /halo/* 要 API key，那个 key 不能下发到浏览器）。
+import HaloReportDialog from './HaloReportDialog.vue';
 import { clearAllOptions, collapseByValue, enabledCount, isOptionEnabled, loadSelection, saveSelection, selectAllOptions, toggleOption, type LayerOption, type LayerSelection } from './layer-selection';
 import { fetchChartPatterns, resolvePatternGeometry, resolveCandleMarks, patternsAtBar, samePatternSet, type DrawableCandle, type DrawablePattern } from './chart-patterns';
 import { computeLevels, pickChartLevels } from './levels';
@@ -638,6 +661,10 @@ const searchQuery = ref('');
 const searchResults = ref<Array<{ ticker: string; name: string; exchange: string }>>([]);
 const isSearching = ref(false);
 let searchDebounceTimer: any = null;
+
+// HALO 报告对话框的开关。报告标的由 currentTicker/currentExchange 决定，
+// 组件本身不持有标的，所以换票后重新打开自然是新标的。
+const showHaloReport = ref(false);
 
 const ADJUST_OPTIONS: Array<{ value: Adjust; label: string }> = [
   { value: 'forward', label: '前复权' },

@@ -1,4 +1,25 @@
 export default {
+  halo: {
+    title: 'HALO 年报分析',
+    open: 'HALO 报告',
+    refresh: '重新生成',
+    archive: '归档到知识库',
+    archiving: '归档中…',
+    close: '关闭',
+    loading: '正在生成报告…',
+    loadFailed: '报告加载失败',
+    noDataTitle: '该标的尚无已落库的年报事实',
+    noDataHint: '先让 agent 执行 halo.filing.sync 同步年报，或直接调用同步接口。',
+    period: '报告期',
+    assetType: '资产类型',
+    llmNote: '报告中 7 个定性维度（护城河/滞胀防御/ESG/管理层/股东资金面/估值/风险）由模型判分，其余数值由评分内核计算。报告有效期 30 天。',
+    pickKb: '归档到',
+    kbPlaceholder: '选择知识库',
+    archiveOk: '已归档为草稿，解析完成后可检索',
+    archiveUpdated: '已更新既有归档文档',
+    archiveFailed: '归档失败',
+    needKb: '请先选择知识库',
+  },
   imageAttr: {
     contain_data_visual: {
       label: '数据可视化',
