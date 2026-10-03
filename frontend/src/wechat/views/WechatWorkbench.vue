@@ -120,7 +120,7 @@
                 v-model="chat.draft.value"
                 :placeholder="t('wechat.chat.placeholder')"
                 :autosize="{ minRows: 2, maxRows: 6 }"
-                @keydown.enter.exact.prevent="submit"
+                @keydown="onDraftKeydown"
               />
               <t-button
                 theme="primary"
@@ -185,6 +185,26 @@ const allTurns = computed(() =>
 function renderTurn(markdown: string): string {
   if (!markdown) return '';
   return renderChatMarkdown(markdown, { renderer: 'chat', escapeMarkdown: true } as any);
+}
+
+/**
+ * t-textarea 的 @keydown 拿到的**不是原生 KeyboardEvent**，而是 TDesign 自己
+ * 发射的 (value, { e: KeyboardEvent }) —— 见 Input-field.vue:2385 的 onKeydown。
+ * 直接写 @keydown.enter 会让 Vue 的 withKeys 收到一个字符串，在 `'key' in event`
+ * 那一行抛 "Cannot use 'in' operator"，回车静默失灵。所以修饰符用不了，
+ * 只能在 JS 里自己判。
+ *
+ * keyCode 229 / isComposing 是中文输入法的组合态：候选词没上屏时按回车是选词，
+ * 不能当发送。Shift+回车留给换行。
+ */
+function onDraftKeydown(_val: string, ctx: { e: KeyboardEvent }) {
+  const ev = ctx?.e;
+  if (!ev) return;
+  if (ev.isComposing || ev.keyCode === 229) return;
+  if (ev.keyCode === 13 && !ev.shiftKey) {
+    ev.preventDefault();
+    submit();
+  }
 }
 
 function submit() {
