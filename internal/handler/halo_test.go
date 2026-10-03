@@ -3,11 +3,18 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/Tencent/WeKnora/internal/agent/tools/halo"
+	"github.com/Tencent/WeKnora/internal/middleware"
 	"github.com/Tencent/WeKnora/internal/types"
 	"github.com/Tencent/WeKnora/internal/types/interfaces"
 )
@@ -162,4 +169,226 @@ func TestFindArchivedReportSkipsNilEntries(t *testing.T) {
 	got, err := h.findArchivedReport(context.Background(), "kb-1", "600519.SH", "2025-12-31")
 	require.NoError(t, err)
 	assert.Nil(t, got)
+}
+
+// ---------------------------------------------------------------------------
+// handler 级集成：真的走一遍 gin → 权限校验 → 归档动作
+//
+// 这一层要验的是「接线是否正确」，纯函数测试覆盖不到：
+// 权限校验是否生效、Create 与 Update 是否按幂等分支走、血缘是否真的写了、
+// 以及发往 python-service 的请求里两个 include_* 标志是否如设计。
+// ---------------------------------------------------------------------------
+
+type fakeKBService struct {
+	interfaces.KnowledgeBaseService
+	kb *types.KnowledgeBase
+}
+
+func (f *fakeKBService) GetKnowledgeBaseByID(
+	_ context.Context, _ string,
+) (*types.KnowledgeBase, error) {
+	return f.kb, nil
+}
+
+type recordingKnowledgeService struct {
+	interfaces.KnowledgeService
+	list     []*types.Knowledge
+	created  []*types.ManualKnowledgePayload
+	updated  []*types.ManualKnowledgePayload
+	lineages []map[string]any
+}
+
+func (r *recordingKnowledgeService) ListKnowledgeByKnowledgeBaseID(
+	_ context.Context, _ string,
+) ([]*types.Knowledge, error) {
+	return r.list, nil
+}
+
+func (r *recordingKnowledgeService) CreateKnowledgeFromManual(
+	_ context.Context, kbID string, payload *types.ManualKnowledgePayload, _ string,
+) (*types.Knowledge, error) {
+	r.created = append(r.created, payload)
+	return &types.Knowledge{ID: "new-doc", KnowledgeBaseID: kbID}, nil
+}
+
+func (r *recordingKnowledgeService) UpdateManualKnowledge(
+	_ context.Context, knowledgeID string, payload *types.ManualKnowledgePayload,
+) (*types.Knowledge, error) {
+	r.updated = append(r.updated, payload)
+	return &types.Knowledge{ID: knowledgeID}, nil
+}
+
+func (r *recordingKnowledgeService) UpdateKnowledge(
+	_ context.Context, k *types.Knowledge,
+) error {
+	var meta map[string]any
+	if err := json.Unmarshal(k.CustomMetadata, &meta); err != nil {
+		return err
+	}
+	r.lineages = append(r.lineages, meta)
+	return nil
+}
+
+// haloStub 假扮 python-service 的 /halo/score，并记录收到的请求体。
+type haloStub struct {
+	body   map[string]any
+	got    map[string]any
+	server *httptest.Server
+}
+
+func newHaloStub(t *testing.T, body map[string]any) *haloStub {
+	t.Helper()
+	s := &haloStub{body: body}
+	s.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(raw, &s.got)
+		assert.Equal(t, "/halo/score", r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(s.body)
+	}))
+	t.Cleanup(s.server.Close)
+	return s
+}
+
+func archiveRouter(ks interfaces.KnowledgeService, client *halo.HTTPClient) *gin.Engine {
+	gin.SetMode(gin.TestMode)
+	h := NewHaloHandler(ks, &fakeKBService{kb: &types.KnowledgeBase{
+		ID: "307ea0c1-690b-46f3-af2c-f350e6b122ca", TenantID: 10000,
+	}}, nil, nil, client)
+	r := gin.New()
+	// ErrorHandler 必须挂：handler 走的是 c.Error(...) 上报错误，没有这个中间件
+	// 时 c.Error 只记录不写响应，错误路径会静默返回 200 空体 —— 那样测试就查不出
+	// 「该拒绝的请求被拒了没有」。
+	r.Use(middleware.ErrorHandler())
+	// 复刻 auth 中间件的效果：KBAccessRequest 的兼容路径读的就是这个 gin 键。
+	r.Use(func(c *gin.Context) {
+		c.Set(types.TenantIDContextKey.String(), uint64(10000))
+		c.Set(types.UserIDContextKey.String(), "admin")
+		c.Next()
+	})
+	r.POST("/halo/archive", h.ArchiveHaloReport)
+	return r
+}
+
+func doArchive(t *testing.T, r *gin.Engine, body string) (int, map[string]any) {
+	t.Helper()
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/halo/archive", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+	var out map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &out)
+	return w.Code, out
+}
+
+const archiveBody = `{"knowledge_base_id":"307ea0c1-690b-46f3-af2c-f350e6b122ca","thscode":"600519"}`
+
+func TestArchiveCreatesDraftKnowledgeWithLineage(t *testing.T) {
+	stub := newHaloStub(t, map[string]any{
+		"ok": true, "thscode": "600519.SH", "period": "2025-12-31",
+		"asset_type": "mixed", "markdown": "# HALO 600519.SH\n\n正文",
+	})
+	ks := &recordingKnowledgeService{}
+	code, out := doArchive(t, archiveRouter(ks, halo.NewHTTPClient(stub.server.URL)), archiveBody)
+
+	require.Equal(t, http.StatusOK, code)
+	assert.Equal(t, "created", out["data"].(map[string]any)["action"])
+
+	require.Len(t, ks.created, 1)
+	assert.Equal(t, "# HALO 600519.SH\n\n正文", ks.created[0].Content)
+	assert.Equal(t, types.ManualKnowledgeStatusDraft, ks.created[0].Status,
+		"默认必须落草稿：报告里约三成是 AI 判断且自带 30 天有效期")
+	assert.Equal(t, "HALO 600519.SH 2025-12-31", ks.created[0].Title)
+	assert.Empty(t, ks.updated)
+
+	require.Len(t, ks.lineages, 1, "血缘必须写进去，否则下次幂等匹配找不到它")
+	assert.Equal(t, "600519.SH", ks.lineages[0][haloMetaThscode])
+	assert.Equal(t, "2025-12-31", ks.lineages[0][haloMetaPeriod])
+	assert.Equal(t, haloLLMScoredDims, ks.lineages[0][haloMetaLLMDims])
+}
+
+func TestArchiveUpdatesInPlaceWhenAlreadyArchived(t *testing.T) {
+	stub := newHaloStub(t, map[string]any{
+		"ok": true, "thscode": "600519.SH", "period": "2025-12-31",
+		"markdown": "# 新正文",
+	})
+	ks := &recordingKnowledgeService{list: []*types.Knowledge{{
+		ID: "existing-doc",
+		CustomMetadata: metaOf(t, map[string]any{
+			haloMetaThscode: "600519.SH", haloMetaPeriod: "2025-12-31",
+		}),
+	}}}
+	code, out := doArchive(t, archiveRouter(ks, halo.NewHTTPClient(stub.server.URL)), archiveBody)
+
+	require.Equal(t, http.StatusOK, code)
+	assert.Equal(t, "updated", out["data"].(map[string]any)["action"])
+	assert.Empty(t, ks.created, "同一 (标的, 报告期) 不得产生第二份")
+	require.Len(t, ks.updated, 1)
+	assert.Equal(t, "# 新正文", ks.updated[0].Content)
+	assert.Equal(t, "existing-doc", out["data"].(map[string]any)["knowledge_id"],
+		"原地更新必须保留 knowledge ID，否则已有引用会断")
+}
+
+func TestArchiveRefusesWhenNoFilingFacts(t *testing.T) {
+	stub := newHaloStub(t, map[string]any{
+		"ok": false, "thscode": "600519.SH",
+		"reason": "600519.SH 没有已落库的年报事实。先调用 halo.filing.sync。",
+	})
+	ks := &recordingKnowledgeService{}
+	code, out := doArchive(t, archiveRouter(ks, halo.NewHTTPClient(stub.server.URL)), archiveBody)
+
+	assert.Equal(t, http.StatusBadRequest, code)
+	// 错误体由 middleware.ErrorHandler 统一成
+	// {"error": {"code", "message", "details"}, "success": false} —— message 嵌在
+	// error 对象里，不在顶层。
+	errObj, ok := out["error"].(map[string]any)
+	require.True(t, ok, `错误体应形如 {"error": {...}}，实际: %v`, out)
+	assert.Contains(t, errObj["message"], "没有已落库的年报事实")
+	assert.Empty(t, ks.created, "空骨架不入库：那会变成一条会骗人的文档")
+	assert.Empty(t, ks.lineages)
+}
+
+func TestArchiveRejectsEmptyThscode(t *testing.T) {
+	stub := newHaloStub(t, map[string]any{"ok": true})
+	ks := &recordingKnowledgeService{}
+	code, _ := doArchive(t, archiveRouter(ks, halo.NewHTTPClient(stub.server.URL)),
+		`{"knowledge_base_id":"kb-1","thscode":"  "}`)
+	assert.Equal(t, http.StatusBadRequest, code)
+	assert.Empty(t, ks.created)
+}
+
+func TestArchiveRefusesMarkdownlessResult(t *testing.T) {
+	// ok=true 但没有 markdown：同样不能落一条空文档。
+	stub := newHaloStub(t, map[string]any{"ok": true, "thscode": "600519.SH"})
+	ks := &recordingKnowledgeService{}
+	code, _ := doArchive(t, archiveRouter(ks, halo.NewHTTPClient(stub.server.URL)), archiveBody)
+	assert.Equal(t, http.StatusBadRequest, code)
+	assert.Empty(t, ks.created)
+}
+
+func TestArchiveRequestsAnnouncementsButNotExternal(t *testing.T) {
+	// 两个 include_* 标志是这次设计的核心取舍，必须钉住：
+	// 公告要（报告里需要，且只多一次巨潮请求）；external 不要（会打东财易封子域）。
+	stub := newHaloStub(t, map[string]any{
+		"ok": true, "thscode": "600519.SH", "period": "2025-12-31", "markdown": "x",
+	})
+	ks := &recordingKnowledgeService{}
+	doArchive(t, archiveRouter(ks, halo.NewHTTPClient(stub.server.URL)), archiveBody)
+
+	assert.Equal(t, true, stub.got["include_announcements"])
+	assert.Equal(t, false, stub.got["include_external"])
+	assert.Equal(t, "600519", stub.got["thscode"])
+	assert.Equal(t, "annual", stub.got["report_type"], "未指定时必须补默认值")
+}
+
+func TestArchivePublishFlag(t *testing.T) {
+	stub := newHaloStub(t, map[string]any{
+		"ok": true, "thscode": "600519.SH", "period": "2025-12-31", "markdown": "x",
+	})
+	ks := &recordingKnowledgeService{}
+	code, _ := doArchive(t, archiveRouter(ks, halo.NewHTTPClient(stub.server.URL)),
+		`{"knowledge_base_id":"kb-1","thscode":"600519","publish":true}`)
+	require.Equal(t, http.StatusOK, code)
+	require.Len(t, ks.created, 1)
+	assert.Equal(t, types.ManualKnowledgeStatusPublish, ks.created[0].Status)
 }
