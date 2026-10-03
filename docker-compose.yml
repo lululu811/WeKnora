@@ -1098,6 +1098,11 @@ services:
       start_period: 10s
     networks:
       - WeKnora-network
+    # 与 app / frontend / mcp 等常驻服务保持一致：宿主机重启或 Docker 守护
+    # 重启后自动拉起。缺这一行时本服务是唯一 restart=no 的常驻容器，宿主机
+    # 一重启就静默消失，而前端 nginx 仍按 `python-service` 别名转发，表现为
+    # K线/形态/指标/代码表集体 502 且前端把 502 吞成"本地无行情数据"。
+    restart: unless-stopped
 
 networks:
   WeKnora-network:
