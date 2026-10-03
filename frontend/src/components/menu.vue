@@ -483,15 +483,18 @@ const getIconActiveState = (itemPath: string) => {
 };
 
 // 分离上下两部分菜单（使用 visibleMenuArr 以便 lite 模式过滤 logout）
-const TOP_MENU_PATHS = new Set(['creatChat', 'knowledge-bases', 'artifacts', 'agents', 'watchlist', 'toolbox', 'organizations']);
+// 用排除法：不在 BOTTOM 集合里的一律视为顶部菜单项。注册到外部模块注册表
+// 的菜单项（如金融 watchlist）自动成为顶部菜单项，本文件不再硬编码任何
+// 外部模块 path。
+const BOTTOM_MENU_PATHS = new Set(['settings', 'logout'])
 
 const topMenuItems = computed<MenuItem[]>(() => {
-    return (visibleMenuArr.value as unknown as MenuItem[]).filter((item: MenuItem) => TOP_MENU_PATHS.has(item.path));
-});
+    return (visibleMenuArr.value as unknown as MenuItem[]).filter((item: MenuItem) => !BOTTOM_MENU_PATHS.has(item.path));
+})
 
 const bottomMenuItems = computed<MenuItem[]>(() => {
-    return (visibleMenuArr.value as unknown as MenuItem[]).filter((item: MenuItem) => !TOP_MENU_PATHS.has(item.path));
-});
+    return (visibleMenuArr.value as unknown as MenuItem[]).filter((item: MenuItem) => BOTTOM_MENU_PATHS.has(item.path));
+})
 
 // 当前知识库信息
 const currentKbName = ref<string>('')

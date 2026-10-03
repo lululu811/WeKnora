@@ -36,6 +36,21 @@ registerToolDisplayTypeMapper((event) => {
   return undefined;
 });
 
+// 副作用：注册金融模块到主应用菜单和路由。
+// `stores/menu.ts` 启动时读取注册表并插入菜单项；`router/index.ts` 创建时
+// 读取注册表并通过 `router.addRoute('Platform', ...)` 动态加入路由。
+// `insertAfter: 'toolbox'` 让 watchlist 出现在工具箱之后、organizations 之前。
+import { registerModule } from '@/modules/registry';
+registerModule({
+  id: 'watchlist',
+  path: 'watchlist',
+  titleKey: 'menu.watchlist',
+  icon: 'watchlist',
+  insertAfter: 'toolbox',
+  routeName: 'watchlist',
+  routeComponent: () => import('@/views/watchlist/Watchlist.vue'),
+});
+
 // ─────────────────── 组件（原地保留，从 barrel re-export）───────────────────
 // 文件位置不变（仍在 src/components/...），但对外入口收敛到 @/finance。
 // 4.6 目录重组时再物理搬迁到 src/finance/components/。

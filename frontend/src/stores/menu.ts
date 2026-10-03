@@ -5,6 +5,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useDeploymentCapabilitiesStore } from '@/stores/deploymentCapabilities'
 import type { DeploymentCapabilityKey } from '@/config/deploymentCapabilities'
 import type { QuestionOrigin } from '@/utils/questionOrigin'
+import { getRegisteredModules } from '@/modules/registry'
 
 type MenuChild = Record<string, any>
 
@@ -35,11 +36,25 @@ export const useMenuStore = defineStore('menuStore', () => {
     { title: '', titleKey: 'menu.artifacts', icon: 'artifact', path: 'artifacts', requiredCapability: 'settings.sandbox' },
     { title: '', titleKey: 'menu.agents', icon: 'agent', path: 'agents', requiredCapability: 'agents' },
     { title: '', titleKey: 'toolbox.title', icon: 'toolbox', path: 'toolbox' },
-    { title: '', titleKey: 'menu.watchlist', icon: 'watchlist', path: 'watchlist' },
     { title: '', titleKey: 'menu.organizations', icon: 'organization', path: 'organizations', requiredCapability: 'organizations' },
     { title: '', titleKey: 'menu.settings', icon: 'setting', path: 'settings' },
     { title: '', titleKey: 'menu.logout', icon: 'logout', path: 'logout' }
   ])
+
+  // 启动时：读取已注册的外部模块，按 `insertAfter` 插入到菜单。
+  // 默认插入到 `settings` 之前（即 toolbox 之后）；找不到 anchor 时退到
+  // `settings` 之前（即末尾倒数第二个位置，因为末尾是 settings + logout）。
+  for (const mod of getRegisteredModules()) {
+    const anchor = mod.insertAfter || 'settings'
+    const anchorIdx = menuArr.findIndex((item) => item.path === anchor)
+    const targetIdx = anchorIdx >= 0 ? anchorIdx + 1 : Math.max(0, menuArr.length - 2)
+    menuArr.splice(targetIdx, 0, {
+      title: '',
+      titleKey: mod.titleKey,
+      icon: mod.icon,
+      path: mod.path,
+    })
+  }
 
   const isFirstSession = ref(false)
   const firstQuery = ref('')

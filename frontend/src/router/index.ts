@@ -9,6 +9,7 @@ import { MessagePlugin } from 'tdesign-vue-next'
 import i18n from '@/i18n'
 import { normalizeSettingsSection } from '@/config/settingsRoute'
 import { isToolboxSection, toolboxLocation } from '@/config/toolbox'
+import { getRegisteredModules } from '@/modules/registry'
 
 /** Lite /桌面 WebView 硬刷新时可能只打开 `/`，用 session 记住上次页面以便恢复 */
 const LITE_LAST_PATH_KEY = 'weknora_lite_last_path'
@@ -150,12 +151,6 @@ const router = createRouter({
           meta: { requiresInit: true, requiresAuth: true }
         },
         {
-          path: "watchlist",
-          name: "watchlist",
-          component: () => import("../views/watchlist/Watchlist.vue"),
-          meta: { requiresInit: true, requiresAuth: true }
-        },
-        {
           path: "agents",
           name: "agentList",
           component: () => import("../views/agent/AgentList.vue"),
@@ -288,6 +283,19 @@ async function hydrateSessionFromToken(authStore: ReturnType<typeof useAuthStore
 
 let autoSetupAttempted = false
 let liteDeepLinkRestoreDone = false
+
+// 启动时：把已注册的外部模块路由动态挂到 /platform 下。
+// 注册发生在 main.ts 顶部 `import '@/finance'` 的副作用，早于 router 创建。
+for (const mod of getRegisteredModules()) {
+  if (mod.routeName && mod.routeComponent) {
+    router.addRoute('Platform', {
+      path: mod.path,
+      name: mod.routeName,
+      component: mod.routeComponent,
+      meta: { requiresInit: true, requiresAuth: true, ...mod.routeMeta },
+    })
+  }
+}
 
 // 路由守卫：检查认证状态和系统初始化状态
 router.beforeEach(async (to, from, next) => {
