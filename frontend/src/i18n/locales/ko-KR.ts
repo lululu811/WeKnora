@@ -1,4 +1,17 @@
 export default {
+  wechat: {
+    send: '질문',
+    clear: '지우기',
+    openOriginal: '원문 보기 ↗',
+    loading: '불러오는 중…',
+    pickHintClosed: '목록이 접혀 있습니다. 오른쪽 위 "목록 보기"로 기사를 선택하세요',
+    pickHint: '왼쪽에서 기사를 선택하세요',
+    vault: { off: 'vault 미설정 — 이미지가 표시되지 않을 수 있습니다' },
+    list: { show: '목록 보기', hide: '목록 숨기기', loading: '기사 불러오는 중…', empty: '이 지식베이스에 위챗 기사가 없습니다' },
+    item: { indexing: '인덱싱 중' },
+    scope: { doc: '이 기사만', kb: '지식베이스 전체' },
+    chat: { empty: '이 기사에 질문하거나, 「지식베이스 전체」로 전환해 통합 검색하세요.', placeholder: '이 기사에 질문 (Enter 전송)' },
+  },
   halo: {
     title: 'HALO 연차보고서 분석',
     open: 'HALO 보고서',
@@ -7301,6 +7314,7 @@ export default {
     knowledgeBase: '지식베이스',
     agents: '에이전트',
     watchlist: '종목 추적',
+    wechat: '위챗 기사',
     artifacts: '산출물',
     organizations: '공유 공간',
     newChat: '새 대화',

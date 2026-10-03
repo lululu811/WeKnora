@@ -3,6 +3,8 @@ import { createPinia } from "pinia";
 // 金融能力必须在 router 之前导入：finance barrel 的副作用会注册菜单项和
 // 路由到 `src/modules/registry.ts`，router/index.ts 创建时读取该注册表。
 import "@/finance";
+// 同理：公众号工作台 barrel 的副作用也要早于 router 创建。
+import "@/wechat";
 import App from "./App.vue";
 import router from "./router";
 import TDesign from "tdesign-vue-next";

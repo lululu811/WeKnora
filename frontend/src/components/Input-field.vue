@@ -2801,6 +2801,11 @@ defineExpose({
         :selected-model-context-is-default="selectedModelContextIsDefault"
         :selected-model-context-title="selectedModelContextTitle"
         :model-button-el-ref="composerRefs.modelButtonRef"
+        :reasoning-levels="reasoningLevels"
+        :show-reasoning-selector="showReasoningSelector"
+        :displayed-reasoning-level="displayedReasoningLevel"
+        :composer-locked="composerLocked"
+        :select-reasoning-level="selectReasoningLevel"
         :toggle-model-selector="toggleModelSelector"
         :agent-mode-button-el-ref="composerRefs.agentModeButtonRef"
         :at-button-el-ref="composerRefs.atButtonRef"
@@ -2821,34 +2826,6 @@ defineExpose({
           />
         </template>
       </InputToolbar>
-          <t-popup v-if="reasoningLevels.length > 0" v-model:visible="showReasoningSelector"
-            trigger="click" placement="top-right" :disabled="composerLocked"
-            :overlay-inner-style="{ padding: '4px', borderRadius: 'var(--app-radius-lg)' }"
-            @visible-change="handleReasoningVisibleChange">
-            <button type="button" class="model-selector-trigger reasoning-effort-trigger"
-              :disabled="composerLocked" :class="{ disabled: composerLocked }"
-              :aria-label="`${$t('modelSettings.debug.reasoningEffort')}: ${$t(levelLabelKey(displayedReasoningLevel))}`"
-              :title="$t('modelSettings.debug.reasoningEffort')" aria-haspopup="menu" :aria-expanded="showReasoningSelector"
-              @keydown.esc="showReasoningSelector = false">
-              <span class="model-selector-name">{{ $t(levelLabelKey(displayedReasoningLevel)) }}</span>
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" class="model-dropdown-arrow"
-                :class="{ rotate: showReasoningSelector }">
-                <path d="M2.5 4.5L6 8L9.5 4.5H2.5Z" />
-              </svg>
-            </button>
-            <template #content>
-              <div class="reasoning-effort-menu" role="menu" :aria-label="$t('modelSettings.debug.reasoningEffort')"
-                @keydown.esc="showReasoningSelector = false">
-                <div class="reasoning-effort-title" role="presentation">{{ $t('modelSettings.debug.reasoningEffort') }}</div>
-                <button v-for="level in reasoningLevels" :key="level" type="button" role="menuitemradio"
-                  class="reasoning-effort-option" :class="{ selected: level === displayedReasoningLevel }"
-                  :aria-checked="level === displayedReasoningLevel" @click="selectReasoningLevel(level)">
-                  <span>{{ $t(levelLabelKey(level)) }}</span>
-                  <t-icon v-if="level === displayedReasoningLevel" name="check" size="14px" />
-                </button>
-              </div>
-            </template>
-          </t-popup>
 
         <Teleport to="body">
           <div v-if="showModelSelector" class="model-selector-overlay" @click="closeModelSelector">
@@ -3223,136 +3200,9 @@ const getImgSrc = (url: string) => {
   text-decoration: underline;
 }
 
-/* 模型显示样式 */
-.model-selector-trigger.reasoning-effort-trigger {
-  flex-shrink: 0;
-  min-width: 0;
-  box-sizing: content-box;
-  background: transparent;
-  font: inherit;
-}
-
-.reasoning-effort-menu {
-  min-width: 120px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.reasoning-effort-title {
-  padding: 6px 8px;
-  margin-bottom: 2px;
-  border-bottom: .5px solid var(--td-component-stroke);
-  color: var(--td-text-color-secondary);
-  font-size: var(--app-text-sm);
-  font-weight: 500;
-  line-height: 20px;
-}
-
-.reasoning-effort-option {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  min-height: 30px;
-  padding: 4px 8px;
-  border: 0;
-  border-radius: var(--app-radius-sm);
-  background: transparent;
-  color: var(--td-text-color-secondary);
-  font: inherit;
-  font-size: var(--app-text-sm);
-  line-height: 20px;
-  text-align: left;
-  cursor: pointer;
-
-  &:hover, &:focus-visible {
-    background: var(--td-bg-color-secondarycontainer-hover);
-  }
-
-  &.selected {
-    background: var(--td-bg-color-secondarycontainer);
-    color: var(--td-brand-color);
-  }
-}
-
-.model-display {
-  display: flex;
-  align-items: center;
-  margin-left: auto;
-  flex-shrink: 0;
-
-  &.agent-controlled {
-    .model-selector-trigger {
-      cursor: not-allowed;
-      opacity: 0.5;
-    }
-  }
-}
-
-.model-selector-trigger {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 2px 8px;
-  min-width: 100px;
-  height: 22px;
-  border-radius: var(--app-radius-sm);
-  border: .5px solid var(--td-component-border);
-  transition: background var(--app-motion-instant), border-color var(--app-motion-instant);
-  cursor: pointer;
-
-  &:hover {
-    background: var(--td-bg-color-secondarycontainer-hover);
-  }
-
-  &.disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-
-    &:hover {
-      background: var(--td-bg-color-secondarycontainer);
-    }
-  }
-}
-
-.model-selector-name {
-  flex: 1;
-  font-size: var(--app-text-sm);
-  font-weight: 500;
-  color: var(--td-text-color-secondary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.model-selector-ctx {
-  flex-shrink: 0;
-  font-size: var(--app-text-xs);
-  font-variant-numeric: tabular-nums;
-  color: var(--td-text-color-placeholder);
-  font-weight: 400;
-
-  &.is-default {
-    opacity: 0.85;
-  }
-}
-
-.model-dropdown-arrow {
-  width: 10px;
-  height: 10px;
-  color: var(--td-text-color-placeholder);
-  flex-shrink: 0;
-  transition: transform var(--app-motion-instant);
-
-  &.rotate {
-    transform: rotate(180deg);
-  }
-}
-
-.model-selector-trigger.disabled .model-dropdown-arrow {
-  color: var(--td-text-color-placeholder);
-}
+/* 模型触发器 / 推理档位触发器与菜单的样式已随元素一起搬进
+   components/input/css/input-toolbar.less：这些元素现在由 InputToolbar 渲染，
+   本组件的 scoped 选择器带的是自己的 data-v 属性，够不到子组件的 DOM。 */
 
 .model-selector-overlay {
   position: fixed;

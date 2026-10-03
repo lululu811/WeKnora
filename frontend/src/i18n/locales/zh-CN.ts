@@ -1,4 +1,17 @@
 export default {
+  wechat: {
+    send: '提问',
+    clear: '清空',
+    openOriginal: '查看原文 ↗',
+    loading: '载入中…',
+    pickHintClosed: '列表已收起，点右上角「显示列表」选择文章',
+    pickHint: '从左侧选择一篇文章',
+    vault: { off: '未配置 vault，图片可能无法显示' },
+    list: { show: '显示列表', hide: '隐藏列表', loading: '载入文章…', empty: '该知识库还没有公众号文章' },
+    item: { indexing: '索引中' },
+    scope: { doc: '只问这一篇', kb: '问整个知识库' },
+    chat: { empty: '就这篇文章提问，或切到「问整个知识库」做跨篇检索。', placeholder: '针对这篇文章提问，Enter 发送' },
+  },
   halo: {
     title: 'HALO 年报分析',
     open: 'HALO 报告',
@@ -7304,6 +7317,7 @@ export default {
     knowledgeBase: '知识库',
     agents: '智能体',
     watchlist: '个股追踪',
+    wechat: '公众号',
     artifacts: '产物',
     organizations: '共享空间',
     newChat: '新对话',

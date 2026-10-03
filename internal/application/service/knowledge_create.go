@@ -759,6 +759,19 @@ func (s *knowledgeService) CreateKnowledgeFromManual(ctx context.Context,
 		return nil, werrors.NewValidationError("标题包含非法字符或超出长度限制")
 	}
 
+	source, err := sanitizeManualSource(payload.Source)
+	if err != nil {
+		return nil, err
+	}
+	if source == "" {
+		source = types.KnowledgeTypeManual
+	}
+
+	vaultPath, err := sanitizeVaultPath(payload.VaultPath)
+	if err != nil {
+		return nil, werrors.NewValidationError(err.Error())
+	}
+
 	status := strings.ToLower(strings.TrimSpace(payload.Status))
 	if status == "" {
 		status = types.ManualKnowledgeStatusDraft
@@ -786,6 +799,7 @@ func (s *knowledgeService) CreateKnowledgeFromManual(ctx context.Context,
 
 	fileName := ensureManualFileName(title)
 	meta := types.NewManualKnowledgeMetadata(cleanContent, status, 1)
+	meta.VaultPath = vaultPath
 
 	knowledge := &types.Knowledge{
 		TenantID:         tenantID,
@@ -794,7 +808,7 @@ func (s *knowledgeService) CreateKnowledgeFromManual(ctx context.Context,
 		Channel:          defaultChannel(channel),
 		Title:            title,
 		Description:      "",
-		Source:           types.KnowledgeTypeManual,
+		Source:           source,
 		ParseStatus:      types.ManualKnowledgeStatusDraft,
 		EnableStatus:     "disabled",
 		CreatedAt:        now,
@@ -1022,6 +1036,18 @@ func (s *knowledgeService) UpdateManualKnowledge(ctx context.Context,
 		return nil, werrors.NewValidationError("标题包含非法字符或超出长度限制")
 	}
 
+	// Empty means "caller didn't mention provenance" — distinct from an
+	// explicit blank, which clears it. The assignment below decides.
+	updatedSource, err := sanitizeManualSource(payload.Source)
+	if err != nil {
+		return nil, err
+	}
+
+	updatedVaultPath, err := sanitizeVaultPath(payload.VaultPath)
+	if err != nil {
+		return nil, werrors.NewValidationError(err.Error())
+	}
+
 	status := strings.ToLower(strings.TrimSpace(payload.Status))
 	if status == "" {
 		status = types.ManualKnowledgeStatusDraft
@@ -1050,7 +1076,15 @@ func (s *knowledgeService) UpdateManualKnowledge(ctx context.Context,
 		version = 1
 	}
 
+	// VaultPath follows the same rule as Source: an edit of the body says
+	// nothing about which file the entry came from, so an empty incoming
+	// value preserves what is already stored.
 	meta := types.NewManualKnowledgeMetadata(cleanContent, status, version)
+	if updatedVaultPath != "" {
+		meta.VaultPath = updatedVaultPath
+	} else if prior, perr := existing.ManualMetadata(); perr == nil && prior != nil {
+		meta.VaultPath = prior.VaultPath
+	}
 	if err := existing.SetManualMetadata(meta); err != nil {
 		logger.Errorf(ctx, "Failed to set manual metadata during update: %v", err)
 		return nil, err
@@ -1064,7 +1098,7 @@ func (s *knowledgeService) UpdateManualKnowledge(ctx context.Context,
 	existing.FileName = ensureManualFileName(existing.Title)
 	existing.FileType = types.KnowledgeTypeManual
 	existing.Type = types.KnowledgeTypeManual
-	existing.Source = types.KnowledgeTypeManual
+	existing.Source = resolveManualSource(existing.Source, updatedSource)
 	existing.EnableStatus = "disabled"
 	existing.UpdatedAt = time.Now()
 	existing.EmbeddingModelID = kb.EmbeddingModelID
@@ -1318,6 +1352,34 @@ func (s *knowledgeService) triggerManualProcessing(ctx context.Context,
 			logger.Infof(ctx, "Resolved %d remote images for manual knowledge %s", len(storedImages), knowledge.ID)
 			clean = updatedContent
 			resolvedImages = append(resolvedImages, storedImages...)
+		}
+
+		// Sibling images of a vault-sourced entry: `![](images/fig.png)` in a
+		// file that lives next to that images/ directory. Neither resolver
+		// above recognises a relative reference, so without this the chunks
+		// carry an empty image_info and multimodal processing has nothing to
+		// OCR — the article reads fine but its charts are invisible to search.
+		//
+		// buildVaultImageResult does the path work and hands the bytes to the
+		// same ResolveAndStore the docreader path uses, so there is exactly
+		// one way images get into storage.
+		if vaultPath := manualVaultPath(knowledge); vaultPath != "" {
+			if result, err := buildVaultImageResult(clean, vaultPath); err != nil {
+				logger.Warnf(ctx, "vault image scan failed for manual knowledge %s: %v", knowledge.ID, err)
+			} else if result != nil && len(result.ImageRefs) > 0 {
+				storedMD, vaultImages, resolveErr := s.imageResolver.ResolveAndStore(
+					ctx, result, fileSvc, knowledge.TenantID,
+				)
+				if resolveErr != nil {
+					logger.Warnf(ctx, "vault image resolution partially failed for %s: %v", knowledge.ID, resolveErr)
+				}
+				if len(vaultImages) > 0 {
+					logger.Infof(ctx, "Resolved %d vault images for manual knowledge %s",
+						len(vaultImages), knowledge.ID)
+					clean = storedMD
+					resolvedImages = append(resolvedImages, vaultImages...)
+				}
+			}
 		}
 	}
 

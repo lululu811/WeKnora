@@ -11,6 +11,7 @@ import { useI18n } from 'vue-i18n'
 import { watch, ref, type PropType } from 'vue'
 import BrowserIcon from '@/components/icons/BrowserIcon.vue'
 import AgentSelector from '@/components/AgentSelector.vue'
+import { levelLabelKey, type ReasoningLevel } from '@/utils/reasoningEffort'
 import type { CustomAgent } from '@/api/agent'
 import type { ModelConfig } from '@/api/model'
 
@@ -67,6 +68,14 @@ const props = defineProps({
   selectedModelContextIsDefault: Boolean,
   selectedModelContextTitle: { type: String, default: '' },
   showModelSelector: Boolean,
+
+  // ---- 推理档位（从父组件移入：原先挂在 .rich-input-container 上，块级兄弟
+  // 节点在文档流里必然另起一行，于是「关闭」永远单独换行显示）----
+  reasoningLevels: { type: Array as PropType<ReasoningLevel[]>, default: () => [] },
+  showReasoningSelector: Boolean,
+  displayedReasoningLevel: { type: String as PropType<ReasoningLevel>, default: 'off' },
+  composerLocked: Boolean,
+  selectReasoningLevel: { type: Function as PropType<(level: ReasoningLevel) => void>, required: true },
 
   // ---- 由本组件回写实例的引用 ----
   // 这三个 ref 只是「把元素交还父组件」的单向管道，父组件里它们的声明类型各不相同
@@ -285,49 +294,58 @@ watch(modelButtonRef, (el) => relay(el, props.modelButtonElRef), { immediate: tr
           </div>
         </div>
       </t-tooltip>
-      <!-- 推理档位的 t-popup 留在父组件：它挂在 body 上，用的是父组件 scoped 的样式，
-           搬过来反而会丢样式；这里只保留模型触发器。 -->
-    </div>
-
-    <!-- 模型下拉走 Teleport：挂在 body 上以脱离输入区定位上下文 -->
-    <Teleport to="body">
-      <div v-if="showModelSelector" class="model-selector-overlay" @click="closeModelSelector">
-        <div class="model-selector-dropdown" :style="modelDropdownStyle" @click.stop>
-          <div class="model-selector-header">
-            <span>{{ $t('conversationSettings.models.chatGroupLabel') }}</span>
-            <button class="model-selector-add" type="button" @click="handleModelChange('__add_model__')">
-              <span class="add-icon">+</span>
-              <span class="add-text">{{ $t('input.addModel') }}</span>
+      <!-- 推理档位：与模型触发器同属左列控件，因此放进 .control-left。
+           之前它挂在父组件 .rich-input-container 上，是 .control-bar 的块级兄弟
+           节点 —— 文档流里块级兄弟必然另起一行，所以无论输入框多宽，「关闭」
+           都会被挤到第二行、还顶在容器左边界（工具栏自己带 16px 边距）。
+           配套样式已一并搬到 css/input-toolbar.less。 -->
+      <t-popup
+        v-if="reasoningLevels.length > 0"
+        :visible="showReasoningSelector"
+        trigger="click"
+        placement="top-right"
+        :disabled="composerLocked"
+        :overlay-inner-style="{ padding: '4px', borderRadius: 'var(--app-radius-lg)' }"
+        @update:visible="(v: boolean) => (showReasoningSelector = v)"
+      >
+        <button
+          type="button"
+          class="model-selector-trigger reasoning-effort-trigger"
+          :disabled="composerLocked"
+          :class="{ disabled: composerLocked }"
+          :aria-label="`${$t('modelSettings.debug.reasoningEffort')}: ${$t(levelLabelKey(displayedReasoningLevel))}`"
+          :title="$t('modelSettings.debug.reasoningEffort')"
+          aria-haspopup="menu"
+          :aria-expanded="showReasoningSelector"
+          @keydown.esc="showReasoningSelector = false"
+        >
+          <span class="model-selector-name">{{ $t(levelLabelKey(displayedReasoningLevel)) }}</span>
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" class="model-dropdown-arrow"
+            :class="{ rotate: showReasoningSelector }">
+            <path d="M2.5 4.5L6 8L9.5 4.5H2.5Z" />
+          </svg>
+        </button>
+        <template #content>
+          <div class="reasoning-effort-menu" role="menu" :aria-label="$t('modelSettings.debug.reasoningEffort')"
+            @keydown.esc="showReasoningSelector = false">
+            <div class="reasoning-effort-title" role="presentation">{{ $t('modelSettings.debug.reasoningEffort') }}</div>
+            <button
+              v-for="level in reasoningLevels"
+              :key="level"
+              type="button"
+              role="menuitemradio"
+              class="reasoning-effort-option"
+              :class="{ selected: level === displayedReasoningLevel }"
+              :aria-checked="level === displayedReasoningLevel"
+              @click="selectReasoningLevel(level)"
+            >
+              <span>{{ $t(levelLabelKey(level)) }}</span>
+              <t-icon v-if="level === displayedReasoningLevel" name="check" size="14px" />
             </button>
           </div>
-          <div class="model-selector-content">
-            <div
-              v-for="model in availableModels"
-              :key="model.id"
-              class="model-option"
-              :class="{ selected: model.id === selectedModelId }"
-              @click="handleModelChange(model.id || '')"
-            >
-              <div class="model-option-left">
-                <div class="model-option-icon">
-                  <t-icon name="chat" size="14px" />
-                </div>
-                <div class="model-option-name-wrap">
-                  <span class="model-option-name">{{ modelDisplayName(model) }}</span>
-                  <span v-if="model.display_name" class="model-option-raw-name">{{ model.name }}</span>
-                </div>
-              </div>
-              <span
-                class="model-option-ctx"
-                :class="{ 'is-default': isDefaultContextWindow(model.parameters?.context_window) }"
-                :title="contextWindowTitle(model.parameters?.context_window)"
-              >{{ formatContextWindow(model.parameters?.context_window) }}</span>
-            </div>
-            <div v-if="availableModels.length === 0" class="model-option empty">{{ $t('input.noModel') }}</div>
-          </div>
-        </div>
-      </div>
-    </Teleport>
+        </template>
+      </t-popup>
+    </div>
 
     <slot name="trailing" />
   </div>

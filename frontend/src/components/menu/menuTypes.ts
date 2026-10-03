@@ -14,6 +14,11 @@ export interface MenuItem {
   path: string;
   childrenPath?: string;
   children?: any[];
+  /**
+   * 注册模块自带的图标资源 URL（见 modules/registry.ts 的 ModuleRegistration.iconSrc）。
+   * 有它就不用为这个图标去改 menu.vue 的内置图标表。
+   */
+  iconSrc?: string;
 }
 
 /** 工具箱入口右侧的图标叠加预览项。 */

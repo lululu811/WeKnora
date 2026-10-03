@@ -6,7 +6,7 @@
     batchMode ? 'submenu_item_batch' : '',
     menuOpen ? 'submenu_item--menu-open' : '',
   ]" @mouseenter="emit('hover-in')" @mouseleave="emit('hover-out')"
-    @click="batchMode ? emit('toggle-select') : emit('navigate')">
+    @click="batchMode ? emit('toggle-select') : emit('navigate', item.path)">
     <t-checkbox v-if="batchMode" class="batch-checkbox" :checked="selectedIds.includes(item.id)" @click.stop
       @change="emit('toggle-select')" />
     <form v-if="titleEditing" class="session-title-edit" @submit.prevent="submitTitleEdit" @click.stop>
@@ -94,7 +94,11 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  (e: 'navigate'): void
+  // 必须带出 path：SidebarSessionList 原样转发给 menu.vue 的 gotopage，
+  // 而 gotopage 直接拼 `/platform/${path}`。早前拆侧边栏前父组件写的是
+  // @navigate="gotopage(subitem.path)"，拆分后改成依赖本组件 emit 载荷，
+  // 但这里一度没传，导致整条链拿到 undefined 并跳到 /platform/undefined。
+  (e: 'navigate', path: string): void
   (e: 'toggle-select'): void
   (e: 'menu-click', data: { value: string }): void
   (e: 'rename-submit', data: { title: string }): void

@@ -49,6 +49,13 @@ skills-lock.json
 !.hithink-placeholder/
 !.hithink-placeholder/.gitkeep
 
+# vault（外部只读资料库）的占位挂载目录。
+# 未设置 WEKNORA_VAULT_HOST_DIR 时 app 挂到这里 —— 空目录、挂载成功、
+# vault 功能保持关闭（WEKNORA_VAULT_ROOT 未设，接口返回 501），主流程不受影响。
+# 真实资料库请设 WEKNORA_VAULT_HOST_DIR 指向本机目录，不要往这里放内容。
+!.vault-placeholder/
+!.vault-placeholder/.gitkeep
+
 web/
 
 **/__pycache__

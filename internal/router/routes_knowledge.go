@@ -133,6 +133,15 @@ func RegisterKnowledgeRoutes(r *gin.RouterGroup, handler *handler.KnowledgeHandl
 		// machine-principal authorization to the API-key gate.
 		kRead.GET("/:id/download", g.Contributor(), g.KBAccessWriteFromKnowledgeIDParam("id"), handler.DownloadKnowledgeFile)
 		kRead.GET("/:id/preview", g.Viewer(), g.KBAccessReadFromKnowledgeIDParam("id"), handler.PreviewKnowledgeFile)
+		// Vault assets are original file bytes served out of the operator's
+		// own filesystem rather than out of WeKnora storage, so they take the
+		// same boundary as download rather than the looser one preview gets:
+		// a tenant Viewer, and a Viewer reaching the entry through an
+		// org-shared agent, must not be able to pull image files off the
+		// vault disk. The service additionally confines every request to the
+		// one entry's own directory and an image-extension allowlist, so this
+		// guard is the outer bound, not the only one.
+		kRead.GET("/:id/vault-asset", g.Contributor(), g.KBAccessWriteFromKnowledgeIDParam("id"), handler.GetKnowledgeVaultAsset)
 		k.PUT("/image/:id/:chunk_id", g.OwnedKnowledgeKBOrAdmin(), g.KBAccessWriteFromKnowledgeIDParam("id"), handler.UpdateImageInfo)
 		kRead.GET("/search", g.Viewer(), handler.SearchKnowledge)
 		kRead.GET("/move/progress/:task_id", g.Viewer(), handler.GetKnowledgeMoveProgress)

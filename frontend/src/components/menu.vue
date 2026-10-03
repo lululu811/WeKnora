@@ -792,8 +792,11 @@ const loadBucketPage = async (key: string, page?: number, token?: number) => {
         };
         syncMenuStoreFromBuckets();
         await refreshSessionListScrollability();
-    } catch {
+    } catch (err) {
         if (activeToken !== bucketRequestToken) return;
+        // 曾经这里是空 catch：接口一失败就静默变成「loaded 且 0 条」，
+        // 侧边栏只显示空态、零报错，会话看起来像「全没了」。留一条 warn。
+        console.warn(`[menu] failed to load session bucket "${key}" page ${nextPage}`, err);
         const current = sessionBuckets.value[key];
         sessionBuckets.value = {
             ...sessionBuckets.value,
@@ -1120,7 +1123,11 @@ const NAV_ICON_FILES: Record<string, string> = {
     logout: logoutIcon.value,
     setting: settingIcon.value,
 };
-const resolveNavIcon = (icon: string): string => {
+const resolveNavIcon = (item: MenuItem): string => {
+    // 外部注册的工作台（见 modules/registry.ts）自带 iconSrc 资源，就不用
+    // 往这张内置表里加条目 —— 那是通用菜单组件与具体模块之间的耦合。
+    if (item?.iconSrc) return item.iconSrc;
+    const icon = item?.icon || '';
     const file = icon in NAV_ICON_FILES ? NAV_ICON_FILES[icon] : prefixIcon.value;
     return getImgSrc(file);
 };

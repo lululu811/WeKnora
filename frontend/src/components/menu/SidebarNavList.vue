@@ -43,7 +43,7 @@
                 >
                     <div class="menu_item-box">
                         <div class="menu_icon">
-                            <img class="icon" :src="resolveIcon(item.icon)" alt="">
+                            <img class="icon" :src="resolveIcon(item)" alt="">
                         </div>
                         <template v-if="!collapsed">
                             <span class="menu_title" :title="item.title">{{ item.title }}</span>
@@ -110,7 +110,7 @@ const props = defineProps<{
   /** 由 menu.vue 提供的统一激活判定（保持单一事实来源）。 */
   isActive: (path: string) => boolean;
   /** 图标名 → 图片 URL 的解析函数。 */
-  resolveIcon: (icon: string) => string;
+  resolveIcon: (item: MenuItem) => string;
   /** 工具箱图标叠加预览项。 */
   toolboxPreview: ToolboxPreviewItem[];
   /** 浏览器连接状态（空串表示不展示）。 */

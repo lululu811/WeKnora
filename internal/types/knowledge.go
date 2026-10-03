@@ -181,7 +181,9 @@ type Knowledge struct {
 	// DescriptionSpecified distinguishes an explicitly supplied empty description
 	// from an omitted field in partial update requests.
 	DescriptionSpecified bool `json:"-" gorm:"-"`
-	// Source of the knowledge (e.g. URL address for url type, "manual" for manual type)
+	// Source of the knowledge: a URL for anything ingested from one, or the
+	// literal "manual" when the caller recorded no provenance. Manual entries
+	// can carry a URL too — see ManualKnowledgePayload.Source.
 	Source string `json:"source"             gorm:"type:varchar(2048)"`
 	// Channel indicates through which channel the knowledge was ingested (web, api, browser_extension, wechat, etc.)
 	Channel string `json:"channel"            gorm:"type:varchar(50);default:'web'"`
@@ -321,15 +323,40 @@ type ManualKnowledgeMetadata struct {
 	Status    string `json:"status"`
 	Version   int    `json:"version"`
 	UpdatedAt string `json:"updated_at"`
+	// VaultPath locates the original file this content was pasted from,
+	// relative to the configured vault root — "腾讯研究院/某文/某文.md" for a
+	// markdown export, say. Empty for hand-typed entries.
+	//
+	// It lives here rather than in CustomMetadata because CustomMetadata is
+	// documented as "user-authored context safe to expose to models": a local
+	// directory layout is neither useful to a model nor something to spend
+	// prompt tokens on. It is not FilePath either, which is a storage-backend
+	// handle that ParseStorageBackendPath and FileService.GetFile own.
+	//
+	// Only ever read by the server to resolve a relative reference *inside*
+	// this entry's own directory — see the knowledge vault-image route.
+	VaultPath string `json:"vault_path,omitempty"`
 }
 
 // ManualKnowledgePayload represents the payload for manual knowledge operations.
 type ManualKnowledgePayload struct {
-	Title         string                     `json:"title"`
-	Content       string                     `json:"content"`
-	Status        string                     `json:"status"`
-	TagIDs        []string                   `json:"tag_ids"`
-	Channel       string                     `json:"channel"`
+	Title   string   `json:"title"`
+	Content string   `json:"content"`
+	Status  string   `json:"status"`
+	TagIDs  []string `json:"tag_ids"`
+	Channel string   `json:"channel"`
+	// Source records where the content came from when the caller knows it —
+	// the upstream article URL for something pasted out of a reader, for
+	// example. Empty means "no provenance recorded" and the row keeps the
+	// literal "manual" marker. Stored verbatim; validating that it is
+	// well-formed is the service's job, not the type's.
+	Source string `json:"source,omitempty"`
+	// VaultPath is the file this content was read from, relative to the
+	// configured vault root. It is what lets a relative image reference in
+	// Content ("images/fig.png") resolve to a real file at render time without
+	// the content being rewritten or the image being copied into storage.
+	// Ignored unless the entry is served from a vault.
+	VaultPath     string                     `json:"vault_path,omitempty"`
 	ProcessConfig *KnowledgeProcessOverrides `json:"process_config,omitempty"`
 }
 

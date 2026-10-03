@@ -38,8 +38,17 @@ export interface ModuleRegistration {
   path: string;
   /** i18n key（如 `menu.watchlist`）。 */
   titleKey: string;
-  /** 图标名（用于 menu.vue 的图标映射，按 item.icon 字段分发）。 */
+  /**
+   * 图标名（用于 menu.vue 的图标映射，按 item.icon 字段分发）。
+   * 内置菜单项走 menu.vue 的图标表；外部模块通常改成提供 iconSrc，
+   * 免得为了一个图标去改通用菜单组件。
+   */
   icon: string;
+  /**
+   * 图标资源 URL，由注册方自行 import。菜单优先用它，其次回退到
+   * `icon` 在内置图标表里的查表结果。
+   */
+  iconSrc?: string;
   /**
    * 在菜单中的插入位置：插入到 path === insertAfter 的菜单项之后。
    * 默认：插入到 `settings` 之前（即 `toolbox` 之后）。
