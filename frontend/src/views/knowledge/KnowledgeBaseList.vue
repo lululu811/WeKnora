@@ -1,30 +1,18 @@
 <template>
   <div class="kb-list-container">
     <div class="kb-list-content">
-      <div class="header" style="--wails-draggable: drag">
-        <div class="header-title" style="--wails-draggable: drag">
-          <div class="title-row" style="--wails-draggable: drag">
-            <h2 style="--wails-draggable: drag">
-              <ResourceIcon type="knowledge" :size="24" />
-              {{ $t('knowledgeBase.title') }}
-            </h2>
-            <div class="header-actions" style="--wails-draggable: no-drag">
-              <ResourceSortControl v-model="selectedResourceSort" />
-              <t-tooltip v-if="authStore.hasRole('contributor')" :content="$t('knowledgeList.create')" placement="bottom">
-                 <t-button variant="text" theme="default" size="small" class="header-action-btn"
-                   data-guide="kb-list-create" style="--wails-draggable: no-drag" @click="handleCreateKnowledgeBase">
-                   <template #icon><t-icon name="folder-add" size="16px" /></template>
-                  {{ $t('knowledgeList.create') }}
-                 </t-button>
-               </t-tooltip>
-             </div>
-          </div>
-          <p class="header-subtitle" style="--wails-draggable: drag">{{ $t('knowledgeList.subtitle') }}</p>
-        </div>
-      </div>
-      <ResourceListToolbar :hide-scopes="authStore.isLiteMode" v-model="spaceSelection" v-model:query="keyword" :count-all="allKnowledgeBases"
-      :count-mine="kbs.length" :count-by-org="effectiveSharedCountByOrg" :count-favorites="kbFavoritesCount"
-      :count-recents="kbRecentsCount" />
+      <KBListHeader
+        v-model:sort-value="selectedResourceSort"
+        v-model:scope="spaceSelection"
+        v-model:query="keyword"
+        :count-all="allKnowledgeBases"
+        :count-mine="kbs.length"
+        :count-by-org="effectiveSharedCountByOrg"
+        :count-favorites="kbFavoritesCount"
+        :count-recents="kbRecentsCount"
+        @create="handleCreateKnowledgeBase"
+      />
+
       <div class="kb-list-main">
         <EmptyState v-if="keyword.trim() && !(loading || spaceKbsLoading) && visibleResultCount === 0" icon="search"
           :title="$t('common.noResult')">
@@ -149,192 +137,25 @@
               <t-icon class="kb-section-toggle"
                 :name="isKbSectionCollapsed('sharedReadonly') ? 'chevron-right' : 'chevron-down'" size="14px" />
             </div>
-            <!-- 我的知识库卡片 -->
-            <div v-if="kb.isMine" v-show="!isKbSectionCollapsed(kbSectionOf(kb))" class="kb-card" :class="{
-              'uninitialized': !isInitialized(kb),
-              'kb-type-document': (kb.type || 'document') === 'document',
-              'kb-type-faq': kb.type === 'faq',
-              'highlight-flash': highlightedKbId !== null && highlightedKbId === kb.id
-            }"
-              :ref="el => { if (highlightedKbId !== null && highlightedKbId === kb.id && el) highlightedCardRef = el as HTMLElement }"
-              role="link" tabindex="0" @keydown.enter.self.prevent="handleCardClick(kb)" @keydown.space.self.prevent="handleCardClick(kb)" @click="handleCardClick(kb)">
-              <!-- 行尾收藏操作，与更多菜单分开。 -->
-              <button type="button" class="kb-favorite-star" :class="{ 'is-favorited': isKbFavorited(kb.id) }"
-                :aria-label="$t('listSpaceSidebar.favorites')" :aria-pressed="isKbFavorited(kb.id)" @click.stop="toggleFavoriteKb(kb.id, $event)">
-                <t-icon :name="isKbFavorited(kb.id) ? 'star-filled' : 'star'" size="14px" />
-              </button>
-              <!-- 卡片头部 -->
-              <div class="card-header">
-                <span class="card-title" :title="kb.name">
-                  <KbWikiBadge v-if="isWikiKb(kb)" />
-                  <span class="card-title-text">{{ kb.name }}</span>
-                </span>
-                <!-- The card menu always exists when the card is visible: pin
-                     is now per-user and available to anyone who can see the KB
-                     (backend route only requires KB read access). Settings /
-                     Delete are mutations, so they stay behind canManageKBCard. -->
-                <t-popup overlayClassName="card-more-popup" trigger="click" destroy-on-close
-                  placement="bottom-right">
-                  <button type="button" :aria-label="$t('common.expand')" class="more-wrap" @click.stop>
-                    <img class="more-icon" src="@/assets/img/more.png" alt="" />
-                  </button>
-                  <template #content>
-                    <div class="popup-menu" @click.stop>
-                      <div class="popup-menu-item" @click.stop="handleTogglePinById(kb.id)">
-                        <t-icon class="menu-icon" :name="kb.is_pinned ? 'pin-filled' : 'pin'" />
-                        <span>{{ kb.is_pinned ? $t('knowledgeList.pin.unpin') : $t('knowledgeList.pin.pin') }}</span>
-                      </div>
-                      <div v-if="canDuplicateKBCard(kb)" class="popup-menu-item"
-                        @click.stop="handleDuplicateById(kb.id)">
-                        <t-icon class="menu-icon" name="file-copy" />
-                        <span>{{ $t('knowledgeList.menu.duplicate') }}</span>
-                      </div>
-                      <template v-if="canManageKBCard(kb)">
-                        <div class="popup-menu-item" @click.stop="handleSettingsById(kb.id)">
-                          <t-icon class="menu-icon" name="setting" />
-                          <span>{{ $t('knowledgeBase.settings') }}</span>
-                        </div>
-                        <div class="popup-menu-item delete" @click.stop="handleDeleteById(kb.id)">
-                          <t-icon class="menu-icon" name="delete" />
-                          <span>{{ $t('common.delete') }}</span>
-                        </div>
-                      </template>
-                    </div>
-                  </template>
-                </t-popup>
-              </div>
-
-              <!-- 卡片内容 -->
-              <div class="card-content">
-                <div class="card-description" :title="kb.description || $t('knowledgeBase.noDescription')">
-                  {{ kb.description || $t('knowledgeBase.noDescription') }}
-                </div>
-              </div>
-
-              <!-- 卡片底部 -->
-              <div class="card-bottom">
-                <div class="bottom-left">
-                  <div class="feature-badges">
-                    <t-tooltip
-                      :content="kb.type === 'faq' ? $t('knowledgeEditor.basic.typeFAQ') : $t('knowledgeEditor.basic.typeDocument')"
-                      placement="top">
-                      <div class="feature-badge"
-                        :class="{ 'type-document': (kb.type || 'document') === 'document', 'type-faq': kb.type === 'faq' }">
-                        <t-icon :name="kb.type === 'faq' ? 'chat-bubble-help' : 'file'" size="14px" />
-                        <span class="badge-count">{{ kb.type === 'faq' ? (kb.chunk_count || 0) : (kb.knowledge_count ||
-                          0) }}</span>
-                        <t-icon v-if="kb.isProcessing" name="loading" size="12px" class="processing-icon" />
-                      </div>
-                    </t-tooltip>
-                    <t-tooltip v-if="kb.extract_config?.enabled" :content="$t('knowledgeList.features.knowledgeGraph')"
-                      placement="top">
-                      <div class="feature-badge kg">
-                        <t-icon name="relation" size="14px" />
-                      </div>
-                    </t-tooltip>
-                    <t-tooltip v-if="kb.vlm_config?.enabled" :content="$t('knowledgeList.features.multimodal')"
-                      placement="top">
-                      <div class="feature-badge multimodal">
-                        <t-icon name="image" size="14px" />
-                      </div>
-                    </t-tooltip>
-                    <t-tooltip v-if="kb.question_generation_config?.enabled"
-                      :content="$t('knowledgeList.features.questionGeneration')" placement="top">
-                      <div class="feature-badge question">
-                        <t-icon name="help-circle" size="14px" />
-                      </div>
-                    </t-tooltip>
-                    <t-tooltip v-if="kb.share_count && kb.share_count > 0"
-                      :content="$t('knowledgeList.sharedToOrgs', { count: kb.share_count })" placement="top">
-                      <div class="feature-badge shared">
-                        <t-icon name="share" size="14px" />
-                      </div>
-                    </t-tooltip>
-                  </div>
-                </div>
-                <div v-if="!authStore.isLiteMode && showKbOriginBadge(kb)" class="bottom-right">
-                  <ResourceOriginBadge :variant="kbOriginVariant(kb)" :creator-name="kb.creator_name" />
-                </div>
-              </div>
-            </div>
-
-            <!-- 共享知识库卡片 -->
-            <div v-else v-show="!isKbSectionCollapsed(kbSectionOf(kb))" class="kb-card shared-kb-card" :class="{
-              'kb-type-document': (kb.type || 'document') === 'document',
-              'kb-type-faq': kb.type === 'faq'
-            }" role="link" tabindex="0" @keydown.enter.self.prevent="handleSharedKbClickFromAll(kb)" @keydown.space.self.prevent="handleSharedKbClickFromAll(kb)" @click="handleSharedKbClickFromAll(kb)">
-              <button type="button" class="kb-favorite-star" :class="{ 'is-favorited': isKbFavorited(kb.id) }"
-                :aria-label="$t('listSpaceSidebar.favorites')" :aria-pressed="isKbFavorited(kb.id)" @click.stop="toggleFavoriteKb(kb.id, $event)">
-                <t-icon :name="isKbFavorited(kb.id) ? 'star-filled' : 'star'" size="14px" />
-              </button>
-              <!-- 卡片头部 -->
-              <div class="card-header">
-                <span class="card-title" :title="kb.name">
-                  <KbWikiBadge v-if="isWikiKb(kb)" />
-                  <span class="card-title-text">{{ kb.name }}</span>
-                </span>
-                <t-tooltip :content="$t('knowledgeList.menu.viewDetails')" placement="top">
-                  <button type="button" class="shared-detail-trigger" @click.stop="openSharedDetailFromAll(kb)"
-                    :aria-label="$t('knowledgeList.menu.viewDetails')">
-                    <t-icon name="info-circle" size="16px" />
-                  </button>
-                </t-tooltip>
-              </div>
-
-              <!-- 卡片内容 -->
-              <div class="card-content">
-                <div class="card-description" :title="kb.description || $t('knowledgeBase.noDescription')">
-                  {{ kb.description || $t('knowledgeBase.noDescription') }}
-                </div>
-              </div>
-
-              <!-- 卡片底部 -->
-              <div class="card-bottom">
-                <div class="bottom-left">
-                  <div class="feature-badges">
-                    <t-tooltip
-                      :content="kb.type === 'faq' ? $t('knowledgeEditor.basic.typeFAQ') : $t('knowledgeEditor.basic.typeDocument')"
-                      placement="top">
-                      <div class="feature-badge"
-                        :class="{ 'type-document': (kb.type || 'document') === 'document', 'type-faq': kb.type === 'faq' }">
-                        <t-icon :name="kb.type === 'faq' ? 'chat-bubble-help' : 'file'" size="14px" />
-                        <span class="badge-count">{{ kb.type === 'faq' ? (kb.chunk_count || '-') : (kb.knowledge_count
-                          || '-')
-                        }}</span>
-                      </div>
-                    </t-tooltip>
-                    <t-tooltip v-if="kb.extract_config?.enabled" :content="$t('knowledgeList.features.knowledgeGraph')"
-                      placement="top">
-                      <div class="feature-badge kg">
-                        <t-icon name="relation" size="14px" />
-                      </div>
-                    </t-tooltip>
-                    <t-tooltip
-                      v-if="kb.vlm_config?.enabled || (kb.storage_provider_config?.provider && kb.storage_provider_config.provider !== 'local')"
-                      :content="$t('knowledgeList.features.multimodal')" placement="top">
-                      <div class="feature-badge multimodal">
-                        <t-icon name="image" size="14px" />
-                      </div>
-                    </t-tooltip>
-                    <t-tooltip v-if="kb.question_generation_config?.enabled"
-                      :content="$t('knowledgeList.features.questionGeneration')" placement="top">
-                      <div class="feature-badge question">
-                        <t-icon name="help-circle" size="14px" />
-                      </div>
-                    </t-tooltip>
-                  </div>
-                </div>
-                <div class="bottom-right">
-                  <t-tooltip :content="kb.org_name" placement="top">
-                    <div class="org-source">
-                      <img src="@/assets/img/organization-green.svg" class="org-source-icon" alt=""
-                        aria-hidden="true" />
-                      <span>{{ kb.org_name }}</span>
-                    </div>
-                  </t-tooltip>
-                </div>
-              </div>
-            </div>
+            <KBCard
+              :kb="kb"
+              :mode="kb.isMine ? 'all-mine' : 'all-shared'"
+              :visible="!isKbSectionCollapsed(kbSectionOf(kb))"
+              :favorited="isKbFavorited(kb.id)"
+              :can-manage="canManageKBCard(kb)"
+              :can-duplicate="canDuplicateKBCard(kb)"
+              :show-origin-badge="!authStore.isLiteMode && showKbOriginBadge(kb)"
+              :origin-variant="kbOriginVariant(kb)"
+              :highlighted="highlightedKbId !== null && highlightedKbId === kb.id"
+              @open="handleCardClick(kb)"
+              @toggle-favorite="toggleFavoriteKb(kb.id)"
+              @toggle-pin="handleTogglePinById(kb.id)"
+              @duplicate="handleDuplicateById(kb.id)"
+              @settings="handleSettingsById(kb.id)"
+              @delete="handleDeleteById(kb.id)"
+              @open-detail="openSharedDetailFromAll(kb)"
+              @card-ref="el => { highlightedCardRef = el }"
+            />
           </template>
         </div>
 
@@ -384,112 +205,28 @@
               <t-icon class="kb-section-toggle"
                 :name="isKbSectionCollapsed('tenantOthers') ? 'chevron-right' : 'chevron-down'" size="14px" />
             </div>
-            <div v-show="!isKbSectionCollapsed(kbSectionOf(kb))" class="kb-card" :class="{
-              'uninitialized': !isInitialized(kb),
-              'kb-type-document': (kb.type || 'document') === 'document',
-              'kb-type-faq': kb.type === 'faq',
-              'highlight-flash': highlightedKbId !== null && highlightedKbId === kb.id
-            }"
-              :ref="el => { if (highlightedKbId !== null && highlightedKbId === kb.id && el) highlightedCardRef = el as HTMLElement }"
-              role="link" tabindex="0" @keydown.enter.self.prevent="handleCardClick(kb)" @keydown.space.self.prevent="handleCardClick(kb)" @click="handleCardClick(kb)">
-              <button type="button" class="kb-favorite-star" :class="{ 'is-favorited': isKbFavorited(kb.id) }"
-                :aria-label="$t('listSpaceSidebar.favorites')" :aria-pressed="isKbFavorited(kb.id)" @click.stop="toggleFavoriteKb(kb.id, $event)">
-                <t-icon :name="isKbFavorited(kb.id) ? 'star-filled' : 'star'" size="14px" />
-              </button>
-              <!-- 卡片头部 -->
-              <div class="card-header">
-                <span class="card-title" :title="kb.name">
-                  <KbWikiBadge v-if="isWikiKb(kb)" />
-                  <span class="card-title-text">{{ kb.name }}</span>
-                </span>
-                <!-- See the matching block in the "all" tab template for why
-                     this is no longer gated by canManageKBCard. -->
-                <t-popup v-model="kb.showMore" overlayClassName="card-more-popup"
-                  :on-visible-change="onVisibleChange" trigger="click" destroy-on-close placement="bottom-right">
-                  <button type="button" :aria-label="$t('common.expand')" class="more-wrap" @click.stop="openMore(index)"
-                    :class="{ 'active-more': currentMoreIndex === index }">
-                    <img class="more-icon" src="@/assets/img/more.png" alt="" />
-                  </button>
-                  <template #content>
-                    <div class="popup-menu" @click.stop>
-                      <div class="popup-menu-item" @click.stop="handleTogglePin(kb)">
-                        <t-icon class="menu-icon" :name="kb.is_pinned ? 'pin-filled' : 'pin'" />
-                        <span>{{ kb.is_pinned ? $t('knowledgeList.pin.unpin') : $t('knowledgeList.pin.pin') }}</span>
-                      </div>
-                      <div v-if="canDuplicateKBCard(kb)" class="popup-menu-item" @click.stop="handleDuplicate(kb)">
-                        <t-icon class="menu-icon" name="file-copy" />
-                        <span>{{ $t('knowledgeList.menu.duplicate') }}</span>
-                      </div>
-                      <template v-if="canManageKBCard(kb)">
-                        <div class="popup-menu-item" @click.stop="handleSettings(kb)">
-                          <t-icon class="menu-icon" name="setting" />
-                          <span>{{ $t('knowledgeBase.settings') }}</span>
-                        </div>
-                        <div class="popup-menu-item delete" @click.stop="handleDelete(kb)">
-                          <t-icon class="menu-icon" name="delete" />
-                          <span>{{ $t('common.delete') }}</span>
-                        </div>
-                      </template>
-                    </div>
-                  </template>
-                </t-popup>
-              </div>
-
-              <!-- 卡片内容 -->
-              <div class="card-content">
-                <div class="card-description" :title="kb.description || $t('knowledgeBase.noDescription')">
-                  {{ kb.description || $t('knowledgeBase.noDescription') }}
-                </div>
-              </div>
-
-              <!-- 卡片底部 -->
-              <div class="card-bottom">
-                <div class="bottom-left">
-                  <div class="feature-badges">
-                    <t-tooltip
-                      :content="kb.type === 'faq' ? $t('knowledgeEditor.basic.typeFAQ') : $t('knowledgeEditor.basic.typeDocument')"
-                      placement="top">
-                      <div class="feature-badge"
-                        :class="{ 'type-document': (kb.type || 'document') === 'document', 'type-faq': kb.type === 'faq' }">
-                        <t-icon :name="kb.type === 'faq' ? 'chat-bubble-help' : 'file'" size="14px" />
-                        <span class="badge-count">{{ kb.type === 'faq' ? (kb.chunk_count || 0) : (kb.knowledge_count ||
-                          0) }}</span>
-                        <t-icon v-if="kb.isProcessing" name="loading" size="12px" class="processing-icon" />
-                      </div>
-                    </t-tooltip>
-                    <t-tooltip v-if="kb.extract_config?.enabled" :content="$t('knowledgeList.features.knowledgeGraph')"
-                      placement="top">
-                      <div class="feature-badge kg">
-                        <t-icon name="relation" size="14px" />
-                      </div>
-                    </t-tooltip>
-                    <t-tooltip
-                      v-if="kb.vlm_config?.enabled || (kb.storage_provider_config?.provider && kb.storage_provider_config.provider !== 'local')"
-                      :content="$t('knowledgeList.features.multimodal')" placement="top">
-                      <div class="feature-badge multimodal">
-                        <t-icon name="image" size="14px" />
-                      </div>
-                    </t-tooltip>
-                    <t-tooltip v-if="kb.question_generation_config?.enabled"
-                      :content="$t('knowledgeList.features.questionGeneration')" placement="top">
-                      <div class="feature-badge question">
-                        <t-icon name="help-circle" size="14px" />
-                      </div>
-                    </t-tooltip>
-                    <!-- 共享状态图标 -->
-                    <t-tooltip v-if="(kb.share_count ?? 0) > 0"
-                      :content="$t('knowledgeList.sharedToOrgs', { count: kb.share_count ?? 0 })" placement="top">
-                      <div class="feature-badge shared">
-                        <t-icon name="share" size="14px" />
-                      </div>
-                    </t-tooltip>
-                  </div>
-                </div>
-                <div v-if="!authStore.isLiteMode && showKbOriginBadge(kb)" class="bottom-right">
-                  <ResourceOriginBadge :variant="kbOriginVariant(kb)" :creator-name="kb.creator_name" />
-                </div>
-              </div>
-            </div>
+            <KBCard
+              :kb="kb"
+              mode="mine-mine"
+              :visible="!isKbSectionCollapsed(kbSectionOf(kb))"
+              :favorited="isKbFavorited(kb.id)"
+              :can-manage="canManageKBCard(kb)"
+              :can-duplicate="canDuplicateKBCard(kb)"
+              :show-origin-badge="!authStore.isLiteMode && showKbOriginBadge(kb)"
+              :origin-variant="kbOriginVariant(kb)"
+              :highlighted="highlightedKbId !== null && highlightedKbId === kb.id"
+              :menu-visible="!!kb.showMore"
+              :menu-active="currentMoreIndex === index"
+              @open="handleCardClick(kb)"
+              @toggle-favorite="toggleFavoriteKb(kb.id)"
+              @toggle-pin="handleTogglePin(kb)"
+              @duplicate="handleDuplicate(kb)"
+              @settings="handleSettings(kb)"
+              @delete="handleDelete(kb)"
+              @menu-open="openMore(index)"
+              @update:menu-visible="onVisibleChange"
+              @card-ref="el => { highlightedCardRef = el }"
+            />
           </template>
         </div>
 
@@ -543,51 +280,13 @@
               <t-icon class="kb-section-toggle"
                 :name="isKbSectionCollapsed('sharedReadonly') ? 'chevron-right' : 'chevron-down'" size="14px" />
             </div>
-            <div v-show="!isSpaceKbCollapsed(shared)" class="kb-card shared-kb-card" :class="{
-              'kb-type-document': (shared.knowledge_base.type || 'document') === 'document',
-              'kb-type-faq': shared.knowledge_base.type === 'faq'
-            }" role="link" tabindex="0" @keydown.enter.self.prevent="handleSharedKbClick(shared)" @keydown.space.self.prevent="handleSharedKbClick(shared)" @click="handleSharedKbClick(shared)">
-              <!-- 卡片头部 -->
-              <div class="card-header">
-                <span class="card-title" :title="shared.knowledge_base.name">
-                  <KbWikiBadge v-if="isWikiKb(shared.knowledge_base)" />
-                  <span class="card-title-text">{{ shared.knowledge_base.name }}</span>
-                </span>
-                <t-tooltip v-if="!shared.is_mine" :content="$t('knowledgeList.menu.viewDetails')" placement="top">
-                  <button type="button" class="shared-detail-trigger" @click.stop="openSharedDetail(shared)"
-                    :aria-label="$t('knowledgeList.menu.viewDetails')">
-                    <t-icon name="info-circle" size="16px" />
-                  </button>
-                </t-tooltip>
-              </div>
-
-              <!-- 卡片内容 -->
-              <div class="card-content">
-                <div class="card-description" :title="shared.knowledge_base.description || $t('knowledgeBase.noDescription')">
-                  {{ shared.knowledge_base.description || $t('knowledgeBase.noDescription') }}
-                </div>
-              </div>
-
-              <!-- 卡片底部 -->
-              <div class="card-bottom">
-                <div class="bottom-left">
-                  <div class="feature-badges">
-                    <t-tooltip
-                      :content="shared.knowledge_base.type === 'faq' ? $t('knowledgeEditor.basic.typeFAQ') : $t('knowledgeEditor.basic.typeDocument')"
-                      placement="top">
-                      <div class="feature-badge"
-                        :class="{ 'type-document': (shared.knowledge_base.type || 'document') === 'document', 'type-faq': shared.knowledge_base.type === 'faq' }">
-                        <t-icon :name="shared.knowledge_base.type === 'faq' ? 'chat-bubble-help' : 'file'"
-                          size="14px" />
-                        <span class="badge-count">{{ shared.knowledge_base.type === 'faq' ?
-                          (shared.knowledge_base.chunk_count ??
-                            '-') : (shared.knowledge_base.knowledge_count ?? '-') }}</span>
-                      </div>
-                    </t-tooltip>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <KBCard
+              :kb="shared.knowledge_base"
+              mode="space-shared"
+              :visible="!isSpaceKbCollapsed(shared)"
+              @open="handleSharedKbClick(shared)"
+              @open-detail="openSharedDetail(shared)"
+            />
           </template>
         </div>
 
@@ -723,19 +422,19 @@ import { useOrganizationStore } from '@/stores/organization'
 import { listOrganizationSharedKnowledgeBases, type SharedKnowledgeBase, type OrganizationSharedKnowledgeBaseItem, type SourceFromAgentInfo } from '@/api/organization'
 import { mergeAllScopeKnowledgeBases, type OwnedKnowledgeBase, type SharedKnowledgeBaseLike } from './kbListMerge'
 import KnowledgeBaseEditorModal from './KnowledgeBaseEditorModal.vue'
-import KbWikiBadge from './components/KbWikiBadge.vue'
-import ResourceListToolbar from '@/components/ResourceListToolbar.vue'
+import KBCard from './list/KBCard.vue'
+import KBListHeader from './list/KBListHeader.vue'
+import { isInitialized as isInitializedKb, isWikiKb, type KB, type KbSectionKey } from './list/kbList.types'
 import { matchesResourceQuery } from '@/utils/resourceListSearch'
-import ResourceOriginBadge from '@/components/ResourceOriginBadge.vue'
 import { shouldShowResourceOriginBadge } from '@/utils/card-list-badge'
 import { permissionCanManageKB } from '@/utils/kbPermission'
 import ContextualGuide from '@/components/ContextualGuide.vue'
-import ResourceSortControl from '@/components/ResourceSortControl.vue'
 import { isContextualGuideDone, markContextualGuideDone } from '@/config/contextualGuides'
 import { useTenantModelReadiness } from '@/composables/useTenantModelReadiness'
 import { useI18n } from 'vue-i18n'
 import { useListUrlState } from '@/composables/useListUrlState'
 import { useResourcePins } from '@/composables/useResourcePins'
+import { useStaggerRise } from '@/composables/useMotion'
 import {
   DEFAULT_RESOURCE_SORT,
   sortResourcesWithinGroups,
@@ -777,36 +476,6 @@ const kbFavoritesCount = computed(
 const kbRecentsCount = computed(
   () => pins.recents.value.filter((e) => e.type === 'kb').length
 )
-
-interface KB {
-  id: string;
-  name: string;
-  description?: string;
-  updated_at?: string;
-  created_at?: string;
-  pinned_at?: string;
-  embedding_model_id?: string;
-  summary_model_id?: string;
-  type?: 'document' | 'faq';
-  showMore?: boolean;
-  vlm_config?: { enabled?: boolean; model_id?: string };
-  extract_config?: { enabled?: boolean };
-  storage_provider_config?: { provider?: string };
-  storage_config?: { provider?: string; bucket_name?: string }; // legacy
-  question_generation_config?: { enabled?: boolean; question_count?: number };
-  knowledge_count?: number;
-  chunk_count?: number;
-  isProcessing?: boolean;
-  processing_count?: number;
-  share_count?: number;
-  is_pinned?: boolean;
-  // creator_id is the owner-id matched against authStore.user.id when
-  // gating the per-card more-menu (Settings / Delete). Empty for legacy
-  // KBs created before PR 5; those fall back to the role gate.
-  creator_id?: string;
-  // creator_name 由后端 list 接口回填，仅用于卡片右下角来源徽章的 tooltip。
-  creator_name?: string;
-}
 
 const flatKnowledgeBaseSortAccessors: ResourceSortAccessors<any> = {
   getName: item => item?.name,
@@ -999,7 +668,6 @@ const tenantSectionIconName = computed(() =>
 // 分组折叠：ephemeral，只在当前会话里生效，不落 localStorage/服务器。
 // 之所以走"折叠集合"而不是"展开集合"，是因为默认全展开——空 Set
 // 即表示初始的全展开状态，避免每次新加分段还得回头维护默认值。
-type KbSectionKey = 'pinned' | 'mine' | 'tenantOthers' | 'sharedByMe' | 'sharedEditable' | 'sharedReadonly'
 const collapsedKbSections = ref<Set<KbSectionKey>>(new Set())
 const isKbSectionCollapsed = (key: KbSectionKey) => collapsedKbSections.value.has(key)
 const toggleKbSection = (key: KbSectionKey) => {
@@ -1124,6 +792,21 @@ const applyKbListData = (data: any[]) => {
     isProcessing: kb.is_processing || false,
     processing_count: kb.processing_count || 0
   }))
+  maybeRiseCards()
+}
+
+/**
+ * 方向 A：首屏卡片依次浮起。延到 nextTick 之后取 DOM，确保卡片真的在树上；
+ * 一旦放过就不再重放（cardRiseDone），避免筛选/翻页时闪一下。
+ */
+const maybeRiseCards = () => {
+  if (cardRiseDone.value) return
+  cardRiseDone.value = true
+  nextTick(() => {
+    const container = document.querySelector('.kb-list-main')
+    if (!container) return
+    riseCards(container.querySelectorAll<HTMLElement>('.kb-card:not(.is-skeleton)'))
+  })
 }
 
 const fetchList = (force = false) => {
@@ -1176,6 +859,11 @@ watch(spaceSelection, (val) => {
 watch(creatorFilter, () => {
   fetchList(true)
 })
+
+// 方向 A：首次进入时卡片依次浮起（12px 位移 / 60ms stagger）。
+// 只在首屏卡片骨架渲染完成后触发一次，翻页/筛选不重放，避免打断用户。
+const { rise: riseCards } = useStaggerRise({ stagger: 60, duration: 260, displacement: 12 })
+const cardRiseDone = ref(false)
 
 onMounted(() => {
   fetchList().then(() => {
@@ -1440,29 +1128,16 @@ const requestDelete = (kb: KB) => {
   })
 }
 
-const isInitialized = (kb: KB) => {
-  // LLM (summary) model is always required
-  if (!kb.summary_model_id || kb.summary_model_id === '') return false
-  // Embedding model only required when RAG indexing is enabled (vector or keyword)
-  const strategy = (kb as any).indexing_strategy
-  const needsEmbedding = !strategy || strategy.vector_enabled || strategy.keyword_enabled
-  if (needsEmbedding && (!kb.embedding_model_id || kb.embedding_model_id === '')) return false
-  return true
-}
-
-const isWikiKb = (kb: unknown) =>
-  !!(kb as { indexing_strategy?: { wiki_enabled?: boolean } } | null | undefined)?.indexing_strategy?.wiki_enabled
-
 // 计算是否有未初始化的知识库
 const hasUninitializedKbs = computed(() => {
-  return kbs.value.some(kb => !isInitialized(kb))
+  return kbs.value.some(kb => !isInitializedKb(kb))
 })
 
 const handleCardClick = (kb: KB) => {
   // Track this open in the per-user "recent" list before navigating —
   // matches the user mental model "this is what I last worked on".
   pins.touchRecent('kb', kb.id)
-  if (isInitialized(kb)) {
+  if (isInitializedKb(kb)) {
     goDetail(kb.id)
   } else {
     goSettings(kb.id)
@@ -1687,24 +1362,6 @@ watch(keyword, () => { collapsedKbSections.value = new Set() })
   }
 }
 
-.shared-kb-card {
-  position: relative;
-
-  .org-tag {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    font-size: var(--app-text-sm);
-    border-color: color-mix(in srgb, var(--td-brand-color) 15%, transparent);
-    color: var(--td-brand-color);
-    background: color-mix(in srgb, var(--td-brand-color) 4%, transparent);
-    font-weight: 500;
-    padding: 2px 8px;
-    border-radius: var(--app-radius-xs);
-    max-width: fit-content;
-  }
-}
-
 .warning-banner {
   display: flex;
   align-items: center;
@@ -1732,173 +1389,7 @@ watch(keyword, () => { collapsedKbSections.value = new Set() })
   .resource-section-header();
 }
 
-.kb-card {
-  .resource-card();
-
-  &.uninitialized {
-    opacity: 0.9;
-  }
-
-  .kb-favorite-star { .resource-favorite-button(); }
-
-}
-
 /* 三个列表卡片统一：描述字体 */
-.bottom-left {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex: 1;
-  min-width: 0;
-}
-
-.bottom-right {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-
-  .card-time {
-    font-size: var(--app-text-sm);
-    color: var(--td-text-color-placeholder);
-  }
-}
-
-.feature-badge {
-  .resource-feature-badge();
-
-  &.type-document {
-    background: var(--td-bg-color-secondarycontainer);
-    color: var(--td-text-color-secondary);
-    width: auto;
-    padding: 0 6px;
-    gap: 3px;
-
-    &:hover {
-      background: var(--td-bg-color-container-hover);
-    }
-
-    .badge-count {
-      font-size: var(--app-text-xs);
-      font-weight: 500;
-    }
-
-    .processing-icon {
-      animation: wk-spin 1s linear infinite;
-    }
-  }
-
-  &.type-faq {
-    background: var(--td-bg-color-secondarycontainer);
-    color: var(--td-text-color-secondary);
-    width: auto;
-    padding: 0 6px;
-    gap: 3px;
-
-    &:hover {
-      background: var(--td-bg-color-container-hover);
-    }
-
-    .badge-count {
-      font-size: var(--app-text-xs);
-      font-weight: 500;
-    }
-
-    .processing-icon {
-      animation: wk-spin 1s linear infinite;
-    }
-  }
-
-  &.kg {
-    background: color-mix(in srgb, var(--app-accent-purple) 8%, transparent);
-    color: var(--td-brand-color);
-
-    &:hover {
-      background: color-mix(in srgb, var(--app-accent-purple) 12%, transparent);
-    }
-  }
-
-  &.multimodal {
-    background: color-mix(in srgb, var(--td-warning-color) 8%, transparent);
-    color: var(--td-warning-color);
-
-    &:hover {
-      background: color-mix(in srgb, var(--td-warning-color) 12%, transparent);
-    }
-  }
-
-  &.question {
-    background: color-mix(in srgb, var(--td-success-color) 8%, transparent);
-    color: var(--td-success-color);
-
-    &:hover {
-      background: color-mix(in srgb, var(--td-success-color) 12%, transparent);
-    }
-  }
-
-  &.shared {
-    background: color-mix(in srgb, var(--td-brand-color) 8%, transparent);
-    color: var(--td-brand-color);
-
-    &:hover {
-      background: color-mix(in srgb, var(--td-brand-color) 12%, transparent);
-    }
-  }
-
-  &.role-admin {
-    background: color-mix(in srgb, var(--td-brand-color) 10%, transparent);
-    color: var(--td-brand-color-active);
-
-    &:hover {
-      background: color-mix(in srgb, var(--td-brand-color) 15%, transparent);
-    }
-  }
-
-  &.role-editor {
-    background: color-mix(in srgb, var(--td-warning-color) 10%, transparent);
-    color: var(--td-warning-color);
-
-    &:hover {
-      background: color-mix(in srgb, var(--td-warning-color) 15%, transparent);
-    }
-  }
-
-  &.role-viewer {
-    background: var(--td-bg-color-container-hover);
-    color: var(--td-text-color-secondary);
-
-    &:hover {
-      background: var(--td-bg-color-component);
-    }
-  }
-}
-
-@keyframes highlightFlash {
-  0% {
-    border-color: var(--td-brand-color);
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--td-brand-color) 40%, transparent);
-    transform: scale(1);
-  }
-
-  50% {
-    border-color: var(--td-brand-color);
-    box-shadow: 0 0 0 8px color-mix(in srgb, var(--td-brand-color) 0%, transparent);
-    transform: scale(1.02);
-  }
-
-  100% {
-    border-color: var(--td-brand-color);
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--td-brand-color) 0%, transparent);
-    transform: scale(1);
-  }
-}
-
-.kb-card.highlight-flash {
-  animation: highlightFlash 0.6s ease-in-out 3;
-  border-color: var(--td-brand-color) !important;
-  box-shadow: 0 0 12px color-mix(in srgb, var(--td-brand-color) 30%, transparent) !important;
-}
-
 // 删除确认对话框样式
 :deep(.t-dialog__position.t-dialog--top) {
   padding-top: 40vh !important;
@@ -1912,30 +1403,6 @@ watch(keyword, () => { collapsedKbSections.value = new Set() })
 /* 下拉菜单样式已统一至 @/assets/dropdown-menu.less */
 
 // 共享知识库卡片：详情触发（替代三点，用「查看详情」链接样式）
-.shared-detail-trigger {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 8px;
-  border: none;
-  border-radius: var(--app-radius-sm);
-  background: transparent;
-  color: var(--td-brand-color);
-  font-size: var(--app-text-md);
-  font-family: var(--app-font-family);
-  cursor: pointer;
-  transition: background var(--app-motion-base) ease, color var(--app-motion-base) ease;
-
-  .t-icon {
-    flex-shrink: 0;
-  }
-
-  &:hover {
-    background: color-mix(in srgb, var(--td-brand-color) 8%, transparent);
-    color: var(--td-brand-color);
-  }
-}
-
 // 右侧滑出：共享知识库详情面板
 .shared-detail-drawer-overlay {
   position: fixed;

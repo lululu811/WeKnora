@@ -7,6 +7,8 @@ import { computed, reactive, ref } from 'vue'
 import { chatSubmitShortcut } from '../utils/chatSubmitShortcut.ts'
 
 const inputField = readFileSync(new URL('./Input-field.vue', import.meta.url), 'utf8')
+// 停止/发送这一个控件已经搬进 InputSendButton.vue，守卫跟着代码走
+const sendButton = readFileSync(new URL('./input/InputSendButton.vue', import.meta.url), 'utf8')
 const settingsStore = readFileSync(new URL('../stores/settings.ts', import.meta.url), 'utf8')
 
 test('composer shortcuts queue Enter, inject drafts, and promote the first queued message when empty', () => {
@@ -68,16 +70,22 @@ test('shared-agent web search button waits for source readiness metadata', () =>
 })
 
 test('one composer action switches between stop and send', () => {
-  const controlsStart = inputField.indexOf('class="control-right"')
-  const controls = inputField.slice(controlsStart, controlsStart + 2200)
+  const controlsStart = sendButton.indexOf('class="control-right"')
+  const controls = sendButton.slice(controlsStart)
   assert.notEqual(controlsStart, -1)
   assert.doesNotMatch(inputField, /steer-delivery-toggle/)
   assert.doesNotMatch(inputField, /setSteerDelivery/)
   assert.match(inputField, /emit\('steer-msg', val\.trim\(\), steerMentions, delivery\)/)
-  assert.match(controls, /v-if="isReplying && \(!canSteer \|\| !query\.trim\(\)\)"/)
-  assert.match(controls, /handleStop/)
-  assert.match(controls, /v-else[\s\S]*createSession\(query\)[\s\S]*send-btn/)
+  // 停止态：回复中且（不能 steer 或没有新内容）
+  assert.match(sendButton, /isReplying && \(!props\.canSteer \|\| !props\.hasText\)/)
+  assert.match(sendButton, /emit\('stop'\)/)
+  assert.match(inputField, /@stop="handleStop"/)
+  // 发送态与停止态共用同一个容器：v-else 才是发送，落到 send-btn
+  assert.match(controls, /v-if="showStop"[\s\S]*v-else/)
+  assert.match(controls, /control-btn send-btn/)
   assert.match(controls, /<t-icon name="arrow-up"/)
+  // 真正发起会话仍由父组件执行
+  assert.match(inputField, /@send="createSession\(query\)"/)
   assert.doesNotMatch(controls, /steer-inject-btn|<t-icon[^>]*'time'/)
 })
 

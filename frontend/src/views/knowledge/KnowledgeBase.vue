@@ -47,7 +47,6 @@ import FAQEntryManager from './components/FAQEntryManager.vue';
 import DocumentListView from './components/DocumentListView.vue';
 import DocumentCardView from './components/DocumentCardView.vue';
 import DocumentBatchBar from './components/DocumentBatchBar.vue';
-import KbUploadSourceDropdown from './components/KbUploadSourceDropdown.vue';
 import KbFolderTree from './components/KbFolderTree.vue';
 import BatchTagDialog from './components/BatchTagDialog.vue';
 import type { KnowledgeProcessOverrides } from '@/types/knowledgeProcess';
@@ -55,6 +54,9 @@ import { useUploadConfirmStore, type UploadConfirmResult } from '@/stores/upload
 import { useUploadTasksStore } from '@/stores/uploadTasks';
 import WikiBrowser from './wiki/WikiBrowser.vue';
 import ImageGallery from './gallery/ImageGallery.vue';
+import KBDetailHeader from './detail/KBDetailHeader.vue';
+import KBDocList from './detail/KBDocList.vue';
+import type { KbDetailTab } from './detail/kbDetail.types';
 import { getWikiStats } from '@/api/wiki';
 import {
   isKnowledgeParseInFlight,
@@ -87,13 +89,14 @@ const route = useRoute();
 const { t } = useI18n();
 const kbId = computed(() => (route.params as any).kbId as string || '');
 const kbInfo = ref<any>(null);
-const uploadSourceRef = ref<InstanceType<typeof KbUploadSourceDropdown> | null>(null);
+const docListRef = ref<InstanceType<typeof KBDocList> | null>(null);
 const kbLoading = ref(false);
 const docListLoading = ref(true);
 const isFAQ = computed(() => (kbInfo.value?.type || '') === 'faq');
 const isWiki = computed(() => !!kbInfo.value?.indexing_strategy?.wiki_enabled);
-const validTabs = ['documents', 'wiki', 'graph', 'gallery'] as const
-type KbTab = typeof validTabs[number]
+import { KB_DETAIL_TABS } from './detail/kbDetail.types';
+const validTabs = KB_DETAIL_TABS
+type KbTab = KbDetailTab
 const initTab = validTabs.includes(route.query.tab as any) ? (route.query.tab as KbTab) : 'documents'
 const activeKbTab = ref<KbTab>(initTab);
 
@@ -1242,7 +1245,7 @@ const handleOpenURLImportDialog = (event: CustomEvent) => {
   console.log('接收到URL导入对话框打开事件，知识库ID:', eventKbId, '当前知识库ID:', kbId.value);
   if (eventKbId && eventKbId === kbId.value && !isFAQ.value) {
     if (ensureDocumentKbReady()) {
-      uploadSourceRef.value?.openUrlDialog();
+      docListRef.value?.uploadSourceRef?.openUrlDialog();
     }
   }
 };
@@ -2260,74 +2263,24 @@ const handleKBEditorSuccess = (kbIdValue: string) => {
 <template>
   <template v-if="!isFAQ">
     <div class="knowledge-layout">
-      <div class="document-header">
-        <div class="document-header-title">
-          <div class="document-title-row">
-            <h2 class="document-breadcrumb">
-              <button type="button" class="breadcrumb-link" @click="handleNavigateToKbList">
-                {{ $t('menu.knowledgeBase') }}
-              </button>
-              <t-icon name="chevron-right" class="breadcrumb-separator" />
-              <KBSwitcherDropdown v-if="knowledgeList.length" :kb-list="knowledgeList" :current-kb-id="kbId"
-                @select="(id) => handleKnowledgeDropdownSelect({ value: id })">
-                <button type="button" class="breadcrumb-link dropdown" :disabled="!kbId">
-                  <template v-if="!kbInfo">
-                    <t-skeleton animation="gradient" :row-col="[{ width: '120px', height: '20px' }]" />
-                  </template>
-                  <template v-else>
-                    <span>{{ kbInfo.name }}</span>
-                    <t-icon name="chevron-down" />
-                  </template>
-                </button>
-              </KBSwitcherDropdown>
-              <button v-else type="button" class="breadcrumb-link" :disabled="!kbId" @click="handleNavigateToCurrentKB">
-                <template v-if="!kbInfo">
-                  <t-skeleton animation="gradient" :row-col="[{ width: '120px', height: '20px' }]" />
-                </template>
-                <template v-else>
-                  {{ kbInfo.name }}
-                </template>
-              </button>
-              <t-icon name="chevron-right" class="breadcrumb-separator" />
-              <div class="kb-view-tabs" role="tablist" :aria-label="$t('knowledgeEditor.wikiBrowser.viewTabs')">
-                <t-tooltip v-for="tab in kbViewTabs" :key="tab.key" :content="tab.tip" placement="bottom">
-                  <button type="button" role="tab" class="kb-view-tab"
-                    :class="{ active: shownKbTab === tab.key, indexing: tab.indexing }"
-                    :aria-selected="shownKbTab === tab.key" @click="activeKbTab = tab.key">
-                    <t-loading v-if="tab.indexing" size="small" class="kb-view-tab__indicator" />
-                    <t-icon v-else :name="tab.icon" size="16px" />
-                    <span>{{ tab.label }}</span>
-                  </button>
-                </t-tooltip>
-              </div>
-            </h2>
-            <!-- 标题行右侧的动作锚点：聚拢"信息"和"设置"两个圆形按钮。 -->
-            <div class="kb-title-actions">
-              <KBInfoPopover v-if="kbInfo && !authStore.isLiteMode" :kb-info="kbInfo"
-                :supported-file-types="[...supportedFileTypes]" />
-              <t-tooltip v-if="canManage" :content="$t('knowledgeBase.settings')" placement="top">
-                <button type="button" class="kb-settings-button" :aria-label="$t('knowledgeBase.settings')" :disabled="!kbId" @click="handleOpenKBSettings">
-                  <t-icon name="setting" size="16px" />
-                </button>
-              </t-tooltip>
-            </div>
-          </div>
-          <p v-if="kbInfo?.description" class="document-subtitle">{{ kbInfo.description }}</p>
-          <p v-if="unsupportedFileTypes.length" class="parser-hint" @click="goToParserSettings">
-            <t-icon name="info-circle" class="parser-hint-icon" />
-            <span>{{$t('knowledgeBase.unsupportedTypesHint', {
-              types: unsupportedFileTypes.map(t => '.' + t).join('、')
-            })
-              }}</span>
-            <span class="parser-hint-link">{{ $t('knowledgeBase.goToParserSettings') }} →</span>
-          </p>
-          <p v-if="missingStorageEngine" class="storage-engine-warning" @click="handleOpenKBSettings">
-            <t-icon name="info-circle" class="warning-icon" />
-            <span>{{ $t('knowledgeBase.missingStorageEngine') }}</span>
-            <span class="warning-link">{{ $t('knowledgeBase.goToStorageSettings') }} →</span>
-          </p>
-        </div>
-      </div>
+      <KBDetailHeader
+        :kb-id="kbId"
+        :kb-info="kbInfo"
+        :knowledge-list="knowledgeList"
+        :tabs="kbViewTabs"
+        :shown-tab="shownKbTab"
+        :can-manage="canManage"
+        :is-lite-mode="authStore.isLiteMode"
+        :supported-file-types="[...supportedFileTypes]"
+        :unsupported-file-types="unsupportedFileTypes"
+        :missing-storage-engine="missingStorageEngine"
+        @navigate-to-list="handleNavigateToKbList"
+        @navigate-current="handleNavigateToCurrentKB"
+        @select-kb="(id) => handleKnowledgeDropdownSelect({ value: id })"
+        @open-settings="handleOpenKBSettings"
+        @go-parser-settings="goToParserSettings"
+        @update:tab="(tab) => activeKbTab = tab"
+      />
 
       <!-- Wiki Browser / Graph (shown when wiki or graph tab is active) -->
       <div v-if="isWiki && (activeKbTab === 'wiki' || activeKbTab === 'graph')" class="wiki-main-area">
@@ -2349,154 +2302,62 @@ const handleKBEditorSuccess = (kbIdValue: string) => {
             @rename="handleFolderRename" />
           <div class="tag-content">
             <div class="doc-card-area">
-              <div class="doc-filter-bar">
-                <nav class="doc-folder-path" :aria-label="$t('knowledgeBase.folderTree.title')">
-                  <button v-if="showFolderTree && folderTreeCollapsed" type="button" class="doc-folder-path__tree-toggle"
-                    :aria-expanded="false" :title="$t('knowledgeBase.folderTree.expand')"
-                    :aria-label="$t('knowledgeBase.folderTree.expand')"
-                    @click="handleFolderTreeCollapsedChange(false)">
-                    <t-icon name="view-list" size="16px" />
-                  </button>
-                  <button v-if="folderBreadcrumbs.length" type="button" class="doc-folder-path__crumb" :title="kbInfo?.name" @click="handleFolderSelect('')">
-                    {{ kbInfo?.name }}
-                  </button>
-                  <span v-else class="doc-folder-path__crumb is-current" :title="kbInfo?.name" aria-current="page">{{ kbInfo?.name }}</span>
-                  <template v-for="(crumb, index) in folderBreadcrumbs" :key="crumb.path">
-                    <t-icon name="chevron-right" class="doc-folder-path__sep" />
-                    <span v-if="index === folderBreadcrumbs.length - 1" class="doc-folder-path__crumb is-current" :title="crumb.name" aria-current="page">{{ crumb.name }}</span>
-                    <button v-else type="button" class="doc-folder-path__crumb" :title="crumb.name" @click="handleFolderSelect(crumb.path)">{{ crumb.name }}</button>
-                  </template>
-                  <span v-if="!docListLoading" class="doc-folder-path__count">{{ $t(isFiltering ? 'knowledgeBase.folderTree.filteredCount' : 'knowledgeBase.documentCount', { count: total }) }}</span>
-                  <t-tooltip v-if="showFolderTree && isFiltering" :content="$t('knowledgeBase.folderTree.searchingSubtree')">
-                    <t-icon name="info-circle" class="doc-folder-path__sep" />
-                  </t-tooltip>
-                </nav>
-                <div class="doc-filter-bar__trailing">
-                  <t-input v-model.trim="docSearchKeyword" :placeholder="$t('knowledgeBase.docSearchPlaceholder')"
-                    :aria-label="$t('knowledgeBase.docSearchPlaceholder')" clearable class="doc-search-input" @clear="loadKnowledgeFiles(kbId)"
-                    @enter="loadKnowledgeFiles(kbId)">
-                    <template #prefix-icon>
-                      <t-icon name="search" size="16px" />
-                    </template>
-                  </t-input>
-                  <t-popup v-model:visible="filtersExpanded" trigger="click" placement="bottom-right"
-                    overlay-class-name="document-filter-popup" :overlay-inner-style="{ padding: 0 }">
-                    <button type="button" class="doc-filter-toggle" :class="{ active: filtersExpanded || activeFilterCount > 0 }"
-                      :aria-expanded="filtersExpanded" aria-controls="document-filters">
-                      <t-icon name="filter" size="16px" />
-                      {{ $t('knowledgeBase.filters') }}
-                      <span v-if="activeFilterCount" class="doc-filter-count">{{ activeFilterCount }}</span>
-                    </button>
-                    <template #content>
-                      <section id="document-filters" class="doc-filter-panel" :aria-label="$t('knowledgeBase.filters')">
-                        <header class="doc-filter-panel__header">
-                          <strong>{{ $t('knowledgeBase.filters') }}</strong>
-                          <button type="button" :disabled="!activeFilterCount" @click="clearDocumentFilters">{{ $t('knowledgeBase.clearFilters') }}</button>
-                        </header>
-                        <div class="doc-filter-panel__fields">
-                          <div class="doc-filter-field">
-                            <span>{{ $t('knowledgeBase.fileTypeFilter') }}</span>
-                            <t-select v-model="selectedFileType" :options="fileTypeOptions" :placeholder="$t('knowledgeBase.fileTypeFilter')" clearable />
-                          </div>
-                          <div class="doc-filter-field">
-                            <span>{{ $t('knowledgeBase.parseStatusFilter') }}</span>
-                            <t-select v-model="selectedParseStatus" :options="parseStatusOptions" :placeholder="$t('knowledgeBase.parseStatusFilter')" clearable />
-                          </div>
-                          <div class="doc-filter-field">
-                            <span>{{ $t('knowledgeBase.sourceFilter') }}</span>
-                            <t-select v-model="selectedSource" :options="sourceOptions" :placeholder="$t('knowledgeBase.sourceFilter')" clearable />
-                          </div>
-                          <div class="doc-filter-field">
-                            <span>{{ $t('knowledgeBase.columnUpdatedAt') }}</span>
-                            <t-date-range-picker v-model="updatedTimeRange"
-                              :placeholder="[$t('knowledgeBase.updatedTimeFrom'), $t('knowledgeBase.updatedTimeTo')]"
-                              :disable-date="disableFutureDate" clearable allow-input />
-                          </div>
-                        </div>
-                        <div class="doc-filter-tags">
-                          <div class="doc-filter-tags__heading">
-                            <span>{{ $t('knowledgeBase.columnTag') }}<span v-if="selectedTagIds.length" class="doc-filter-tags__count">{{ selectedTagIds.length }}</span></span>
-                          </div>
-                          <t-input v-model.trim="tagSearchQuery" :placeholder="$t('knowledgeBase.tagSearchPlaceholder')" clearable>
-                            <template #prefix-icon><t-icon name="search" size="14px" /></template>
-                          </t-input>
-                          <div class="doc-filter-tags__list">
-                            <t-loading v-if="tagLoading && !tagList.length" size="small" />
-                            <t-checkbox v-for="tag in filterTagOptions" :key="tag.id" class="doc-filter-tag" :title="tag.name"
-                              :checked="selectedTagIds.includes(tag.id)"
-                              @change="(checked: boolean) => handleTagFilterChange(checked ? [...selectedTagIds, tag.id] : selectedTagIds.filter(id => id !== tag.id))">
-                              <span>{{ tag.name }}</span>
-                            </t-checkbox>
-                            <span v-if="!tagLoading && !filterTagOptions.length" class="doc-filter-tags__empty">{{ $t(tagSearchQuery ? 'knowledgeBase.tagEmptyResult' : 'knowledgeBase.noTags') }}</span>
-                          </div>
-                          <t-button v-if="tagHasMore" variant="text" size="small" :loading="tagLoadingMore" @click="kbId && loadTags(kbId)">{{ $t('tenant.loadMore') }}</t-button>
-                        </div>
-                      </section>
-                    </template>
-                  </t-popup>
-                  <button v-if="viewMode === 'grid' && (canDownloadKnowledge || canMutateKnowledge) && cardList.length"
-                    type="button" class="doc-filter-toggle doc-batch-toggle" :class="{ active: batchMode }" :aria-pressed="batchMode"
-                    :disabled="batchDeleting || batchReparsing || batchTagging || batchDownloading"
-                    @click="toggleBatchMode">
-                    <t-icon :name="batchMode ? 'close' : 'check-rectangle'" size="16px" />
-                    {{ $t(batchMode ? 'common.cancel' : 'menu.batchManage') }}
-                  </button>
-                  <t-popup v-model:visible="documentSortPanelVisible" trigger="click" placement="bottom-right"
-                    overlay-class-name="document-sort-popup" :overlay-inner-style="{ padding: 0 }">
-                    <template #content>
-                      <div class="document-sort-panel" role="menu" :aria-label="$t('knowledgeBase.sort.title')">
-                        <section v-for="group in documentSortGroups" :key="group.key" class="document-sort-group">
-                          <div class="document-sort-group__heading">
-                            <div class="document-sort-group__label">{{ group.label }}</div>
-                            <div class="document-sort-group__description">{{ group.description }}</div>
-                          </div>
-                          <div class="document-sort-group__options">
-                            <button v-for="option in group.options" :key="option.value" type="button"
-                              class="document-sort-option"
-                              :class="{ active: selectedDocumentSort === option.value }"
-                              role="menuitemradio" :aria-checked="selectedDocumentSort === option.value"
-                              @click.stop="handleDocumentSortSelect(option.value)">
-                              <span>{{ documentSortOptionLabel(option) }}</span>
-                              <t-icon v-if="selectedDocumentSort === option.value" name="check" size="14px" />
-                            </button>
-                          </div>
-                        </section>
-                      </div>
-                    </template>
-                    <button type="button" class="doc-sort-trigger" :class="{ active: documentSortPanelVisible }"
-                      :title="`${$t('knowledgeBase.sort.title')}: ${activeDocumentSortLabel}`"
-                      :aria-label="`${$t('knowledgeBase.sort.title')}: ${activeDocumentSortLabel}`">
-                      <t-icon name="filter-sort" size="16px" />
-                      <span class="doc-sort-trigger__label">
-                        {{ $t('knowledgeBase.sort.title') }} · {{ activeDocumentSortLabel }}
-                      </span>
-                      <t-icon name="chevron-down" size="14px" class="doc-sort-trigger__caret"
-                        :class="{ open: documentSortPanelVisible }" />
-                      </button>
-                    </t-popup>
-                  <div class="doc-view-toggle" role="group" :aria-label="$t('knowledgeBase.viewModeToggle')">
-                    <t-tooltip :content="$t('knowledgeBase.viewModeGrid')" placement="top">
-                      <button type="button" class="doc-view-toggle-btn" :class="{ active: viewMode === 'grid' }"
-                        :aria-label="$t('knowledgeBase.viewModeGrid')" @click="viewMode = 'grid'" :aria-pressed="viewMode === 'grid'">
-                        <t-icon name="view-module" size="16px" />
-                      </button>
-                    </t-tooltip>
-                    <t-tooltip :content="$t('knowledgeBase.viewModeList')" placement="top">
-                      <button type="button" class="doc-view-toggle-btn" :class="{ active: viewMode === 'list' }"
-                        :aria-label="$t('knowledgeBase.viewModeList')" @click="viewMode = 'list'" :aria-pressed="viewMode === 'list'">
-                        <t-icon name="view-list" size="16px" />
-                      </button>
-                    </t-tooltip>
-                  </div>
-                  <div v-if="canEdit" class="doc-filter-actions">
-                    <KbUploadSourceDropdown ref="uploadSourceRef" :accept-file-types="acceptFileTypes"
-                      :supported-file-types="[...supportedFileTypes]" include-manual trigger-icon="add" :trigger-label="t('knowledgeBase.addDocument')"
-                      trigger-class="content-bar-icon-btn" data-guide="kb-detail-add-doc"
-                      :tooltip="t('knowledgeBase.addDocument')" placement="bottom-right" @files="handleUploadSourceFiles"
-                      @url="handleUploadSourceUrl" @manual="handleManualCreate" />
-                  </div>
-                </div>
-              </div>
+              <KBDocList
+                ref="docListRef"
+                v-model:doc-search-keyword="docSearchKeyword"
+                v-model:filters-expanded="filtersExpanded"
+                v-model:selected-file-type="selectedFileType"
+                v-model:selected-parse-status="selectedParseStatus"
+                v-model:selected-source="selectedSource"
+                v-model:updated-time-range="updatedTimeRange"
+                v-model:selected-tag-ids="selectedTagIds"
+                v-model:tag-search-query="tagSearchQuery"
+                v-model:view-mode="viewMode"
+                v-model:batch-mode="batchMode"
+                v-model:document-sort-panel-visible="documentSortPanelVisible"
+                v-model:selected-document-sort="selectedDocumentSort"
+                :kb-id="kbId"
+                :kb-info="kbInfo"
+                :show-folder-tree="showFolderTree"
+                :folder-tree-collapsed="folderTreeCollapsed"
+                :folder-breadcrumbs="folderBreadcrumbs"
+                :total="total"
+                :is-filtering="isFiltering"
+                :loading="docListLoading"
+                :active-filter-count="activeFilterCount"
+                :file-type-options="fileTypeOptions"
+                :parse-status-options="parseStatusOptions"
+                :source-options="sourceOptions"
+                :disable-future-date="disableFutureDate"
+                :tag-loading="tagLoading"
+                :tag-loading-more="tagLoadingMore"
+                :tag-has-more="tagHasMore"
+                :filter-tag-options="filterTagOptions"
+                :document-sort-groups="documentSortGroups"
+                :active-document-sort-label="activeDocumentSortLabel"
+                :document-sort-option-label="documentSortOptionLabel"
+                :has-items="!!cardList.length"
+                :batch-deleting="batchDeleting"
+                :batch-reparsing="batchReparsing"
+                :batch-tagging="batchTagging"
+                :batch-downloading="batchDownloading"
+                :can-download-knowledge="canDownloadKnowledge"
+                :can-mutate-knowledge="canMutateKnowledge"
+                :can-edit="canEdit"
+                :accept-file-types="acceptFileTypes"
+                :supported-file-types="[...supportedFileTypes]"
+                @navigate-folder="handleFolderSelect"
+                @toggle-folder-tree="handleFolderTreeCollapsedChange"
+                @reload="loadKnowledgeFiles(kbId)"
+                @clear-filters="clearDocumentFilters"
+                @load-tags="kbId && loadTags(kbId)"
+                @tag-filter-change="handleTagFilterChange"
+                @sort-select="handleDocumentSortSelect"
+                @toggle-batch="toggleBatchMode"
+                @upload-files="handleUploadSourceFiles"
+                @upload-url="handleUploadSourceUrl"
+                @manual-create="handleManualCreate"
+              />
               <div class="doc-scroll-container"
                 :class="{
                   'is-empty': !cardList.length && !docListLoading,
@@ -2645,789 +2506,5 @@ const handleKBEditorSuccess = (kbIdValue: string) => {
 
 </style>
 <style scoped lang="less">
-.knowledge-layout {
-  display: flex;
-  flex-direction: column;
-  margin: 0 16px 0 0;
-  gap: 16px;
-  height: 100%;
-  flex: 1;
-  width: 100%;
-  min-width: 0;
-  padding: 20px 28px 0;
-  box-sizing: border-box;
-}
-
-// View switch (文档 / Wiki / 图谱 / 画廊): a segmented control after the
-// breadcrumb, drawn like the documents tab's view toggle so the four views
-// read as siblings rather than as another breadcrumb level.
-.kb-view-tabs {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  margin-left: 2px;
-  padding: 3px;
-  border-radius: var(--app-radius-lg);
-  background: var(--td-bg-color-secondarycontainer);
-}
-
-.kb-view-tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 28px;
-  padding: 0 12px;
-  border: 0;
-  border-radius: var(--app-radius-md);
-  background: transparent;
-  color: var(--td-text-color-secondary);
-  font-family: var(--app-font-family);
-  font-size: var(--app-text-base);
-  font-weight: 500;
-  line-height: 1;
-  white-space: nowrap;
-  cursor: pointer;
-  transition: color var(--app-motion-fast) ease, background-color var(--app-motion-fast) ease;
-
-  &:hover {
-    color: var(--td-text-color-primary);
-  }
-
-  &.active {
-    background: var(--td-bg-color-container);
-    color: var(--td-brand-color);
-    font-weight: 600;
-    box-shadow: 0 1px 3px rgb(0 0 0 / 8%);
-  }
-
-  &:focus-visible {
-    outline: 2px solid var(--app-focus-border);
-    outline-offset: 1px;
-  }
-
-  &__indicator {
-    display: inline-flex;
-    color: var(--td-brand-color);
-  }
-}
-
-.wiki-main-area {
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
-}
-
-// Directory navigation and the document content share the available width.
-.knowledge-main {
-  display: flex;
-  flex: 1;
-  min-height: 0;
-  background: transparent;
-  border: none;
-}
-
-@media (max-width: 1000px) {
-  .knowledge-main {
-    flex-direction: column;
-    :deep(.kb-folder-tree) {
-      width: 100%;
-      max-height: 200px;
-      padding: 0 0 12px;
-      margin: 0 0 16px;
-      border-right: 0;
-      border-bottom: 1px solid var(--td-component-stroke);
-    }
-    :deep(.kb-folder-tree__header) { height: 28px; padding-bottom: 4px; }
-  }
-}
-
-// 标签筛选浮层：点击工具栏入口展开，不占文档列表横向空间
-
-.tag-content {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  padding: 0;
-  border: none;
-  overflow: hidden;
-  background: transparent;
-}
-
-.doc-card-area {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  min-width: 0;
-  position: relative;
-  container-type: inline-size;
-  container-name: doc-card-area;
-}
-
-// One navigation row; filters open in a single anchored panel.
-.doc-filter-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  flex-shrink: 0;
-  padding: 0 0 16px;
-  border-bottom: 1px solid var(--td-component-stroke);
-  &__trailing { display: flex; align-items: center; gap: 8px; min-width: 0; }
-  .doc-search-input { width: 220px; min-width: 100px; }
-  :deep(.doc-search-input .t-input) {
-    background: transparent;
-    border-color: var(--td-component-stroke);
-    border-radius: var(--app-radius-md);
-    font-size: var(--app-text-md);
-  }
-  .doc-filter-actions :deep(.content-bar-icon-btn) {
-    height: 32px;
-    padding: 0 12px;
-    border-radius: var(--app-radius-md);
-    background: var(--td-brand-color);
-    color: var(--td-text-color-anti);
-    &:hover { background: var(--td-brand-color-hover); }
-  }
-}
-.doc-folder-path {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  min-width: 0;
-  min-height: 32px;
-  line-height: 20px;
-  flex-wrap: wrap;
-  &__tree-toggle {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    align-self: center;
-    gap: 6px;
-    height: 32px;
-    padding: 0 10px;
-    font: inherit;
-    font-size: var(--app-text-md);
-    border: 1px solid var(--td-component-stroke);
-    border-radius: var(--app-radius-md);
-    background: var(--td-bg-color-container);
-    color: var(--td-text-color-secondary);
-    cursor: pointer;
-    &:hover { background: var(--td-bg-color-container-hover); color: var(--td-text-color-primary); }
-  }
-  &__crumb {
-    max-width: 160px;
-    padding: 6px 2px;
-    border: 0;
-    background: transparent;
-    color: var(--td-text-color-secondary);
-    font: inherit;
-    font-size: var(--app-text-md);
-    line-height: 20px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    cursor: pointer;
-    &:is(button):hover { color: var(--td-brand-color); }
-    &.is-current { color: var(--td-text-color-primary); font-weight: 600; cursor: default; }
-  }
-  &__count { padding: 6px 0; line-height: 20px; margin-left: 6px; color: var(--td-text-color-placeholder); font-size: var(--app-text-sm); font-variant-numeric: tabular-nums; white-space: nowrap; }
-  &__sep, &__scope { align-self: center; flex-shrink: 0; color: var(--td-text-color-placeholder); font-size: var(--app-text-sm); }
-}
-.doc-filter-toggle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  height: 32px;
-  padding: 0 10px;
-  border: 1px solid var(--td-component-stroke);
-  border-radius: var(--app-radius-md);
-  background: transparent;
-  color: var(--td-text-color-secondary);
-  font: inherit;
-  font-size: var(--app-text-md);
-  white-space: nowrap;
-  cursor: pointer;
-  &:hover, &.active { background: var(--td-bg-color-secondarycontainer); color: var(--td-text-color-primary); }
-}
-.doc-filter-count {
-  display: inline-flex; align-items: center; justify-content: center; min-width: 17px; height: 17px;
-  padding: 0 2px; color: var(--td-brand-color); font-weight: 600;
-  font-size: var(--app-text-xs); font-variant-numeric: tabular-nums;
-}
-.doc-view-toggle {
-  display: inline-flex;
-  align-items: center;
-  background: var(--td-bg-color-secondarycontainer);
-  border: 1px solid transparent;
-  border-radius: var(--app-radius-md);
-  padding: 2px;
-  .doc-view-toggle-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 28px;
-    height: 26px;
-    padding: 0;
-    border: 0;
-    border-radius: var(--app-radius-xs);
-    background: transparent;
-    color: var(--td-text-color-placeholder);
-    cursor: pointer;
-    &:hover { color: var(--td-text-color-primary); }
-    &.active { background: var(--td-bg-color-container); color: var(--td-brand-color); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08); }
-  }
-}
-.doc-filter-panel {
-  width: 340px;
-  max-width: calc(100vw - 32px);
-  max-height: min(600px, 80vh);
-  overflow-y: auto;
-  padding: 16px;
-  box-sizing: border-box;
-  color: var(--td-text-color-primary);
-  font-size: var(--app-text-md);
-  button { font: inherit; cursor: pointer; }
-  &__header {
-    display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;
-    strong { font-size: var(--app-text-base); font-weight: 600; }
-    button { border: 0; padding: 0; background: transparent; color: var(--td-text-color-secondary); font-size: var(--app-text-sm); }
-    button:disabled { color: var(--td-text-color-disabled); cursor: default; }
-  }
-  &__fields { display: flex; flex-direction: column; gap: 10px; }
-  .doc-filter-field {
-    display: grid; grid-template-columns: 72px minmax(0, 1fr); align-items: center; gap: 8px;
-    > span { color: var(--td-text-color-secondary); font-size: var(--app-text-sm); }
-    :deep(.t-date-range-picker) { width: 100%; }
-  }
-}
-
-.document-sort-panel {
-  width: 330px;
-  max-width: min(330px, calc(100vw - 32px));
-  padding: 6px;
-  box-sizing: border-box;
-  color: var(--td-text-color-primary);
-}
-
-.document-sort-group {
-  padding: 7px 6px 8px;
-
-  & + & {
-    border-top: 1px solid var(--td-component-stroke);
-  }
-
-  &__heading {
-    padding: 0 4px 6px;
-  }
-
-  &__label {
-    font-size: var(--app-text-md);
-    line-height: 20px;
-    font-weight: 600;
-  }
-
-  &__description {
-    margin-top: 1px;
-    color: var(--td-text-color-secondary);
-    font-size: var(--app-text-xs);
-    line-height: 17px;
-  }
-
-  &__options {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 4px;
-  }
-}
-
-.document-sort-option {
-  display: inline-flex;
-  align-items: center;
-  justify-content: space-between;
-  min-width: 0;
-  height: 32px;
-  padding: 0 10px;
-  border: 0;
-  border-radius: var(--app-radius-sm);
-  background: transparent;
-  color: var(--td-text-color-primary);
-  font-family: var(--app-font-family);
-  font-size: var(--app-text-md);
-  cursor: pointer;
-
-  &:hover {
-    background: var(--td-bg-color-secondarycontainer);
-  }
-
-  &.active {
-    background: var(--td-brand-color-light);
-    color: var(--td-brand-color);
-    font-weight: 500;
-  }
-}
-.doc-filter-tags {
-  margin-top: 16px;
-  padding-top: 14px;
-  border-top: 1px solid var(--td-component-stroke);
-  &__heading {
-    display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;
-    button { padding: 0; border: 0; background: transparent; color: var(--td-text-color-secondary); font-size: var(--app-text-sm); }
-  }
-  &__count { margin-left: 6px; color: var(--td-text-color-placeholder); font-variant-numeric: tabular-nums; }
-  &__list { display: flex; flex-direction: column; gap: 2px; max-height: 168px; overflow-y: auto; margin-top: 8px; }
-  &__empty { color: var(--td-text-color-placeholder); padding: 8px 0; }
-}
-.doc-filter-tag {
-  display: flex; align-items: center; flex-shrink: 0; width: 100%; min-height: 28px; margin: 0;
-  padding: 4px 6px; box-sizing: border-box; border-radius: var(--app-radius-xs);
-  &:hover { background: var(--td-bg-color-container-hover); }
-  :deep(.t-checkbox__label) { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  :deep(.t-checkbox__input) { flex-shrink: 0; }
-}
-.doc-batch-toggle {
-  &:disabled { cursor: not-allowed; opacity: 0.5; }
-  &.active { color: var(--app-selection-text); border-color: var(--td-component-border); background: var(--app-selection-bg); }
-}
-.doc-filter-bar button:focus-visible, .doc-filter-panel button:focus-visible {
-  outline: 2px solid var(--app-focus-border); outline-offset: 2px;
-}
-.doc-list-skeleton-row { padding: 16px 40px; }
-@container doc-card-area (max-width: 780px) {
-  .doc-filter-bar { flex-wrap: wrap; gap: 12px; }
-  .doc-filter-bar__trailing { width: 100%; }
-  .doc-filter-bar .doc-search-input { flex: 1; width: auto; }
-}
-
-.doc-sort-trigger {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  max-width: 220px;
-  height: 32px;
-  padding: 0 10px;
-  border: 1px solid var(--td-component-stroke);
-  border-radius: var(--app-radius-md);
-  background: transparent;
-  color: var(--td-text-color-secondary);
-  font: inherit;
-  font-size: var(--app-text-md);
-  cursor: pointer;
-
-  &:hover,
-  &.active {
-    color: var(--td-text-color-primary);
-    background: var(--td-bg-color-secondarycontainer);
-  }
-
-  &__label {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  &__caret {
-    flex-shrink: 0;
-    transition: transform var(--app-motion-base) ease;
-
-    &.open { transform: rotate(180deg); }
-  }
-}
-
-@container doc-card-area (max-width: 540px) {
-  .doc-filter-bar__trailing { flex-wrap: wrap; }
-  .doc-filter-bar .doc-search-input { flex: 1 0 100%; }
-}
-
-.doc-scroll-container {
-  position: relative;
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding-right: 4px;
-
-  &.is-empty {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    overflow-y: hidden;
-  }
-
-  &.is-marquee-active {
-    cursor: crosshair;
-  }
-}
-
-.doc-marquee-box {
-  position: absolute;
-  z-index: 4;
-  pointer-events: none;
-  border: 1px solid var(--td-brand-color);
-  background: color-mix(in srgb, var(--td-brand-color) 12%, transparent);
-  border-radius: 2px;
-
-  &.is-add {
-    border-color: var(--td-brand-color);
-    background: color-mix(in srgb, var(--td-brand-color) 14%, transparent);
-  }
-
-  &.is-subtract {
-    border-color: var(--td-error-color-6);
-    background: color-mix(in srgb, var(--td-error-color-6) 12%, transparent);
-  }
-}
-
-/* Reserve space for the batch actions so the last document stays reachable. */
-.doc-batch-bar-anchor {
-  position: relative;
-  flex-shrink: 0;
-  z-index: 6;
-  display: flex;
-  justify-content: center;
-  padding: 12px 0 0;
-  pointer-events: none;
-
-  &>* {
-    pointer-events: auto;
-  }
-}
-
-// Header 样式（无底部分割线，留更多空间给下方内容区）
-.document-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 12px;
-  flex-shrink: 0;
-
-  .document-header-title {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-
-  .document-title-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
-
-  .kb-title-actions {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    flex-shrink: 0;
-    margin-left: 4px;
-  }
-
-  .document-breadcrumb {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 6px;
-    row-gap: 8px;
-    margin: 0;
-    font-size: var(--app-text-3xl);
-    font-weight: 600;
-    color: var(--td-text-color-primary);
-  }
-
-  .breadcrumb-link {
-    border: none;
-    background: transparent;
-    padding: 4px 8px;
-    margin: -4px -8px;
-    font: inherit;
-    color: var(--td-text-color-secondary);
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    white-space: nowrap;
-    border-radius: var(--app-radius-sm);
-    transition: all var(--app-motion-instant) ease;
-
-    &:hover:not(:disabled) {
-      color: var(--td-success-color);
-      background: var(--td-bg-color-container);
-    }
-
-    &:disabled {
-      cursor: not-allowed;
-      color: var(--td-text-color-placeholder);
-    }
-
-    &.dropdown {
-      padding-right: 6px;
-
-      :deep(.t-icon) {
-        font-size: var(--app-text-base);
-        transition: transform var(--app-motion-instant) ease;
-      }
-
-      &:hover:not(:disabled) {
-        :deep(.t-icon) {
-          transform: translateY(1px);
-        }
-      }
-    }
-  }
-
-  .breadcrumb-separator {
-    font-size: var(--app-text-base);
-    color: var(--td-text-color-placeholder);
-  }
-
-  .breadcrumb-current {
-    color: var(--td-text-color-primary);
-    font-weight: 600;
-  }
-
-  h2 {
-    margin: 0;
-    color: var(--td-text-color-primary);
-    font-family: var(--app-font-family);
-    font-size: var(--app-text-4xl);
-    font-weight: 600;
-    line-height: 32px;
-  }
-
-  .document-subtitle {
-    margin: 0;
-    color: var(--td-text-color-placeholder);
-    font-family: var(--app-font-family);
-    font-size: var(--app-text-base);
-    font-weight: 400;
-    line-height: 20px;
-  }
-
-  .parser-hint {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    margin: 2px 0 0;
-    color: var(--td-warning-color);
-    font-size: var(--app-text-sm);
-    line-height: 1.4;
-    cursor: pointer;
-    transition: color var(--app-motion-fast) ease;
-
-    &:hover {
-      color: var(--td-warning-color-active);
-
-      .parser-hint-link {
-        text-decoration: underline;
-      }
-    }
-
-    .parser-hint-icon {
-      font-size: var(--app-text-sm);
-      flex-shrink: 0;
-    }
-
-    .parser-hint-link {
-      color: var(--td-brand-color);
-      margin-left: 2px;
-      white-space: nowrap;
-    }
-  }
-
-  .storage-engine-warning {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    margin: 2px 0 0;
-    color: var(--td-warning-color);
-    font-size: var(--app-text-sm);
-    line-height: 1.4;
-    cursor: pointer;
-    transition: color var(--app-motion-fast) ease;
-
-    &:hover {
-      color: var(--td-warning-color-active);
-
-      .warning-link {
-        text-decoration: underline;
-      }
-    }
-
-    .warning-icon {
-      font-size: var(--app-text-sm);
-      flex-shrink: 0;
-    }
-
-    .warning-link {
-      color: var(--td-brand-color);
-      margin-left: 2px;
-      white-space: nowrap;
-    }
-  }
-}
-
-
-
-.kb-settings-button {
-  width: 30px;
-  height: 30px;
-  border: none;
-  border-radius: 50%;
-  background: var(--td-bg-color-secondarycontainer);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--td-text-color-secondary);
-  cursor: pointer;
-  transition: all var(--app-motion-base) ease;
-  padding: 0;
-
-  &:hover:not(:disabled) {
-    background: var(--td-success-color-light);
-    color: var(--td-brand-color);
-    box-shadow: none;
-  }
-
-  &:disabled {
-    cursor: not-allowed;
-    opacity: 0.4;
-  }
-
-  :deep(.t-icon) {
-    font-size: var(--app-text-2xl);
-  }
-}
-
-.faq-manager-wrapper {
-  flex: 1;
-  min-height: 0;
-  padding: 24px 32px;
-  overflow-y: auto;
-  margin: 0 16px 0 4px;
-}
-
-@keyframes contentFadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.doc-card-list {
-  box-sizing: border-box;
-  display: grid;
-  // 文档卡片信息量较大（标题 + 摘要 + 标签/类型），保持稍宽的最小列宽，避免一行塞太多导致内容拥挤。
-  grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr));
-  gap: 10px;
-  align-content: flex-start;
-  width: 100%;
-
-  &.doc-card-list-animated {
-    animation: contentFadeIn 0.32s ease-out;
-  }
-}
-
-.knowledge-card-skeleton {
-  cursor: default;
-
-  .card-content {
-    flex: 1;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
-    padding: 10px;
-  }
-
-  .card-content-nav {
-    margin-bottom: 8px;
-  }
-
-  .card-bottom {
-    flex-shrink: 0;
-    margin-top: auto;
-    width: 100%;
-    padding: 0 14px;
-    box-sizing: border-box;
-    height: 32px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    border-top: 1px solid var(--td-component-stroke);
-  }
-}
-
-.doc-empty-state {
-  flex: 1;
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 60px 20px;
-  min-height: 100%;
-}
-
-.knowledge-card {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  border: 1px solid var(--td-component-border);
-  height: 164px;
-  border-radius: var(--app-radius-md);
-  overflow: hidden;
-  box-sizing: border-box;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
-  background: var(--td-bg-color-container);
-  position: relative;
-  cursor: pointer;
-  transition: border-color var(--app-motion-base) ease, box-shadow var(--app-motion-base) ease, background-color var(--app-motion-base) ease;
-
-  .card-content {
-    flex: 1;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
-    padding: 12px;
-  }
-
-  .card-content-nav {
-    flex-shrink: 0;
-    display: flex;
-    align-items: flex-start;
-    gap: 0;
-    margin-bottom: 6px;
-  }
-
-  .card-bottom {
-    flex-shrink: 0;
-    margin-top: auto;
-    padding: 0 14px;
-    box-sizing: border-box;
-    height: 32px;
-    width: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    background: var(--td-bg-color-container);
-    border-top: 1px solid var(--td-component-stroke);
-  }
-
-}
-
-.knowledge-card:hover {
-  border-color: color-mix(in srgb, var(--td-component-stroke) 55%, var(--td-brand-color));
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.07);
-}
-
+@import './detail/kbDetail.less';
 </style>

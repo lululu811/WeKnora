@@ -1,0 +1,285 @@
+.knowledge-layout {
+  display: flex;
+  flex-direction: column;
+  margin: 0 16px 0 0;
+  gap: 16px;
+  height: 100%;
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  padding: 20px 28px 0;
+  box-sizing: border-box;
+}
+
+// View switch (文档 / Wiki / 图谱 / 画廊): a segmented control after the
+// breadcrumb, drawn like the documents tab's view toggle so the four views
+// read as siblings rather than as another breadcrumb level.
+.kb-view-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 2px;
+  padding: 3px;
+  border-radius: var(--app-radius-lg);
+  background: var(--td-bg-color-secondarycontainer);
+}
+
+.kb-view-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--app-radius-md);
+  background: transparent;
+  color: var(--td-text-color-secondary);
+  font-family: var(--app-font-family);
+  font-size: var(--app-text-base);
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color var(--app-motion-fast) ease, background-color var(--app-motion-fast) ease;
+
+  &:hover {
+    color: var(--td-text-color-primary);
+  }
+
+  // Direction A：激活态用珊瑚色 2px 下划线，不再叠背景 + 阴影，
+  // 避免和 hover 的背景色互相覆盖。
+  &.active {
+    position: relative;
+    background: transparent;
+    color: var(--td-brand-color);
+    font-weight: 600;
+    box-shadow: none;
+
+    &::after {
+      content: '';
+      position: absolute;
+      left: 12px;
+      right: 12px;
+      bottom: -1px;
+      height: 2px;
+      border-radius: 1px;
+      background: var(--td-brand-color);
+    }
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--app-focus-border);
+    outline-offset: 1px;
+  }
+
+  &__indicator {
+    display: inline-flex;
+    color: var(--td-brand-color);
+  }
+}
+
+// Header 样式（无底部分割线，留更多空间给下方内容区）
+.document-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  flex-shrink: 0;
+
+  .document-header-title {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .document-title-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .kb-title-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+    margin-left: 4px;
+  }
+
+  .document-breadcrumb {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    row-gap: 8px;
+    margin: 0;
+    font-size: var(--app-text-3xl);
+    font-weight: 600;
+    color: var(--td-text-color-primary);
+  }
+
+  .breadcrumb-link {
+    border: none;
+    background: transparent;
+    padding: 4px 8px;
+    margin: -4px -8px;
+    font: inherit;
+    color: var(--td-text-color-secondary);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+    border-radius: var(--app-radius-sm);
+    transition: all var(--app-motion-instant) ease;
+
+    &:hover:not(:disabled) {
+      color: var(--td-success-color);
+      background: var(--td-bg-color-container);
+    }
+
+    &:disabled {
+      cursor: not-allowed;
+      color: var(--td-text-color-placeholder);
+    }
+
+    &.dropdown {
+      padding-right: 6px;
+
+      :deep(.t-icon) {
+        font-size: var(--app-text-base);
+        transition: transform var(--app-motion-instant) ease;
+      }
+
+      &:hover:not(:disabled) {
+        :deep(.t-icon) {
+          transform: translateY(1px);
+        }
+      }
+    }
+  }
+
+  .breadcrumb-separator {
+    font-size: var(--app-text-base);
+    color: var(--td-text-color-placeholder);
+  }
+
+  .breadcrumb-current {
+    color: var(--td-text-color-primary);
+    font-weight: 600;
+  }
+
+  h2 {
+    margin: 0;
+    color: var(--td-text-color-primary);
+    font-family: var(--app-font-family);
+    font-size: var(--app-text-4xl);
+    font-weight: 600;
+    line-height: 32px;
+  }
+
+  .document-subtitle {
+    margin: 0;
+    color: var(--td-text-color-placeholder);
+    font-family: var(--app-font-family);
+    font-size: var(--app-text-base);
+    font-weight: 400;
+    line-height: 20px;
+  }
+
+  .parser-hint {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin: 2px 0 0;
+    color: var(--td-warning-color);
+    font-size: var(--app-text-sm);
+    line-height: 1.4;
+    cursor: pointer;
+    transition: color var(--app-motion-fast) ease;
+
+    &:hover {
+      color: var(--td-warning-color-active);
+
+      .parser-hint-link {
+        text-decoration: underline;
+      }
+    }
+
+    .parser-hint-icon {
+      font-size: var(--app-text-sm);
+      flex-shrink: 0;
+    }
+
+    .parser-hint-link {
+      color: var(--td-brand-color);
+      margin-left: 2px;
+      white-space: nowrap;
+    }
+  }
+
+  .storage-engine-warning {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin: 2px 0 0;
+    color: var(--td-warning-color);
+    font-size: var(--app-text-sm);
+    line-height: 1.4;
+    cursor: pointer;
+    transition: color var(--app-motion-fast) ease;
+
+    &:hover {
+      color: var(--td-warning-color-active);
+
+      .warning-link {
+        text-decoration: underline;
+      }
+    }
+
+    .warning-icon {
+      font-size: var(--app-text-sm);
+      flex-shrink: 0;
+    }
+
+    .warning-link {
+      color: var(--td-brand-color);
+      margin-left: 2px;
+      white-space: nowrap;
+    }
+  }
+}
+
+
+
+.kb-settings-button {
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 50%;
+  background: var(--td-bg-color-secondarycontainer);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--td-text-color-secondary);
+  cursor: pointer;
+  transition: all var(--app-motion-base) ease;
+  padding: 0;
+
+  &:hover:not(:disabled) {
+    background: var(--td-success-color-light);
+    color: var(--td-brand-color);
+    box-shadow: none;
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.4;
+  }
+
+  :deep(.t-icon) {
+    font-size: var(--app-text-2xl);
+  }
+}

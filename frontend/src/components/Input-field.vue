@@ -34,6 +34,9 @@ import { useDeploymentCapabilitiesStore } from '@/stores/deploymentCapabilities'
 import { hostSkillsOnly, mentionSkillTargetId } from '@/utils/skillTarget';
 import { useI18n } from 'vue-i18n';
 import AttachmentUpload, { type AttachmentFile } from './AttachmentUpload.vue';
+import InputEditor from './input/InputEditor.vue';
+import InputToolbar from './input/InputToolbar.vue';
+import InputSendButton from './input/InputSendButton.vue';
 import {
   kbSatisfiesAgentRequirements,
   deriveKbFilterForAgent,
@@ -56,6 +59,17 @@ import { formatLocalizedList } from '@/utils/format-list';
 import { SKILL_ICON, type MentionItem, type MentionItemType, type MentionRequestItem } from '@/types/mention';
 import { toolboxLocation } from '@/config/toolbox';
 import { supportedLevels, levelLabelKey, levelFromLegacy, clampLevel, type ReasoningLevel } from '@/utils/reasoningEffort';
+
+/** 附件按钮：原内联表达式搬家，行为不变。AttachmentUpload 通过 InputEditor 的
+ *  默认插槽渲染，模板 ref 仍属于本组件，因此直接取本组件的 attachmentUploadRef。 */
+const triggerAttachment = () => (attachmentUploadRef.value as any)?.triggerFileSelect();
+
+/** 投递动效的起点。useSendFlight 只按起点定位，终点留空即可。 */
+const composerSourceEl = computed<HTMLElement | null>(() => {
+  const instance = textareaRef.value as any;
+  return (instance?.textarea ?? instance?.$el ?? instance ?? null) as HTMLElement | null;
+});
+const composerTargetEl = ref<HTMLElement | null>(null);
 
 const route = useRoute();
 const router = useRouter();
@@ -728,6 +742,14 @@ const modelsLoading = ref(false);
 const showModelSelector = ref(false);
 const modelButtonRef = ref<HTMLElement>();
 const modelDropdownStyle = ref<Record<string, string>>({});
+
+/**
+ * 交给子组件回写的「元素引用管道」。必须放在上面四个 ref 之后（TDZ）。
+ *
+ * 之所以包一层普通对象再传给子组件：模板里直接写 `:el-ref="textareaRef"` 会被 Vue
+ * 自动解包成 DOM 元素，子组件就再也拿不到 ref 本身；放进对象里按属性取即可绕开解包。
+ */
+const composerRefs = { textareaRef, agentModeButtonRef, atButtonRef, modelButtonRef };
 
 // 显示的知识库标签（最多显示2个）
 const displayedKbs = computed(() => selectedKbs.value.slice(0, 2));
@@ -2716,212 +2738,89 @@ defineExpose({
       </div>
     </div>
     <div class="rich-input-container" data-guide="chat-input">
-      <!-- 图片预览区域 -->
-      <div v-if="uploadedImages.length > 0" class="image-preview-bar">
-        <div v-for="(img, idx) in uploadedImages" :key="idx" class="image-preview-item">
-          <img :src="img.preview" class="image-preview-thumb" />
-          <span class="image-preview-remove" @click="removeImage(idx)">×</span>
-        </div>
-      </div>
-
-      <!-- 附件列表区域 (由 AttachmentUpload 组件渲染) -->
-      <AttachmentUpload ref="attachmentUploadRef" :max-files="5"
-        :session-id="sessionId" :agent-id="selectedAgentId"
-        :agent-source-tenant-id="settingsStore.selectedAgentSourceTenantId ?? undefined"
-        @update:files="uploadedAttachments = $event" />
-
-      <!-- 选中的知识库和文件标签（显示在输入框内顶部） -->
-      <div v-if="allSelectedItems.length > 0" class="selected-tags-inline">
-        <span v-for="item in allSelectedItems" :key="`${item.type}:${item.id}`" class="mention-chip" :class="[
-          getMentionChipClass(item),
-          { 'mention-chip--agent': item.isAgentConfigured }
-        ]">
-          <span class="mention-chip__icon-wrap" :class="{ 'has-org': item.org_name }">
-            <span class="mention-chip__icon">
-              <t-icon v-if="item.type === 'kb'" :name="item.kbType === 'faq' ? 'chat-bubble-help' : 'folder'" />
-              <t-icon v-else :name="getMentionIcon(item)" />
-            </span>
-            <span v-if="item.org_name" class="mention-chip__org-badge">
-              <img :src="getImgSrc(item.type === 'file' ? 'organization-grey.svg' : 'organization-green.svg')"
-                class="mention-chip__org-img" alt="" aria-hidden="true" />
-            </span>
-          </span>
-          <span class="mention-chip__name" :title="item.name">{{ item.name }}</span>
-          <span class="mention-chip__remove" @click.stop="removeSelectedItem(item)"
-            :aria-label="$t('common.remove')">×</span>
-        </span>
-      </div>
-
-      <!-- 实际输入框 -->
-      <t-textarea ref="textareaRef" v-model="query" :placeholder="t('input.placeholder')" name="description" :autosize="true"
-        @keydown="onKeydown" @input="onInput" @compositionstart="onCompositionStart" @compositionend="onCompositionEnd"
-        @paste="onPaste" />
+      <InputEditor
+        :model-value="query"
+        :placeholder="t('input.placeholder')"
+        :images="uploadedImages"
+        :selected-items="allSelectedItems"
+        :el-ref="composerRefs.textareaRef"
+        :get-mention-chip-class="getMentionChipClass"
+        :get-mention-icon="getMentionIcon"
+        :get-img-src="getImgSrc"
+        :t="t"
+        @update:model-value="query = $event"
+        @keydown="onKeydown"
+        @input="onInput"
+        @compositionstart="onCompositionStart"
+        @compositionend="onCompositionEnd"
+        @paste="onPaste"
+        @remove-image="removeImage"
+        @remove-item="removeSelectedItem"
+      >
+        <!-- 附件列表区域 (由 AttachmentUpload 组件渲染) -->
+        <AttachmentUpload ref="attachmentUploadRef" :max-files="5"
+          :session-id="sessionId" :agent-id="selectedAgentId"
+          :agent-source-tenant-id="settingsStore.selectedAgentSourceTenantId ?? undefined"
+          @update:files="uploadedAttachments = $event" />
+      </InputEditor>
 
       <!-- 控制栏按文档流排列，换行时自动撑开容器 -->
-      <div class="control-bar" :class="{ 'is-embedded': embeddedMode }">
-        <!-- 左侧控制按钮 -->
-        <div class="control-left" v-if="!embeddedMode">
-          <!-- Agent 模式切换按钮 -->
-          <div ref="agentModeButtonRef" class="control-btn agent-mode-btn" :class="{
-            'is-normal': !isCustomAgent && !isAgentEnabled,
-            'is-agent': !isCustomAgent && isAgentEnabled,
-            'is-custom': isCustomAgent
-          }" @click.stop="toggleAgentModeSelector">
-            <span class="agent-mode-text">
-              {{ selectedAgent.name || (isAgentEnabled ? $t('input.agentMode') : $t('input.normalMode')) }}
-            </span>
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" class="dropdown-arrow"
-              :class="{ 'rotate': showAgentModeSelector }">
-              <path d="M2.5 4.5L6 8L9.5 4.5H2.5Z" />
-            </svg>
-          </div>
-
-          <!-- Agent 选择器下拉菜单 -->
-          <AgentSelector :visible="showAgentModeSelector" :anchorEl="agentModeButtonRef"
-            :currentAgentId="selectedAgentId" :agents="enabledAgents" :all-models="allModels"
-            @close="closeAgentModeSelector" @select="handleSelectAgent" @not-ready="handleAgentNotReady" />
-
-          <t-tooltip v-if="settingsStore.isAgentStreamMode" placement="top" theme="light"
-            :popupProps="{ overlayClassName: 'input-field-tooltip' }">
-            <template #content>
-              <div v-if="!browserConnection.knownOffline" class="browser-source-tooltip">
-                <strong>{{ $t('localBrowser.local') }}</strong>
-                <span>{{ $t('localBrowser.sourceHint') }}</span>
-              </div>
-              <div v-else class="tooltip-with-link">
-                <span>{{ $t(browserSourceUnavailableHint) }}</span>
-                <a href="#" @click.prevent="openBrowserConnectionSettings">{{ $t('localBrowser.openSettings') }}</a>
-              </div>
-            </template>
-            <button type="button" class="control-btn browser-source-btn"
-              :class="{
-                active: settingsStore.isLocalBrowserEnabled && browserConnection.online,
-                disabled: browserConnection.knownOffline,
-              }"
-              :aria-pressed="settingsStore.isLocalBrowserEnabled && browserConnection.online"
-              :aria-disabled="browserConnection.knownOffline"
-              :aria-label="$t('localBrowser.local')"
-              @click.stop="toggleBrowserSource">
-              <BrowserIcon class="control-icon" />
-            </button>
-          </t-tooltip>
-
-          <!-- WebSearch 开关按钮（智能体未启用时不显示） -->
-          <t-tooltip v-if="showWebSearchButton" placement="top" theme="light"
-            :popupProps="{ overlayClassName: 'input-field-tooltip' }">
-            <template #content>
-              <span v-if="isWebSearchConfigured">{{ isWebSearchEnabled ? $t('input.webSearch.toggleOff') :
-                $t('input.webSearch.toggleOn') }}</span>
-              <div v-else class="tooltip-with-link">
-                <span>{{ $t('input.webSearch.notConfigured') }}</span>
-                <a href="#" @click.prevent="handleGoToWebSearchConfig">{{ $t('input.goToAgentSettings') }}</a>
-              </div>
-            </template>
-            <div class="control-btn websearch-btn" :class="{
-              'active': isWebSearchEnabled && isWebSearchConfigured,
-              'disabled': !isWebSearchConfigured
-            }" @click.stop="toggleWebSearch">
-              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg"
-                class="control-icon websearch-icon" :class="{ 'active': isWebSearchEnabled && isWebSearchConfigured }">
-                <circle cx="9" cy="9" r="7" stroke="currentColor" stroke-width="1.2" fill="none" />
-                <path d="M 9 2 A 3.5 7 0 0 0 9 16" stroke="currentColor" stroke-width="1.2" fill="none" />
-                <path d="M 9 2 A 3.5 7 0 0 1 9 16" stroke="currentColor" stroke-width="1.2" fill="none" />
-                <line x1="2.94" y1="5.5" x2="15.06" y2="5.5" stroke="currentColor" stroke-width="1.2"
-                  stroke-linecap="round" />
-                <line x1="2.94" y1="12.5" x2="15.06" y2="12.5" stroke="currentColor" stroke-width="1.2"
-                  stroke-linecap="round" />
-              </svg>
-            </div>
-          </t-tooltip>
-
-          <!-- 图片上传按钮（智能体未启用时不显示） -->
-          <t-tooltip v-if="showImageUploadButton" placement="top" theme="light"
-            :popupProps="{ overlayClassName: 'input-field-tooltip' }">
-            <template #content>
-              <span>{{ $t('chat.imageUploadTooltip') }}</span>
-            </template>
-            <div class="control-btn image-upload-btn" :class="{
-              'active': uploadedImages.length > 0
-            }" @click.stop="triggerImageUpload()">
-              <svg width="18" height="18" viewBox="0 0 1024 1024" fill="currentColor" class="control-icon">
-                <path
-                  d="M896 128H128c-35.3 0-64 28.7-64 64v640c0 35.3 28.7 64 64 64h768c35.3 0 64-28.7 64-64V192c0-35.3-28.7-64-64-64zM128 832V192h768l0.1 640H128z" />
-                <path d="M352 448a96 96 0 1 0 0-192 96 96 0 0 0 0 192z" />
-                <path d="M128 768l224-288 160 160 192-256L896 640v128H128z" />
-              </svg>
-              <span v-if="uploadedImages.length > 0" class="image-count">{{ uploadedImages.length }}</span>
-            </div>
-          </t-tooltip>
-
-          <!-- 附件上传按钮 -->
-          <t-tooltip placement="top" theme="light" :popupProps="{ overlayClassName: 'input-field-tooltip' }">
-            <template #content>
-              <span>{{ uploadedAttachments.length > 0 ? $t('chat.attachmentWithCount', {
-                count: uploadedAttachments.length
-              }) : $t('chat.attachmentUploadTooltip') }}</span>
-            </template>
-            <div class="control-btn attachment-upload-btn" :class="{ 'active': uploadedAttachments.length > 0 }"
-              @click.stop="attachmentUploadRef?.triggerFileSelect()">
-              <!-- 回形针图标 -->
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
-                stroke-linecap="round" stroke-linejoin="round" class="control-icon">
-                <path
-                  d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
-              </svg>
-              <span v-if="uploadedAttachments.length > 0" class="attachment-count">{{ uploadedAttachments.length
-              }}</span>
-            </div>
-          </t-tooltip>
-
-          <!-- @ 知识库/文件选择按钮 -->
-          <t-tooltip placement="top" theme="light" :popupProps="{ overlayClassName: 'input-field-tooltip' }">
-            <template #content>
-              <div v-if="isMentionDisabled && isKnowledgeBaseDisabledByAgent" class="tooltip-with-link">
-                <span>{{ $t('input.kbDisabledByAgent') }}</span>
-                <a href="#" @click.prevent="handleGoToAgentSettings('knowledge')">{{ $t('input.goToAgentSettings')
-                }}</a>
-              </div>
-              <span v-else>{{ allSelectedItems.length > 0 ? $t('input.knowledgeBaseWithCount', {
-                count:
-                  allSelectedItems.length
-              }) : $t('input.knowledgeBase') }}</span>
-            </template>
-            <div ref="atButtonRef" class="control-btn kb-btn" data-guide="chat-kb-mention" :class="{
-              'active': allSelectedItems.length > 0,
-              'disabled': isMentionDisabled
-            }" @click.stop @mousedown.prevent="triggerMention">
-              <svg width="18" height="18" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"
-                class="control-icon at-icon">
-                <circle cx="10" cy="10" r="3.5" stroke="currentColor" stroke-width="1.8" />
-                <path
-                  d="M13.5 10V11.5C13.5 12.163 13.7634 12.7989 14.2322 13.2678C14.7011 13.7366 15.337 14 16 14C16.663 14 17.2989 13.7366 17.7678 13.2678C18.2366 12.7989 18.5 12.163 18.5 11.5V10C18.5 7.74566 17.6045 5.58365 16.0104 3.98959C14.4163 2.39553 12.2543 1.5 10 1.5C7.74566 1.5 5.58365 2.39553 3.98959 3.98959C2.39553 5.58365 1.5 7.74566 1.5 10C1.5 12.2543 2.39553 14.4163 3.98959 16.0104C5.58365 17.6045 7.74566 18.5 10 18.5H12"
-                  stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
-              </svg>
-              <span v-if="allSelectedItems.length > 0" class="kb-count">{{ allSelectedItems.length }}</span>
-            </div>
-          </t-tooltip>
-
-          <!-- 模型显示 -->
-          <t-tooltip :content="isModelLockedByAgent ? $t('input.modelLockedByAgent') : ''"
-            :disabled="!isModelLockedByAgent">
-            <div class="model-display" :class="{ 'agent-controlled': isModelLockedByAgent }">
-              <div ref="modelButtonRef" class="model-selector-trigger" @click.stop="toggleModelSelector">
-                <span class="model-selector-name">
-                  {{ selectedModelDisplayName }}
-                </span>
-                <span
-                  v-if="selectedModelContextLabel"
-                  class="model-selector-ctx"
-                  :class="{ 'is-default': selectedModelContextIsDefault }"
-                  :title="selectedModelContextTitle"
-                >{{ selectedModelContextLabel }}</span>
-                <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" class="model-dropdown-arrow"
-                  :class="{ 'rotate': showModelSelector }">
-                  <path d="M2.5 4.5L6 8L9.5 4.5H2.5Z" />
-                </svg>
-              </div>
-            </div>
-          </t-tooltip>
+      <InputToolbar
+        :embedded-mode="embeddedMode"
+        :is-custom-agent="isCustomAgent"
+        :is-agent-enabled="isAgentEnabled"
+        :selected-agent="selectedAgent"
+        :show-agent-mode-selector="showAgentModeSelector"
+        :current-agent-id="selectedAgentId"
+        :enabled-agents="enabledAgents"
+        :all-models="allModels"
+        :is-agent-stream-mode="settingsStore.isAgentStreamMode"
+        :is-local-browser-enabled="settingsStore.isLocalBrowserEnabled"
+        :browser-connection="browserConnection"
+        :browser-source-unavailable-hint="browserSourceUnavailableHint"
+        :open-browser-connection-settings="openBrowserConnectionSettings"
+        :toggle-browser-source="toggleBrowserSource"
+        :show-web-search-button="showWebSearchButton"
+        :is-web-search-configured="isWebSearchConfigured"
+        :is-web-search-enabled="isWebSearchEnabled"
+        :toggle-web-search="toggleWebSearch"
+        :handle-go-to-web-search-config="handleGoToWebSearchConfig"
+        :show-image-upload-button="showImageUploadButton"
+        :image-count="uploadedImages.length"
+        :trigger-image-upload="triggerImageUpload"
+        :attachment-count="uploadedAttachments.length"
+        :trigger-attachment="triggerAttachment"
+        :is-mention-disabled="isMentionDisabled"
+        :is-knowledge-base-disabled-by-agent="isKnowledgeBaseDisabledByAgent"
+        :selected-count="allSelectedItems.length"
+        :trigger-mention="triggerMention"
+        :handle-go-to-agent-settings="handleGoToAgentSettings"
+        :is-model-locked-by-agent="isModelLockedByAgent"
+        :selected-model-display-name="selectedModelDisplayName"
+        :selected-model-context-label="selectedModelContextLabel"
+        :selected-model-context-is-default="selectedModelContextIsDefault"
+        :selected-model-context-title="selectedModelContextTitle"
+        :model-button-el-ref="composerRefs.modelButtonRef"
+        :toggle-model-selector="toggleModelSelector"
+        :agent-mode-button-el-ref="composerRefs.agentModeButtonRef"
+        :at-button-el-ref="composerRefs.atButtonRef"
+      >
+        <!-- 右侧控制：回复中且输入为空是停止，一旦输入新内容同一位置变成发送 -->
+        <template #trailing>
+          <InputSendButton
+            :is-replying="isReplying"
+            :can-steer="canSteer"
+            :has-text="!!query.trim()"
+            :locked="composerLocked"
+            :flight-text="query"
+            :source-el="composerSourceEl"
+            :target-el="composerTargetEl"
+            direction="down"
+            @send="createSession(query)"
+            @stop="handleStop"
+          />
+        </template>
+      </InputToolbar>
           <t-popup v-if="reasoningLevels.length > 0" v-model:visible="showReasoningSelector"
             trigger="click" placement="top-right" :disabled="composerLocked"
             :overlay-inner-style="{ padding: '4px', borderRadius: 'var(--app-radius-lg)' }"
@@ -2950,7 +2849,6 @@ defineExpose({
               </div>
             </template>
           </t-popup>
-        </div>
 
         <Teleport to="body">
           <div v-if="showModelSelector" class="model-selector-overlay" @click="closeModelSelector">
@@ -2987,23 +2885,6 @@ defineExpose({
             </div>
           </div>
         </Teleport>
-
-        <!-- 右侧控制：回复中且输入为空是停止，一旦输入新内容同一位置变成发送 -->
-        <div class="control-right">
-          <t-tooltip v-if="isReplying && (!canSteer || !query.trim())" :content="$t('input.stopGeneration')" placement="top">
-            <button type="button" @click="handleStop" class="control-btn stop-btn" :aria-label="$t('input.stopGeneration')">
-              <t-icon name="stop" />
-            </button>
-          </t-tooltip>
-          <t-tooltip v-else :content="`${isReplying && canSteer ? $t('input.steerAfter') : $t('input.send')} · Enter`">
-            <button type="button" @click="createSession(query)" class="control-btn send-btn" data-guide="chat-send"
-              :disabled="!query.trim() || composerLocked" :class="{ 'disabled': !query.trim() || composerLocked }"
-              :aria-label="isReplying && canSteer ? $t('input.steerAfter') : $t('input.send')">
-              <t-icon name="arrow-up" />
-            </button>
-          </t-tooltip>
-        </div>
-      </div>
     </div>
 
     <!-- Mention Selector -->
@@ -3025,7 +2906,6 @@ const getImgSrc = (url: string) => {
 }
 </script>
 <style scoped lang="less">
-@import './css/chat-resource-chips.less';
 
 .answers-input {
   position: absolute;
@@ -3132,39 +3012,30 @@ const getImgSrc = (url: string) => {
   &:focus-within {
     border-color: var(--td-brand-color);
   }
+
+  /* Direction A 聚焦暖光：一圈极淡的珊瑚暖光从下缘晕开。 */
+  &::after {
+    content: '';
+    position: absolute;
+    left: 12%;
+    right: 12%;
+    bottom: -6px;
+    height: 28px;
+    pointer-events: none;
+    opacity: 0;
+    background: radial-gradient(60% 100% at 50% 100%, var(--td-brand-color) 0%, transparent 72%);
+    filter: blur(14px);
+    transition: opacity var(--app-motion-slow);
+  }
+
+  &:focus-within::after {
+    opacity: 0.16;
+  }
 }
 
-/* 选中的知识库/文件标签（mention list 已选项） */
-.selected-tags-inline {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 5px;
-  padding: 6px 12px 6px;
-  border-bottom: 1px solid var(--td-component-stroke);
-  background: var(--td-bg-color-container);
-  border-radius: 11px 11px 0 0;
-  /* 与 .rich-input-container 内缘上边圆角一致（12px - 1px 边框） */
-}
-
-.mention-chip {
-  .chat-resource-chip-surface();
-
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  min-height: 26px;
-  padding: 3px 7px 3px 6px;
-  border-radius: var(--td-radius-medium);
-  box-sizing: border-box;
-  font-size: var(--app-text-sm);
-  font-weight: 500;
-  cursor: default;
-  transition: background var(--app-motion-fast), border-color var(--app-motion-fast);
-  line-height: 18px;
-
-  &:hover {
-    .chat-resource-chip-hover();
+@media (prefers-reduced-motion: reduce) {
+  .rich-input-container::after {
+    transition: none;
   }
 }
 
@@ -3287,12 +3158,6 @@ const getImgSrc = (url: string) => {
   color: #b7791f;
 }
 
-/* 智能体预配置：虚线边框区分 */
-.mention-chip--agent {
-  border-style: dashed;
-  border-color: var(--td-component-border);
-}
-
 :deep(.t-textarea__inner) {
   width: 100%;
   max-height: 152px !important;
@@ -3330,24 +3195,6 @@ const getImgSrc = (url: string) => {
   padding-top: 16px;
 }
 
-/* 控制栏 */
-.control-bar {
-  position: relative;
-  margin: 0 16px 12px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  flex-wrap: wrap;
-  z-index: 10;
-  pointer-events: auto;
-  padding-top: 8px;
-
-  &.is-embedded {
-    justify-content: flex-end;
-  }
-}
-
 .answers-input.is-compact {
   --composer-input-min-height: 56px;
 
@@ -3355,385 +3202,15 @@ const getImgSrc = (url: string) => {
     padding: 12px 14px;
   }
 
-  .control-bar {
+  :deep(.control-bar) {
     margin: 0 12px 8px;
     padding-top: 4px;
   }
 
-  .control-icon {
+  :deep(.control-icon) {
     width: 16px;
     height: 16px;
   }
-}
-
-.control-left {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex: 1;
-  flex-wrap: wrap;
-  min-width: 0;
-}
-
-.control-btn {
-  border: 0;
-  font: inherit;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  padding: 6px 10px;
-  border-radius: var(--app-radius-sm);
-  color: var(--td-text-color-secondary);
-  cursor: pointer;
-  transition: background var(--app-motion-instant), color var(--app-motion-instant);
-  user-select: none;
-  flex-shrink: 0;
-
-  &:hover {
-    background: var(--td-bg-color-secondarycontainer-hover);
-  }
-
-  &.disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-
-    &:hover {
-      background: var(--td-bg-color-secondarycontainer);
-    }
-  }
-}
-
-.agent-mode-btn {
-  height: 28px;
-  padding: 0 10px;
-  min-width: auto;
-  font-weight: 500;
-  position: relative;
-  border: .5px solid var(--td-component-border);
-}
-
-.agent-icon {
-  width: 18px;
-  height: 18px;
-  flex-shrink: 0;
-}
-
-.agent-btn-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  border-radius: 5px;
-  flex-shrink: 0;
-  color: var(--td-text-color-secondary);
-}
-
-.agent-mode-text {
-  font-size: var(--app-text-md);
-  color: var(--td-text-color-secondary);
-  font-weight: 500;
-  white-space: nowrap;
-  margin: 0 4px;
-}
-
-.control-icon {
-  width: 18px;
-  height: 18px;
-}
-
-.kb-btn {
-  height: 28px;
-  width: 28px;
-  padding: 0;
-  min-width: auto;
-  position: relative;
-
-  &:hover:not(.disabled):not(.active) {
-    color: var(--td-text-color-primary);
-  }
-
-  &.active {
-    background: var(--td-bg-color-secondarycontainer);
-    color: var(--td-brand-color);
-
-    &:hover {
-      color: var(--td-brand-color);
-      background: var(--td-bg-color-secondarycontainer);
-    }
-  }
-
-  &.agent-controlled {
-    cursor: not-allowed;
-    opacity: 0.85;
-
-    &:hover {
-      background: var(--td-bg-color-secondarycontainer);
-    }
-
-    &.active:hover {
-      background: var(--td-bg-color-secondarycontainer);
-    }
-  }
-}
-
-.kb-count {
-  position: absolute;
-  top: -2px;
-  right: -2px;
-  z-index: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  box-sizing: border-box;
-  min-width: 14px;
-  height: 14px;
-  padding: 0 3px;
-  border-radius: 7px;
-  background: var(--td-brand-color);
-  color: var(--td-text-color-anti);
-  font-size: var(--app-text-2xs);
-  font-weight: 600;
-  line-height: 1;
-  font-variant-numeric: tabular-nums;
-  pointer-events: none;
-}
-
-.kb-btn-text {
-  font-size: var(--app-text-md);
-  color: var(--td-text-color-secondary);
-  font-weight: 500;
-  white-space: nowrap;
-}
-
-.kb-btn.active .kb-btn-text {
-  color: var(--td-brand-color);
-}
-
-/* Image upload */
-.image-upload-btn {
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  min-width: auto;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-  color: var(--td-text-color-secondary);
-
-  &:hover {
-    background: var(--td-bg-color-secondarycontainer-hover);
-    color: var(--td-text-color-primary);
-  }
-
-  &.active {
-    background: var(--td-bg-color-secondarycontainer);
-    color: var(--td-brand-color);
-  }
-
-  .image-count {
-    position: absolute;
-    top: -2px;
-    right: -2px;
-    background: var(--td-brand-color);
-    color: var(--td-text-color-anti);
-    font-size: var(--app-text-2xs);
-    width: 14px;
-    height: 14px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    line-height: 1;
-  }
-}
-
-/* Attachment upload */
-.attachment-upload-btn {
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  min-width: auto;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-  color: var(--td-text-color-secondary);
-
-  &:hover {
-    background: var(--td-bg-color-secondarycontainer-hover);
-    color: var(--td-text-color-primary);
-  }
-
-  &.active {
-    background: var(--td-bg-color-secondarycontainer);
-    color: var(--td-brand-color);
-  }
-
-  .attachment-count {
-    position: absolute;
-    top: -2px;
-    right: -2px;
-    background: var(--td-brand-color);
-    color: var(--td-text-color-anti);
-    font-size: var(--app-text-2xs);
-    width: 14px;
-    height: 14px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    line-height: 1;
-  }
-}
-
-.image-preview-bar {
-  display: flex;
-  gap: 8px;
-  padding: 8px 12px 4px;
-  flex-wrap: wrap;
-}
-
-.image-preview-item {
-  position: relative;
-  width: 60px;
-  height: 60px;
-  border-radius: var(--app-radius-md);
-  overflow: hidden;
-  border: 1px solid var(--td-border-level-1-color);
-
-  .image-preview-thumb {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-  }
-
-  .image-preview-remove {
-    position: absolute;
-    top: 2px;
-    right: 2px;
-    width: 16px;
-    height: 16px;
-    background: rgba(0, 0, 0, 0.5);
-    color: var(--td-text-color-anti);
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: var(--app-text-sm);
-    cursor: pointer;
-    line-height: 1;
-
-    &:hover {
-      background: rgba(0, 0, 0, 0.7);
-    }
-  }
-}
-
-.browser-source-btn {
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  background: transparent;
-
-  &:hover:not(.disabled):not(.active) {
-    color: var(--td-text-color-primary);
-  }
-
-  &.active {
-    color: var(--td-brand-color);
-    background: var(--td-bg-color-secondarycontainer);
-
-    &:hover {
-      color: var(--td-brand-color);
-      background: var(--td-bg-color-secondarycontainer);
-    }
-  }
-
-  &:focus-visible {
-    outline: 2px solid var(--td-brand-color);
-    outline-offset: 2px;
-  }
-}
-
-.browser-source-tooltip {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  max-width: 240px;
-  line-height: 1.5;
-
-  strong {
-    font-weight: 500;
-  }
-}
-
-.websearch-btn {
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  min-width: auto;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-
-  &.active {
-    background: var(--td-bg-color-secondarycontainer);
-
-    .websearch-icon {
-      color: var(--td-brand-color);
-    }
-
-    &:hover {
-      background: var(--td-bg-color-secondarycontainer);
-    }
-  }
-
-  &:not(.active) {
-    .websearch-icon {
-      color: var(--td-text-color-secondary);
-    }
-
-    &:hover {
-      background: var(--td-bg-color-secondarycontainer-hover);
-
-      .websearch-icon {
-        color: var(--td-text-color-primary);
-      }
-    }
-  }
-
-  &.agent-controlled {
-    cursor: not-allowed;
-    opacity: 0.85;
-
-    &:hover {
-      background: var(--td-bg-color-secondarycontainer);
-    }
-
-    &.active:hover {
-      background: var(--td-bg-color-secondarycontainer);
-    }
-  }
-}
-
-:global(.input-field-tooltip) {
-  .t-popup__content {
-    box-shadow: var(--td-shadow-2);
-    border: .5px solid var(--td-component-border);
-  }
-}
-
-:global(.tooltip-with-link) {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  max-width: 220px;
-  font-size: var(--app-text-sm);
-  color: var(--td-text-color-primary);
 }
 
 :global(.tooltip-with-link a) {
@@ -3744,60 +3221,6 @@ const getImgSrc = (url: string) => {
 
 :global(.tooltip-with-link a:hover) {
   text-decoration: underline;
-}
-
-.websearch-icon {
-  width: 18px;
-  height: 18px;
-}
-
-.dropdown-arrow {
-  width: 10px;
-  height: 10px;
-  margin-left: 2px;
-  transition: transform var(--app-motion-instant);
-
-  &.rotate {
-    transform: rotate(180deg);
-  }
-}
-
-.control-right {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.stop-btn, .send-btn {
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  box-sizing: border-box;
-  font-size: var(--app-text-xl);
-  line-height: 1;
-
-  &:focus-visible {
-    outline: 2px solid var(--td-brand-color);
-    outline-offset: 2px;
-  }
-}
-
-.stop-btn, .send-btn {
-  background-color: var(--td-brand-color);
-  color: var(--td-text-color-anti);
-
-  &:hover:not(.disabled) {
-    background-color: var(--td-brand-color-active);
-  }
-
-  &.disabled {
-    background-color: var(--td-success-color-light);
-  }
-
-  img {
-    width: 16px;
-    height: 16px;
-  }
 }
 
 /* 模型显示样式 */

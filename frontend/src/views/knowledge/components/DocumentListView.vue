@@ -533,7 +533,7 @@ const handleAction = (action: 'download' | 'edit' | 'reparse' | 'cancel-parse' |
 
   &:hover:not(.selected),
   &.menu-open:not(.selected) {
-    background: var(--td-bg-color-secondarycontainer);
+    background: var(--td-bg-color-container-hover);
   }
 
   &:focus-within .row-more-btn,
