@@ -65,8 +65,6 @@
                     @toggle-select="toggleBatchSelect"
                     @menu-click="handleSessionMenuClick"
                     @rename-submit="renameSessionTitle"
-                    @hover-in="mouseenteBotDownr"
-                    @hover-out="mouseleaveBotDown"
                 />
             </div>
 
@@ -270,7 +268,6 @@ const hasAnySession = computed(() =>
     Object.values(sessionBuckets.value).some((bucket) => bucket.items.length > 0),
 );
 const { menuArr, visibleMenuArr } = storeToRefs(usemenuStore);
-let activeSubmenu = ref<string>('');
 const isLiteEdition = ref(false);
 
 // 批量管理状态
@@ -492,13 +489,6 @@ const ensureBucketFillsViewport = async (key: string) => {
         if ((sessionBuckets.value[key]?.items.length ?? 0) <= prevCount) break;
     }
 };
-
-const mouseenteBotDownr = (val: string) => {
-    activeSubmenu.value = val;
-}
-const mouseleaveBotDown = () => {
-    activeSubmenu.value = '';
-}
 
 const enterBatchMode = () => {
     batchMode.value = true

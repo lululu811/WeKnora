@@ -25,7 +25,12 @@ export interface MenuItem {
 export interface ToolboxPreviewItem {
   key: string;
   title: string;
-  icon: string;
+  /**
+   * 叠加图标名。**可选**：`browserconnection` 那一项画的是 BrowserIcon 组件
+   * （带连通状态小圆点），根本不用 icon 名 —— 它此前被要求必填，于是 menu.vue
+   * 传 TOOLBOX_ITEMS 时类型对不上（那一条本来就没有 icon）。
+   */
+  icon?: string;
 }
 
 /** 浏览器连接状态，驱动工具箱角标的连通/离线小圆点。 */
@@ -38,11 +43,20 @@ export interface SidebarSessionGroup<T = any> {
   items: T[];
 }
 
-/** 当前会话来源筛选器的一个选项。 */
-export interface SessionSourceOptionView {
-  key: string;
-  label: string;
-  icon?: string;
+/** 当前会话来源筛选器的一个选项。
+ *
+ * 直接复用 `sessionSidebarSourceFilter.ts` 的 `SessionSourceOption`，不另立
+ * 一份 View 类型：那条链的产出方是 `buildSessionSourceOptions`，消费方是
+ * `SessionSourceFilter.vue` 的 `SourceItem`，两边都是 `{value,label,logo?}`。
+ * 中间再放一个 `{key,label,icon?}` 的同义类型，只会让字段名在传递处对不上。
+ */
+
+/** 会话行右上角菜单的一项（SessionSidebarRow 渲染，menu.vue 构造）。 */
+export interface SessionMenuOption {
+  content: string;
+  value: string;
+  theme?: 'default' | 'success' | 'warning' | 'error' | 'primary';
+  prefixIcon?: unknown;
 }
 
 /** SessionSidebarRow 需要的行数据（结构保持与 stores/menu.ts 的 children 一致）。 */

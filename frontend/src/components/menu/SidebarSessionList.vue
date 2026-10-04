@@ -66,8 +66,6 @@
                                     @toggle-select="$emit('toggle-select', $event)"
                                     @menu-click="$emit('menu-click', $event, row)"
                                     @rename-submit="$emit('rename-submit', row, $event.title)"
-                                    @hover-in="$emit('hover-in', $event)"
-                                    @hover-out="$emit('hover-out')"
                                 />
                             </div>
                         </div>
@@ -98,7 +96,8 @@ import { useI18n } from 'vue-i18n';
 import SessionSidebarRow from '../SessionSidebarRow.vue';
 import SessionSourceFilter from '../SessionSourceFilter.vue';
 import type { SidebarSessionBucket } from '../sessionSidebarBuckets';
-import type { SessionRowView, SessionSourceOptionView, SidebarSessionGroup } from './menuTypes';
+import type { SessionSourceOption } from '../sessionSidebarSourceFilter';
+import type { SessionMenuOption, SessionRowView, SidebarSessionGroup } from './menuTypes';
 
 defineProps<{
   /** 分组后的会话（按日期或按智能体）。 */
@@ -114,7 +113,7 @@ defineProps<{
   /** 筛选器是否被锁定（非默认来源）。 */
   sourceFilterPinned: boolean;
   /** 来源筛选项。 */
-  sourceOptions: SessionSourceOptionView[];
+  sourceOptions: SessionSourceOption[];
   /** 当前来源 key。 */
   activeBucketKey: string;
   /** 批量管理模式。 */
@@ -128,17 +127,17 @@ defineProps<{
   /** 运行中会话表（来自 sessionActivity store）。 */
   activityById: Record<string, unknown>;
   /** 行菜单项构造（留在 menu.vue，避免 t() 与图标状态分叉）。 */
-  buildMenuOptions: (row: SessionRowView) => unknown[];
+  buildMenuOptions: (row: SessionRowView) => SessionMenuOption[];
 }>();
 
+// 载荷必须与 menu.vue 的处理器对齐：那边的 toggleBatchSelect(id) 要 id，
+// 而 SessionSidebarRow 早先发的是**空载荷**，于是批量勾选一直拿到 undefined。
 defineEmits<{
   (e: 'select-source', key: string): void;
   (e: 'navigate', path: string): void;
   (e: 'toggle-select', id: string): void;
   (e: 'menu-click', payload: { value: string }, row: SessionRowView): void;
   (e: 'rename-submit', row: SessionRowView, title: string): void;
-  (e: 'hover-in', id: string): void;
-  (e: 'hover-out'): void;
 }>();
 
 const { t } = useI18n();

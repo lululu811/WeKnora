@@ -5,10 +5,9 @@
     batchMode && selectedIds.includes(item.id) ? 'submenu_item_selected' : '',
     batchMode ? 'submenu_item_batch' : '',
     menuOpen ? 'submenu_item--menu-open' : '',
-  ]" @mouseenter="emit('hover-in')" @mouseleave="emit('hover-out')"
-    @click="batchMode ? emit('toggle-select') : emit('navigate', item.path)">
+  ]" @click="batchMode ? emit('toggle-select', item.id) : emit('navigate', item.path)">
     <t-checkbox v-if="batchMode" class="batch-checkbox" :checked="selectedIds.includes(item.id)" @click.stop
-      @change="emit('toggle-select')" />
+      @change="emit('toggle-select', item.id)" />
     <form v-if="titleEditing" class="session-title-edit" @submit.prevent="submitTitleEdit" @click.stop>
       <input ref="titleInputRef" v-model="titleDraft" class="session-title-edit__input"
         :maxlength="SESSION_TITLE_MAX_LENGTH" @keydown.esc.prevent="cancelTitleEdit" @blur="submitTitleEdit" />
@@ -72,18 +71,14 @@ import { computed, nextTick, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { normalizeSessionTitleDraft, SESSION_TITLE_MAX_LENGTH } from './sessionTitleEdit'
 import { useSessionTitleMotion } from '@/composables/useSessionTitleMotion'
-
-interface SessionMenuOption {
-  content: string
-  value: string
-  theme?: 'default' | 'success' | 'warning' | 'error' | 'primary'
-  prefixIcon?: any
-}
+import type { SessionMenuOption } from './menu/menuTypes'
 
 type MenuMode = 'menu' | 'clear' | 'delete'
 
 const props = defineProps<{
-  item: { id: string; path: string; title: string; is_pinned?: boolean; user_id?: string; parent_session_id?: string }
+  // title 可选：会话允许无标题（menu.vue 用 isNoTitle 表达同一件事），
+  // 模板里 `{{ item.title }}` 与 :title 都能吃 undefined。
+  item: { id: string; path: string; title?: string; is_pinned?: boolean; user_id?: string; parent_session_id?: string }
   batchMode: boolean
   activePath: string
   selectedIds: string[]
@@ -99,11 +94,11 @@ const emit = defineEmits<{
   // @navigate="gotopage(subitem.path)"，拆分后改成依赖本组件 emit 载荷，
   // 但这里一度没传，导致整条链拿到 undefined 并跳到 /platform/undefined。
   (e: 'navigate', path: string): void
-  (e: 'toggle-select'): void
+  // toggle-select 必须带 id：父链的 toggleBatchSelect(id) 需要它，
+  // 空载荷会让批量勾选失效。
+  (e: 'toggle-select', id: string): void
   (e: 'menu-click', data: { value: string }): void
   (e: 'rename-submit', data: { title: string }): void
-  (e: 'hover-in'): void
-  (e: 'hover-out'): void
 }>()
 
 const { t } = useI18n()
@@ -114,7 +109,7 @@ const titleEditing = ref(false)
 const titleDraft = ref('')
 const titleInputRef = ref<HTMLInputElement | null>(null)
 const titleTextRef = ref<HTMLElement | null>(null)
-useSessionTitleMotion(titleTextRef, () => props.item.id, () => props.item.title)
+useSessionTitleMotion(titleTextRef, () => props.item.id, () => props.item.title ?? '')
 
 const menuOverlayClass = computed(() => (
   menuMode.value === 'menu'
