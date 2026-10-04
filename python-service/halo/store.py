@@ -35,7 +35,7 @@ import os
 import sqlite3
 import threading
 from datetime import datetime, timezone
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 # 允许进入评分公式的记录状态。
 STATUS_VERIFIED = "verified"
@@ -165,8 +165,22 @@ class FactStore:
     def upsert(self, records: Iterable[Dict[str, Any]]) -> int:
         """写入/覆盖事实记录，返回受影响行数。
 
-        同一 (thscode, period, report_type, field, scope) 视为同一条事实：
-        重新抽取（更准的通道、修正后的页码）应当覆盖旧值，而不是堆积多行。
+        同一 (thscode, period, report_type, field, scope, value_text) 视为同一条
+        事实：重新抽取（更准的通道、修正后的页码）应当覆盖旧值，而不是堆积多行。
+
+        实现是「按主键删一遍再插」，**不是** ``INSERT … ON CONFLICT``。原因：
+        ``value_text`` 在主键里，而标量字段（固定资产/员工数/净利润…）的
+        ``value_text`` 是 NULL，SQLite 的唯一索引把每个 NULL 当作**互不相同**
+        —— ON CONFLICT 永远匹配不上，于是每同步一次就给同一格追加一行。
+
+        危害不止行数：``analyze`` 取标量事实用的是 ``facts.setdefault(field, row)``
+        （先到先得），而 ``query`` 不带 ORDER BY，返回顺序就是 rowid 顺序 ——
+        **最老的那一行赢**。重新抽取修好的值会被旧值盖住，且没有任何报错。
+        实测：688111 二次同步后每个标量字段各多出一行，其中一行是上一轮的
+        ``net_profit=0.00``。
+
+        ``IS`` 是 NULL 安全的等号，所以 NULL 键也能被这条 DELETE 匹配到 ——
+        顺带把历史遗留的重复行清理掉。
         """
         rows = []
         now = datetime.now(timezone.utc).isoformat()
@@ -191,7 +205,24 @@ class FactStore:
             ))
         if not rows:
             return 0
+        # 同一批里会出现同键重复：分部数据来自多张表（主营业务分行业 / 分产品 /
+        # 分地区），同一个业务名可能被两张表各报一次。旧实现的 ON CONFLICT 让
+        # 后一条覆盖前一条，这里保持同样的语义 —— 先按主键去重（后写胜），
+        # 否则下面的「删一遍再插」会被批内的第二条撞上唯一约束。
+        deduped: Dict[Tuple[Any, ...], Tuple[Any, ...]] = {}
+        for row in rows:
+            deduped[(row[0], row[1], row[2], row[3], row[7], row[5])] = row
+        rows = list(deduped.values())
         with self._connect() as conn:
+            conn.executemany(
+                """
+                DELETE FROM halo_filing_facts
+                 WHERE thscode = ? AND period = ? AND report_type = ?
+                   AND field = ? AND scope = ? AND value_text IS ?
+                """,
+                # 列序见上面的 rows：scope 是第 8 项（下标 7），value_text 是第 6 项（下标 5）
+                [(r[0], r[1], r[2], r[3], r[7], r[5]) for r in rows],
+            )
             conn.executemany(
                 """
                 INSERT INTO halo_filing_facts
@@ -199,17 +230,6 @@ class FactStore:
                      unit, scope, source_page, raw_text, extract_by, status,
                      confidence, verified_by, verified_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT (thscode, period, report_type, field, scope, value_text) DO UPDATE SET
-                    value       = excluded.value,
-                    value_text  = excluded.value_text,
-                    unit        = excluded.unit,
-                    source_page = excluded.source_page,
-                    raw_text    = excluded.raw_text,
-                    extract_by  = excluded.extract_by,
-                    status      = excluded.status,
-                    confidence  = excluded.confidence,
-                    verified_by = excluded.verified_by,
-                    verified_at = excluded.verified_at
                 """,
                 rows,
             )

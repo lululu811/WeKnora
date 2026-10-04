@@ -194,6 +194,43 @@ class TestCompareField:
                                base, STATUS_PENDING)
         assert far.passed is False and far.status_after == STATUS_DISPUTED
 
+    def test_immaterial_inventory_passes_on_magnitude_not_ratio(self):
+        """存货相对公司整体不可比时，相对阈值不成立，改用量级判据。
+
+        实测触发样本 —— 北京金山办公 2025 年报（688111.SH）：合并口径期末存货
+        522,439.52 元、年初 802,036.62 元，参照值 662,238.07 元正是两者均值
+        （存货周转率的分母是平均存货），相对差 21.1% > 20%，绝对差 139,798.55 元；
+        总资产 181.56 亿，1% 是 1.82 亿 —— 这点差改变不了任何结论。
+
+        没有这道判据，这条 disputed 会让整个合并口径失去管线信任
+        （``promote_by_pipeline``），六维直接算不出来。
+        """
+        ref = _ref(assets_total=18155801690.14, inventory_estimate=662238.07)
+        r = rc.compare_field("inventory", 522439.52, ref, STATUS_PENDING)
+        assert r.diff_ratio > 0.20                      # 相对判据确实没过
+        assert r.passed is True and r.status_after == STATUS_VERIFIED
+        assert "量级判据" in r.reason and "不可比" in r.reason
+        assert "口径" in r.reason                        # 口径说明照样带出来
+        # 走相对判据的记录不该挂豁免说明
+        assert rc.compare_field("inventory", 662238.07, ref, STATUS_PENDING).reason.startswith("对账通过")
+
+    def test_material_inventory_still_needs_the_relative_check(self):
+        """存货对总资产可比时，量级判据不接管 —— 读错一列仍要拦住。"""
+        ref = _ref()                                    # 茅台量级：存货 614 亿 / 总资产 3038 亿
+        ten_x = rc.compare_field("inventory", ref.inventory_estimate * 10, ref, STATUS_PENDING)
+        assert ten_x.passed is False and ten_x.status_after == STATUS_DISPUTED
+
+        # 小公司同理：存货 600 万 / 总资产 10 亿时，10 倍错值 5400 万 > 1% 锚点（1000 万）
+        small = _ref(assets_total=1.0e9, inventory_estimate=6.0e6)
+        r = rc.compare_field("inventory", 6.0e7, small, STATUS_PENDING)
+        assert r.passed is False and r.status_after == STATUS_DISPUTED
+
+    def test_exemption_needs_the_materiality_anchor(self):
+        """锚点（总资产）缺失时回到相对判据，不放行。"""
+        ref = _ref(assets_total=None, inventory_estimate=662238.07)
+        r = rc.compare_field("inventory", 522439.52, ref, STATUS_PENDING)
+        assert r.passed is False and r.status_after == STATUS_DISPUTED
+
     def test_net_profit_uses_not_parent_holder(self):
         """用净利润，不是归母。拿归母来比会差一点点并被 1% 阈值判成冲突。"""
         r = rc.compare_field("net_profit", 46026723467.42, _ref(), STATUS_PENDING)

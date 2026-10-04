@@ -212,3 +212,58 @@ def test_unreconcilable_only_scope_is_not_trusted():
     ]
     out = rc.finalize_status(records, results)
     assert out[0]["status"] == STATUS_PENDING
+
+
+# ----------------------------------------------------------------------
+# 实测触发样本：北京金山办公 2025 年报（688111.SH）
+# ----------------------------------------------------------------------
+
+#: 两条 disputed 曾把整个合并口径钉死在 pending —— 六维因此"不可计算"，
+#: 而如实报出来的原因是「缺 fixed_assets / construction_in_progress /
+#: inventory / employees」，看不出病根其实在两格对账上。
+#:
+#: 一条是抽取错（p111 正文脚注的 0.00 覆盖了 p110 的净利润真值，见
+#: test_halo_extractor.TestNarrativeFootnotes），一条是口径差（存货参照值是
+#: 平均存货，年报给的是期末余额，见 reconcile.MATERIALITY_EXEMPTIONS）。
+JINSHAN_PDF = {
+    "total_assets": 18_155_801_690.14,
+    "net_profit": 1_821_869_488.91,
+    "inventory": 522_439.52,
+    "fixed_assets": 453_218_785.42,
+    "construction_in_progress": 134_959_435.80,
+    "employees_total": 6048.0,
+}
+
+JINSHAN_DUCK = {
+    "assets_total": 18_155_801_690.14,
+    "net_profit": 1_821_869_488.91,
+    # 833,129,464.33 / 1258.0513 = 662,238.07 = (522,439.52 + 802,036.62) / 2
+    "operating_costs": 833_129_464.33,
+    "inventory_turnover_ratio": 1258.0513,
+}
+
+
+def test_jinshan_2025_scope_becomes_trusted():
+    """修好那两条后，六维要的字段才拿得到输入 —— 这是整条链路的验收点。"""
+    records = [_rec(f, v) for f, v in JINSHAN_PDF.items()]
+    row = dict(
+        thscode="688111.SH", db_period="annual", fiscal_year=2025,
+        fiscal_period="FY", period_end_ms=1767110400000,
+        parent_holder_net_profit=JINSHAN_DUCK["net_profit"], **JINSHAN_DUCK,
+    )
+    results = asyncio.run(rc.reconcile_records(
+        FakeSrc(row), records, thscode="688111.SH",
+        period="2025-12-31", report_type="annual",
+    ))
+    out = rc.finalize_status(records, results)
+    by = {r["field"]: r for r in out}
+
+    # 存货走的是量级判据，不是相对阈值 —— 豁免理由要留在记录里可查
+    assert by["inventory"]["status"] == STATUS_VERIFIED
+    assert "量级判据" in by["inventory"]["reconcile"]["reason"]
+    assert by["net_profit"]["status"] == STATUS_VERIFIED
+
+    # 六维真正要的三个字段：靠管线信任升级，来源可区分
+    for field in ("fixed_assets", "construction_in_progress", "employees_total"):
+        assert by[field]["status"] == STATUS_VERIFIED, f"{field} 没拿到输入，六维算不出来"
+        assert by[field]["verified_by"] == VERIFIED_BY_PIPELINE

@@ -361,6 +361,27 @@ RECONCILE_RULES: Dict[str, Tuple[str, float]] = {
     "net_profit": ("net_profit", 0.01),
 }
 
+#: 相对阈值在「该科目相对公司整体不可比」时不成立，此时改用量级判据：
+#: field -> (量级锚点字段, 锚点比例)。
+#:
+#: 只有存货一条，而且原因可以逐分位复算：参照值是反推的**平均**存货
+#: （营业成本 / 存货周转率），年报给的是**期末**余额，两者之差 = 存货增速 / 2。
+#: 存货对总资产本就微不足道的公司（软件、服务），这点差在相对比例上被放大。
+#: 实测量子 —— 北京金山办公 2025 年报：期末 522,439.52 元，年初 802,036.62 元，
+#: 参照值 662,238.07 元 = 两者均值（逐分位一致），相对差 21.1% 越过 20% 阈值，
+#: 但绝对差只有 139,798.55 元。它不是抽取错误，是口径。
+#:
+#: 锚点取总资产的 1%，与 ``total_assets`` 自己的阈值同源 —— 那是本模块认定的
+#: 「读错一列会差的数量级」。差异绝对额低于这个量级时，相对阈值失去区分力
+#: （分母本身带着口径误差），放行并在 ``reason`` 里写明走的是哪条判据。
+#:
+#: 代价认在这里：这一档里一个「读错行但量级相同」的错值会被放行。它对公司
+#: 整体不可比（< 总资产 1%），落进评分的有效位也改变不了结论；要精确校验
+#: 平均口径，得让抽取器把年初余额也交出来，那是另一个改动。
+MATERIALITY_EXEMPTIONS: Dict[str, Tuple[str, float]] = {
+    "inventory": ("assets_total", 0.01),
+}
+
 #: 口径不同、对账结果需附带说明的字段。
 CALIBER_NOTES: Dict[str, str] = {
     "inventory": "口径说明：参照值由『营业成本/存货周转率』反推，分母是平均存货；"
@@ -468,9 +489,30 @@ def compare_field(
     diff_ratio = abs(diff) / scale if scale else 0.0
     passed = diff_ratio <= threshold
 
+    # 量级判据（见 MATERIALITY_EXEMPTIONS）。只在相对判据**未过**时启用，
+    # 免得给本来通过的记录也挂上一句豁免说明。
+    exemption = ""
+    exempt = MATERIALITY_EXEMPTIONS.get(field)
+    if not passed and exempt is not None:
+        anchor_attr, anchor_ratio = exempt
+        anchor = _to_float(getattr(ref, anchor_attr, None))
+        if anchor and abs(diff) <= abs(anchor_ratio * anchor):
+            passed = True
+            exemption = (
+                f"绝对差 {abs(diff):,.2f} 落在 {anchor_attr} 的 "
+                f"{anchor_ratio:.2%}（{anchor:,.2f}）之内 —— 该科目相对公司整体"
+                f"不可比，相对阈值在此不适用"
+            )
+
     note = CALIBER_NOTES.get(field, "")
     if passed:
-        reason = f"对账通过：差异 {diff_ratio:.4%} <= 阈值 {threshold:.2%}"
+        if exemption:
+            reason = (
+                f"量级判据通过：{exemption}；相对差 {diff_ratio:.4%} > 阈值 "
+                f"{threshold:.2%}，仅作记录不作为证伪"
+            )
+        else:
+            reason = f"对账通过：差异 {diff_ratio:.4%} <= 阈值 {threshold:.2%}"
         status_after = STATUS_VERIFIED
     else:
         # 对账不通过一律落到 disputed，**包括本来就是 verified 的记录**。

@@ -201,6 +201,60 @@ class TestRuleExtraction:
 
 
 # ---------------------------------------------------------------------------
+# 叙述句里的同名科目
+# ---------------------------------------------------------------------------
+
+#: 年报固定披露句，PDF 折行把它切成两半 —— 两半都命中「净利润」，守卫要都覆盖。
+FOOTNOTE_HALVES = (
+    "本期发生同一控制下企业合并的，被合并方在合并前实现的净利润为：0.00元, 上期被合并方实现",
+    "的净利润为： 0.00 元。",
+)
+
+
+class TestNarrativeFootnotes:
+    """正文脚注里的同名科目不是报表行。
+
+    实测触发样本 —— 北京金山办公 2025 年报（688111.SH）::
+
+        p109  合并利润表 · 标题页（单位：元）
+        p110  五、净利润（净亏损以“－”号填列） 1,821,869,488.91 1,655,284,064.88
+
+    p111 是续页，正文里有那句固定披露句（见 ``FOOTNOTE_HALVES``）。合并利润表
+    锚点会把后续 2 页一起扫进来（``pipeline.TABLE_SPILL_PAGES``），于是 0.00 被
+    当成报表行抽出，而 ``merge_channels`` 按 ``(field, scope)`` 去重、**末位胜出**
+    —— p110 的真值被 p111 的 0.00 顶掉。落库 net_profit=0.00 → 对账判 disputed →
+    整个合并口径失去管线信任（``reconcile.promote_by_pipeline``）→ 六维算不出来。
+
+    守的是「脚注不产生事实」，不是「脚注不覆盖真值」——后者是排序假设，前者是
+    抽取器本就该有的判据。
+    """
+
+    P109 = "合并利润表\n2025 年度\n单位：元  币种：人民币\n项目 附注 本期金额 上期金额\n"
+    P110 = "五、净利润（净亏损以“－”号填列） 1,821,869,488.91 1,655,284,064.88\n"
+    P111 = "".join(FOOTNOTE_HALVES) + "\n"
+
+    @pytest.mark.parametrize("half", FOOTNOTE_HALVES)
+    def test_each_half_of_the_wrapped_footnote_is_rejected(self, half):
+        assert ex.extract_by_rule(111, half, unit=ex.UNIT_CNY) == []
+
+    def test_footnote_does_not_displace_the_statement_row(self):
+        facts, _, _ = ex.extract_pages(
+            [(109, self.P109), (110, self.P110), (111, self.P111)]
+        )
+        net = [f for f in facts if f.field == "net_profit"]
+        assert len(net) == 1, f"脚注也产生了事实：{[(f.value, f.raw_text) for f in net]}"
+        assert net[0].value == pytest.approx(1821869488.91)
+        assert net[0].source_page == 110
+
+    def test_statement_row_is_still_extracted(self):
+        """反向守卫：排除词不能把正常报表行一起吃掉。"""
+        facts = ex.extract_by_rule(110, self.P110, unit=ex.UNIT_CNY)
+        f = _by_field(facts)[("net_profit", SCOPE_CONSOLIDATED)]
+        assert f.value == pytest.approx(1821869488.91)
+        assert f.value != pytest.approx(1655284064.88)   # 上期列
+
+
+# ---------------------------------------------------------------------------
 # LLM 通道
 # ---------------------------------------------------------------------------
 
