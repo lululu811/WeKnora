@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/Tencent/WeKnora/internal/agent/tools"
+	"github.com/Tencent/WeKnora/internal/types"
 )
 
 // checkToolReachability is check 5, in both directions.
@@ -67,6 +68,18 @@ func (i *Inspector) checkToolReachability(ctx context.Context) ([]Finding, error
 		}
 	}
 
+	// An agent with an empty allowlist is not a defect — the runtime
+	// substitutes DefaultAllowedTools — but that substitution also means the
+	// default names ARE reachable. Without this, search_conversations reads as
+	// unreachable while every agent that never customised its allowlist can
+	// call it (session_agent_qa.go / agent_service.go both fall back to
+	// DefaultAllowedTools when AllowedTools is empty).
+	for _, name := range tools.DefaultAllowedTools() {
+		if _, ok := registered[name]; ok {
+			claimed[name] = append(claimed[name], "tools.DefaultAllowedTools()")
+		}
+	}
+
 	// The invisible direction. Report it as a single grouped finding rather
 	// than one per tool: an operator needs the list, not N copies of the
 	// same sentence, and the per-tool detail is noise when the tool is
@@ -80,8 +93,9 @@ func (i *Inspector) checkToolReachability(ctx context.Context) ([]Finding, error
 			Detail: fmt.Sprintf("%d registered tool(s) are in no agent's allowed_tools, so no "+
 				"model can ever select them: %s",
 				len(unreachable), strings.Join(unreachable, ", ")),
-			Remediation: "either add the tool to an agent's allowed_tools, or accept that it is " +
-				"unreachable and say so here so the next reader does not rediscover it",
+			Remediation: "either add the tool to an agent's allowed_tools, or add it to " +
+				"acceptedUnreachableTools in internal/healthcheck/reachability.go with a reason, " +
+				"so the next reader does not rediscover it",
 		})
 	}
 	return findings, nil
@@ -127,17 +141,125 @@ func (i *Inspector) loadAgentAllowlists(ctx context.Context) ([]allowlistedAgent
 			allowed: cfg.AllowedTools,
 		})
 	}
+
+	// Built-in agents with no custom_agents row are invisible to the query
+	// above, yet their tools are reachable by every tenant that has not
+	// customised the agent. customAgentService.ListAgents merges the DB rows
+	// with the YAML definitions (custom_agent.go, ListAgents), and a reachable
+	// tool is one *any* agent names — so the union of both sources is the right
+	// input here, not the DB rows alone.
+	//
+	// BuiltinAgentRegistry rather than GetBuiltinAgentIDs: the latter lists only
+	// the user-facing agents and deliberately omits the internal wiki-fixer and
+	// skill-installer, whose wiki_* / write_skill_file / edit_skill_file tools
+	// would otherwise keep showing up as unreachable.
+	//
+	// The factory ignores tenantID for the allowlist (the YAML config is the
+	// same for every tenant), so 0 is passed rather than inventing a tenant.
+	builtinIDs := make([]string, 0, len(types.BuiltinAgentRegistry))
+	for id := range types.BuiltinAgentRegistry {
+		builtinIDs = append(builtinIDs, id)
+	}
+	sort.Strings(builtinIDs)
+	for _, id := range builtinIDs {
+		agent := types.GetBuiltinAgent(id, 0)
+		if agent == nil {
+			continue
+		}
+		agents = append(agents, allowlistedAgent{
+			object:  fmt.Sprintf("builtin_agents.yaml:%s (id=%s)", agent.Name, agent.ID),
+			allowed: agent.Config.AllowedTools,
+		})
+	}
 	return agents, nil
 }
 
-// unreachableTools returns registered tools claimed by no agent, sorted so
-// the finding is stable between runs.
+// capabilityRegisteredTools are tool names registered from a capability
+// switch rather than from an agent's allowed_tools. No allowlist will ever
+// name them, and that absence is by design — the switch, not a checkbox, is
+// what makes them available. The unreachable direction must therefore skip
+// them, or it reports a finding that is always present and therefore always
+// ignored.
+//
+// The reason strings are documentation for the next reader; the check only
+// consults the keys. Each names the registration site, which is the source of
+// truth.
+var capabilityRegisteredTools = map[string]string{
+	tools.ToolListSandboxFiles: "registerSandboxFileTools (agent_service.go): sandbox file primitive; " +
+		"follows the sandbox session-files capability (definitions.go)",
+	tools.ToolReadFile: "registerSandboxFileTools (agent_service.go): workspace reads follow the sandbox; " +
+		"skill reads follow SkillsEnabled (definitions.go)",
+	tools.ToolWriteSandboxFile: "registerSandboxFileTools (agent_service.go): sandbox-only writer; " +
+		"absent from AvailableToolDefinitions (definitions.go)",
+	tools.ToolEditSandboxFile: "registerSandboxFileTools (agent_service.go): sandbox-only patcher; " +
+		"absent from AvailableToolDefinitions (definitions.go)",
+	tools.ToolShellExec: "registerSandboxShellTool via registerSandboxShellIfAllowed (agent_service.go): " +
+		"remote shell follows SkillsEnabled or install mode (definitions.go)",
+	tools.ToolWriteSkillFile: "registerSkillFileTools (agent_service.go): install-mode only; " +
+		"absent from AvailableToolDefinitions (definitions.go)",
+	tools.ToolEditSkillFile: "registerSkillFileTools (agent_service.go): install-mode only; " +
+		"absent from AvailableToolDefinitions (definitions.go)",
+	tools.ToolWebSearch: "registerTools appends it when WebSearchEnabled (agent_service.go); " +
+		"not in AvailableToolDefinitions (definitions.go)",
+	tools.ToolWebFetch: "registerTools appends it when WebSearchEnabled (agent_service.go); " +
+		"not in AvailableToolDefinitions (definitions.go)",
+	tools.ToolSearchMemory: "registerTools injects it when MemoryEnabled (agent_service.go); " +
+		"not in AvailableToolDefinitions (definitions.go)",
+	tools.ToolCallMCPTool: "registerMCPTools (agent_service.go) / tools.RegisterMCPTools: " +
+		"capability-scoped, not a tenant-selectable builtin (definitions.go)",
+	tools.ToolDiscoverMCPTools: "registerMCPTools (agent_service.go) / tools.RegisterMCPTools: " +
+		"capability-scoped, not a tenant-selectable builtin (definitions.go)",
+}
+
+// acceptedUnreachableTools are registered tools that are deliberately offered
+// to no agent, so the unreachable direction must not report them — but the
+// acceptance has to stay visible and bounded, or this table becomes a dustbin
+// for anything nobody wanted to delete. Each entry carries its reason, and
+// acceptedUnreachableToolsLimit caps the list, mirroring the
+// deliberatelyNotWhitelisted table in internal/agent/tools/zettaranc.
+//
+// Two kinds live here, and nothing else may be added without saying why:
+//   - a stub whose Execute always fails, which is a net loss to hand the model;
+//   - a tool that is genuinely selectable (listed in AvailableToolDefinitions)
+//     but that no agent currently ticks, which is a configuration choice rather
+//     than a defect.
+var acceptedUnreachableTools = map[string]string{
+	"zettaranc.backtest": "回测桩，Execute 恒返回 Success:false（zettaranc/backtest.go）；" +
+		"真回测落地后连同本条目一起删除",
+	tools.ToolThinking: "AvailableToolDefinitions 里的可选工具，当前无 agent 勾选；" +
+		"勾上任一 agent 即被认领",
+	tools.ToolTodoWrite: "AvailableToolDefinitions 里的可选工具，agent_service.go 会按需禁用它；" +
+		"当前无 agent 勾选",
+	tools.ToolDatabaseQuery: "AvailableToolDefinitions 里的可选工具（Label「查询数据库」），" +
+		"且不在 DefaultAllowedTools 里 —— 当前无 agent 勾选，属于配置取舍而非缺陷",
+}
+
+// acceptedUnreachableToolsLimit is deliberately small. Raising it requires
+// editing this number and therefore answering, for the new entry, why the
+// model should not be given the tool and why the tool should still exist.
+const acceptedUnreachableToolsLimit = 4
+
+// unreachableTools returns registered tools claimed by no agent, minus the
+// capability-registered and accepted-unreachable sets, sorted so the finding
+// is stable between runs.
+//
+// A capability tool omitted here is not "unreachable": the runtime registers
+// it from a switch, so the model can call it. An accepted tool is unreachable
+// on purpose and documented as such in acceptedUnreachableTools. Only what
+// remains is a defect worth reporting.
 func unreachableTools(registered map[string]bool, claimed map[string][]string) []string {
 	out := make([]string, 0, len(registered))
 	for name := range registered {
-		if len(claimed[name]) == 0 {
-			out = append(out, name)
+		if len(claimed[name]) > 0 {
+			continue
 		}
+		if _, ok := capabilityRegisteredTools[name]; ok {
+			continue
+		}
+		if _, ok := acceptedUnreachableTools[name]; ok {
+			continue
+		}
+		out = append(out, name)
 	}
 	sort.Strings(out)
 	return out
