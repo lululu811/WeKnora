@@ -2,7 +2,10 @@ package pattern
 
 import (
 	"fmt"
+	"os"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -508,3 +511,74 @@ func contains(list []string, want string) bool {
 	}
 	return false
 }
+
+// rowGuardRe 抓 `len(rows) >= N` 里的 N。带空白容忍，因为写法不统一。
+var rowGuardRe = regexp.MustCompile(`len\(rows\)\s*>=\s*(\d+)`)
+
+// deepestRowGuard 返回 signals.go 里最深的一处 `len(rows) >= N`。
+//
+// 先剥掉行注释再扫：注释里写"需要 70 根"这类说明不该把窗口算进去，
+// 那是解释文字不是守卫 —— 与 query_contract_test.go 对 COALESCE 列名的
+// 同一处理（那条测试最初就是被注释里的字面量 `COALESCE(col, 0)` 绊倒的）。
+func deepestRowGuard(t *testing.T) int {
+	t.Helper()
+	src, err := os.ReadFile("signals.go")
+	if err != nil {
+		t.Fatalf("读 signals.go 失败：%v", err)
+	}
+	text := stripLineComments(string(src))
+	deepest := 0
+	for _, m := range rowGuardRe.FindAllStringSubmatch(text, -1) {
+		if n, err := strconv.Atoi(m[1]); err == nil && n > deepest {
+			deepest = n
+		}
+	}
+	if deepest == 0 {
+		t.Fatal("signals.go 里一处 `len(rows) >= N` 都没有 —— 正则失效或代码大改，" +
+			"这个测试会静默放行，必须先确认它还能扫到东西")
+	}
+	return deepest
+}
+
+// TestAuditWindowCoversDeepestGuard 守住 auditWinSize 与代码同步。
+//
+// 失配的后果是**静默**的：审计喂 N 根窗口，而某条信号要 N+ 根，于是它每根
+// bar 都因历史不足而不触发，verdict 报 `dead`。看到这个结果的人会去查"是不是
+// 阈值太严"，而真因是审计没喂够 —— 方向完全错。
+func TestAuditWindowCoversDeepestGuard(t *testing.T) {
+	deepest := deepestRowGuard(t)
+	if deepest > auditWinSize {
+		t.Errorf("signals.go 里最深需要 %d 根，auditWinSize 只有 %d —— "+
+			"需要更多历史的信号在审计里会永远不触发，verdict 报 dead。\n"+
+			"请把 auditWinSize 调到 %d **并重跑全量审计**（分母会从 Σ(N_i-6) "+
+			"变成 Σ(N_i-%d)，评估到的 bar 数大幅减少，别拿旧结论沿用）。",
+			deepest, auditWinSize, deepest, deepest-1)
+	}
+	if auditWinSize > deepest {
+		t.Logf("auditWinSize=%d 比代码里最深的守卫 %d 还大：多喂的历史没人用，"+
+			"却让分母从 Σ(N_i-%d) 缩到 Σ(N_i-%d)，白白少评估一批 bar",
+			auditWinSize, deepest, deepest-1, auditWinSize-1)
+	}
+}
+
+// auditWinSize 定义在本文件（无 build tag）而不是审计测试文件里：
+// 下面那条守卫测试要在普通 CI 里跑，必须拿得到这个数；同包的带 tag 文件
+// 编译时也能看到它，所以审计本身照常用。
+const (
+	// auditWinSize 是 detectSignals 里任何分支要求的最深 `len(rows) >= N`。
+	// 当前 signals.go 最深到 7。
+	//
+	// 这个数字由 TestAuditWindowCoversDeepestGuard 守着 —— 有人加了一条需要
+	// 更多历史的信号而忘了改它，那条信号会在**每根** bar 上因为历史不足而不触发，
+	// 审计报 `dead`，看起来像"阈值太严"，实际是审计自己没喂够历史。
+	//
+	// ⚠️ **不要为了让某个信号"有希望过审"而调大它。** 窗口 N 的分母是
+	// `Σ max(0, N_i - (N-1))`：N=7 时评估 88% 的 bar，N=70 时只剩 6.6%，
+	// 样本少一个数量级，77 条真实信号里会凭空冒出一批 `dead`。
+	// 窗口只该在**真的有信号需要更深历史**时跟着长，而且必须同时重跑全量。
+	//
+	// 需要更长历史的形态类策略（缩量回踩 70 根 / 双枪 15 根 / 长安 3 根）
+	// 不在本引擎里 —— 它们在 python-service 的形态层，由选股池按 `min_bars`
+	// 单独取窗口，频率用全库实测（10,349,853 根 bar）而不是这个逐 bar 审计来量。
+	auditWinSize = 7
+)

@@ -47,8 +47,9 @@
 // detectSignals reads rows[0] as "today" and rows[1..] as history, so to
 // evaluate the signal state *as of* historical bar t we feed the window
 // rows[t:t+W]. W is the largest `len(rows) >= N` guard in signals.go (7,
-// signals.go:607), so a uniform 7-bar window gives every signal its full
-// required history and makes the denominator identical across all 71 signals.
+// auditWinSize), so a uniform window gives every signal its full required
+// history and makes the denominator identical across all declared signals.
+// TestAuditWindowCoversDeepestGuard keeps that number honest.
 //
 // The sample is a fixed stride across the thscode-sorted universe, never a
 // prefix: prefix sampling is systematically biased toward early Shenzhen
@@ -71,9 +72,6 @@ import (
 )
 
 const (
-	// auditWinSize is the maximum `len(rows) >= N` required by any branch in
-	// detectSignals. Verified against signals.go: the deepest guard is 7.
-	auditWinSize = 7
 	// noisyFloor is the verdict threshold. See verdictFor for the argument.
 	noisyFloor = 0.20
 	// alwaysOnFloor flags a signal that fires on nearly every evaluated bar.
