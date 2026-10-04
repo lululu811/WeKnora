@@ -1077,9 +1077,28 @@ services:
       - "127.0.0.1:50052:50052"
     volumes:
       - ${HITHINK_DB_DIR:-./.hithink-placeholder}:/data/hithink:ro
+      # HALO 运行期状态：年报事实库 + 已下载的年报 PDF 缓存（+ 判分影子记录）。
+      #
+      # 必须是命名卷。此前没有这一行，`halo/store.py` 的默认路径是
+      # `~/.hithink-finance/halo.sqlite`，而容器里 HOME=/root —— 事实库写进了
+      # 容器可写层：`docker compose up --force-recreate`、换镜像、`docker rm`
+      # 都会连同每份 1–3 分钟的同步结果一起丢掉，而 /data/hithink 这条又是
+      # **只读**挂载（它是 7 个只读 DuckDB 的目录，写进去既被 ro 挡住、也会
+      # 污染财务数据目录；未设 HITHINK_DB_DIR 时更是直接写进仓库占位目录）。
+      #
+      # 页数、来源页码、raw_text 都是人回原文复核时的抓手，丢了就得重新抓巨潮
+      # ——那边有限速额度（HALO_CNINFO_MIN_INTERVAL，默认 0.5s）。
+      - halo-data:/data/halo
     environment:
       - DB_DIR=/data/hithink
       - PORT=50052
+      # HALO 运行期产物全部落在 halo-data 卷里（见上面 volumes 的说明）。
+      # 三个变量对应 store.py / pipeline.py / decider.py 里各自的默认路径；
+      # 与文件其余部分一致，写成 ${VAR:-默认} 形式 —— 在 .env 里显式设过就以
+      # .env 为准（那种情况下务必指向一个挂载进来的目录，否则又落回容器层）。
+      - HALO_DB_PATH=${HALO_DB_PATH:-/data/halo/halo.sqlite}
+      - HALO_CACHE_DIR=${HALO_CACHE_DIR:-/data/halo/halo-pdfs}
+      - HALO_SHADOW_DIR=${HALO_SHADOW_DIR:-/data/halo/halo-shadow}
       # 二级缓存接 compose 里的 redis 服务；留空则不启用 Redis
       - REDIS_HOST=${REDIS_HOST:-redis}
       - REDIS_PORT=${REDIS_PORT:-6379}
@@ -1118,6 +1137,10 @@ volumes:
   postgres-data:
   data-files:
   docreader-tmp:
+  # HALO 年报事实库 / PDF 缓存 / 判分影子记录（python-service，见该服务的 volumes）。
+  # 放在命名卷而不是宿主目录：它是可重建的运行产物，但重建一次要重抓巨潮
+  # （限速 0.5s/请求，单份年报 1–3 分钟），不该被容器重建顺手抹掉。
+  halo-data:
   minio_data:
   neo4j-data:
   qdrant_data:
