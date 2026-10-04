@@ -480,12 +480,18 @@ STRATEGY_RULES: Dict[str, Dict[str, Any]] = {
     # 想放宽就把这里改成 4 或 3 —— 但那是**有意的口径决定**，不要因为
     # "选不出票"就顺手调低，先去看是哪一条在卡（见 SHRINK_* 常量的注释）。
     #
-    # 依赖 close/open/low/volume 四列跨 70 根，故要求 screener.LOOKBACK_DAYS
-    # ≥ 70；20 天时这五条信号会一条都不发，而不是发出错的。
+    # 依赖 close/open/low/volume 四列跨 70 根，故本规则声明 min_bars=70
+    # ≥ 70（见本规则的 min_bars）；默认窗口下这五条信号会一条都不发，
+    # 而不是发出错的。
     "shrink_pullback": {
         "match_signals": ["缩量回踩", "下跌不放量", "守住前低", "低位回踩",
                           "KDJ深度超卖"],
         "min_count": 5,
+        # 需要 70 根：shrink 看近 15 日最大量、dn_up 看近 15 日阴阳线均量、
+        # 守前低看 70 日最低。**按这条规则单独声明**，不要去改全局
+        # screener.LOOKBACK_DAYS —— 那会让每条策略都按 70 天取全市场，
+        # 实测一次 /zettaranc/screen 就把 python-service OOM 掉。
+        "min_bars": 70,
     },
     # 左侧转右侧（黄白线双闸门）。来源是用户自己的说法：「等市场从左侧转右侧后，
     # 从 BBI线升级为黄白线」「BBI线是保命用的，黄白线是赚钱用的」。
@@ -906,95 +912,15 @@ async def zettaranc_screen(request: ScreenRequest) -> Dict[str, Any]:
                 f"都不在当前候选集内",
             )
 
-    shards = screener.shard_codes(all_codes)
+    # 窗口按这条规则实际需要的取，不跟着某条形态策略的 70 根走 ——
+    # 全局 70 会让全市场取数膨胀 3.5 倍，把容器 OOM 掉（见 screener.LOOKBACK_DAYS）。
+    lookback = screener.lookback_for(rule)
+    shards = screener.shard_codes(all_codes, lookback)
     if len(shards) > 1:
         logger.info(
             "选股 %s：%d 只切成 %d 片查询（单查询行数预算 %d）",
             request.strategy, len(all_codes), len(shards), screener.QUERY_ROW_BUDGET,
         )
-
-    rows: List[Dict[str, Any]] = []
-    price_rows: List[Dict[str, Any]] = []
-    universe_truncated = False
-    price_source = registry.get("market")
-
-    for shard in shards:
-        shard_csv = ",".join(shard)
-        try:
-            part = await indicators_src.execute(
-                screener.build_indicator_snapshot_sql(),
-                [shard_csv, screener.LOOKBACK_DAYS],
-            )
-        except Exception as exc:
-            logger.warning("选股取指标失败(分片 %d 只): %s", len(shard), exc)
-            raise fail(503, f"选股取数失败：{exc}") from exc
-        rows.extend(part)
-        if getattr(indicators_src, "last_result_truncated", False):
-            # 分片本应保证不超预算；这里真被截断说明预算算错了，必须报出来
-            # 而不是继续跑出一个"看起来正常、其实少了票"的结果。
-            universe_truncated = True
-            logger.error(
-                "分片 %d 只仍被截断，QUERY_ROW_BUDGET=%d 对 LOOKBACK_DAYS=%d 偏大",
-                len(shard), screener.QUERY_ROW_BUDGET, screener.LOOKBACK_DAYS,
-            )
-
-        # 价量维度：v_indicators_daily 没有任何价格列，close/volume 只能从
-        # market.v_daily_qfq 单独取，再按 (thscode, date) 并回指标行。
-        # 两个库是独立只读连接，不能 JOIN，只能在 Python 侧合。
-        if price_source is not None:
-            try:
-                price_rows.extend(await price_source.execute(
-                    screener.build_price_snapshot_sql(),
-                    [shard_csv, screener.LOOKBACK_DAYS],
-                ))
-            except Exception as exc:
-                # 价量拿不到不该让整个选股失败：没有价量只是"放量突破"这类
-                # 形态信号不触发，其余指标信号照常。降级优先于报错。
-                logger.warning("选股取价量失败(分片 %d 只): %s", len(shard), exc)
-                price_source = None
-            else:
-                if getattr(price_source, "last_result_truncated", False):
-                    universe_truncated = True
-                    logger.error("价量分片 %d 只被截断", len(shard))
-
-    if not rows:
-        raise fail(503, "指标快照为空")
-
-    price_merged = 0
-    if price_source is not None and price_rows:
-        price_merged = screener.merge_price_rows(rows, price_rows)
-        if price_merged == 0:
-            logger.warning(
-                "价量与指标按 (thscode,date) 一条都没对上，形态信号将全部失效"
-            )
-
-    # 截断必须在这里说清楚。
-    #
-    # 旧实现把 `scanned` 报成 `len(names)` —— 那是**清单长度**，不是实际
-    # 参与筛选的标的数。指标快照查询被 `max_rows` 截断时（indicators.duckdb
-    # 有 12GB，全市场 × LOOKBACK_DAYS 天很容易撞上限），多出来的票被静默
-    # 丢掉，而返回里的 `scanned` 仍然写着完整的 5,571 —— 调用方无从判断
-    # 这次结果是不是全市场口径。
-    scanned_codes = {r.get("thscode") for r in rows if r.get("thscode")}
-
-    # 数据截止日。形态信号全部由最近 LOOKBACK_DAYS 天的指标算出，
-    # 不说截止日的话，「今天这只票超卖」和「三天前的快照」长得一样。
-    # 两个库各自可能有各自的最新日期（同步进度不同），所以分开报。
-    indicator_as_of = max(
-        (str(r.get("date")) for r in rows if r.get("date")), default=None
-    )
-    price_as_of = max(
-        (str(r.get("date")) for r in price_rows if r.get("date")), default=None
-    )
-    # 「没有指标行」的基准必须是**实际送去查的候选集**，不是全市场清单。
-    # 板块筛选把候选集缩到 320 只之后，若仍拿 5,571 只的 names 去算差集，
-    # 会报出"5,251 只没有指标行"——而它们只是**不在这个板块里**，
-    # 这条警告会把一个正常的板块限定说成大规模数据缺失。
-    candidate_set = set(all_codes)
-    # 清单里有、但一行指标都没回来的票：不是被截断，就是该票确实没有指标数据。
-    # 两种情况对调用方的含义不同，都不该藏进 `scanned` 里。
-    no_indicator = len(candidate_set) - len(candidate_set & scanned_codes)
-    dropped = sorted(candidate_set - scanned_codes)
 
     # 风险筛选要跑在 `limit` **之后**才合理吗？不 —— 那会让用户要 8 只却只拿到 2 只：
     # 形态命中 866，取前 8 送筛，淘汰 6 剩 2。淘汰率最高的三项阈值
@@ -1005,6 +931,8 @@ async def zettaranc_screen(request: ScreenRequest) -> Dict[str, Any]:
     # 本地 p50 负债 0.40、流动比 1.50，p10 负债约 0.70、流动比 0.60，
     # 三分之一通过是贴近实际的乐观估计；多取的量由 OVERSAMPLE_CAP 封顶，
     # 免得"要 200 只"变成扫全市场。
+    #
+    # 放在分片循环**之前**：下面每片各自要判一次，得知道这次要判多少。
     OVERSAMPLE_CAP = 4
     risk_requested = any((
         request.max_debt_ratio is not None,
@@ -1014,9 +942,137 @@ async def zettaranc_screen(request: ScreenRequest) -> Dict[str, Any]:
         request.exclude_st,
     ))
     fetch_limit = request.limit * OVERSAMPLE_CAP if risk_requested else request.limit
-    result = await asyncio.to_thread(
-        screener.screen, rows, rule, fetch_limit, names
-    )
+
+    # 逐分片评估：取一片、判一片、**只留命中**，然后让这一片的行出作用域。
+    #
+    # 旧实现把 5 个分片的行全部累积进 rows / price_rows 再统一判，峰值是
+    # 5,571 只 × lookback 天 × 2 张表。对默认 20 天窗口是 22 万行，扛得住；
+    # 对 shrink_pullback 声明的 70 天窗口是 78 万行 Python dict，容器 3 GiB
+    # 直接被打穿 —— 实测一次 /zettaranc/screen 就把 python-service OOM kill。
+    # 逐片判完只留命中（几十到几百条），峰值降到单片，与窗口长短无关。
+    hits: List[Dict[str, Any]] = []
+    matched_total = 0
+    incomplete_total = 0
+    scanned_codes: set = set()
+    indicator_as_of: Optional[str] = None
+    price_as_of: Optional[str] = None
+    universe_truncated = False
+    price_merged = 0
+    price_source = registry.get("market")
+    any_rows = False
+
+    for shard in shards:
+        shard_csv = ",".join(shard)
+        try:
+            rows: List[Dict[str, Any]] = await indicators_src.execute(
+                screener.build_indicator_snapshot_sql(),
+                [shard_csv, lookback],
+            )
+        except Exception as exc:
+            logger.warning("选股取指标失败(分片 %d 只): %s", len(shard), exc)
+            raise fail(503, f"选股取数失败：{exc}") from exc
+        if rows:
+            any_rows = True
+        if getattr(indicators_src, "last_result_truncated", False):
+            # 分片本应保证不超预算；这里真被截断说明预算算错了，必须报出来
+            # 而不是继续跑出一个"看起来正常、其实少了票"的结果。
+            universe_truncated = True
+            logger.error(
+                "分片 %d 只仍被截断，QUERY_ROW_BUDGET=%d 对 lookback=%d 偏大",
+                len(shard), screener.QUERY_ROW_BUDGET, lookback,
+            )
+
+        # 价量维度：v_indicators_daily 没有任何价格列，close/volume 只能从
+        # market.v_daily_qfq 单独取，再按 (thscode, date) 并回指标行。
+        # 两个库是独立只读连接，不能 JOIN，只能在 Python 侧合。
+        price_rows: List[Dict[str, Any]] = []
+        if price_source is not None:
+            try:
+                price_rows = await price_source.execute(
+                    screener.build_price_snapshot_sql(),
+                    [shard_csv, lookback],
+                )
+            except Exception as exc:
+                # 价量拿不到不该让整个选股失败：没有价量只是"放量突破"这类
+                # 形态信号不触发，其余指标信号照常。降级优先于报错。
+                logger.warning("选股取价量失败(分片 %d 只): %s", len(shard), exc)
+                price_source = None
+            else:
+                if getattr(price_source, "last_result_truncated", False):
+                    universe_truncated = True
+                    logger.error("价量分片 %d 只被截断", len(shard))
+
+        if price_rows:
+            price_merged += screener.merge_price_rows(rows, price_rows)
+
+        scanned_codes.update(r.get("thscode") for r in rows if r.get("thscode"))
+        for source, rows_ in (("ind", rows), ("px", price_rows)):
+            latest = max((str(r.get("date")) for r in rows_ if r.get("date")),
+                         default=None)
+            if latest is None:
+                continue
+            if source == "ind":
+                if indicator_as_of is None or latest > indicator_as_of:
+                    indicator_as_of = latest
+            elif price_as_of is None or latest > price_as_of:
+                price_as_of = latest
+
+        if rows:
+            shard_result = await asyncio.to_thread(
+                screener.screen, rows, rule, fetch_limit, names
+            )
+            hits.extend(shard_result.get("stocks", []))
+            matched_total += shard_result.get("matched", 0)
+            incomplete_total += shard_result.get("incomplete", 0)
+        # rows / price_rows 在下一轮循环里被重新赋值，上一轮的整片数据随之出作用域
+        # 被回收。**不要**把这两行提到循环外 —— 那就退回"全部分片累积"的旧行为。
+
+    if not any_rows:
+        raise fail(503, "指标快照为空")
+
+    if price_source is not None and price_merged == 0:
+        logger.warning(
+            "价量与指标按 (thscode,date) 一条都没对上，形态信号将全部失效"
+        )
+
+    # 全市场口径下排序：各分片内部已按 score 排过序，这里归并后重排并截到
+    # fetch_limit。分数相同时按 thscode 排，与 screener.screen 内部一致，
+    # 保证同一批数据无论分几片都得到同一个结果。
+    hits.sort(key=lambda s: (-float(s.get("score") or 0.0), str(s.get("thscode") or "")))
+    hits = hits[:fetch_limit]
+
+    # 截断必须在这里说清楚。
+    #
+    # 旧实现把 `scanned` 报成 `len(names)` —— 那是**清单长度**，不是实际
+    # 参与筛选的标的数。指标快照查询被 `max_rows` 截断时（indicators.duckdb
+    # 有 12GB，全市场 × lookback 天很容易撞上限），多出来的票被静默
+    # 丢掉，而返回里的 `scanned` 仍然写着完整的 5,571 —— 调用方无从判断
+    # 这次结果是不是全市场口径。
+    #
+    # `scanned_codes` / `indicator_as_of` / `price_as_of` 现在在分片循环里逐片
+    # 累积（`rows` 出作用域后就拿不到了），语义与原来"全量算一次 max/集合"相同。
+    #
+    # 数据截止日。形态信号全部由最近 lookback 天的指标算出，
+    # 不说截止日的话，「今天这只票超卖」和「三天前的快照」长得一样。
+    # 两个库各自可能有各自的最新日期（同步进度不同），所以分开报。
+
+    # 「没有指标行」的基准必须是**实际送去查的候选集**，不是全市场清单。
+    # 板块筛选把候选集缩到 320 只之后，若仍拿 5,571 只的 names 去算差集，
+    # 会报出"5,251 只没有指标行"——而它们只是**不在这个板块里**，
+    # 这条警告会把一个正常的板块限定说成大规模数据缺失。
+    candidate_set = set(all_codes)
+    # 清单里有、但一行指标都没回来的票：不是被截断，就是该票确实没有指标数据。
+    # 两种情况对调用方的含义不同，都不该藏进 `scanned` 里。
+    no_indicator = len(candidate_set) - len(candidate_set & scanned_codes)
+    dropped = sorted(candidate_set - scanned_codes)
+
+    # 各分片各自的判定结果在这里归并成一个与旧 `screener.screen` 返回同形的
+    # 结构，下游（风险筛选、截断、返回体）不需要知道分片这回事。
+    result = {
+        "stocks": hits,
+        "matched": matched_total,
+        "incomplete": incomplete_total,
+    }
 
     # ---- 财务风险代理筛选 ----
     # 只在用户明确要筛时才去查 financials。默认不查：多一次跨库查询，

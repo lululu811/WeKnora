@@ -1040,3 +1040,51 @@ class TestSignalUtilisation:
                 f"{name} 是单根形态，min_count 必须为 1"
             )
             assert sig in STRATEGY_RULES[name]["match_signals"]
+
+
+class TestPerStrategyLookback:
+    """回看窗口必须**按策略**取，不能全局统一。
+
+    实测教训：缩量回踩需要 70 根历史，一度把 screener.LOOKBACK_DAYS 全局设成 70，
+    于是每一条策略都按 70 天取全市场 —— 5,571 只 × 70 天 × 2 张表 ≈ 78 万行
+    Python dict，容器 3 GiB 上限被打穿，一次 /zettaranc/screen 就把
+    python-service OOM kill 掉。窗口改成规则自报 `min_bars` 才解决。
+    """
+
+    def test_default_window_stays_small(self):
+        from zettaranc import screener
+        assert screener.LOOKBACK_DAYS == 20, (
+            f"默认窗口变成 {screener.LOOKBACK_DAYS} 天 —— 全局调大会打爆容器内存"
+        )
+
+    def test_rule_declaring_min_bars_gets_it(self):
+        from main import STRATEGY_RULES
+        from zettaranc import screener
+
+        rule = STRATEGY_RULES["shrink_pullback"]
+        assert rule.get("min_bars") == 70
+        assert screener.lookback_for(rule) == 70
+
+    def test_ordinary_rules_get_the_default(self):
+        from main import STRATEGY_RULES
+        from zettaranc import screener
+
+        for name, rule in STRATEGY_RULES.items():
+            if name == "shrink_pullback":
+                continue
+            assert screener.lookback_for(rule) == screener.LOOKBACK_DAYS, \
+                f"{name} 不该要更长窗口"
+
+    def test_min_bars_smaller_than_default_does_not_shrink(self):
+        from zettaranc import screener
+        assert screener.lookback_for({"min_bars": 5}) == screener.LOOKBACK_DAYS
+
+    def test_shard_size_follows_the_window(self):
+        """70 天的分片必须比 20 天的细，否则每片会超预算被静默截断。"""
+        from zettaranc import screener
+        codes = [f"{i:06d}.SZ" for i in range(5571)]
+        s20 = screener.shard_codes(codes, 20)
+        s70 = screener.shard_codes(codes, 70)
+        assert len(s70) > len(s20)
+        for shard in s70:
+            assert len(shard) * 70 <= screener.QUERY_ROW_BUDGET
