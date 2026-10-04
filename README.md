@@ -27,7 +27,7 @@
 
 | 文档 | 内容 |
 |---|---|
-| 本文件 | 快速开始与投研栈说明 |
+| 本文件 | 快速开始与投研栈说明（含第七节「配置速查」） |
 | [NOTICE.md](NOTICE.md) | 许可、第三方组件、商标声明 |
 | [DEPLOY.md](DEPLOY.md) | 部署与排障手册 |
 | [docs/DATABASE.md](docs/DATABASE.md) | **数据库表结构**：80 张表总览、本 fork 新增的自选股表 |
@@ -209,3 +209,64 @@ cd python-service && python3 -m pytest tests/ -q
 - 代码：**MIT**（上游 Copyright (C) 2025 Tencent，本 fork 新增部分同 MIT）
 - 第三方组件：见 [NOTICE.md](NOTICE.md) 与 `licenses/`
 - **本仓库不含金融数据**；hithink-finance 数据需自行获取
+
+---
+
+## 七、配置速查（本 fork 实测）
+
+> 这一节记的是**踩过的坑**，不是配置项清单（完整清单见 `.env.example`，按 A–J 分组、带中文注释）。
+> 每一条都对应一次真实的**静默**故障：不报错、不崩，只是某个能力悄悄不可用。
+
+### 7.1 模型：每个 agent 必须显式绑定
+
+| 事实 | 说明 |
+|---|---|
+| 内置 `qwen-plus` / `qwen-turbo` 默认**不可用** | `api_key: ${DASHSCOPE_API_KEY}`，而 `.env` 里没有这个变量 → 插值器刻意保留字面量 → 每次调用 401。已在 `config/builtin_models.yaml` 注释停用；重启后加载器的漂移清理会自动软删这两行（只清理 `managed_by=yaml` 的行） |
+| 实际在用的对话模型 | `qwen3.7-plus`（DashScope coding 端点）与 `MiniMax-M3`；`qwen3.7-plus` 是 KnowledgeQA 的默认 |
+| agent 必须带 `model_id` | 内置 agent 的 YAML 里**不带** `model_id`，直接选它对话会报 `chat model is not configured: please set model_id on agent <id>`。在「智能体 → 编辑」里选一次模型即可（会落一行定制配置） |
+
+### 7.2 内置 agent 的「定制行冻结」陷阱（最坑的一条）
+
+内置 agent 一旦在库里存了定制行（在 UI 里编辑过、或 API `PUT` 过），**整份 config 以库为准**：之后改 `config/builtin_agents.yaml` 再重启，**不会**回灌到那个空间。
+
+实测踩过两次：
+
+- `builtin-halo` 的白名单里 `hithink.finance.financial.statement.balance` 写成了 `hittink...` —— 白名单里的工具名拼错 = 该工具**永远不注册**，且不报任何错；
+- `builtin-zettaranc` 的定制行停在旧版本，缺 `zettaranc.four_bricks` —— "四块砖"这个能力在对话里一直不可用。
+
+所以：**改 YAML 只对「没有定制行」的空间生效**。已有定制行的空间要在 UI 里改，或 `PUT /api/v1/agents/<id>`（记得带**完整** config，缺字段会被整份覆盖）。
+
+护栏（跟测试一起跑）：`internal/agent/tools/halo/whitelist_test.go`、`internal/types/builtin_agent_workbench_test.go`、`internal/agent/tools/zettaranc/whitelist_test.go` 把 YAML 与代码里的注册表/词表对齐。
+
+### 7.3 工作台（右侧面板）
+
+- `config.workbench: "finance"` → 渲染 `kline` 组件。工作台由 `session → agent → config.workbench` 推导，一个会话只绑一个 agent，所以 Z哥 与 HALO 可以共用同一个工作台。
+- K 线面板底部「继续向 Agent 提问」里的 HALO 三条问法，**只在当前 agent 的白名单含 `halo.analyze` 时出现** —— 给没有该工具的 agent 显示，等于给用户一个必定失败的动作。
+
+### 7.4 HALO 年报链路
+
+- 运行期状态（事实库 `halo.sqlite`、年报 PDF 缓存、判分影子记录）都在 **`halo-data` 命名卷**（容器内 `/data/halo`）。别指回 `~`：容器里 `HOME=/root`，会写进容器可写层，重建即丢，而重抓一份年报要 1–3 分钟（巨潮还限速）。
+- 面板上的「归档到知识库」默认落成**草稿**（设计如此：报告里约三成是模型判断）。**草稿不进检索** —— 要在知识库列表里发布/启用之后，问答才能检索到它。
+- 数据铁律：取不到就标缺失，不补值、不外推。因此**非年报期 HALO 六维必然不可计算**，这是正确行为，不是 bug。
+
+### 7.5 后台任务并发（asynq）
+
+- 摘要 / 多模态 / 图谱 / 问题生成跑在 **enrichment 池**，默认并发 **12**。
+- 若摘要模型指向**并发额度很紧**的端点（典型：DashScope coding 计划 `coding.dashscope.aliyuncs.com/apps/anthropic`），12 路并发会稳定撞 429 `concurrency allocated quota exceeded` —— 实测一天 639 条 `summary:generation` 死信。本部署已设 `WEKNORA_ASYNQ_ENRICHMENT_CONCURRENCY=2`。
+- 观测点：`GET /health/readiness`（带 `X-API-Key`）的 `dead_letter_backlog`；原始档案在 `task_dead_letters` 表。
+- 想跑快点就调大，但要盯有没有新的 429 死信。
+
+### 7.6 本地 embedding（Ollama）
+
+本部署 4 个知识库的 embedding 模型都是 `milkey/wemm-embedding-2b:Q4_K_M`（本地 Ollama）。**Ollama 没起**时，任何需要 embedding 的后台步骤都会失败：
+
+```
+failed to get embedding vectors: Post "http://host.docker.internal:11434/api/embed":
+dial tcp 192.168.65.254:11434: connect: connection refused
+```
+
+表现为 `task_dead_letters` 里多一条。起服务：`ollama serve`（或 `brew services start ollama`）。
+
+### 7.7 自检入口
+
+`GET /health/readiness`（需鉴权）是唯一能一眼看到「死信积压 / 悬空模型引用 / 不可达工具」的地方。本 fork 用它清掉了 28 条工具可达性**误报** —— 根因是检查项自己漏了四种情况：内置 agent 没有 DB 行、能力开关注册的工具不需要白名单条目、空白名单会兜底到 `DefaultAllowedTools`、以及少数工具是故意不授予任何 agent 的。这类误报修干净，下一个人（多半是我自己）才不会重新排查一遍。
