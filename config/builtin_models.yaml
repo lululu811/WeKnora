@@ -9,7 +9,10 @@
 #    字面量 ${NAME}，这样错误配置会在 API 调用时暴露出来。
 # 2. 非字符串字段（type, source, is_default, dimension 等）必须使用字面值。
 # 3. 每次启动时重新应用 - 修改文件后重启即可生效。
-# 4. 从文件中移除的条目不会自动从数据库删除，需要手动清理。
+# 4. 从文件中移除（或注释掉）条目后重启，加载器会**自动软删除**该 id 的行
+#    （漂移清理只动 managed_by="yaml" 的行；UI/API 建的行不受影响，见
+#    internal/types/builtin_models_config.go 的 Lifecycle contract）。
+#    条目重新出现时该行会被复活。
 #
 # 模型类型说明
 # -------------------------
@@ -29,29 +32,38 @@
 builtin_models:
   # ========== 对话模型（KnowledgeQA）==========
 
-  # 阿里云百炼 - 通义千问 Plus（主力模型，性价比高）
-  - id: builtin-qwen-plus
-    type: KnowledgeQA
-    source: remote
-    is_default: true
-    name: qwen-plus
-    parameters:
-      base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
-      api_key: ${DASHSCOPE_API_KEY}
-      provider: openai  # 百炼兼容 OpenAI 协议
-      context_window: 131072  # 128K 上下文
-
-  # 阿里云百炼 - 通义千问 Turbo（快速响应，成本更低）
-  - id: builtin-qwen-turbo
-    type: KnowledgeQA
-    source: remote
-    is_default: false
-    name: qwen-turbo
-    parameters:
-      base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
-      api_key: ${DASHSCOPE_API_KEY}
-      provider: openai
-      context_window: 131072
+  # 阿里云百炼 - 通义千问 Plus / Turbo —— 已停用（2026-10-04）。
+  #
+  # 停用原因不是"不想要"，是**它们在这套部署里从来不可用**：api_key 走
+  # ${DASHSCOPE_API_KEY}，而 .env 里没有这个变量，插值器刻意把未设置的变量
+  # 原样留下，于是每次调用都把字面量 "${DASHSCOPE_API_KEY}" 当密钥发出去，
+  # 上游稳定返回 401 invalid_api_key。更糟的是 builtin-qwen-plus 还是
+  # KnowledgeQA 的 is_default 行 —— 任何走"默认对话模型"兜底的路径都会撞上它。
+  #
+  # 要恢复：取消注释并确保 .env 里有 DASHSCOPE_API_KEY。注意本文件是
+  # **声明式**的，重启时按 id 重新应用；被删掉的条目会被漂移清理（见文件头第 4 条）。
+  #
+  # - id: builtin-qwen-plus
+  #   type: KnowledgeQA
+  #   source: remote
+  #   is_default: true
+  #   name: qwen-plus
+  #   parameters:
+  #     base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
+  #     api_key: ${DASHSCOPE_API_KEY}
+  #     provider: openai  # 百炼兼容 OpenAI 协议
+  #     context_window: 131072  # 128K 上下文
+  #
+  # - id: builtin-qwen-turbo
+  #   type: KnowledgeQA
+  #   source: remote
+  #   is_default: false
+  #   name: qwen-turbo
+  #   parameters:
+  #     base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
+  #     api_key: ${DASHSCOPE_API_KEY}
+  #     provider: openai
+  #     context_window: 131072
 
   # DeepSeek - V3（强大的推理能力，可选）
   # - id: builtin-deepseek-v3
