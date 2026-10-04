@@ -62,6 +62,7 @@ type fixture struct {
 // coverageFixtures 为 declaredSignalNames 里的**每一条**信号各提供一组能把它打
 // 出来的 K 线。少一条覆盖，测试 2（完整性）不会发现，但测试 1（覆盖）会发现——
 // 清单里躺着一条永远打不出来的信号，那和"描述里广告了却没实现"是同一种病。
+
 func coverageFixtures() []fixture {
 	var fs []fixture
 	add := func(want string, rows ...row) {
@@ -115,6 +116,20 @@ func coverageFixtures() []fixture {
 	add("Aroon空头排列", with(func(r *row) { r.AroonUp, r.AroonDown = 20, 80 }))
 	add("Vortex金叉", with(func(r *row) { r.VIPlus, r.VIMinus = 1.2, 0.8 }), with(func(r *row) { r.VIPlus, r.VIMinus = 0.7, 0.9 }))
 	add("Vortex死叉", with(func(r *row) { r.VIPlus, r.VIMinus = 0.8, 1.2 }), with(func(r *row) { r.VIPlus, r.VIMinus = 0.9, 0.7 }))
+	// zettaranc 双线。Close 必须给 —— 信号描述里带收盘价，且判定要过 hasData。
+	add("白线金叉黄线",
+		with(func(r *row) { r.Close, r.ZtrWhite, r.ZtrYellow = 20.5, 20.3, 20.0 }),
+		with(func(r *row) { r.Close, r.ZtrWhite, r.ZtrYellow = 19.6, 19.5, 20.0 }))
+	add("白线死叉黄线",
+		with(func(r *row) { r.Close, r.ZtrWhite, r.ZtrYellow = 19.5, 19.8, 20.0 }),
+		with(func(r *row) { r.Close, r.ZtrWhite, r.ZtrYellow = 20.4, 20.2, 20.0 }))
+	// 黄线穿越要两根：rows[0] 已经在黄线上方、rows[1] 还在下方。
+	add("收盘上穿黄线",
+		with(func(r *row) { r.Close, r.ZtrYellow = 20.5, 20.0 }),
+		with(func(r *row) { r.Close, r.ZtrYellow = 19.5, 20.0 }))
+	add("收盘下穿黄线",
+		with(func(r *row) { r.Close, r.ZtrYellow = 19.5, 20.0 }),
+		with(func(r *row) { r.Close, r.ZtrYellow = 20.5, 20.0 }))
 	add("CHOP进入震荡", with(func(r *row) { r.Chop = 70 }), with(func(r *row) { r.Chop = 55 }))
 	add("CHOP重回趋势", with(func(r *row) { r.Chop = 30 }), with(func(r *row) { r.Chop = 50 }))
 	add("KC中轨多头带",
@@ -194,6 +209,9 @@ func coverageFixtures() []fixture {
 		with(func(r *row) { r.PVI, r.NVI = 1000, 1000 }),
 		with(func(r *row) { r.PVI, r.NVI = 1000, 1000 }))
 
+	// 单针下20：3日百分位 15 (<=20) + 21日百分位 70 (>=60)
+	add("单针下20", with(func(r *row) { r.ZtrRSLRank15, r.ZtrRSLRank105 = 15, 70 }))
+
 	// ── Statistics ──
 	add("Z-Score超卖", with(func(r *row) { r.ZScore = -2.5 }))
 	add("Z-Score超买", with(func(r *row) { r.ZScore = 2.5 }))
@@ -241,7 +259,34 @@ func coverageFixtures() []fixture {
 //	上穿VWAP / 下穿VWAP        —— 收盘价穿越当日建仓成本线。
 //
 // 三组都补了正向 fixture（各自能被打出来）和一个全 0 负向闸门。
-const wantDeclaredSignalCount = 71
+//
+// 71 → 75：接入 zettaranc 自研双线（BBI 牵牛绳一并取数备用），补四条**转折**信号。
+//
+//	白线金叉黄线 / 白线死叉黄线 —— 快线 DEMA10 穿越慢线 LONGBBI(14/28/57/114)
+//	收盘上穿黄线 / 收盘下穿黄线 —— 收盘价穿越慢线，即"左侧转右侧"的那一步
+//
+// 刻意**不**发两类状态信号：其一 "close > 黄线"，400 只 × 400 根实测 48.13% 的
+// bar 成立；其二 "黄线斜率向上"，实测 **45.92%**（频率审计判 noisy），因为 114 日
+// 均线的日间差值微乎其微、符号在零附近随机翻转——**慢线的斜率方向是状态不是事件**。
+// 这与本文件 Choppiness 段落写下的原则一致。
+//
+// 四条都配了正向 fixture 和 COALESCE 补 0 的负向闸门 —— ztr_* 三列有约 0.4%
+// 的 NULL 会补成 0，0 比任何一条线都低，不挡就是给缺列的 K 线凭空发金叉。
+//
+// 75 → 76：接入 a-stock 的 p9 单针下 20（RSL 改名前后的列名对齐）。实测 8.09%，informative。
+//
+// 同一批里原本还实现了 p6 长安三件套，**已移出 signals.go**，理由与它的 verdict 无关
+// —— 它确实会触发：**全库 5,572 只 × 十年 10,349,853 根 bar 上，七条条件同时成立
+// 恰好 117 次**（0.0011%，约每 20 个交易日全市场一次）。1/88,000 的 bar 率不是
+// "每根 K 报一次状态"该待的地方，而 run_signal_audit.sh 的 300 只定距样本只覆盖
+// 全库的 2.7%，期望 3.2 次，因此给出 `dead`（λ=3.2 时 P(0)≈4%，完全合理）。
+// 它与 shrink_pullback（70 根窗口）、double_gun（15 根窗口，超出审计 7 根窗口）
+// 同属形态层，在 python-service/zettaranc/volume.py 实现。
+//
+// 顺带记下一个真实的坑：第一版守卫写成 hasData(..., latest.J)，而 hasData 要求每个
+// 值 > 0、主判据却是 J < -13，信号因此**永远打不出来**。那个 `dead` 是我的 bug。
+// 结论：`dead` 判定必须先确认信号在结构上可能触发，再谈阈值松紧。
+const wantDeclaredSignalCount = 76
 
 func TestDeclaredSignalCountPinned(t *testing.T) {
 	if got := len(declaredSignalNames); got != wantDeclaredSignalCount {

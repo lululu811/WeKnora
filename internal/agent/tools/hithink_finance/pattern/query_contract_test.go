@@ -121,11 +121,17 @@ func TestQueryCoversEverySelectedColumn(t *testing.T) {
 	for _, m := range keyRe.FindAllStringSubmatch(text, -1) {
 		mapped[m[1]] = true
 	}
-	// close 不来自这条指标 SQL：indicators 库根本没有价格列，收盘价是从
-	// market.v_daily_qfq 按 date 合并进来的（见 query.go 顶部注释），所以它的
-	// closeSQL 里自然没有 "AS close"。这不是漏查，是跨库合并。
-	delete(aliases, "close")
-	delete(mapped, "close")
+	// 价格列不来自这条指标 SQL：indicators 库根本没有价格列，它们是从
+	// market.v_daily_qfq 按 date 合并进来的（见 query.go 顶部注释），所以那条
+	// priceSQL 里自然没有 "AS close" 之类的别名。这不是漏查，是跨库合并。
+	//
+	// 原来只豁免 close；接入长安三件套后 close 旁边的 high / low / volume 也走同一条
+	// priceSQL，必须一起豁免，否则 mapToRow 明明读了它们，本测试却报
+	// "SQL 里没有对应的 AS xxx"。
+	for _, priceCol := range []string{"close", "high", "low", "volume"} {
+		delete(aliases, priceCol)
+		delete(mapped, priceCol)
+	}
 	if len(mapped) < 50 {
 		t.Fatalf("只认出 %d 个字段映射，正则多半失效了", len(mapped))
 	}
@@ -140,7 +146,7 @@ func TestQueryCoversEverySelectedColumn(t *testing.T) {
 			t.Errorf("mapToRow 读了别名 %q，但 SQL 里没有对应的 AS %s —— 恒读出 0。", m, m)
 		}
 	}
-	t.Logf("别名 %d 个、字段映射 %d 个，双向一一对应（close 为跨库合并，不计）", len(aliases), len(mapped))
+	t.Logf("别名 %d 个、字段映射 %d 个，双向一一对应（价格列为跨库合并，不计）", len(aliases), len(mapped))
 }
 
 // stripLineComments 去掉 Go 行注释，保留原始行结构，避免拼坏字符串字面量。

@@ -49,13 +49,20 @@ func (t *PatternScanTool) Description() string {
   MFI超卖、MFI超买、ER转高效、ER转低效
 - 趋势：Supertrend翻转、Supertrend翻空、PSAR翻多、PSAR翻空、ADX多头趋势、
   ADX空头趋势、DI金叉、DI死叉、Aroon多头排列、Aroon空头排列、Vortex金叉、
-  Vortex死叉、CHOP进入震荡、CHOP重回趋势、KC中轨多头带、KC中轨空头带、
+  Vortex死叉、白线金叉黄线、白线死叉黄线、收盘上穿黄线、收盘下穿黄线、
+  CHOP进入震荡、CHOP重回趋势、KC中轨多头带、KC中轨空头带、
   MACD动能衰减
+  双线口径：「白线」是 DEMA10 快线，「黄线」是 LONGBBI(14/28/57/114) 慢线。
+  白线金叉/死叉黄线 报快线穿越慢线（启动位），收盘上穿/下穿黄线 报价格穿越慢线
+  （左侧转右侧的那一步）—— 四条都是转折而非状态。这里**不**报"收盘在黄线上方"，
+  也不报"黄线斜率向上"：实测前者 48%%、后者 46%% 的 K 线都成立，报的是行情状态。
 - 波动：布林带收口、布林中轨收复、布林中轨跌破、Donchian上轨突破、
   Donchian下轨跌破、Keltner挤压、Keltner挤压向上突破、Keltner挤压向下突破、
   NATR进入高波动档位、NATR退出高波动档位、ATR扩张
 - 量价：CMF资金流入、CMF资金流出、价量背离、缩量下跌吸筹、PVI强于NVI吸筹、
   NVI强于PVI派发、上穿VWAP、下穿VWAP
+- 高级形态：「单针下20」是 3 日涨幅的 15 根窗口百分位 <=20 且 21 日涨幅的 105 根窗口
+  百分位 >=60 —— 长期强势趋势里的短期超跌。
 - 统计：Z-Score超卖、Z-Score超买、线性回归上升、线性回归下降
 - 蜡烛图：Morning Star晨星、Evening Star暮星、Hammer锤子线、Shooting Star流星、
   Doji十字星、Engulfing吞没、Harami孕线、Piercing刺透、Dark Cloud乌云盖顶、

@@ -29,21 +29,29 @@ MAX_UNIVERSE = 20_000
 # 均量被单日极值带偏。这里与 volume.py 的 `_calc_vol_avg` 默认窗口保持一致。
 VOL_AVG_WINDOW = 10
 
-# 取最近 20 天。
+# 取最近 70 天。
 #
-# 原来是 10 天，为了与 /zettaranc/scan 的下限一致。现在要加价量维度，
-# 10 天不够：算「放量突破」需要「当日 + 前 10 日均量」共 11 根，10 天窗口下
-# 均量实际只覆盖 9 根，判定口径与单票 analyze 路径不一致 —— 而"选股池和
-# 单票扫描必须同口径"正是这个模块存在的理由。
-LOOKBACK_DAYS = 20
+# 原来是 10 天，为了与 /zettaranc/scan 的下限一致；之后提到 20 天，因为算
+# 「放量突破」需要「当日 + 前 10 日均量」共 11 根，10 天窗口下均量实际只覆盖
+# 9 根，判定口径与单票 analyze 路径不一致 —— 而"选股池和单票扫描必须同口径"
+# 正是这个模块存在的理由。
+#
+# 现在提到 70 天，同样是为了口径：缩量回踩形态的 shrink（近 15 日最大量）、
+# dn_up（近 15 日阴阳线均量）、守前低（近 70 日最低）全部是跨窗口聚合量，
+# 20 根窗口下永远算不出来 —— 形态信号会一条都不发，而不是"发了但不准"。
+# 代价是行数预算，见下面 QUERY_ROW_BUDGET 的分片计算。
+LOOKBACK_DAYS = 70
 
 # 单次查询的行数预算。
 #
 # python-service 给每条查询封顶 MAX_QUERY_ROWS=100_000，超了会**静默截断**
-# （只保留前 100k 行）。全市场 5,571 只 × 20 天：
-#   indicators ≈ 111,206 行、market 价量 ≈ 83,269 行
-# 单条查询无论取哪张表都已经贴着上限，**两张表相加更是必然超标**，
-# 所以价量维度只能靠"按代码分片"接进来，不能靠把两条查询拼成一条。
+# （只保留前 100k 行）。全市场 5,571 只 × 70 天：
+#   indicators ≈ 389,970 行、market 价量 ≈ 390,040 行
+# 单条查询无论取哪张表都已经远超上限，所以价量维度只能靠"按代码分片"接进来。
+#
+# 每片 = 80,000 // 70 = 1,142 只 → 5,571 / 1,142 = 5 片（20 天时是 2 片）。
+# 5 片 × 2 条查询 = 10 次往返，对一次全市场选股可以接受；嫌慢就把窗口砍到
+# 45 天（近 15 日窗口照旧，守前低改用 45 日低点），片数降到 3。
 #
 # 留 20% 余量而不是正好卡 100_000：实际行数会随停牌、新股、数据同步进度
 # 波动，正好卡满的阈值迟早会在某天悄悄截断，而截断的表现是"少了些票"，
@@ -75,8 +83,9 @@ def build_price_snapshot_sql() -> str:
     现在把 `market.v_daily_qfq` 的价量按 (thscode, date) 并进指标行，
     两个形态信号才进得了集合式选股。
 
-    只取 close/high/low/volume 四列：Donchian 上轨要用 high 滚动窗口，
-    放量突破要 close + volume，turnover/open 在这两个判定里用不上。
+    只取 close/open/high/low/volume 五列：Donchian 上轨要用 high 滚动窗口，
+    放量突破要 close + volume，缩量回踩要 open（判阴阳）+ low（判前低）。
+    turnover 在这些判定里用不上，不取。
     """
     select_list = ", ".join(PRICE_SNAPSHOT_COLUMNS)
     return f"""
@@ -91,7 +100,11 @@ def build_price_snapshot_sql() -> str:
 
 
 # 价量快照的列名。信号判定读的就是这几个 key。
-PRICE_SNAPSHOT_COLUMNS = ("close", "high", "low", "volume")
+#
+# `open` 是为缩量回踩形态加的：dn_up（阴线均量 / 阳线均量）必须靠 open 判阴阳，
+# 缺了它 `close > open` 永远不成立，那四个信号会在选股池里**静默不发** ——
+# 而在单票 analyze 路径上如果 open 是齐的，就会发出，两边对不上。
+PRICE_SNAPSHOT_COLUMNS = ("close", "open", "high", "low", "volume")
 
 
 def merge_price_rows(

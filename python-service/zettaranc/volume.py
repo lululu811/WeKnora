@@ -13,6 +13,48 @@ from .utils import min_int, num, nz, round2
 
 MIN_BARS = 10
 
+# ── 缩量回踩形态的窗口与阈值 ─────────────────────────────────────
+#
+# 来源是用户自有的 a-stock/b1.md（「放量突破 → 缩量回踩 → 不破前低」）。
+# 搬到这里而不是留在 a-stock 的理由：那边只有 SQL 和文档，没有可复用实现，
+# 而且那份文档与它自己的 SQL 在三处阈值上互相矛盾（见下方偏差说明）。
+#
+# ⚠️ **与 b1.md 有三处有意偏差**，都不是笔误，改动前先读下面的注释：
+#
+# 1. 窗口 70 根，不是 52 周（250 根）。b1.md 正文写 `low_52w`，但它自己的
+#    b1_screen.sql 写的是 `low_70d` —— 两份不一致，而 70 根正好是选股池
+#    单次快照能负担的量级（见 screener.LOOKBACK_DAYS）。这里跟 SQL 走。
+# 2. `from_btm` 的分母用 70 日低，不是 52 周低。同上，SQL 口径。
+# 3. KDJ 的 J<-5 不在这里判。b1.md 里 J 有三个互相冲突的取值（README 写
+#    -5、zettaranc 的建仓波写 -10、P6 写 -13），在裁决之前不把任何一个
+#    焊进形态判定 —— J 是单根指标，由 signals.py 用同一份 J 值单独发信号，
+#    阈值留在策略规则层，可改不改这里。
+SHRINK_PULLBACK_WINDOW = 70       # 形态判定需要的 K 线根数
+SHRINK_PULLBACK_RECENT = 5        # 近 5 日：均量、最低价
+SHRINK_PULLBACK_TREND = 15        # 近 15 日：最大量、阳/阴线均量
+SHRINK_PULLBACK_BASE_START = 19   # 基准量起点（跳过最近 19 根，取更早的一段）
+SHRINK_PULLBACK_BASE_LEN = 51     # 基准量长度 → 合计 70 根
+
+SHRINK_MAX = 0.5                  # shrink = 近5日均量 / 近15日最大量
+SHRINK_DN_UP_MAX = 0.8            # dn_up = 近15日阴线均量 / 阳线均量
+SHRINK_MAX_DN_RATIO_MAX = 1.8     # max_dn_vol / vol_base（下跌日的恐慌放量）
+SHRINK_FLOOR_MULT = 1.02          # low_5d > low_70d * 1.02 才算守住前低
+SHRINK_FROM_BTM_MAX_PCT = 30.0    # (close - low_70d) / low_70d 的百分数上限
+
+
+def _vol_of(row: Optional[Dict]) -> Optional[float]:
+    """取一行的成交量。
+
+    两套行结构并存：集合式选股池的价量快照列名是 `volume`
+    （screener.PRICE_SNAPSHOT_COLUMNS），而本模块其余函数读的是 `vol`。
+    以 `volume` 为主、`vol` 兜底 —— 少一个键名兜底，这个形态在只提供 `vol`
+    的单只扫描路径上就会整段返回 None，而且不报错。
+    """
+    if row is None:
+        return None
+    value = num(row.get("volume"))
+    return value if value is not None else num(row.get("vol"))
+
 
 def _calc_price_range(rows: List[Dict]) -> float:
     if not rows:
@@ -44,6 +86,268 @@ def _calc_vol_trend(rows: List[Dict]) -> Optional[float]:
     if recent is None or old is None or old == 0:
         return None
     return (recent - old) / old
+
+
+def shrink_pullback_metrics(rows: List[Dict]) -> Dict:
+    """缩量回踩形态的五个量 + 三个布尔结论。
+
+    返回 insufficient=True 时不给任何结论，只如实回报缺多少根 K 线 ——
+    与本模块"缺数据就标 unknown，不拿 0 凑数"的既有口径一致。
+
+    为什么形态判定放在这里而不塞进 signals.detect_signals：
+    那个函数的信号契约是"单根或少数几根 K 线的原语"，而这里的 shrink /
+    dn_up / max_dn_ratio / from_btm / floor 全部是**跨 70 根的聚合量**。
+    硬塞进去会让 STRATEGY_RULES 那个 {match_signals, min_count} 字典
+    退化成什么都装的黑洞。所以分工是：这里算数，这里发信号，
+    STRATEGY_RULES 只负责把信号组合成策略。
+
+    rows[0] 是最新一根（与本模块其余函数一致）。
+    """
+    if len(rows) < SHRINK_PULLBACK_WINDOW:
+        return {
+            "insufficient": True,
+            "required_bars": SHRINK_PULLBACK_WINDOW,
+            "actual_bars": len(rows),
+        }
+
+    win = rows[:SHRINK_PULLBACK_WINDOW]
+    recent = win[:SHRINK_PULLBACK_RECENT]
+    trend = win[:SHRINK_PULLBACK_TREND]
+    base = win[SHRINK_PULLBACK_BASE_START:
+               SHRINK_PULLBACK_BASE_START + SHRINK_PULLBACK_BASE_LEN]
+
+    def _avg(values: List[Optional[float]]) -> Optional[float]:
+        return None if any(v is None for v in values) else \
+            sum(values) / len(values)  # type: ignore[arg-type]
+
+    def _need(name: str, values: List[Optional[float]]) -> Optional[str]:
+        """任一元素缺失就返回缺失原因名，供调用方如实回报。"""
+        return name if any(v is None for v in values) else None
+
+    # ── 量能三件套 ──
+    vol_recent = [_vol_of(r) for r in recent]
+    vol_trend = [_vol_of(r) for r in trend]
+    vol_base = [_vol_of(r) for r in base]
+
+    missing = next((m for m in (
+        _need("近5日成交量", vol_recent),
+        _need("近15日成交量", vol_trend),
+        _need("基准量成交量", vol_base),
+    ) if m), None)
+    if missing is not None:
+        return {
+            "insufficient": True,
+            "required_bars": SHRINK_PULLBACK_WINDOW,
+            "actual_bars": len(rows),
+            "missing": missing,
+        }
+
+    vol_5d = _avg(vol_recent)
+    vol_base_avg = _avg(vol_base)
+    max_vol_15d = max(vol_trend)  # type: ignore[type-var]
+
+    # ── 阳/阴线拆分：b1.md 的口径是 close > open 记阳、close <= open 记阴 ──
+    up_vol: List[Optional[float]] = []
+    dn_vol: List[Optional[float]] = []
+    for r in trend:
+        c, o = num(r.get("close")), num(r.get("open"))
+        v = _vol_of(r)
+        if c is None or o is None or v is None:
+            return {
+                "insufficient": True,
+                "required_bars": SHRINK_PULLBACK_WINDOW,
+                "actual_bars": len(rows),
+                "missing": "近15日开收盘价",
+            }
+        (up_vol if c > o else dn_vol).append(v)
+
+    # 15 个交易日全是阳（或全阴）时，均量比无定义 —— 那种形态本来也不该
+    # 被判成"下跌不放量"，返回 None 让调用方不发信号，而不是拿 0 当分母。
+    vol_up = _avg(up_vol) if up_vol else None
+    vol_dn = _avg(dn_vol) if dn_vol else None
+
+    # ── 价格位置 ──
+    lows_recent = [num(r.get("low")) for r in recent]
+    lows_all = [num(r.get("low")) for r in win]
+    close_now = num(win[0].get("close"))
+
+    missing = next((m for m in (
+        _need("近5日最低价", lows_recent),
+        _need("70日最低价", lows_all),
+    ) if m), None)
+    if missing is not None or close_now is None:
+        return {
+            "insufficient": True,
+            "required_bars": SHRINK_PULLBACK_WINDOW,
+            "actual_bars": len(rows),
+            "missing": missing or "最新收盘价",
+        }
+
+    low_5d = min(lows_recent)   # type: ignore[type-var]
+    low_70d = min(lows_all)     # type: ignore[type-var]
+
+    # 每一项都独立判 None，不让一个除数缺失把整段拉成 0。
+    shrink = (vol_5d / max_vol_15d) if (vol_5d and max_vol_15d) else None
+    dn_up = (vol_dn / vol_up) if (vol_dn and vol_up) else None
+    max_dn_ratio = (
+        max(dn_vol) / vol_base_avg if (dn_vol and vol_base_avg) else None
+    )
+    from_btm_pct = (
+        (close_now - low_70d) / low_70d * 100 if low_70d else None
+    )
+
+    return {
+        "insufficient": False,
+        "date": win[0].get("date"),
+        "vol_5d": round2(vol_5d) if vol_5d is not None else None,
+        "max_vol_15d": round2(max_vol_15d) if max_vol_15d is not None else None,
+        "shrink": round2(shrink) if shrink is not None else None,
+        "dn_up": round2(dn_up) if dn_up is not None else None,
+        "max_dn_ratio": round2(max_dn_ratio) if max_dn_ratio is not None else None,
+        "from_btm_pct": round2(from_btm_pct) if from_btm_pct is not None else None,
+        "low_5d": round2(low_5d),
+        "low_70d": round2(low_70d),
+        "is_shrunk": shrink is not None and shrink < SHRINK_MAX,
+        "no_panic_volume": dn_up is not None and dn_up < SHRINK_DN_UP_MAX
+        and (max_dn_ratio is None or max_dn_ratio < SHRINK_MAX_DN_RATIO_MAX),
+        "floor_held": low_70d > 0 and low_5d > low_70d * SHRINK_FLOOR_MULT,
+        "near_bottom": from_btm_pct is not None
+        and from_btm_pct < SHRINK_FROM_BTM_MAX_PCT,
+    }
+
+
+# ── 长安三件套 / 双枪放量 ─────────────────────────────────────
+#
+# 两条都落在本形态层，但**理由不同**，别混为一谈：
+#
+# **长安三件套** —— 罕见但真实。全库 5,572 只 × 十年 **10,349,853 根 bar** 上，
+#   七个条件同时成立恰好 **117 次**（0.0011%，约每 20 个交易日全市场一次）。
+#   逐条拆开看并不离奇：J<-13 有 87,874 次、量<T1×0.7 有 1,731,253 次、
+#   两者同时 12,472 次 —— 是七条 AND 把概率压到了 1/88,000。
+#   run_signal_audit.sh 的 300 只定距样本只覆盖全库 2.7%，期望 3.2 次，因此报
+#   `dead`；λ=3.2 时 P(0)≈4%，**那个 dead 是抽样波动，不是策略失效**。
+#   它进不了 signals.go 的理由是**用途**：1/88,000 的 bar 率不属于"每根 K 报一次
+#   状态"，而属于"今天恰好出现这个形态"。
+#
+#   ⚠️ 途中踩过一个真实的坑，值得留着：第一版守卫写成 hasData(..., latest.J)，
+#   而 hasData 要求每个值 > 0、主判据却是 J < -13 —— 信号因此**永远打不出来**，
+#   那个 dead 是我的 bug。教训：拿到 dead 判定，先确认信号在结构上可能触发，
+#   再谈阈值松紧。
+#
+# **双枪放量** —— 15 根窗口，**结构上进不了频率审计**：auditWinSize 是 signals.go
+#   里最大的 `len(rows) >= N` 守卫（7），审计统一喂 rows[t:t+7]。双枪要 15 根，
+#   `len(rows) >= 15` 在审计里恒不成立，必然报 dead。那个 dead 说的是
+#   "审计窗口不够"，不是"策略不成立" —— 与 shrink_pullback（70 根窗口）同类。
+CHANGAN_BARS = 3
+CHANGAN_J_DEEP = -13.0     # T 日 J 深度超卖
+CHANGAN_T1_GAIN_MIN = 0.039  # T+1 涨幅下限
+CHANGAN_J_RECOVERED = 55.0   # T+1 的 J 要回到 55 以下
+CHANGAN_QUIET = 0.02         # T 日涨跌幅绝对值上限
+CHANGAN_AMP_MAX = 0.07       # T 日振幅上限
+CHANGAN_SHRINK_TO = 0.7      # T 日量 < T+1 的 70%
+
+DOUBLE_GUN_BARS = 15
+DOUBLE_GUN_BASE_SLICE = slice(5, 15)   # SQL 叫它 vol_5d，实际取 rn 6~15 = 十根
+DOUBLE_GUN_MID_SLICE = slice(1, 4)     # 中间三根
+DOUBLE_GUN_VOL_RATIO = 1.5
+DOUBLE_GUN_BODY_PCT = 0.02
+DOUBLE_GUN_MID_SHRINK = 0.8
+
+
+def changan_metrics(rows: List[Dict]) -> Dict:
+    """长安三件套的七个条件逐条判，返回是否全部成立。
+
+    ⚠️ a-stock 的 p6_chang_an_screen.sql 把**最新**那根叫 T、往前数叫 T+1 / T+2，
+    标号方向是反的，照字面读会整体错位两根。落到本模块的 rows[0]=T、rows[1]=T+1、
+    rows[2]=T+2，`j_t` 取的是**最新**那根（T）的 J。
+    """
+    if len(rows) < CHANGAN_BARS:
+        return {"insufficient": True, "required_bars": CHANGAN_BARS,
+                "actual_bars": len(rows)}
+    t, t1, t2 = rows[0], rows[1], rows[2]
+    vals = [num(t.get(k)) for k in ("close", "open", "high", "low", "volume", "j")]
+    vals += [num(t1.get(k)) for k in ("close", "volume", "j")]
+    vals += [num(t2.get(k)) for k in ("close", "volume")]
+    if any(v is None for v in vals):
+        return {"insufficient": True, "missing": "长安三件套所需字段"}
+    c0, _, h0, l0, v0, j0 = vals[0:6]
+    c1, v1, j1 = vals[6:9]
+    c2, v2 = vals[9:11]
+    if c1 <= 0 or c2 <= 0 or v1 <= 0 or v2 <= 0:
+        return {"insufficient": True, "missing": "零价或零量"}
+    t1_gain = (c1 - c2) / c2
+    t0_gain = (c0 - c1) / c1
+    t0_amp = (h0 - l0) / c1
+    checks = {
+        "J深度超卖": j0 < CHANGAN_J_DEEP,
+        "T1放量长阳": t1_gain >= CHANGAN_T1_GAIN_MIN and v1 > v2,
+        "T1的J拐头": j1 < CHANGAN_J_RECOVERED,
+        "T日窄幅": abs(t0_gain) < CHANGAN_QUIET,
+        "T日振幅小": t0_amp < CHANGAN_AMP_MAX,
+        "T日缩半量": v0 < v1 * CHANGAN_SHRINK_TO,
+    }
+    return {
+        "insufficient": False,
+        "checks": checks,
+        "hit": all(checks.values()),
+        "t1_gain_pct": round(t1_gain * 100, 2),
+        "t0_gain_pct": round(t0_gain * 100, 2),
+        "t0_amp_pct": round(t0_amp * 100, 2),
+        "vol_ratio": round(v0 / v1, 2) if v1 else None,
+        "j_t": round2(j0),
+        "j_t1": round2(j1),
+    }
+
+
+def double_gun_metrics(rows: List[Dict]) -> Dict:
+    """双枪放量：rows[7] 与 rows[0] 各为放量阳柱，中间 rows[1..3] 缩量且含阴线。
+
+    ⚠️ SQL 里那个叫 `vol_5d` 的基准量实际取 `rn BETWEEN 6 AND 15`，是**十根**的
+    均量。这里跟 SQL 走（rows[5:15]），因为 1.5 / 0.8 这两个阈值是配着这个分母
+    标定的；换成 5 根均量会把量比整体抬高、双枪变得太容易成立。
+    """
+    if len(rows) < DOUBLE_GUN_BARS:
+        return {"insufficient": True, "required_bars": DOUBLE_GUN_BARS,
+                "actual_bars": len(rows)}
+    base = rows[DOUBLE_GUN_BASE_SLICE]
+    mid = rows[DOUBLE_GUN_MID_SLICE]
+    gun1, gun2 = rows[7], rows[0]
+
+    def _ohcv(r):
+        return (num(r.get("open")), num(r.get("high")),
+                num(r.get("low")), num(r.get("close")), _vol_of(r))
+
+    pool = [_ohcv(r) for r in (gun1, gun2) + tuple(base) + tuple(mid)]
+    if any(None in p or p[3] <= 0 or p[0] <= 0 or p[4] <= 0 for p in pool):
+        return {"insufficient": True, "missing": "双枪所需 OHLCV"}
+    base_vol = sum(p[4] for p in pool[2:12]) / 10.0      # rows[5:15]
+    mid_vol = sum(pool[12 + i][4] for i in range(3)) / 3.0
+    if base_vol <= 0:
+        return {"insufficient": True, "missing": "基准均量为零"}
+    g1_o, _, _, g1_c, g1_v = pool[0]
+    g2_o, _, _, g2_c, g2_v = pool[1]
+    g1_body = (g1_c - g1_o) / g1_o
+    g2_body = (g2_c - g2_o) / g2_o
+    mid_has_bear = any(p[3] < p[0] for p in pool[12:15])
+    checks = {
+        "两枪皆阳": g1_c > g1_o and g2_c > g2_o,
+        "两枪量比达标": (g1_v / base_vol >= DOUBLE_GUN_VOL_RATIO
+                     and g2_v / base_vol >= DOUBLE_GUN_VOL_RATIO),
+        "两枪实体达标": (g1_body >= DOUBLE_GUN_BODY_PCT
+                     and g2_body >= DOUBLE_GUN_BODY_PCT),
+        "中段缩量": mid_vol / base_vol < DOUBLE_GUN_MID_SHRINK,
+        "中段含阴线": mid_has_bear,
+    }
+    return {
+        "insufficient": False,
+        "checks": checks,
+        "hit": all(checks.values()),
+        "g1_body_pct": round(g1_body * 100, 2),
+        "g2_body_pct": round(g2_body * 100, 2),
+        "g1_vol_ratio": round(g1_v / base_vol, 2),
+        "g2_vol_ratio": round(g2_v / base_vol, 2),
+        "mid_vol_ratio": round(mid_vol / base_vol, 2),
+    }
 
 
 def analyze_wyckoff_phase(rows: List[Dict]) -> Dict:

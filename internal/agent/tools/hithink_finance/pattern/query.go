@@ -98,6 +98,30 @@ type row struct {
 	// Statistics
 	ZScore   float64 `json:"zscore"`
 	LinSlope float64 `json:"lin_slope"`
+	// zettaranc 自研双线 + 牵牛绳（价格量纲，2026-10-01 已修复回填）
+	//
+	// ⚠️ 取数时被 COALESCE 补成 0（与本文件其余列同样处理），但**判定必须先过
+	// hasData**：这三列仍有约 0.4% 的 NULL，补成 0 之后 0 落在任何价格下方，
+	// 直接比较会凭空造出"站上黄线"。见 signals.go 里 hasData 的注释。
+	// （注：本行的说明刻意不写成 COALESCE 括号形式 —— query_contract_test.go 用
+	//  正则从**全文**抓列名，注释里的字面量也会被当成真列名校验。）
+	ZtrWhite  float64 `json:"ztr_white"`
+	ZtrYellow float64 `json:"ztr_yellow"`
+	ZtrBBI    float64 `json:"ztr_bbi"`
+	// zettaranc 相对强弱排名：3 日涨幅在 15 根窗口内的百分位 / 21 日涨幅在 105 根
+	// 窗口内的百分位，值域 [0,100]。**不是** 3 日 / 21 日的涨幅本身。
+	//
+	// ⚠️ 库里现名是 zettaranc_rsl_rank_15 / _rank_105。旧名
+	// zettaranc_rsl_short_3 / rsl_long_21 在 2026-10-01 随 rsl_same_name_different_meaning
+	// 一并改掉了，**旧名已不存在**——a-stock/strategies/sql/p9_needle_screen.sql 至今
+	// 还在引用旧名，那份 SQL 跑起来会直接 Binder Error。改到这里时别把旧名抄回来。
+	ZtrRSLRank15  float64 `json:"ztr_rsl_rank_15"`
+	ZtrRSLRank105 float64 `json:"ztr_rsl_rank_105"`
+	// 原始价量：长安三件套要 high/low 算 T 日振幅、要 volume 比前两日的量。
+	// 指标库没有现成的多根价量列，只能从 market 侧一起取。
+	High   float64 `json:"high"`
+	Low    float64 `json:"low"`
+	Volume float64 `json:"volume"`
 	// Candlestick patterns (non-zero = pattern present)
 	CdlMorningStar  float64 `json:"cdl_morning_star"`
 	CdlEveningStar  float64 `json:"cdl_evening_star"`
@@ -168,6 +192,11 @@ func queryIndicatorRows(ctx context.Context, config *hithink_finance.Config, ths
 			COALESCE(volume_nvi, 0) AS nvi,
 			COALESCE(statistics_zscore_20, 0) AS zscore,
 			COALESCE(statistics_linearreg_slope_14, 0) AS lin_slope,
+		COALESCE(zettaranc_zg_white_10, 0) AS ztr_white,
+		COALESCE(zettaranc_dg_yellow_14, 0) AS ztr_yellow,
+		COALESCE(zettaranc_bbi, 0) AS ztr_bbi,
+		COALESCE(zettaranc_rsl_rank_15, 0) AS ztr_rsl_rank_15,
+		COALESCE(zettaranc_rsl_rank_105, 0) AS ztr_rsl_rank_105,
 			COALESCE(candles_cdl_morningstar_0, 0) AS cdl_morning_star,
 			COALESCE(candles_cdl_eveningstar_0, 0) AS cdl_evening_star,
 			COALESCE(candles_cdl_hammer_0, 0) AS cdl_hammer,
@@ -191,23 +220,38 @@ func queryIndicatorRows(ctx context.Context, config *hithink_finance.Config, ths
 		return nil, err
 	}
 
-	// 收盘价单独从 market 库取（见上面关于 close 的注释），按 date 合并。
-	// Donchian 突破信号依赖 Close（signals.go），所以不能直接丢掉该字段。
-	closeSQL := `SELECT CAST(date AS VARCHAR) AS date, close FROM v_daily_qfq WHERE thscode = ? ORDER BY date DESC LIMIT ?`
-	closeRows, err := hithink_finance.QueryDuckDBParams(
-		ctx, config, "market", closeSQL, thscode, days)
+	// 收盘价与 high/low/volume 单独从 market 库取（见上面关于 close 的注释），
+	// 按 date 合并。长安三件套（signals.go）要用 high/low 算 T 日振幅、用 volume
+	// 比前两日的量，都是**多根** bar 的比较，指标库没有现成列。
+	priceSQL := `
+		SELECT CAST(date AS VARCHAR) AS date, close, high, low, volume
+		FROM v_daily_qfq WHERE thscode = ? ORDER BY date DESC LIMIT ?`
+	priceRows, err := hithink_finance.QueryDuckDBParams(
+		ctx, config, "market", priceSQL, thscode, days)
 	if err != nil {
 		return nil, err
 	}
-	closeByDate := make(map[string]float64, len(closeRows))
-	for _, r := range closeRows {
-		closeByDate[fmt.Sprint(r["date"])] = f64(r, "close")
+	type price struct {
+		close, high, low, volume float64
+	}
+	priceByDate := make(map[string]price, len(priceRows))
+	for _, r := range priceRows {
+		priceByDate[fmt.Sprint(r["date"])] = price{
+			close:  f64(r, "close"),
+			high:   f64(r, "high"),
+			low:    f64(r, "low"),
+			volume: f64(r, "volume"),
+		}
 	}
 
 	var rows []row
 	for _, r := range results {
 		mapped := mapToRow(r)
-		mapped.Close = closeByDate[mapped.Date]
+		p := priceByDate[mapped.Date]
+		mapped.Close = p.close
+		mapped.High = p.high
+		mapped.Low = p.low
+		mapped.Volume = p.volume
 		rows = append(rows, mapped)
 	}
 	return rows, nil
@@ -261,6 +305,14 @@ func mapToRow(m map[string]interface{}) row {
 		NVI:             f64(m, "nvi"),
 		ZScore:          f64(m, "zscore"),
 		LinSlope:        f64(m, "lin_slope"),
+		ZtrWhite:        f64(m, "ztr_white"),
+		ZtrYellow:       f64(m, "ztr_yellow"),
+		ZtrBBI:          f64(m, "ztr_bbi"),
+		ZtrRSLRank15:    f64(m, "ztr_rsl_rank_15"),
+		ZtrRSLRank105:   f64(m, "ztr_rsl_rank_105"),
+		High:            f64(m, "high"),
+		Low:             f64(m, "low"),
+		Volume:          f64(m, "volume"),
 		CdlMorningStar:  f64(m, "cdl_morning_star"),
 		CdlEveningStar:  f64(m, "cdl_evening_star"),
 		CdlHammer:       f64(m, "cdl_hammer"),

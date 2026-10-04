@@ -39,6 +39,21 @@ DI/Vortex/Supertrend）window=2：四个值缺一个就不发，完整度恒为 
 from typing import Dict, List, Optional, Sequence
 
 from .utils import num, round2
+from .volume import (
+    CHANGAN_BARS,
+    DOUBLE_GUN_BARS,
+    SHRINK_DN_UP_MAX,
+    SHRINK_FLOOR_MULT,
+    SHRINK_FROM_BTM_MAX_PCT,
+    SHRINK_MAX,
+    SHRINK_MAX_DN_RATIO_MAX,
+    SHRINK_PULLBACK_RECENT,
+    SHRINK_PULLBACK_TREND,
+    SHRINK_PULLBACK_WINDOW,
+    changan_metrics,
+    double_gun_metrics,
+    shrink_pullback_metrics,
+)
 
 
 def _v(row: Optional[Dict], key: str) -> Optional[float]:
@@ -52,6 +67,15 @@ VOL_AVG_WINDOW = 10
 # 不是"手上碰巧有几根"。
 BB_AVG_WINDOW = 5
 ATR_AVG_WINDOW = 5
+
+# J 值深度超卖线。取值与出处见 detect_signals 里「KDJ深度超卖」那段注释。
+KDJ_DEEP_OVERSOLD_J = -5
+
+# 单针下 20 的两个百分位档位。与 Go 侧 signals.go 的 needle* 常量同源。
+# ⚠️ 库中现名是 zettaranc_rsl_rank_15 / _rank_105；旧名 rsl_short_3 / rsl_long_21
+# 已于 2026-10-01 随 rsl_same_name_different_meaning 改名，**旧列不存在**。
+NEEDLE_SHORT_RANK_MAX = 20.0
+NEEDLE_LONG_RANK_MIN = 60.0
 
 
 def _avg_volume(rows: List[Dict]) -> Optional[float]:
@@ -145,6 +169,20 @@ def detect_signals(rows: List[Dict]) -> List[Dict]:
         add("sell", "KDJ超买死叉", "bearish", 0.85,
             f"K({latest_k:.1f}) 下穿 D({_v(latest, 'd'):.1f})，超买区",
             ("k", "d"), 2)
+
+    # J 值的**绝对低位**，与上面的金叉/死叉是两件事：金叉看的是方向转折，
+    # 这里看的是位置深浅 —— 一只票可以 J<-5 却还在往下走。
+    #
+    # 阈值 -5 来自用户自己的 a-stock/b1.md（缩量回踩形态的过滤条件之一）。
+    # ⚠️ 同一个 J 在那套体系里有三个互相冲突的取值：README 写 -5、
+    # zettaranc 的建仓波写 -10、P6 长安写 -13。这里只取 -5 且**放在信号层**
+    # 而不是焊进形态判定（见 volume.py 顶部的偏差说明）—— 要改成 -10 或 -13
+    # 就改这一行，不要去动 SHRINK_* 那批常量。
+    latest_j = _v(latest, "j")
+    if latest_j is not None and latest_j < KDJ_DEEP_OVERSOLD_J:
+        add("buy", "KDJ深度超卖", "bullish", 0.8,
+            f"J={latest_j:.1f} (<{KDJ_DEEP_OVERSOLD_J} 深度超卖区)",
+            ("j",))
 
     rsi6 = _v(latest, "rsi6")
     if rsi6 is not None and rsi6 < 20:
@@ -292,6 +330,76 @@ def detect_signals(rows: List[Dict]) -> List[Dict]:
             f"收盘价 {close:.2f} 站上前一日 Donchian 上轨 {dc_upper_prev:.2f}",
             ("close", "dc_upper"), 2)
 
+    # ── zettaranc 双线：白线 DEMA10 / 黄线 LONGBBI(14/28/57/114) ──
+    #
+    # 本文件是 Go 侧 internal/agent/tools/hithink_finance/pattern 的回填副本。
+    # 按 query.go 顶部写死的对齐顺序：新信号先在 signals.go 实现 → 登记
+    # declaredSignalNames → 跑 run_signal_audit.sh 确认 verdict=informative →
+    # **再回填到这一侧**。这四条已过审计（300 只 / 114,933 bar）：
+    #
+    #	白线金叉黄线 0.9110% · 白线死叉黄线 0.9519%
+    #	收盘上穿黄线 4.3782% · 收盘下穿黄线 4.4739%     全部 informative
+    #
+    # 曾有一对"黄线转向上/黄线转向下"（慢线斜率由非正转正）在这里和 Go 侧都试过，
+    # 被频率审计判成 noisy（45.92% / 43.76%）后**删除**：114 日均线的日间差值
+    # 微乎其微、符号在零附近随机翻转，差值是真的、转折是假的。慢线斜率方向是
+    # **状态**不是事件，逐 bar 报它等于报"现在是上行段"。同理会话不报
+    # "收盘在黄线上方"（实测 48.13% 的 bar 成立）。
+    #
+    # 本侧与 Go 侧的差异只有一处，且是本侧更强：data_loader 刻意不写
+    # COALESCE，缺失就是 None（Go 侧补 0 需要 hasData 挡），所以这里的
+    # `None not in (...)` 就够，不必再判 `> 0`。
+    if prev is not None:
+        lw, ly = _v(prev, "ztr_white"), _v(prev, "ztr_yellow")
+        cw, cy = _v(latest, "ztr_white"), _v(latest, "ztr_yellow")
+        pc, cc = _v(prev, "close"), _v(latest, "close")
+
+        # 白线穿越黄线：启动位
+        if None not in (lw, ly, cw, cy):
+            if lw <= ly and cw > cy:
+                add("buy", "白线金叉黄线", "bullish", 0.8,
+                    f"白线({cw:.2f}) 上穿 黄线({cy:.2f})，启动位"
+                    + (f"，收盘 {cc:.2f}" if cc is not None else ""),
+                    ("ztr_white", "ztr_yellow"), 2)
+            elif lw >= ly and cw < cy:
+                add("sell", "白线死叉黄线", "bearish", 0.8,
+                    f"白线({cw:.2f}) 下穿 黄线({cy:.2f})，跌破启动位"
+                    + (f"，收盘 {cc:.2f}" if cc is not None else ""),
+                    ("ztr_white", "ztr_yellow"), 2)
+
+        # 收盘穿越黄线：价格由慢线下方转到上方 = 左侧转右侧的那一步
+        if None not in (ly, cy, pc, cc):
+            if pc <= ly and cc > cy:
+                add("trend", "收盘上穿黄线", "bullish", 0.8,
+                    f"收盘 {cc:.2f} 由黄线 {cy:.2f} 下方上穿，趋势转右",
+                    ("close", "ztr_yellow"), 2)
+            elif pc > ly and cc <= cy:
+                add("trend", "收盘下穿黄线", "bearish", 0.8,
+                    f"收盘 {cc:.2f} 跌破黄线 {cy:.2f}，趋势转左",
+                    ("close", "ztr_yellow"), 2)
+
+    # ── 长安三件套 / 双枪放量（形态层，见 volume.py 里的说明）──
+    #
+    # 这两条**没有**进 Go 侧 signals.go：run_signal_audit.sh 给它们的 verdict 是
+    # `dead`（300 只 × 279,360 根 bar 上 0 次触发）。逐条量过单条件命中率，长安七条
+    # AND 的联合概率约 2e-5。它们是"今天恰好出现这个形态"的稀有 setup，不是逐 bar
+    # 状态，两者量级差两三个数量级。改在本形态层实现，与 shrink_pullback 同层。
+    cg = changan_metrics(rows)
+    if not cg.get("insufficient") and cg.get("hit"):
+        add("buy", "长安三件套", "bullish", 0.85,
+            f"J {cg['j_t']:.1f}→{cg['j_t1']:.1f}，前一日涨 {cg['t1_gain_pct']:.2f}%，"
+            f"当根 {cg['t0_gain_pct']:.2f}%/振幅 {cg['t0_amp_pct']:.2f}%/"
+            f"量缩至 {cg['vol_ratio']:.2f}",
+            ("close", "open", "high", "low", "volume", "j"), CHANGAN_BARS)
+
+    dg = double_gun_metrics(rows)
+    if not dg.get("insufficient") and dg.get("hit"):
+        add("buy", "双枪放量", "bullish", 0.8,
+            f"两枪实体 {dg['g1_body_pct']:.2f}% / {dg['g2_body_pct']:.2f}%，"
+            f"量比 {dg['g1_vol_ratio']:.2f} / {dg['g2_vol_ratio']:.2f}，"
+            f"中段量为基准 {dg['mid_vol_ratio']:.2f}",
+            ("open", "close", "volume"), DOUBLE_GUN_BARS)
+
     latest_atr = _v(latest, "atr")
     if latest_atr is not None:
         prior = [_v(rows[i], "atr") for i in range(1, min(ATR_AVG_WINDOW, len(rows)))]
@@ -339,6 +447,65 @@ def detect_signals(rows: List[Dict]) -> List[Dict]:
                     f"涨幅 {price_change * 100:.2f}%，成交量为 {VOL_AVG_WINDOW} 日均量的 "
                     f"{vol_ratio:.2f} 倍",
                     ("close", "volume"), VOL_AVG_WINDOW + 1)
+
+    # ── 缩量回踩形态 ─────────────────────────────────────────
+    #
+    # 四条信号来自同一个跨 70 根的聚合计算（volume.shrink_pullback_metrics），
+    # 刻意拆成四条而不是合成一条：STRATEGY_RULES 用 min_count 组合它们，拆开
+    # 之后一旦选不出票，能直接看出是哪一条在卡，而不是面对一个黑箱。
+    sp = shrink_pullback_metrics(rows)
+    if not sp.get("insufficient"):
+        # shrink_pullback_metrics 只读这四个字段，deps 如实声明，
+        # 完整度才不会被一个没读过的字段稀释。
+        sp_deps = ("close", "open", "low", "volume")
+
+        if sp.get("is_shrunk"):
+            add("volume", "缩量回踩", "bullish", 0.8,
+                f"近{SHRINK_PULLBACK_RECENT}日均量 / 近{SHRINK_PULLBACK_TREND}日最大量 "
+                f"= {sp['shrink']:.2f} (<{SHRINK_MAX}，量能明显萎缩)",
+                sp_deps, SHRINK_PULLBACK_WINDOW)
+
+        if sp.get("no_panic_volume"):
+            # max_dn_ratio 在 15 日内一根阴线都没有时无定义（此时 dn_up 也
+            # 无意义，该信号整体不发），但 dn_up 成立、max_dn_ratio 缺失的
+            # 组合是可能的，所以这里要能少拼一段。
+            ratio = f"，最大阴线量/基准量 = {sp['max_dn_ratio']:.2f}" \
+                if sp.get("max_dn_ratio") is not None else ""
+            add("volume", "下跌不放量", "bullish", 0.75,
+                f"近{SHRINK_PULLBACK_TREND}日阴线均量/阳线均量 = {sp['dn_up']:.2f} "
+                f"(<{SHRINK_DN_UP_MAX}，下跌没放量){ratio}"
+                f"(<{SHRINK_MAX_DN_RATIO_MAX})",
+                sp_deps, SHRINK_PULLBACK_WINDOW)
+
+        if sp.get("floor_held"):
+            add("volume", "守住前低", "bullish", 0.8,
+                f"近{SHRINK_PULLBACK_RECENT}日最低 {sp['low_5d']:.2f} > "
+                f"{SHRINK_PULLBACK_WINDOW}日最低 {sp['low_70d']:.2f} × "
+                f"{SHRINK_FLOOR_MULT}（回调未破前低）",
+                sp_deps, SHRINK_PULLBACK_WINDOW)
+
+        if sp.get("near_bottom"):
+            add("volume", "低位回踩", "bullish", 0.65,
+                f"现价距{SHRINK_PULLBACK_WINDOW}日低点 {sp['from_btm_pct']:.1f}% "
+                f"(<{SHRINK_FROM_BTM_MAX_PCT}%，位置在低位)",
+                sp_deps, SHRINK_PULLBACK_WINDOW)
+
+    # ── 单针下 20 ──
+    #
+    # 这条在 Go 侧跑过频率审计（8.09%，informative），是本批三个里唯一留在
+    # signals.go 的。本侧字段名与 Go 对齐：ztr_rsl_rank_15 / ztr_rsl_rank_105。
+    #
+    # ⚠️ 库里的百分位排名只要窗口有数据就恒 > 0（最小 1/n），所以 "<= 20" 的
+    # 缺列方向是安全的 —— 缺列在本侧是 None，压根不会进这个分支。与 Go 侧的
+    # COALESCE 补 0 情形不同（那边 0 同样满足 <=20，要靠 hasData 挡）。
+    rsl_s = _v(latest, "ztr_rsl_rank_15")
+    rsl_l = _v(latest, "ztr_rsl_rank_105")
+    if rsl_s is not None and rsl_l is not None \
+            and rsl_s <= NEEDLE_SHORT_RANK_MAX and rsl_l >= NEEDLE_LONG_RANK_MIN:
+        add("buy", "单针下20", "bullish", 0.75,
+            f"RSL 3日 {rsl_s:.0f} (<={NEEDLE_SHORT_RANK_MAX:.0f}) / "
+            f"21日 {rsl_l:.0f} (>={NEEDLE_LONG_RANK_MIN:.0f})，长期强趋势中的短期超跌",
+            ("ztr_rsl_rank_15", "ztr_rsl_rank_105"))
 
     # ── 统计信号 ──
 

@@ -320,6 +320,85 @@ func detectSignals(rows []row) []Signal {
 			fmt.Sprintf("VI+(%.2f) 下穿 VI-(%.2f)", latest.VIPlus, latest.VIMinus)})
 	}
 
+	// ── zettaranc 双线：白线 DEMA10 / 黄线 LONGBBI(14/28/57/114) ──
+	//
+	// 为什么只发"转折"不发"状态"：本文件 Choppiness 那段已经把原则写下来了 ——
+	// "上面那一堆趋势型信号（金叉、突破、ADX）全是噪音"。`close > 黄线` 在上行段里
+	// 对绝大多数票恒成立，400 只 × 400 根实测 **48.13%** 的 bar 都成立，纯粹是报
+	// 行情状态。频率审计对它的判读也是这么说的。
+	//
+	// 曾经这里还发过一对"黄线转向上/黄线转向下"（慢线斜率由非正转正），被频率审计
+	// 判成 **noisy：45.92% / 43.76%**。原因是 114 日均线的日间差值微乎其微，符号
+	// 在零附近随机翻转 —— 差值是真的，转折是假的。实测：哪怕要求 5 日内相对升幅
+	// 超过 0.5%（一个 114 日均线上很小的幅度），仍有 33.89% 的 bar 命中。
+	// **慢线的斜率方向是状态（regime），不是事件（event）**，逐 bar 报它等于报
+	// "现在是上行段"。已删除，不保留占位。
+	//
+	// 现在只发两组真正的**穿越**：
+	//
+	//	白线金叉黄线 / 白线死叉黄线  快线穿越慢线 —— 启动位
+	//	收盘上穿黄线 / 收盘下穿黄线  价格穿越慢线 —— 从慢线下方（左侧）转到上方（右侧）
+	//
+	// 实测频率（400 只 × 400 根 = 159,600 bar，2025-06 至今）：
+	//	白线金叉黄线 0.91% · 白线死叉黄线 0.95%
+	//	收盘上穿黄线 4.77% · 收盘下穿黄线 4.69%
+	// 全部落在 informative 档（1%~20%）。两组 bullish 两组 bearish：选股器必须
+	// 能选出"该躲开的票"，与 main.py 里 anomaly / overbought_combo 补 bearish
+	// 是同一个理由。
+	//
+	// ⚠️ 三列都是价格量纲，取数时被 COALESCE 补成 0，而 ztr_* 仍有约 0.4% 的
+	// NULL 会被补 0。0 落在任何价格下方且小于任何一条线，不先过 hasData 就等于
+	// 给每一根缺列的 K 线凭空发一次金叉。
+	// 两组信号各判各的可用性：白线金叉/死叉要白线黄线收盘三者，
+	// 收盘穿越黄线只要黄线和收盘 —— 把不相关的列塞进同一个 guard 会让
+	// 缺白线的历史连"收盘上穿黄线"也一起被挡掉。
+	if len(rows) >= 2 && hasData(latest.Close, latest.ZtrWhite, latest.ZtrYellow) &&
+		hasData(prev.Close, prev.ZtrWhite, prev.ZtrYellow) {
+		// 白线金叉黄线：启动位
+		if prev.ZtrWhite <= prev.ZtrYellow && latest.ZtrWhite > latest.ZtrYellow {
+			signals = append(signals, Signal{"buy", "白线金叉黄线", "bullish", 0.8, latest.Date,
+				fmt.Sprintf("白线(%.2f) 上穿 黄线(%.2f)，收盘 %.2f 在双线之上",
+					latest.ZtrWhite, latest.ZtrYellow, latest.Close)})
+		}
+		// 白线死叉黄线：跌破启动位
+		if prev.ZtrWhite >= prev.ZtrYellow && latest.ZtrWhite < latest.ZtrYellow {
+			signals = append(signals, Signal{"sell", "白线死叉黄线", "bearish", 0.8, latest.Date,
+				fmt.Sprintf("白线(%.2f) 下穿 黄线(%.2f)，收盘 %.2f 跌回双线之下",
+					latest.ZtrWhite, latest.ZtrYellow, latest.Close)})
+		}
+	}
+	// 收盘穿越黄线：只依赖收盘与黄线
+	if len(rows) >= 2 && hasData(latest.Close, latest.ZtrYellow) &&
+		hasData(prev.Close, prev.ZtrYellow) {
+		// 收盘上穿黄线：价格从慢线下方转到上方，即"左侧转右侧"的那一步
+		if prev.Close <= prev.ZtrYellow && latest.Close > latest.ZtrYellow {
+			signals = append(signals, Signal{"trend", "收盘上穿黄线", "bullish", 0.8, latest.Date,
+				fmt.Sprintf("收盘 %.2f 由黄线 %.2f 下方上穿，趋势转右",
+					latest.Close, latest.ZtrYellow)})
+		}
+		// 收盘下穿黄线：跌回慢线下方，转回左侧
+		if prev.Close > prev.ZtrYellow && latest.Close <= latest.ZtrYellow {
+			signals = append(signals, Signal{"trend", "收盘下穿黄线", "bearish", 0.8, latest.Date,
+				fmt.Sprintf("收盘 %.2f 跌破黄线 %.2f，趋势转左",
+					latest.Close, latest.ZtrYellow)})
+		}
+	}
+
+	// ── 单针下 20（p9_needle_screen.sql）──
+	// 长期强势 + 短期超跌：3 日涨幅在 15 根窗口的百分位 <= 20，
+	// 且 21 日涨幅在 105 根窗口的百分位 >= 60。
+	//
+	// ⚠️ 取数被 COALESCE 补 0，而判据是 `<= 20`：**0 同样满足**，缺列的票会整批
+	// 涌进"短期超跌"名单。百分位排名只要窗口有数据就恒 >= 1/n > 0，所以
+	// "> 0" 既是有效的缺列闸门，又不会误杀真实读数。
+	if hasData(latest.ZtrRSLRank15, latest.ZtrRSLRank105) &&
+		latest.ZtrRSLRank15 <= needleShortRankMax && latest.ZtrRSLRank105 >= needleLongRankMin {
+		signals = append(signals, Signal{"buy", "单针下20", "bullish", 0.75, latest.Date,
+			fmt.Sprintf("RSL 3日 %.0f (<=%.0f) / 21日 %.0f (>=%.0f)，长期强趋势中的短期超跌",
+				latest.ZtrRSLRank15, needleShortRankMax,
+				latest.ZtrRSLRank105, needleLongRankMin)})
+	}
+
 	// Choppiness Index 进出震荡区
 	//
 	// CHOP = 100 * log10(ΣTR / (区间最高 - 区间最低)) / log10(n)，固定 0~100，跟价格
@@ -694,6 +773,10 @@ const (
 	chopHighQuantile = 61.8
 	// NATR 高波动档位：日均真实波幅超过 5%，一个 NATR 以内的止损必被扫。
 	natrHighPct = 5.0
+
+	// ── 单针下 20（a-stock p9_needle_screen.sql 的逐条阈值）──
+	needleShortRankMax = 20.0 // 3 日涨幅的 15 根窗口百分位 <= 20
+	needleLongRankMin  = 60.0 // 21 日涨幅的 105 根窗口百分位 >= 60
 )
 
 // absVal 是 math.Abs 的别名，让"只看幅度、不看方向"的那几处判断读起来更清楚：
@@ -796,6 +879,7 @@ var declaredSignalNames = []string{
 	"DI金叉", "DI死叉",
 	"Aroon多头排列", "Aroon空头排列",
 	"Vortex金叉", "Vortex死叉",
+	"白线金叉黄线", "白线死叉黄线", "收盘上穿黄线", "收盘下穿黄线",
 	"CHOP进入震荡", "CHOP重回趋势",
 	"KC中轨多头带", "KC中轨空头带",
 	// Volatility
@@ -809,6 +893,8 @@ var declaredSignalNames = []string{
 	"上穿VWAP", "下穿VWAP",
 	"价量背离", "缩量下跌吸筹",
 	"PVI强于NVI吸筹", "NVI强于PVI派发",
+	// 高级形态（阈值逐条来自 a-stock/strategies/sql/p9_needle_screen.sql）
+	"单针下20",
 	// Statistics
 	"Z-Score超卖", "Z-Score超买",
 	"线性回归上升", "线性回归下降",

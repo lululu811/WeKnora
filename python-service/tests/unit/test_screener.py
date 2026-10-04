@@ -13,6 +13,8 @@ that are easy to get wrong:
 
 import pytest
 
+from datetime import date, timedelta
+
 from conftest import newest_first
 
 from zettaranc import screener
@@ -236,6 +238,91 @@ class TestRuleSignals:
             )
 
 
+def _shrink_pullback_rows(code: str = "600519.SH"):
+    """70 根真能算出「缩量回踩」形态的行，rows[0] 最新。
+
+    数值逐段对应 volume.shrink_pullback_metrics 的判定：
+      rows[0..4]    缩量阴线回踩，量 1e5，low 21.50（守在 21.00 上方）
+      rows[5..9]    放量阳线，量 5e6 —— 撑起近 15 日最大量
+      rows[10..14]  阴线，量 3e5，探出 70 日低点 21.00
+      rows[15..69]  更早的拉升，量 9e6 —— 构成 max_dn_vol 的基准量
+    由此 shrink=0.02、dn_up=0.04、max_dn_ratio=0.03、from_btm≈6.2%，四条全中。
+    j=-8 让「KDJ深度超卖」一并触发，五条信号同时可达。
+    """
+    start = date(2026, 9, 30)
+    rows = [dict(_row(code, (start - timedelta(days=i)).isoformat()))
+            for i in range(70)]
+
+    def _put(i, close, open_, low, vol):
+        rows[i].update(close=close, open=open_, low=low,
+                       high=max(close, open_), volume=vol, j=-8.0)
+
+    for i in range(5):                       # rows[0..4] 缩量阴线回踩
+        _put(i, 22.30 - i * 0.10, 22.40 - i * 0.10, 21.50, 1.0e5)
+    for i in range(5):                       # rows[5..9] 放量阳线
+        _put(5 + i, 22.50 + i * 0.30, 22.20 + i * 0.30, 21.20 + i * 0.30, 5.0e6)
+    for i in range(5):                       # rows[10..14] 探出 70 日低
+        _put(10 + i, 22.00 - i * 0.10, 22.05 - i * 0.10, 21.00, 3.0e5)
+    for i in range(55):                      # rows[15..69] 基准量
+        _put(15 + i, 30.00 - i * 0.10, 29.50, 23.00 + i * 0.02, 9.0e6)
+    return rows
+
+
+def _zettaranc_line_rows(up: bool):
+    """两根 K 线，触发 zettaranc 双线的穿越信号。rows[0] 最新。
+
+    up=True  → 白线金叉黄线 + 收盘上穿黄线（左侧转右侧）
+    up=False → 白线死叉黄线 + 收盘下穿黄线（转回左侧）
+
+    数值与 Go 侧 signals_contract_test.go 的 fixture 刻意一致，两侧判据是同一套。
+    """
+    prev_close, latest_close = (19.5, 20.5) if up else (20.5, 19.5)
+    prev_white, latest_white = (19.0, 20.3) if up else (20.3, 19.8)
+    yellow = 20.0
+    return [
+        {"date": "2026-09-30", "thscode": "600519.SH",
+         "close": latest_close, "ztr_white": latest_white, "ztr_yellow": yellow},
+        {"date": "2026-09-29", "thscode": "600519.SH",
+         "close": prev_close, "ztr_white": prev_white, "ztr_yellow": yellow},
+    ]
+
+
+def _changan_rows():
+    """长安三件套的三根 K 线，rows[0] 最新（T）。
+
+    a-stock 的 p6 SQL 把最新那根叫 T、往前数叫 T+1/T+2，标号方向是反的；
+    落到行下标上就是 rows[0]=T、rows[1]=T+1、rows[2]=T+2，J 取**最新**那根。
+    数值按七个条件反推：J=-15(<-13)、前一日 +5%(≥3.9%)且量 2e6>1e6 且 J=30(<55)、
+    当根 +0.48%(|涨跌|<2%)、振幅 2.86%(<7%)、量 1e6 < 2e6×0.7。
+    """
+    return [
+        {"date": "2026-09-30", "thscode": "600519.SH", "j": -15.0,
+         "close": 10.55, "open": 10.50, "high": 10.70, "low": 10.40, "volume": 1.0e6},
+        {"date": "2026-09-29", "thscode": "600519.SH", "j": 30.0,
+         "close": 10.50, "open": 10.40, "high": 10.60, "low": 10.35, "volume": 2.0e6},
+        {"date": "2026-09-28", "thscode": "600519.SH", "j": 0.0,
+         "close": 10.00, "open": 10.10, "high": 10.15, "low": 9.95, "volume": 1.0e6},
+    ]
+
+
+def _double_gun_rows():
+    """双枪放量的十五根 K 线，rows[0] 最新（第 2 枪），rows[7] 是第 1 枪。
+
+    基准均量取 rows[5:15] 全给 1e6；两枪各 2.0e6 / 2.5e6（量比 2.0 / 2.5 ≥1.5）、
+    实体 3% / 5%（≥2%）；中间 rows[1..3] 均量 3.33e5 ≈ 基准的 33%（<80%），
+    且 rows[1] 是阴线。
+    """
+    rows = [{"date": f"2026-09-{30 - i:02d}", "thscode": "600519.SH",
+             "open": 10.0, "high": 10.6, "low": 9.8, "close": 10.0,
+             "volume": 1.0e6} for i in range(15)]
+    rows[0].update(close=10.30, volume=2.0e6)          # 第 2 枪，实体 3%
+    rows[1].update(close=9.90, volume=3.0e5)           # 阴线
+    rows[2].update(close=10.20, volume=4.0e5)
+    rows[3].update(close=10.10, volume=3.0e5)
+    rows[7].update(close=10.50, volume=2.5e6)          # 第 1 枪，实体 5%
+    return rows
+
+
 def _emitted_names(bearish: bool = False):
     """All signal names detect_signals can produce for a real indicator shape.
 
@@ -284,7 +371,128 @@ def _emitted_names(bearish: bool = False):
                        atr=5.0)
         rows[1].update(dif=-0.1, dea=-0.3, k=82.0, d=85.0,
                        stoch_k=82.0, stoch_d=85.0, atr=0.5)
-    return {s["name"] for s in detect_signals(rows)}
+    names = {s["name"] for s in detect_signals(rows)}
+    if not bearish:
+        # 缩量回踩那组信号要 70 根价量，上面 12 根的振荡器夹具算不出来。
+        # 单独用一个真形态夹具补上，否则可达性闸门会误报"这些信号谁也发不出"。
+        names |= {s["name"] for s in detect_signals(_shrink_pullback_rows())}
+        # 双线穿越同理：_row() 的基线里没有 ztr_* 两列。
+        for up in (True, False):
+            names |= {s["name"] for s in detect_signals(_zettaranc_line_rows(up))}
+        # 三个高级形态：长安（三根）、双枪（十五根）、单针下20（单根）
+        for fixture in (_changan_rows(), _double_gun_rows(),
+                        [{"date": "2026-09-30", "thscode": "600519.SH",
+                          "ztr_rsl_rank_15": 15.0, "ztr_rsl_rank_105": 70.0}]):
+            names |= {s["name"] for s in detect_signals(fixture)}
+    return names
+
+
+class TestShrinkPullback:
+    """缩量回踩形态：放量拉升 → 缩量回踩 → 不破前低。
+
+    数值口径来自用户自有的 a-stock/b1.md，与有意的三处偏差见 volume.py 顶部。
+    """
+
+    NAMES = {"缩量回踩", "下跌不放量", "守住前低", "低位回踩", "KDJ深度超卖"}
+    # 形态那四条依赖 70 根窗口；KDJ深度超卖只读单根 j，窗口独立。
+    PATTERN_NAMES = NAMES - {"KDJ深度超卖"}
+
+    def test_good_shape_emits_all_five_signals(self):
+        from zettaranc.volume import shrink_pullback_metrics
+
+        m = shrink_pullback_metrics(_shrink_pullback_rows())
+        assert m["insufficient"] is False
+        for key in ("is_shrunk", "no_panic_volume", "floor_held", "near_bottom"):
+            assert m[key] is True, f"{key} 应为 True，实际 {m}"
+        emitted = {s["name"] for s in detect_signals(_shrink_pullback_rows())}
+        assert self.NAMES <= emitted, f"缺信号：{sorted(self.NAMES - emitted)}"
+
+    def test_strategy_rule_selects_the_good_shape(self):
+        """规则与形态的端到端：好形态入选，坏形态落选。"""
+        from main import STRATEGY_RULES
+
+        rule = STRATEGY_RULES["shrink_pullback"]
+        assert rule["min_count"] == len(rule["match_signals"]), \
+            "b1.md 的形态筛选是严格 AND，min_count 应等于信号条数"
+
+        rows = _shrink_pullback_rows()
+        result = screener.screen(rows, rule, 10)
+        assert result["matched"] == 1, result
+        assert result["stocks"][0]["thscode"] == "600519.SH"
+
+    def test_too_few_bars_emits_nothing(self):
+        """窗口不足时宁可不发，也不拿残缺窗口凑数。
+
+        注意只针对形态那四条：KDJ深度超卖 只读单根 j（window=1），本来就与
+        70 根窗口无关，40 根时它照发是对的 —— 它也是给别的策略用的通用超卖信号。
+        """
+        from zettaranc.volume import shrink_pullback_metrics
+
+        m = shrink_pullback_metrics(_shrink_pullback_rows()[:40])
+        assert m["insufficient"] is True
+        assert m["required_bars"] == 70 and m["actual_bars"] == 40
+        emitted = {s["name"] for s in detect_signals(_shrink_pullback_rows()[:40])}
+        assert not (self.PATTERN_NAMES & emitted)
+        assert "KDJ深度超卖" in emitted
+
+    def test_breaking_the_prior_low_is_rejected(self):
+        from zettaranc.volume import shrink_pullback_metrics
+
+        rows = _shrink_pullback_rows()
+        for i in range(5):          # 最近 5 根直接砸穿 21.00
+            rows[i]["low"] = 19.0
+        m = shrink_pullback_metrics(rows)
+        assert m["floor_held"] is False
+        emitted = {s["name"] for s in detect_signals(rows)}
+        assert "守住前低" not in emitted
+
+    def test_panic_volume_on_the_decline_is_rejected(self):
+        from zettaranc.volume import shrink_pullback_metrics
+
+        rows = _shrink_pullback_rows()
+        # 阴线段放量到基准量的 2 倍以上 → max_dn_ratio 越过 1.8；
+        # 同时阴线均量被抬到阳线均量之上 → dn_up 也越过 0.8。两个条件同时失效。
+        for i in range(10, 15):
+            rows[i]["volume"] = 2.0e7
+        m = shrink_pullback_metrics(rows)
+        assert m["max_dn_ratio"] > 1.8 and m["dn_up"] > 0.8
+        assert m["no_panic_volume"] is False
+        emitted = {s["name"] for s in detect_signals(rows)}
+        assert "下跌不放量" not in emitted
+
+    def test_all_up_window_leaves_dn_up_undefined(self):
+        """15 日全是阳线时阴线均量无定义，不该被当成 0 而误判成"下跌没放量"。"""
+        from zettaranc.volume import shrink_pullback_metrics
+
+        rows = _shrink_pullback_rows()
+        for i in range(15):         # 强行把所有 bar 变成阳线
+            rows[i]["open"] = rows[i]["close"] - 0.5
+        m = shrink_pullback_metrics(rows)
+        assert m["dn_up"] is None
+        assert m["no_panic_volume"] is False
+        emitted = {s["name"] for s in detect_signals(rows)}
+        assert "下跌不放量" not in emitted
+
+    def test_thresholds_are_strict_boundaries(self):
+        """shrink 恰好等于阈值时不算缩量 —— 判定是 < 而不是 <=。"""
+        from zettaranc.volume import SHRINK_MAX, shrink_pullback_metrics
+
+        rows = _shrink_pullback_rows()
+        for i in range(5):
+            rows[i]["volume"] = SHRINK_MAX * 5.0e6   # 令 shrink 恰为 0.5
+        m = shrink_pullback_metrics(rows)
+        assert m["shrink"] == pytest.approx(0.5, abs=0.01)
+        assert m["is_shrunk"] is False
+
+    def test_vol_key_fallback_for_the_single_scan_path(self):
+        """单只扫描路径给的是 vol 而不是 volume，不能因此整段返回 None。"""
+        from zettaranc.volume import shrink_pullback_metrics
+
+        rows = _shrink_pullback_rows()
+        for r in rows:
+            r["vol"] = r.pop("volume")
+        m = shrink_pullback_metrics(rows)
+        assert m["shrink"] is not None and m["is_shrunk"] is True
 
 
 class TestLimitUpPoolCollapse:
