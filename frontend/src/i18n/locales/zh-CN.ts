@@ -11,6 +11,16 @@ export default {
     item: { indexing: '索引中' },
     scope: { doc: '只问这一篇', kb: '问整个知识库' },
     chat: { empty: '就这篇文章提问，或切到「问整个知识库」做跨篇检索。', placeholder: '针对这篇文章提问，Enter 发送' },
+    tabs: {
+      radar: '动态雷达',
+      study: '精读问答',
+    },
+    radar: {
+      openExternal: '独立窗口打开',
+      reload: '刷新',
+      offlineHint: '未连接到公众号服务 (http://127.0.0.1:5030/biz)',
+      retry: '重试连接',
+    },
   },
   halo: {
     title: 'HALO 年报分析',

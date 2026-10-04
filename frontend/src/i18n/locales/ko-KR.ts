@@ -11,6 +11,16 @@ export default {
     item: { indexing: '인덱싱 중' },
     scope: { doc: '이 기사만', kb: '지식베이스 전체' },
     chat: { empty: '이 기사에 질문하거나, 「지식베이스 전체」로 전환해 통합 검색하세요.', placeholder: '이 기사에 질문 (Enter 전송)' },
+    tabs: {
+      radar: '동적 레이더',
+      study: '정독 질의응답',
+    },
+    radar: {
+      openExternal: '새 창에서 열기',
+      reload: '새로고침',
+      offlineHint: '공식 계정 서비스에 연결할 수 없습니다 (http://127.0.0.1:5030/biz)',
+      retry: '다시 시도',
+    },
   },
   halo: {
     title: 'HALO 연차보고서 분석',

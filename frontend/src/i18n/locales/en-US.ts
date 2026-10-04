@@ -11,6 +11,16 @@ export default {
     item: { indexing: 'indexing' },
     scope: { doc: 'This article', kb: 'Whole knowledge base' },
     chat: { empty: 'Ask about this article, or switch to the whole knowledge base for cross-article search.', placeholder: 'Ask about this article. Enter to send' },
+    tabs: {
+      radar: 'Dynamic Radar',
+      study: 'Deep Reading',
+    },
+    radar: {
+      openExternal: 'Open in new window',
+      reload: 'Reload',
+      offlineHint: 'Could not connect to WeChat service (http://127.0.0.1:5030/biz)',
+      retry: 'Retry connection',
+    },
   },
   halo: {
     title: 'HALO annual-report analysis',

@@ -11,6 +11,16 @@ export default {
     item: { indexing: '索引中' },
     scope: { doc: 'この記事のみ', kb: 'ナレッジベース全体' },
     chat: { empty: 'この記事について質問するか、「ナレッジベース全体」に切り替えて横断検索。', placeholder: 'この記事について質問（Enter で送信）' },
+    tabs: {
+      radar: '動的レーダー',
+      study: '精読・質疑',
+    },
+    radar: {
+      openExternal: '別ウィンドウで開く',
+      reload: '再読み込み',
+      offlineHint: '公式アカウントサービスに接続できません (http://127.0.0.1:5030/biz)',
+      retry: '再試行',
+    },
   },
   halo: {
     title: 'HALO 年次報告分析',
