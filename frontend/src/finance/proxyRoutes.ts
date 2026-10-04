@@ -37,6 +37,10 @@ export const FINANCE_PROXY_ROUTES = [
   '/api/quotes',
   // 悬浮卡个股速览
   '/api/stock-profile',
+  // 大盘预览：聚合快照（指数 + 情绪 + ETF）
+  '/api/market/snapshot',
+  // 大盘预览：龙虎榜净买入榜
+  '/api/market/dragon-tiger',
 ] as const;
 
 export type FinanceProxyRoute = (typeof FINANCE_PROXY_ROUTES)[number];
@@ -47,6 +51,12 @@ export type FinanceProxyRoute = (typeof FINANCE_PROXY_ROUTES)[number];
  * 与 `FINANCE_PROXY_ROUTES` 表达的是同一份清单，但 nginx 的正则语法要求
  * 把所有路径写进一个 alternation。本常量只作为"应该同步到的目标形态"的
  * 文档，不被任何 JS 代码消费 —— nginx.conf 是静态配置，无法 import JS。
+ *
+ * 注意 `/api/market/(snapshot|dragon-tiger)` 这段：两条路径共享 `market`
+ * 前缀，但**不能**写成 `/api/market/.*` —— 那会把将来任何挂在 /api/market
+ * 下的新端点（包括可能出现的写端点）一并直通到 python-service。
+ * 反代白名单要显式枚举，漏一条是"页面少一块数据"（还能发现），
+ * 多一条是"把不该公开的端点暴露出去"（发现不了）。
  */
 export const FINANCE_PROXY_ROUTES_REGEX =
-  '^/api/(kline|annotate|indicators|symbols|stock-profile|quotes|chart-pattern)(/.*)?$';
+  '^/api/(kline|annotate|indicators|symbols|stock-profile|quotes|chart-pattern|market/(snapshot|dragon-tiger))(/.*)?$';

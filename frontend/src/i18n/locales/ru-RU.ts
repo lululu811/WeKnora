@@ -4776,6 +4776,20 @@ export default {
       yesterday: 'Вчера',
       daysAgo: '{n} дн назад'
     },
+    marketEntry: {
+      sectionTitle: 'Рынок',
+      title: 'Обзор рынка',
+      subtitle: 'Индекс · Избранное · ETF · Особые сделки',
+      open: 'Открыть обзор рынка',
+      metrics: {
+        index: 'Шанхайский композит',
+        limits: 'Верхний / нижний предел',
+        watchlist: 'Избранное',
+        triggered: '{n} сработало',
+        noWatchlist: 'Пусто',
+        unavailable: 'Недоступно'
+      }
+    },
     title: 'Привет, я WeKnora — ваши знания всегда под рукой',
     newSessionTitle: 'Новая сессия',
     openProject: 'Выбрать проект',
@@ -7341,6 +7355,66 @@ export default {
     myChats: 'Мои чаты',
     apiChats: 'Сессии API',
     noSessions: 'Пока нет диалогов'
+  },
+  marketDashboard: {
+    title: 'Обзор рынка',
+    back: 'Назад к рабочей области',
+    backToWorkbench: 'Назад',
+    dataTime: 'Данные на',
+    tickerLabel: 'Индекс',
+    refresh: 'Обновить',
+    refreshFailed: 'Не удалось обновить котировки. Попробуйте ещё раз.',
+    themeToDark: 'Переключить на тёмную тему',
+    themeToLight: 'Переключить на светлую тему',
+    latestLabel: 'Последняя',
+    closedLabel: 'Закрытие',
+    state: {
+      open: 'Торги',
+      closed: 'Торги завершены',
+      holiday: 'Нет торгов'
+    },
+    holidayNote: 'показан последний торговый день',
+    chartLow: 'Мин {v}',
+    chartHigh: 'Макс {v}',
+    prevCloseTitle: 'Пред. закрытие {v}',
+    chartLegend: '— 60 дн.   ┆ Открытие   ┆ Пред. закрытие (пунктир)   ● {point}',
+    sentiment: {
+      title: 'Настроения рынка',
+      caption: 'Пределы ±10% · Весь рынок',
+      limitUp: 'Верхний предел',
+      limitDown: 'Нижний предел',
+      broken: 'Сорвались',
+      brokenUnit: '· {rate}%',
+      maxStreak: 'Макс. серия',
+      streakUnit: 'дн.',
+      trendLabel: 'Верхний предел за 5 дней',
+      breadth: { up: 'Рост', flat: 'Без изм.', down: 'Падение' }
+    },
+    watchlist: {
+      title: 'Избранное',
+      count: '{n} бумаг',
+      all: 'Все →',
+      empty: 'Список пуст — добавьте бумаги, за которыми следите',
+      emptyCta: 'Перейти в избранное',
+      emptyChip: '+ {name}',
+      state: { observing: 'Наблюдение', triggered: 'Сработало', holding: 'Держу', dropped: 'Убрано' }
+    },
+    dragonTiger: {
+      title: 'Особые сделки',
+      caption: 'Топ-5 по нетто-покупкам · Весь рынок',
+      full: 'Весь список →',
+      net: 'Нетто',
+      org: 'Институты',
+      empty: 'Сегодня данных нет'
+    },
+    etf: {
+      title: 'Крупные ETF',
+      caption: 'Индексные'
+    },
+    noData: 'Нет данных',
+    loading: 'Загрузка…',
+    sourceUnavailable: 'Некоторые источники недоступны ({sources}); соответствующие панели пусты',
+    indexUnavailable: 'Нет локальных котировок по этому индексу'
   },
   watchlist: {
     title: 'Отслеживание акций',

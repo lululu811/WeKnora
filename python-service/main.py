@@ -2576,6 +2576,408 @@ async def get_indicators(
     }
 
 
+# ===== 大盘预览（/dashboard）=====
+#
+# 三条数据链路，各自有坑，逐条记在这里免得下次重新踩：
+#
+# 1. **指数快照不来自 `index.v_index_latest`**。那个视图只装 `.TI` 同花顺板块
+#    （实测 848 行全是 881xxx.TI / 9xxxxx.TI），四大指数 000001.SH / 399001.SZ /
+#    399006.SZ / 000300.SH 一个都不在里面。指数行情在 `index.v_index_daily`，
+#    按 thscode 取最近一根即可（每个约 1223 行，代价可忽略）。
+#
+# 2. **指数 60 日曲线不能走 `/api/kline`**。`/api/kline` 按**后缀**路由数据集
+#    （`_dataset_for`）：`.TI` → index 库，其余 → market 库。四大指数是 `.SH/.SZ`
+#    而非 `.TI`，所以会被路由到 market 库的 `v_daily_qfq`，而那里 0 行 ——
+#    请求会 200 返回空数组，看起来像"没数据"而不是"路由错了"。所以 60 日序列
+#    在这里直接查 `v_index_daily` 一并返回。
+#
+# 3. **龙虎榜上榜原因本地没有**。`v_dragon_tiger.board_type` 只有 `all` / `org`
+#    两个值，语义是"全部榜/机构榜"这个**榜单口径**，不是交易所的上榜原因枚举
+#    （日涨幅偏离值达 7% / 三日累计涨幅偏离达 20% / 日换手率达 20% …）。
+#    原实现同源的 `special/dragon_tiger.go` 也写明"上榜原因(reason)不在本地数据里"。
+#    所以这里不编造原因，改为把本地**确实有**的口径翻译成人话：
+#    榜单类型 + 统计区间（range_days）。样稿里的原因文案需要另接交易所源才有。
+
+# 四大指数：展示顺序即此顺序，与设计稿一致。
+_MARKET_MAIN_INDICES: List[tuple[str, str]] = [
+    ("000001.SH", "上证指数"),
+    ("399001.SZ", "深证成指"),
+    ("399006.SZ", "创业板指"),
+    ("000300.SH", "沪深300"),
+]
+
+# 指数快照条：上证50 / 科创50 / 北证50 / 中证500 / 中证1000
+_MARKET_TICKER_INDICES: List[tuple[str, str]] = [
+    ("000016.SH", "上证50"),
+    ("000688.SH", "科创50"),
+    ("899050.BJ", "北证50"),
+    ("000905.SH", "中证500"),
+    ("000852.SH", "中证1000"),
+]
+
+# 权重 ETF：宽基六只，代码写死而不是让前端传 —— 这格的口径是"宽基"，
+# 换一批就换了一个语义，不该由调用方每次拼一遍。
+_MARKET_ETFS: List[tuple[str, str]] = [
+    ("510300.SH", "300ETF"),
+    ("510050.SH", "50ETF"),
+    ("510500.SH", "500ETF"),
+    ("588000.SH", "科创50ETF"),
+    ("159915.SZ", "创业板ETF"),
+    ("512100.SH", "1000ETF"),
+]
+
+# 60 日曲线的取数根数。样稿的折线窗口是 60 个交易日。
+_MARKET_INDEX_SERIES_DAYS = 60
+# 近 5 日涨停家数柱状图。
+_MARKET_LIMIT_UP_TREND_DAYS = 5
+
+# 龙虎榜榜单元数据 → 人话。本地只有这两个值（见文件头第 3 条）。
+_DRAGON_BOARD_TYPE_LABELS = {"all": "全部榜", "org": "机构榜"}
+
+
+def _f(value: Any) -> Optional[float]:
+    """DuckDB 的 DOUBLE/DECIMAL 归一成 float。None 就是 None，不补 0。"""
+    if value is None:
+        return None
+    return float(value)
+
+
+def _dragon_board_tag(row: Dict[str, Any]) -> str:
+    """把龙虎榜一行拼成一句人能读的来源说明。
+
+    **只描述本地有的字段**。上榜原因（交易所枚举）本地不存在，编一个出来就是
+    假数据；这里给的是"哪个榜单口径 + 几日统计"，都直接来自
+    `board_type` / `range_days` 两列。
+    """
+    board = _DRAGON_BOARD_TYPE_LABELS.get((row.get("board_type") or "").lower())
+    days = row.get("range_days")
+    parts: List[str] = []
+    if board:
+        parts.append(board)
+    if days is not None:
+        try:
+            d = int(days)
+        except (TypeError, ValueError):
+            d = 0
+        parts.append(f"{d} 日累计" if d > 1 else "当日")
+    return " · ".join(parts) if parts else "龙虎榜"
+
+
+@app.get("/api/market/snapshot")
+@app.get("/market/snapshot")
+async def market_snapshot(
+    days: int = Query(
+        _MARKET_INDEX_SERIES_DAYS, ge=10, le=250, description="指数曲线回看交易日数"
+    ),
+):
+    """大盘预览聚合快照 —— 指数、情绪、ETF 一次返回。
+
+    为什么合并成一个接口：工作台入口横幅只想要"上证涨跌 + 涨停跌停家数"两三个数，
+    大屏要的是全部九格。拆成 4~5 个接口意味着横幅和大屏各打一轮，而它们读的
+    是同一批表、同一批交易日 —— 一次查询、一次往返。
+
+    **降级策略**：每个数据块独立降级（与 `/api/stock-profile` 同一套约定）。
+    任何一个库不可用只让对应块为空并记进 `unavailable`，不拖垮整页 ——
+    涨跌停池没同步时，指数和 ETF 仍然要能显示。
+
+    **空 ≠ 零**：查不到就是查不到。涨停家数缺失时 `limit_up` 是 null 而不是 0，
+    因为 0 在金融语义里是"今天真的没有票涨停"，用它顶替缺失会读成一个假结论
+    （同一约定见 `/api/quotes` 的 missing 字段说明）。
+    """
+    from datasources import registry
+
+    unavailable: List[str] = []
+
+    async def safe(db: str, sql: str, params: Optional[list] = None) -> List[Dict[str, Any]]:
+        """查不到就返回空列表并记录原因，绝不把异常冒给前端。"""
+        src = registry.get(db)
+        if src is None:
+            unavailable.append(db)
+            return []
+        try:
+            return await src.execute(sql, params or [])
+        except Exception as exc:  # noqa: BLE001 —— 降级优先于报错
+            logger.warning("market_snapshot 查询 %s 失败：%s", db, exc)
+            unavailable.append(db)
+            return []
+
+    # ---- 指数：快照 + 60 日曲线 ----
+    # 四大指数与快照条共 9 个代码，一次 LATERAL 取回每个代码最近 days 根，
+    # 前端要哪条曲线自己按 code 取。快照 = 序列最后一根，前收 = 倒数第二根。
+    index_rows = await safe(
+        "index",
+        """
+        SELECT s.thscode AS thscode, q.trade_date AS trade_date,
+               q.open AS open, q.high AS high, q.low AS low, q.close AS close
+        FROM (VALUES {placeholders}) AS s(thscode)
+        JOIN LATERAL (
+            SELECT trade_date, open, high, low, close
+            FROM v_index_daily
+            WHERE thscode = s.thscode
+            ORDER BY trade_date DESC
+            LIMIT ?
+        ) q ON TRUE
+        ORDER BY s.thscode, q.trade_date
+        """.format(
+            placeholders=",".join("(?)" for _ in range(len(_MARKET_MAIN_INDICES) + len(_MARKET_TICKER_INDICES)))
+        ),
+        [c for c, _ in _MARKET_MAIN_INDICES]
+        + [c for c, _ in _MARKET_TICKER_INDICES]
+        + [days],
+    )
+
+    series_by_code: Dict[str, List[Dict[str, Any]]] = {}
+    for r in index_rows:
+        series_by_code.setdefault(r["thscode"], []).append(r)
+
+    def _index_snapshot(code: str, display: str) -> Optional[Dict[str, Any]]:
+        bars = series_by_code.get(code) or []
+        if not bars:
+            return None
+        last = bars[-1]
+        prev = bars[-2] if len(bars) > 1 else None
+        close = _f(last.get("close"))
+        prev_close = _f(prev.get("close")) if prev else None
+        change_pct = None
+        if close is not None and prev_close:
+            change_pct = (close - prev_close) / prev_close * 100
+        return {
+            "thscode": code,
+            "name": display,
+            "trade_date": _iso_date(last.get("trade_date")),
+            "last": close,
+            "prev_close": prev_close,
+            "open": _f(last.get("open")),
+            "high": _f(last.get("high")),
+            "low": _f(last.get("low")),
+            "change_pct": change_pct,
+            # 曲线按时间正序返回：前端直接画，不用再反转。
+            "series": [
+                {"date": _iso_date(b.get("trade_date")), "close": _f(b.get("close"))}
+                for b in bars
+            ],
+        }
+
+    indices = [
+        s for s in (_index_snapshot(code, name) for code, name in _MARKET_MAIN_INDICES) if s
+    ]
+    tickers = [
+        s for s in (_index_snapshot(code, name) for code, name in _MARKET_TICKER_INDICES) if s
+    ]
+
+    # ---- 情绪：涨跌停 / 炸板 / 最高连板 / 近 5 日涨停 ----
+    # 四个计数共用"最新交易日"这一个口径：先各自取 MAX(trade_date)，
+    # 再按该日期 COUNT。如果四块各自的最新日不同（同步进度不一致），拼出来的
+    # 情绪格会是不同日子加减出来的数 —— 那比缺一块更糟。
+    latest_row = await safe(
+        "special",
+        "SELECT MAX(trade_date) AS d FROM v_limit_up_pool",
+    )
+    trade_date = _iso_date(latest_row[0]["d"]) if latest_row and latest_row[0].get("d") else None
+
+    limit_up = limit_down = broken = max_streak = None
+    streak_name: Optional[str] = None
+    lu5: List[Dict[str, Any]] = []
+    breadth: Dict[str, Optional[int]] = {"up": None, "flat": None, "down": None}
+
+    if trade_date:
+        counts = await safe(
+            "special",
+            """
+            SELECT
+              (SELECT count(*) FROM v_limit_up_pool WHERE trade_date = ?) AS limit_up,
+              (SELECT count(*) FROM v_limit_down_pool WHERE trade_date = ?) AS limit_down,
+              (SELECT count(*) FROM v_limit_break_pool WHERE trade_date = ?) AS broken
+            """,
+            [trade_date, trade_date, trade_date],
+        )
+        if counts:
+            limit_up = int(counts[0]["limit_up"] or 0)
+            limit_down = int(counts[0]["limit_down"] or 0)
+            broken = int(counts[0]["broken"] or 0)
+
+        # 最高连板：取连板数最大的一只，同数时按封单金额定先后（封单大的是市场龙头）。
+        streak = await safe(
+            "special",
+            """SELECT name, continue_day_cnt FROM v_limit_up_pool
+               WHERE trade_date = ? AND continue_day_cnt IS NOT NULL
+               ORDER BY continue_day_cnt DESC, seal_money DESC LIMIT 1""",
+            [trade_date],
+        )
+        if streak:
+            max_streak = int(streak[0]["continue_day_cnt"] or 0)
+            streak_name = streak[0].get("name") or None
+
+        # 近 5 日涨停家数：取最近 5 个**有数据**的交易日（不是日历日 ——
+        # 节假日和停市会让"最近 5 个自然日"里只有 2 天有数据，柱状图直接缺 3 根）。
+        trend = await safe(
+            "special",
+            """SELECT trade_date, count(*) AS c FROM v_limit_up_pool
+               GROUP BY trade_date ORDER BY trade_date DESC LIMIT ?""",
+            [_MARKET_LIMIT_UP_TREND_DAYS],
+        )
+        lu5 = [
+            {"trade_date": _iso_date(r.get("trade_date")), "count": int(r.get("c") or 0)}
+            for r in reversed(trend)
+        ]
+
+        # 涨跌家数：全市场聚合。走 market 库最近交易日的收盘 vs 前收。
+        # 单独一个查询而不是塞进上面那个 —— 失败时只是这一项为 null。
+        #
+        # **窗口函数必须在"最近两个交易日"上算，不能先筛到最新日再 lag**：
+        # 先 `WHERE date = max(date)` 之后每个 thscode 只剩一行，lag() 恒为 NULL，
+        # 三个计数会一起返回 0（实测过：up/flat/down = 0/0/0，看着像"全市场平盘"）。
+        # 正确顺序是「取最近 2 个交易日 → 按票分区算 lag → 再筛回最新日」。
+        breadth_rows = await safe(
+            "market",
+            """
+            WITH last2 AS (
+                SELECT DISTINCT date FROM v_daily_qfq
+                ORDER BY date DESC LIMIT 2
+            ),
+            d AS (
+                SELECT thscode, date, close,
+                       lag(close) OVER (PARTITION BY thscode ORDER BY date) AS prev
+                FROM v_daily_qfq
+                WHERE date IN (SELECT date FROM last2)
+            ),
+            latest AS (SELECT max(date) AS d FROM last2)
+            SELECT
+              count(*) FILTER (WHERE date = (SELECT d FROM latest) AND close > prev) AS up,
+              count(*) FILTER (WHERE date = (SELECT d FROM latest) AND close = prev) AS flat,
+              count(*) FILTER (WHERE date = (SELECT d FROM latest) AND close < prev) AS down
+            FROM d
+            """,
+        )
+        if breadth_rows:
+            breadth = {
+                "up": int(breadth_rows[0]["up"] or 0),
+                "flat": int(breadth_rows[0]["flat"] or 0),
+                "down": int(breadth_rows[0]["down"] or 0),
+            }
+
+    sentiment = {
+        "trade_date": trade_date,
+        "limit_up": limit_up,
+        "limit_down": limit_down,
+        "broken": broken,
+        # 炸板率 = 炸板 / (涨停 + 炸板)。分母为 0 时给 null 而不是 0 ——
+        # "0% 的炸板率"是一个结论，"算不出来"是另一回事。
+        "broken_rate": (
+            round(broken / (limit_up + broken) * 100, 1)
+            if limit_up is not None and broken is not None and (limit_up + broken) > 0
+            else None
+        ),
+        "max_streak": max_streak,
+        "streak_name": streak_name,
+        "limit_up_trend": lu5,
+        "breadth": breadth,
+    }
+
+    # ---- 权重 ETF ----
+    etf_rows = await safe(
+        "fund",
+        """
+        SELECT s.thscode AS thscode, q.name AS name, q.trade_date AS trade_date,
+               q.last_price AS last_price, q.change_pct AS change_pct
+        FROM (VALUES {placeholders}) AS s(thscode)
+        JOIN LATERAL (
+            SELECT name, trade_date, last_price, change_pct
+            FROM v_etf_latest WHERE thscode = s.thscode LIMIT 1
+        ) q ON TRUE
+        ORDER BY s.thscode
+        """.format(placeholders=",".join("(?)" for _ in _MARKET_ETFS)),
+        [c for c, _ in _MARKET_ETFS],
+    )
+    etf_by_code = {r["thscode"]: r for r in etf_rows}
+    # 按常量顺序输出（而不是按数据库返回顺序）—— 前端要的是设计稿里那六行的次序。
+    etfs = []
+    for code, display in _MARKET_ETFS:
+        r = etf_by_code.get(code)
+        if not r:
+            continue
+        etfs.append(
+            {
+                "thscode": code,
+                "name": display,
+                "trade_date": _iso_date(r.get("trade_date")),
+                "last": _f(r.get("last_price")),
+                "change_pct": _f(r.get("change_pct")),
+            }
+        )
+
+    return {
+        "code": 0,
+        "trade_date": trade_date,
+        "indices": indices,
+        "tickers": tickers,
+        "sentiment": sentiment,
+        "etfs": etfs,
+        "unavailable": sorted(set(unavailable)),
+        "sources": {
+            "index": "index.v_index_daily",
+            "sentiment": "special.v_limit_{up,down,break}_pool",
+            "breadth": "market.v_daily_qfq",
+            "etf": "fund.v_etf_latest",
+        },
+    }
+
+
+@app.get("/api/market/dragon-tiger")
+@app.get("/market/dragon-tiger")
+async def market_dragon_tiger(
+    limit: int = Query(5, ge=1, le=50, description="返回条数（按净买额降序）"),
+):
+    """龙虎榜净买入榜（默认前五）。
+
+    取最新交易日、按 `net_value` 降序。同一只票可能同时出现在 `all` 和 `org`
+    两个榜单口径里（实测"我爱我家"同日两条，net_value 相同），**按 thscode 去重**，
+    否则前五会被同一只票占掉两行。
+
+    `org_net_value` 是 null 就返回 null —— 该票当日无机构席位数据，
+    报 0 会被读成"机构净卖出 0 元"，那是另一回事。
+    """
+    from datasources import registry
+
+    src = registry.get("special")
+    if src is None:
+        raise fail(503, "special 数据源未就绪")
+
+    sql = """
+        SELECT thscode, name, trade_date, board_type, net_value, org_net_value, range_days
+        FROM (
+            SELECT thscode, name, trade_date, board_type, net_value, org_net_value, range_days,
+                   row_number() OVER (PARTITION BY thscode ORDER BY net_value DESC) AS rn
+            FROM v_dragon_tiger
+            WHERE trade_date = (SELECT MAX(trade_date) FROM v_dragon_tiger)
+        ) t
+        WHERE rn = 1
+        ORDER BY net_value DESC
+        LIMIT ?
+    """
+    try:
+        rows = await src.execute(sql, [limit])
+    except Exception as exc:
+        logger.warning("龙虎榜查询失败: %s", exc)
+        raise fail(503, f"查询龙虎榜失败: {exc}") from exc
+
+    return {
+        "code": 0,
+        "trade_date": _iso_date(rows[0]["trade_date"]) if rows else None,
+        "count": len(rows),
+        "data": [
+            {
+                "thscode": r.get("thscode"),
+                "name": r.get("name") or "",
+                "tag": _dragon_board_tag(r),
+                "net_value": _f(r.get("net_value")),
+                "org_net_value": _f(r.get("org_net_value")),
+            }
+            for r in rows
+        ],
+    }
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", "50052")))

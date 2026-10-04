@@ -1,0 +1,604 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>大盘预览</title>
+<style>
+/* ===== 设计变量：逐项映射 frontend/src/assets/theme/theme.css，不新增 ===== */
+:root[data-theme="light"] {
+  --page: #FAF4EA;            /* --td-bg-color-page */
+  --container: #FFFCF6;       /* --td-bg-color-container */
+  --container-hover: #FBF7EF;
+  --inset: #F3EAD9;           /* --td-bg-color-secondarycontainer */
+  --stroke: #E6DBC9;          /* --td-component-stroke */
+  --border: #D9CBB4;          /* --td-component-border */
+  --text-1: rgba(43,35,32,.92);
+  --text-2: rgba(43,35,32,.62);
+  --text-3: rgba(43,35,32,.42);
+  --text-4: rgba(43,35,32,.28);
+  --brand: #E85D3D;
+  --brand-deep: #C4572E;
+  --up: #dc2626;              /* kline palette.ts light.up */
+  --down: #047857;            /* kline palette.ts light.down */
+  --shadow-1: 0 1px 2px rgba(43,35,32,.04), 0 4px 12px rgba(43,35,32,.05);
+  --shadow-2: 0 2px 6px rgba(43,35,32,.05), 0 10px 24px rgba(196,87,46,.07);
+}
+:root[data-theme="dark"] {
+  --page: #1F1A16;
+  --container: #2A231C;
+  --container-hover: #322A21;
+  --inset: #322A21;
+  --stroke: #3A3128;
+  --border: #4A4034;
+  --text-1: rgba(237,227,211,.92);
+  --text-2: rgba(237,227,211,.60);
+  --text-3: rgba(237,227,211,.40);
+  --text-4: rgba(237,227,211,.24);
+  --brand: #E85D3D;
+  --brand-deep: #F06A48;
+  /* 评审修正：palette.ts 的深色红绿是在 K 线画布 #181d26 上测的，本页容器是更亮更暖的
+     #2A231C，原值对比度掉档。深底下各提一档到 red-400 / emerald-400。 */
+  --up: #f87171;
+  --down: #34d399;
+  --shadow-1: 0 1px 2px rgba(0,0,0,.24), 0 4px 12px rgba(0,0,0,.20);
+  --shadow-2: 0 2px 6px rgba(0,0,0,.28), 0 10px 24px rgba(0,0,0,.30);
+}
+:root {
+  --font-body: "Inter", -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-display: "Noto Serif SC", "Source Han Serif SC", "Songti SC", serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --radius: 14px;
+  --ease-out: cubic-bezier(.16,1,.3,1);
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  font-family: var(--font-body);
+  background: var(--page);
+  color: var(--text-1);
+  font-size: 14px;
+  overflow: hidden;
+}
+.num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.up { color: var(--up); }
+.down { color: var(--down); }
+
+/* ===== 页面骨架 ===== */
+.page { height: 100vh; display: flex; flex-direction: column; padding: 14px 20px 16px; gap: 12px; }
+
+/* 顶栏 */
+.topbar { display: flex; align-items: center; gap: 12px; flex: 0 0 40px; }
+.icon-btn {
+  width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--border); border-radius: 10px; background: var(--container);
+  color: var(--text-2); cursor: pointer;
+  transition: transform .18s var(--ease-out), border-color .18s ease-out, color .18s ease-out;
+  &:hover { border-color: color-mix(in srgb, var(--brand) 30%, var(--border)); color: var(--text-1); transform: translateY(-1px); }
+  &:active { transform: scale(.96); }
+}
+.topbar__title { font-family: var(--font-display); font-size: 22px; font-weight: 600; letter-spacing: .01em; }
+.topbar__date { font-size: 12px; color: var(--text-2); }
+.topbar__spacer { flex: 1; }
+.topbar__clock { font-size: 12px; color: var(--text-3); }
+
+.status-chip {
+  display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 10px;
+  border-radius: 999px; font-size: 11px; font-weight: 600;
+  border: 1px solid var(--border); color: var(--text-2); background: var(--container);
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-4); }
+  &.is-open { color: var(--brand-deep); border-color: color-mix(in srgb, var(--brand) 34%, var(--border)); }
+  &.is-open .dot { background: var(--brand); animation: pulse 2s ease-out infinite; }
+}
+@keyframes pulse {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--brand) 40%, transparent); }
+  70% { box-shadow: 0 0 0 6px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+.spin { animation: rot .7s linear; }
+@keyframes rot { to { transform: rotate(360deg); } }
+
+/* 指数快照条：名称次级灰 / 数值等宽中黑 / 涨跌幅 pill——与下方卡片同一语言 */
+.ticker {
+  flex: 0 0 40px; display: flex; align-items: center; gap: 0;
+  background: var(--container); border: 1px solid var(--stroke); border-radius: var(--radius);
+  padding: 0 8px; overflow-x: auto; scrollbar-width: none;
+}
+.ticker__label { flex: 0 0 auto; padding: 0 10px 0 6px; font-size: 10px; font-weight: 600; letter-spacing: .08em; color: var(--text-4); text-transform: uppercase; }
+.ticker__item {
+  flex: 0 0 auto; display: inline-flex; align-items: center; gap: 8px; padding: 0 16px;
+  align-self: stretch; border-left: 1px solid var(--stroke);
+  .name { font-size: 12px; color: var(--text-2); }
+  .val { font-size: 12.5px; font-weight: 600; }
+  .pct { font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 999px; }
+  .pct.up { background: color-mix(in srgb, var(--up) 11%, transparent); }
+  .pct.down { background: color-mix(in srgb, var(--down) 11%, transparent); }
+}
+
+/* 主网格 */
+.board { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(12, 1fr); grid-template-rows: 1.08fr .92fr; gap: 12px; }
+.tile {
+  min-height: 0; min-width: 0; display: flex; flex-direction: column;
+  background: var(--container); border: 1px solid var(--stroke); border-radius: var(--radius);
+  padding: 13px 16px; box-shadow: var(--shadow-1);
+  opacity: 0; transform: translateY(12px);
+  animation: rise .48s var(--ease-out) forwards; animation-delay: var(--d, 0ms);
+}
+@keyframes rise { to { opacity: 1; transform: translateY(0); } }
+/* .tile 是 column flex，顶栏和快照条需要横排，显式掰回来 */
+.tile.topbar, .tile.ticker { flex-direction: row; align-items: center; }
+.tile__head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px; }
+.tile__title { font-family: var(--font-display); font-size: 15px; font-weight: 600; }
+.tile__caption { font-size: 10px; color: var(--text-3); }
+.tile__link { margin-left: auto; font-size: 12px; color: var(--brand-deep); text-decoration: none; cursor: pointer; }
+
+/* 四大指数 2×2 */
+.index-grid { grid-column: span 8; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 12px; min-height: 0; }
+.index-panel { display: flex; flex-direction: column; min-height: 0; }
+.index-panel__row { display: flex; align-items: baseline; gap: 8px; }
+.index-panel__name { font-family: var(--font-display); font-size: 15px; font-weight: 600; }
+.index-panel__code { font-size: 10px; color: var(--text-3); }
+.index-panel__last { margin-left: auto; font-size: 20px; font-weight: 700; line-height: 1; }
+.pill { font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 999px; }
+.pill.up { background: color-mix(in srgb, var(--up) 11%, transparent); }
+.pill.down { background: color-mix(in srgb, var(--down) 11%, transparent); }
+.index-panel__chart { flex: 1; min-height: 0; margin: 6px 0 8px; }
+.index-panel__chart svg { width: 100%; height: 100%; display: block; }
+
+/* 当日快照条：低—高轨道 + 今开刻度 + 昨收虚线 + 最新点（无分时数据的日内位置表达） */
+.rangebar { display: flex; align-items: center; gap: 8px; }
+.rangebar__edge { font-size: 9px; color: var(--text-3); white-space: nowrap; }
+.rangebar__track { position: relative; flex: 1; height: 4px; border-radius: 2px; background: var(--inset); }
+.rangebar__open { position: absolute; top: 50%; width: 2px; height: 10px; border-radius: 1px; background: var(--text-4); transform: translate(-50%, -50%); }
+.rangebar__prev { position: absolute; top: 50%; height: 12px; border-left: 1.5px dashed var(--text-3); transform: translate(-50%, -50%); }
+.rangebar__last {
+  position: absolute; top: 50%; width: 9px; height: 9px; border-radius: 50%;
+  transform: translate(-50%, -50%); border: 2px solid var(--container); box-shadow: 0 0 0 1px var(--stroke);
+}
+.index-panel__legend { margin-top: 5px; font-size: 10.5px; color: var(--text-4); letter-spacing: .02em; }
+
+/* 市场情绪：涨停/跌停是这格的主角，近5日涨停迷你柱填中段，涨跌家数条收尾 */
+.sentiment { grid-column: span 4; }
+.sentiment__hero { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 2px 0 10px; }
+.hero-metric__label { font-size: 11px; color: var(--text-2); }
+.hero-metric__value { font-size: 40px; font-weight: 700; line-height: 1.15; }
+.sentiment__sub { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 10px; }
+.metric__label { font-size: 11px; color: var(--text-2); }
+.metric__value { font-size: 17px; font-weight: 700; line-height: 1.3; }
+.metric__value .unit { font-size: 11px; font-weight: 400; color: var(--text-3); margin-left: 3px; }
+.metric__note { font-size: 9px; color: var(--text-4); }
+.lu5 { flex: 1; min-height: 0; display: flex; flex-direction: column; margin-bottom: 14px; }
+.lu5__label { font-size: 10px; color: var(--text-3); margin-bottom: 6px; }
+.lu5__bars { flex: 1; min-height: 26px; display: flex; align-items: flex-end; gap: 6px; border-bottom: 1px solid var(--stroke); padding-bottom: 0; }
+.lu5__bar { flex: 1; border-radius: 3px 3px 1px 1px; background: color-mix(in srgb, var(--up) 32%, transparent); position: relative; }
+.lu5__bar.is-last { background: var(--up); }
+.lu5__bar b { position: absolute; top: -14px; left: 50%; transform: translateX(-50%); font-size: 9px; font-weight: 400; color: var(--text-3); }
+.breadth__bar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: var(--inset); }
+.breadth__bar i { display: block; height: 100%; }
+.breadth__legend { display: flex; gap: 16px; margin-top: 6px; font-size: 10px; color: var(--text-3); }
+.breadth__legend .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 4px; vertical-align: 1px; }
+
+/* 自选股 */
+.watchlist { grid-column: span 5; }
+.wl-rows { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: space-between; }
+.wl-row {
+  display: grid; grid-template-columns: minmax(96px,1.15fr) .9fr .72fr 58px auto;
+  align-items: center; gap: 10px; padding: 7px 2px;
+  border-top: 1px solid var(--stroke);
+  &:first-child { border-top: 0; }
+}
+.wl-row__name { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wl-row__code { font-size: 9px; color: var(--text-3); display: block; }
+.wl-row__price { font-size: 13px; text-align: right; }
+.wl-row .pill { justify-self: end; }
+.wl-row__spark { width: 58px; height: 22px; }
+.badge { font-size: 10px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--border); color: var(--text-2); white-space: nowrap; }
+.badge.is-trigger { color: var(--brand-deep); border-color: color-mix(in srgb, var(--brand) 36%, var(--border)); background: color-mix(in srgb, var(--brand) 7%, transparent); }
+/* 空态：快速添加建议 + 珊瑚实心主按钮，不把首屏黄金位浪费在一行灰字上 */
+.wl-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; }
+.wl-empty__hint { font-size: 13px; color: var(--text-2); }
+.wl-empty__sugg { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.wl-empty__chip {
+  display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 11px;
+  border: 1px solid var(--border); border-radius: 999px; background: var(--container);
+  font-size: 12px; color: var(--text-1); cursor: pointer;
+  transition: border-color .15s ease-out, background .15s ease-out;
+  &:hover { border-color: color-mix(in srgb, var(--brand) 34%, var(--border)); background: var(--container-hover); }
+  .plus { color: var(--brand-deep); font-weight: 600; }
+}
+.wl-empty__cta {
+  height: 30px; padding: 0 16px; border: none; border-radius: 10px;
+  background: var(--brand); color: #fff; font-size: 12px; font-weight: 600; cursor: pointer;
+  transition: background .15s ease-out;
+  &:hover { background: var(--brand-deep); }
+}
+
+/* 龙虎榜 */
+.lhb { grid-column: span 4; }
+.lhb-rows { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: space-between; }
+.lhb-row { display: flex; align-items: center; gap: 10px; padding: 8px 2px; border-top: 1px solid var(--stroke); &:first-child { border-top: 0; } }
+.lhb-row__rank { font-family: var(--font-display); font-size: 15px; font-weight: 600; color: var(--text-3); width: 16px; }
+.lhb-row__rank.is-first { color: var(--brand); }
+.lhb-row__name { font-size: 13px; font-weight: 500; }
+.lhb-row__tag { display: block; font-size: 9px; color: var(--text-3); }
+.lhb-row__amt { margin-left: auto; text-align: right; }
+.lhb-row__net { font-size: 13px; font-weight: 600; display: block; }
+.lhb-row__org { font-size: 9px; color: var(--text-3); }
+
+/* 权重 ETF */
+.etf { grid-column: span 3; }
+.etf-rows { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: space-between; }
+.etf-row { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 10px; padding: 6.5px 2px; border-top: 1px solid var(--stroke); &:first-child { border-top: 0; } }
+.etf-row__name { font-size: 12px; font-weight: 500; white-space: nowrap; }
+.etf-row__code { font-size: 9px; color: var(--text-3); display: block; }
+.etf-row__price { font-size: 12px; text-align: right; }
+
+/* 刷新时全屏数字起伏一次（状态切换动效） */
+.flash .num { animation: numflash .45s ease-out; }
+@keyframes numflash { 0% { opacity: .3; } 100% { opacity: 1; } }
+
+@media (max-height: 800px) {
+  .page { padding: 10px 16px 12px; gap: 10px; }
+  .board { gap: 10px; }
+  .tile { padding: 9px 14px; }
+  .tile__head { margin-bottom: 6px; }
+  .topbar { flex-basis: 36px; }
+  .ticker { flex-basis: 36px; }
+  .hero-metric__value { font-size: 32px; }
+  .wl-row { padding: 4px 2px; }
+  .wl-row:nth-child(7) { display: none; } /* 小视口减到 6 行，留安全边距 */
+  .wl-row__spark { height: 18px; }
+  .lhb-row { padding: 5px 2px; }
+  .etf-row { padding: 4px 2px; }
+  .index-panel__chart { margin: 4px 0 6px; }
+  .lu5 { margin-bottom: 6px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tile { animation: none; opacity: 1; transform: none; }
+  .status-chip.is-open .dot, .spin { animation: none; }
+  .flash .num { animation: none; }
+}
+</style>
+</head>
+<body>
+<div class="page" x-data="dash()" x-init="init()" :class="{ flash: flashing }">
+
+  <!-- 顶栏 -->
+  <header class="topbar tile" style="--d:0ms; padding:0 12px;">
+    <a class="icon-btn" href="workbench-entry.html" title="返回工作台" aria-label="返回工作台">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M9 2.5 4.5 7 9 11.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </a>
+    <span class="topbar__title">大盘预览</span>
+    <span class="topbar__date" x-text="dateLine"></span>
+    <span class="topbar__spacer"></span>
+    <span class="topbar__clock num">数据时间 <span x-text="clock"></span></span>
+    <span class="status-chip" :class="{ 'is-open': state === 'open' }">
+      <span class="dot"></span><span x-text="stateLabel"></span>
+    </span>
+    <button class="icon-btn" @click="toggleTheme()" :title="theme === 'dark' ? '切到浅色' : '切到深色'">
+      <svg x-show="theme !== 'dark'" width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="3" stroke="currentColor" stroke-width="1.4"/><path d="M7 1v1.6M7 11.4V13M1 7h1.6M11.4 7H13M2.8 2.8l1.1 1.1M10.1 10.1l1.1 1.1M11.2 2.8l-1.1 1.1M3.9 10.1l-1.1 1.1" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+      <svg x-show="theme === 'dark'" width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M11.8 8.6A5.2 5.2 0 0 1 5.4 2.2a5.2 5.2 0 1 0 6.4 6.4Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+    </button>
+    <button class="icon-btn" @click="refresh()" title="刷新" aria-label="刷新">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" :class="{ spin: spinning }"><path d="M12 7A5 5 0 1 1 7 2c1.9 0 3.5 1 4.4 2.6M12 1.4v3.2H8.8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+  </header>
+
+  <!-- 指数快照条 -->
+  <div class="ticker tile" style="--d:60ms; padding-top:0; padding-bottom:0;">
+    <span class="ticker__label">指数</span>
+    <template x-for="t in ticker" :key="t.name">
+      <span class="ticker__item">
+        <span class="name" x-text="t.name"></span>
+        <span class="val num" x-text="t.val"></span>
+        <span class="pct num" :class="t.pct >= 0 ? 'up' : 'down'" x-text="fmtPct(t.pct)"></span>
+      </span>
+    </template>
+  </div>
+
+  <main class="board">
+    <!-- 四大指数走势 -->
+    <section class="index-grid">
+      <template x-for="(idx, i) in indices" :key="idx.code">
+        <div class="tile index-panel" :style="`--d:${120 + i * 60}ms`">
+          <div class="index-panel__row">
+            <span class="index-panel__name" x-text="idx.name"></span>
+            <span class="index-panel__code num" x-text="idx.code"></span>
+            <span class="index-panel__last num" :class="idx.pct >= 0 ? 'up' : 'down'" x-text="fmt(idx.last)"></span>
+            <span class="pill num" :class="idx.pct >= 0 ? 'up' : 'down'" x-text="fmtPct(idx.pct)"></span>
+          </div>
+          <div class="index-panel__chart">
+            <svg viewBox="0 0 260 64" preserveAspectRatio="none">
+              <path :d="idx.area" :fill="idx.pct >= 0 ? 'url(#gUp)' : 'url(#gDown)'"></path>
+              <line x1="3" x2="257" :y1="idx.prevY" :y2="idx.prevY" stroke="var(--text-4)" stroke-width="1" stroke-dasharray="4 3" vector-effect="non-scaling-stroke"></line>
+              <path :d="idx.line" fill="none" :stroke="idx.pct >= 0 ? 'var(--up)' : 'var(--down)'" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"></path>
+            </svg>
+          </div>
+          <div class="rangebar">
+            <span class="rangebar__edge num" x-text="'低 ' + fmt(idx.low)"></span>
+            <div class="rangebar__track">
+              <span class="rangebar__prev" :style="`left:${pos(idx, idx.prev)}%`" :title="'昨收 ' + fmt(idx.prev)"></span>
+              <span class="rangebar__open" :style="`left:${pos(idx, idx.open)}%`" :title="'今开 ' + fmt(idx.open)"></span>
+              <span class="rangebar__last" :class="idx.pct >= 0 ? 'up' : 'down'"
+                    :style="`left:${pos(idx, idx.last)}%; background: currentColor`"
+                    :title="(state === 'open' ? '最新 ' : '收盘 ') + fmt(idx.last)"></span>
+            </div>
+            <span class="rangebar__edge num" x-text="'高 ' + fmt(idx.high)"></span>
+          </div>
+          <div class="index-panel__legend">— 近60日 &nbsp;┆ 今开 &nbsp;┆ 昨收（虚线）&nbsp;● <span x-text="state === 'open' ? '最新' : '收盘'"></span></div>
+        </div>
+      </template>
+    </section>
+
+    <!-- 市场情绪 -->
+    <section class="tile sentiment" style="--d:360ms">
+      <div class="tile__head">
+        <span class="tile__title">市场情绪</span>
+        <span class="tile__caption">涨跌停池 · 全市场</span>
+      </div>
+      <div class="sentiment__hero">
+        <div class="hero-metric">
+          <div class="hero-metric__label">涨停</div>
+          <div class="hero-metric__value num up" x-text="sent.limitUp"></div>
+        </div>
+        <div class="hero-metric">
+          <div class="hero-metric__label">跌停</div>
+          <div class="hero-metric__value num down" x-text="sent.limitDown"></div>
+        </div>
+      </div>
+      <div class="sentiment__sub">
+        <div class="metric">
+          <div class="metric__label">炸板</div>
+          <div class="metric__value num"><span x-text="sent.broken"></span><span class="unit" x-text="'只 · ' + sent.brokenRate + '%'"></span></div>
+        </div>
+        <div class="metric">
+          <div class="metric__label">最高连板</div>
+          <div class="metric__value num"><span x-text="sent.maxStreak"></span><span class="unit">板</span></div>
+          <div class="metric__note" x-text="sent.streakName"></div>
+        </div>
+      </div>
+      <div class="lu5">
+        <div class="lu5__label">近5日涨停家数</div>
+        <div class="lu5__bars">
+          <template x-for="(v, i) in sent.lu5" :key="i">
+            <span class="lu5__bar" :class="{ 'is-last': i === sent.lu5.length - 1 }" :style="`height:${(v / lu5Max * 100).toFixed(0)}%`">
+              <b class="num" x-text="v"></b>
+            </span>
+          </template>
+        </div>
+      </div>
+      <div class="breadth">
+        <div class="breadth__bar">
+          <i :style="`width:${breadth.upW}%; background: var(--up)`"></i>
+          <i :style="`width:${breadth.flatW}%; background: var(--text-4)`"></i>
+          <i :style="`width:${breadth.downW}%; background: var(--down)`"></i>
+        </div>
+        <div class="breadth__legend">
+          <span><i class="dot" style="background:var(--up)"></i>上涨 <b class="num up" x-text="fmtInt(sent.up)"></b></span>
+          <span><i class="dot" style="background:var(--text-4)"></i>平盘 <b class="num" x-text="sent.flat"></b></span>
+          <span><i class="dot" style="background:var(--down)"></i>下跌 <b class="num down" x-text="fmtInt(sent.down)"></b></span>
+        </div>
+      </div>
+    </section>
+
+    <!-- 自选股 -->
+    <section class="tile watchlist" style="--d:420ms">
+      <div class="tile__head">
+        <span class="tile__title">自选股</span>
+        <span class="tile__caption num" x-show="!watchlistEmpty">12 只</span>
+        <a class="tile__link" x-show="!watchlistEmpty">全部 →</a>
+      </div>
+      <div class="wl-empty" x-show="watchlistEmpty">
+        <span class="wl-empty__hint">还没有自选股，先加几只常看的</span>
+        <div class="wl-empty__sugg">
+          <button class="wl-empty__chip" @click="watchlistEmpty = false"><span class="plus">+</span>贵州茅台</button>
+          <button class="wl-empty__chip" @click="watchlistEmpty = false"><span class="plus">+</span>宁德时代</button>
+          <button class="wl-empty__chip" @click="watchlistEmpty = false"><span class="plus">+</span>300ETF</button>
+        </div>
+        <button class="wl-empty__cta" @click="watchlistEmpty = false">去自选页添加</button>
+      </div>
+      <div class="wl-rows" x-show="!watchlistEmpty">
+        <template x-for="w in watchlist" :key="w.code">
+          <div class="wl-row">
+            <span class="wl-row__name"><span x-text="w.name"></span><span class="wl-row__code num" x-text="w.code"></span></span>
+            <span class="wl-row__price num" :class="w.pct >= 0 ? 'up' : 'down'" x-text="fmt(w.price)"></span>
+            <span class="pill num" :class="w.pct >= 0 ? 'up' : 'down'" x-text="fmtPct(w.pct)"></span>
+            <svg class="wl-row__spark" viewBox="0 0 58 22" preserveAspectRatio="none">
+              <path :d="w.spark" fill="none" :stroke="w.pct >= 0 ? 'var(--up)' : 'var(--down)'" stroke-width="1.2" vector-effect="non-scaling-stroke"></path>
+            </svg>
+            <span class="badge" :class="{ 'is-trigger': w.state === 'trigger' }" x-text="stateText(w.state)"></span>
+          </div>
+        </template>
+      </div>
+    </section>
+
+    <!-- 龙虎榜 -->
+    <section class="tile lhb" style="--d:480ms">
+      <div class="tile__head">
+        <span class="tile__title">龙虎榜</span>
+        <span class="tile__caption">净买入前五 · 全市场</span>
+        <a class="tile__link">完整榜单 →</a>
+      </div>
+      <div class="lhb-rows">
+        <template x-for="(r, i) in dragon" :key="r.name">
+          <div class="lhb-row">
+            <span class="lhb-row__rank num" :class="{ 'is-first': i === 0 }" x-text="i + 1"></span>
+            <span class="lhb-row__name"><span x-text="r.name"></span><span class="lhb-row__tag" x-text="r.tag"></span></span>
+            <span class="lhb-row__amt">
+              <span class="lhb-row__net num" :class="r.net >= 0 ? 'up' : 'down'" x-text="fmtYi(r.net)"></span>
+              <span class="lhb-row__org num">机构 <span :class="r.org >= 0 ? 'up' : 'down'" x-text="fmtYi(r.org)"></span></span>
+            </span>
+          </div>
+        </template>
+      </div>
+    </section>
+
+    <!-- 权重 ETF -->
+    <section class="tile etf" style="--d:540ms">
+      <div class="tile__head">
+        <span class="tile__title">权重 ETF</span>
+        <span class="tile__caption">宽基</span>
+      </div>
+      <div class="etf-rows">
+        <template x-for="e in etfs" :key="e.code">
+          <div class="etf-row">
+            <span class="etf-row__name"><span x-text="e.name"></span><span class="etf-row__code num" x-text="e.code"></span></span>
+            <span class="etf-row__price num" :class="e.pct >= 0 ? 'up' : 'down'" x-text="e.price.toFixed(3)"></span>
+            <span class="pill num" :class="e.pct >= 0 ? 'up' : 'down'" x-text="fmtPct(e.pct)"></span>
+          </div>
+        </template>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- 折线渐变（涨跌两色，跟随主题变量） -->
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <linearGradient id="gUp" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" style="stop-color:var(--up); stop-opacity:.16"/>
+      <stop offset="1" style="stop-color:var(--up); stop-opacity:0"/>
+    </linearGradient>
+    <linearGradient id="gDown" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" style="stop-color:var(--down); stop-opacity:.16"/>
+      <stop offset="1" style="stop-color:var(--down); stop-opacity:0"/>
+    </linearGradient>
+  </defs>
+</svg>
+
+<script defer src="vendor/alpine.min.js"></script>
+<script>
+/* 确定性随机游走：同一 seed 每次渲染同一条曲线（模拟 60 日收盘） */
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function walk(seed, n, drift) {
+  const rnd = mulberry32(seed);
+  const pts = [0.5];
+  for (let i = 1; i < n; i++) pts.push(pts[i - 1] + (rnd() - 0.485) * 0.09 + drift);
+  const min = Math.min(...pts), max = Math.max(...pts), span = max - min || 1;
+  return pts.map(p => (p - min) / span);
+}
+function linePath(norm, w, h, pad = 3) {
+  return norm.map((v, i) => {
+    const x = pad + (i / (norm.length - 1)) * (w - pad * 2);
+    const y = pad + (1 - v) * (h - pad * 2);
+    return (i ? 'L' : 'M') + x.toFixed(1) + ',' + y.toFixed(1);
+  }).join(' ');
+}
+function areaPath(norm, w, h, pad = 3) {
+  return linePath(norm, w, h, pad) + ` L${w - pad},${h} L${pad},${h} Z`;
+}
+
+function dash() {
+  const q = new URLSearchParams(location.search);
+  return {
+    state: ['open', 'closed', 'holiday'].includes(q.get('state')) ? q.get('state') : 'open',
+    theme: q.get('theme') === 'dark' ? 'dark' : 'light',
+    watchlistEmpty: q.get('watchlist') === 'empty',
+    flashing: false,
+    spinning: false,
+    clock: '',
+    dateLine: '',
+    indices: [
+      { code: '000001.SH', name: '上证指数', last: 3892.45, pct: 0.62, open: 3878.12, high: 3901.55, low: 3871.02, prev: 3868.50, seed: 11, drift: 0.0012 },
+      { code: '399001.SZ', name: '深证成指', last: 13245.78, pct: 1.08, open: 13120.40, high: 13260.10, low: 13088.25, prev: 13104.36, seed: 22, drift: 0.0018 },
+      { code: '399006.SZ', name: '创业板指', last: 3156.22, pct: 1.84, open: 3105.30, high: 3162.48, low: 3092.15, prev: 3099.27, seed: 33, drift: 0.0026 },
+      { code: '000300.SH', name: '沪深300', last: 4508.12, pct: -0.34, open: 4520.00, high: 4532.66, low: 4498.30, prev: 4523.52, seed: 44, drift: -0.0020 },
+    ],
+    ticker: [
+      { name: '上证50', val: '2,985.40', pct: 0.55 },
+      { name: '科创50', val: '1,387.22', pct: 1.37 },
+      { name: '北证50', val: '1,412.66', pct: -0.83 },
+      { name: '中证500', val: '6,842.10', pct: -0.18 },
+      { name: '中证1000', val: '7,421.55', pct: -0.42 },
+    ],
+    sent: { limitUp: 68, limitDown: 9, broken: 21, brokenRate: 23.6, maxStreak: 6, streakName: '天普股份', up: 3412, flat: 212, down: 1805, lu5: [54, 62, 48, 71, 68] },
+    lu5Max: 80,
+    breadth: { upW: 0, flatW: 0, downW: 0 },
+    watchlist: [
+      { name: '贵州茅台', code: '600519.SH', price: 1689.00, pct: 0.85, state: 'holding', seed: 71 },
+      { name: '宁德时代', code: '300750.SZ', price: 268.42, pct: 2.31, state: 'holding', seed: 72 },
+      { name: '中芯国际', code: '688981.SH', price: 128.75, pct: -1.12, state: 'observing', seed: 73 },
+      { name: '比亚迪', code: '002594.SZ', price: 352.10, pct: 0.44, state: 'observing', seed: 74 },
+      { name: '药明康德', code: '603259.SH', price: 98.66, pct: 3.02, state: 'trigger', seed: 75 },
+      { name: '长江电力', code: '600900.SH', price: 28.35, pct: -0.28, state: 'holding', seed: 76 },
+      { name: '中科曙光', code: '603019.SH', price: 86.20, pct: 5.64, state: 'trigger', seed: 77 },
+    ],
+    dragon: [
+      { name: '寒武纪-U', tag: '科创板涨跌幅限制', net: 4.82, org: 2.15 },
+      { name: '中际旭创', tag: '日涨幅偏离值达 7%', net: 3.15, org: -0.42 },
+      { name: '立讯精密', tag: '日涨幅偏离值达 7%', net: 2.47, org: 1.08 },
+      { name: '东方财富', tag: '日换手率达 20%', net: 1.93, org: 0.66 },
+      { name: '新易盛', tag: '三日累计涨幅偏离达 20%', net: 1.55, org: -0.21 },
+    ],
+    etfs: [
+      { name: '300ETF', code: '510300.SH', price: 4.215, pct: 0.72 },
+      { name: '50ETF', code: '510050.SH', price: 2.918, pct: 0.55 },
+      { name: '500ETF', code: '510500.SH', price: 6.842, pct: -0.18 },
+      { name: '科创50ETF', code: '588000.SH', price: 1.186, pct: 1.37 },
+      { name: '创业板ETF', code: '159915.SZ', price: 2.542, pct: 1.84 },
+      { name: '1000ETF', code: '512100.SH', price: 2.689, pct: -0.42 },
+    ],
+    get stateLabel() {
+      return { open: '盘中', closed: '盘后', holiday: '非交易日' }[this.state];
+    },
+    init() {
+      document.documentElement.dataset.theme = this.theme;
+      this.dateLine = this.state === 'holiday'
+        ? '2026年9月30日 周三 · 国庆假期，展示最近交易日'
+        : '2026年9月30日 周三';
+      this.clock = this.state === 'open' ? '14:23:05' : '15:00:00';
+      this.lu5Max = Math.max(...this.sent.lu5) * 1.12;
+      for (const idx of this.indices) {
+        const norm = walk(idx.seed, 60, idx.drift);
+        idx.line = linePath(norm, 260, 64);
+        idx.area = areaPath(norm, 260, 64);
+        /* 昨收 = 60 日序列的倒数第二点，画成横贯图区的虚线（与快照条虚线同一词表） */
+        idx.prevY = (3 + (1 - norm[norm.length - 2]) * 58).toFixed(1);
+      }
+      for (const w of this.watchlist) {
+        w.spark = linePath(walk(w.seed, 30, (w.pct >= 0 ? 1 : -1) * 0.004), 58, 22, 2);
+      }
+      const total = this.sent.up + this.sent.flat + this.sent.down;
+      this.breadth = {
+        upW: (this.sent.up / total * 100).toFixed(1),
+        flatW: (this.sent.flat / total * 100).toFixed(1),
+        downW: (this.sent.down / total * 100).toFixed(1),
+      };
+    },
+    toggleTheme() {
+      this.theme = this.theme === 'dark' ? 'light' : 'dark';
+      document.documentElement.dataset.theme = this.theme;
+    },
+    refresh() {
+      if (this.spinning) return;
+      this.spinning = true;
+      setTimeout(() => {
+        if (this.state === 'open') {
+          const [h, m, s] = this.clock.split(':').map(Number);
+          const ns = (s + 47) % 60;
+          this.clock = `${String(h).padStart(2, '0')}:${String(m + (s + 47 >= 60 ? 1 : 0)).padStart(2, '0')}:${String(ns).padStart(2, '0')}`;
+        }
+        this.spinning = false;
+        this.flashing = true;
+        setTimeout(() => { this.flashing = false; }, 500);
+      }, 650);
+    },
+    pos(idx, v) { return (((v - idx.low) / (idx.high - idx.low)) * 100).toFixed(1); },
+    fmt(v) { return v.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); },
+    fmtInt(v) { return v.toLocaleString('zh-CN'); },
+    fmtPct(p) { return (p >= 0 ? '+' : '') + p.toFixed(2) + '%'; },
+    fmtYi(v) { return (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(2) + ' 亿'; },
+    stateText(s) { return { holding: '持有', observing: '观察', trigger: '已触发', dropped: '已移出' }[s] || s; },
+  };
+}
+</script>
+</body>
+</html>

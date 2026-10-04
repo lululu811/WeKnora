@@ -4778,6 +4778,20 @@ export default {
       yesterday: '昨天',
       daysAgo: '{n} 天前'
     },
+    marketEntry: {
+      sectionTitle: '市场行情',
+      title: '大盘预览',
+      subtitle: '指数 · 自选 · ETF · 龙虎榜',
+      open: '打开大盘预览大屏',
+      metrics: {
+        index: '上证指数',
+        limits: '涨停 / 跌停',
+        watchlist: '自选股',
+        triggered: '{n} 只已触发',
+        noWatchlist: '暂无自选',
+        unavailable: '暂不可用'
+      }
+    },
     title: '你好，这里是@:{\'appName\'}，让知识触手可及',
     newSessionTitle: '新会话',
     openProject: '选择项目',
@@ -7343,6 +7357,68 @@ export default {
     myChats: '我的对话',
     apiChats: 'API 会话',
     noSessions: '暂无对话'
+  },
+  marketDashboard: {
+    title: '大盘预览',
+    back: '返回工作台',
+    backToWorkbench: '返回',
+    dataTime: '数据时间',
+    tickerLabel: '指数',
+    refresh: '刷新',
+    refreshFailed: '行情刷新失败，请稍后重试',
+    themeToDark: '切到深色',
+    themeToLight: '切到浅色',
+    /** 盘后与非交易日统一叫「收盘」：那一刻的读数是收盘价，不是"最新"。 */
+    latestLabel: '最新',
+    closedLabel: '收盘',
+    state: {
+      open: '盘中',
+      closed: '盘后',
+      holiday: '非交易日'
+    },
+    holidayNote: '展示最近交易日',
+    chartLow: '低 {v}',
+    chartHigh: '高 {v}',
+    prevCloseTitle: '昨收 {v}',
+    chartLegend: '— 近60日   ┆ 今开   ┆ 昨收（虚线）   ● {point}',
+    sentiment: {
+      title: '市场情绪',
+      caption: '涨跌停池 · 全市场',
+      limitUp: '涨停',
+      limitDown: '跌停',
+      broken: '炸板',
+      brokenUnit: '只 · {rate}%',
+      maxStreak: '最高连板',
+      streakUnit: '板',
+      trendLabel: '近5日涨停家数',
+      breadth: { up: '上涨', flat: '平盘', down: '下跌' }
+    },
+    watchlist: {
+      title: '自选股',
+      count: '{n} 只',
+      all: '全部 →',
+      empty: '还没有自选股，先加几只常看的',
+      emptyCta: '去自选页添加',
+      emptyChip: '+ {name}',
+      state: { observing: '观察', triggered: '已触发', holding: '持有', dropped: '已移出' }
+    },
+    dragonTiger: {
+      title: '龙虎榜',
+      caption: '净买入前五 · 全市场',
+      full: '完整榜单 →',
+      net: '净买',
+      org: '机构',
+      empty: '今日暂无数据'
+    },
+    etf: {
+      title: '权重 ETF',
+      caption: '宽基'
+    },
+    noData: '暂无数据',
+    loading: '加载中…',
+    sourceUnavailable: '部分数据源未就绪（{sources}），相关格子为空',
+    /** 指数格整体不可用时（本地没有该指数行情）才用这一句，不是"今天休市"。 */
+    indexUnavailable: '该指数暂无本地行情数据'
   },
   watchlist: {
     title: '个股追踪',

@@ -55,6 +55,17 @@ const router = createRouter({
       component: () => import("../views/auth/Login.vue"),
       meta: { requiresAuth: false, requiresInit: false }
     },
+    // 大盘预览大屏：顶级全屏路由，render full-bleed（outside the platform
+    // sidebar shell），与 design-lab 的全屏先例同一处理方式。它挂在 /platform
+    // 之外而不是 /platform/dashboard，因为大屏自己占满视口，放进平台壳里会
+    // 被侧边栏挤成"带边距的仪表盘"，一屏无滚动的前提就没了。
+    // 返回入口在组件内（goBack 回工作台），不进 /platform 侧边栏。
+    {
+      path: "/dashboard",
+      name: "marketDashboard",
+      component: () => import("@/finance/views/MarketDashboard.vue"),
+      meta: { requiresAuth: true, requiresInit: true }
+    },
     // Embed chat is a separate entry (embed.html + embed-main.ts), not this SPA.
     {
       path: "/register",

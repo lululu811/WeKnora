@@ -399,6 +399,66 @@ export default {
     nameAscending: 'A–Z',
     nameDescending: 'Z–A'
   },
+  marketDashboard: {
+    title: 'Market Overview',
+    back: 'Back to workbench',
+    backToWorkbench: 'Back',
+    dataTime: 'As of',
+    tickerLabel: 'Index',
+    refresh: 'Refresh',
+    refreshFailed: 'Failed to refresh quotes. Please try again.',
+    themeToDark: 'Switch to dark',
+    themeToLight: 'Switch to light',
+    latestLabel: 'Latest',
+    closedLabel: 'Close',
+    state: {
+      open: 'Trading',
+      closed: 'Closed',
+      holiday: 'Non-trading day'
+    },
+    holidayNote: 'showing latest trading day',
+    chartLow: 'L {v}',
+    chartHigh: 'H {v}',
+    prevCloseTitle: 'Prev close {v}',
+    chartLegend: '— 60d   ┆ Open   ┆ Prev close (dashed)   ● {point}',
+    sentiment: {
+      title: 'Market sentiment',
+      caption: 'Limit pools · All market',
+      limitUp: 'Limit up',
+      limitDown: 'Limit down',
+      broken: 'Broken',
+      brokenUnit: '· {rate}%',
+      maxStreak: 'Max streak',
+      streakUnit: 'boards',
+      trendLabel: 'Limit-ups, last 5 days',
+      breadth: { up: 'Up', flat: 'Flat', down: 'Down' }
+    },
+    watchlist: {
+      title: 'Watchlist',
+      count: '{n}',
+      all: 'All →',
+      empty: 'No watchlist items yet — add a few you follow',
+      emptyCta: 'Add in watchlist',
+      emptyChip: '+ {name}',
+      state: { observing: 'Watching', triggered: 'Triggered', holding: 'Holding', dropped: 'Removed' }
+    },
+    dragonTiger: {
+      title: 'Top traded',
+      caption: 'Top 5 net buys · All market',
+      full: 'Full list →',
+      net: 'Net',
+      org: 'Inst.',
+      empty: 'No data today'
+    },
+    etf: {
+      title: 'Broad ETFs',
+      caption: 'Broad-based'
+    },
+    noData: 'No data',
+    loading: 'Loading…',
+    sourceUnavailable: 'Some data sources are unavailable ({sources}); those panels are empty',
+    indexUnavailable: 'No local quote data for this index'
+  },
   watchlist: {
     title: 'Watchlist',
     subtitle: 'Latest price and change for the symbols you follow, from the local market database (forward-adjusted)',
@@ -3099,6 +3159,20 @@ export default {
       hoursAgo: '{n} h ago',
       yesterday: 'Yesterday',
       daysAgo: '{n} d ago'
+    },
+    marketEntry: {
+      sectionTitle: 'Market',
+      title: 'Market overview',
+      subtitle: 'Index · Watchlist · ETF · Top traded',
+      open: 'Open the market overview',
+      metrics: {
+        index: 'SSE Composite',
+        limits: 'Limit up / down',
+        watchlist: 'Watchlist',
+        triggered: '{n} triggered',
+        noWatchlist: 'No watchlist',
+        unavailable: 'Unavailable'
+      }
     },
     title: 'Hi, this is @:{\'appName\'} — your knowledge, within reach',
     newSessionTitle: 'New Session',

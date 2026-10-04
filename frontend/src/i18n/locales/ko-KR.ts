@@ -4775,6 +4775,20 @@ export default {
       yesterday: '어제',
       daysAgo: '{n}일 전'
     },
+    marketEntry: {
+      sectionTitle: '시장',
+      title: '시장 개요',
+      subtitle: '지수 · 관심 종목 · ETF · 상향종목',
+      open: '시장 개요 대시보드 열기',
+      metrics: {
+        index: '상하이 종합',
+        limits: '상한가 / 하한가',
+        watchlist: '관심 종목',
+        triggered: '{n}건 발생',
+        noWatchlist: '관심 종목 없음',
+        unavailable: '사용 불가'
+      }
+    },
     title: '안녕하세요, WeKnora입니다 — 당신의 지식을 손끝에',
     newSessionTitle: '새 세션',
     openProject: '프로젝트 선택',
@@ -7340,6 +7354,66 @@ export default {
     myChats: '내 대화',
     apiChats: 'API 세션',
     noSessions: '대화가 없습니다'
+  },
+  marketDashboard: {
+    title: '시장 개요',
+    back: '워크벤치로 돌아가기',
+    backToWorkbench: '뒤로',
+    dataTime: '데이터 시각',
+    tickerLabel: '지수',
+    refresh: '새로고침',
+    refreshFailed: '시세 갱신에 실패했습니다. 다시 시도해 주세요.',
+    themeToDark: '다크 모드로 전환',
+    themeToLight: '라이트 모드로 전환',
+    latestLabel: '최신',
+    closedLabel: '종가',
+    state: {
+      open: '장중',
+      closed: '장 마감',
+      holiday: '휴장일'
+    },
+    holidayNote: '최근 거래일 기준',
+    chartLow: '저 {v}',
+    chartHigh: '고 {v}',
+    prevCloseTitle: '전일 종가 {v}',
+    chartLegend: '— 60일   ┆ 시가   ┆ 전일 종가(파선)   ● {point}',
+    sentiment: {
+      title: '시장 심리',
+      caption: '상·하한가 · 전 시장',
+      limitUp: '상한가',
+      limitDown: '하한가',
+      broken: '상한가 이탈',
+      brokenUnit: '· {rate}%',
+      maxStreak: '최대 연속',
+      streakUnit: '판',
+      trendLabel: '최근 5일 상한가 수',
+      breadth: { up: '상승', flat: '보합', down: '하락' }
+    },
+    watchlist: {
+      title: '관심 종목',
+      count: '{n}종목',
+      all: '전체 →',
+      empty: '아직 관심 종목이 없습니다. 자주 보는 종목을 추가해 보세요',
+      emptyCta: '관심 종목 페이지로',
+      emptyChip: '+ {name}',
+      state: { observing: '관찰', triggered: '발생', holding: '보유', dropped: '제외됨' }
+    },
+    dragonTiger: {
+      title: '상향종목',
+      caption: '순매수 상위 5 · 전 시장',
+      full: '전체 보기 →',
+      net: '순매수',
+      org: '기관',
+      empty: '오늘 데이터 없음'
+    },
+    etf: {
+      title: '대형 ETF',
+      caption: '지수형'
+    },
+    noData: '데이터 없음',
+    loading: '불러오는 중…',
+    sourceUnavailable: '일부 데이터 소스를 사용할 수 없습니다({sources}). 해당 패널은 비어 있습니다',
+    indexUnavailable: '이 지수의 로컬 시세 데이터가 없습니다'
   },
   watchlist: {
     title: '종목 추적',

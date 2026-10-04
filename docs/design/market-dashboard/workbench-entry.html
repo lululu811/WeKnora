@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>工作台 · 大盘预览入口</title>
+<style>
+:root[data-theme="light"] {
+  --page: #FAF4EA; --container: #FFFCF6; --container-hover: #FBF7EF; --inset: #F3EAD9;
+  --stroke: #E6DBC9; --border: #D9CBB4;
+  --text-1: rgba(43,35,32,.92); --text-2: rgba(43,35,32,.62); --text-3: rgba(43,35,32,.42); --text-4: rgba(43,35,32,.28);
+  --brand: #E85D3D; --brand-deep: #C4572E;
+  --up: #dc2626; --down: #047857;
+  --shadow-1: 0 1px 2px rgba(43,35,32,.04), 0 4px 12px rgba(43,35,32,.05);
+  --shadow-2: 0 2px 6px rgba(43,35,32,.05), 0 10px 24px rgba(196,87,46,.07);
+}
+:root[data-theme="dark"] {
+  --page: #1F1A16; --container: #2A231C; --container-hover: #322A21; --inset: #322A21;
+  --stroke: #3A3128; --border: #4A4034;
+  --text-1: rgba(237,227,211,.92); --text-2: rgba(237,227,211,.60); --text-3: rgba(237,227,211,.40); --text-4: rgba(237,227,211,.24);
+  --brand: #E85D3D; --brand-deep: #F06A48;
+  --up: #ef4444; --down: #10b981;
+  --shadow-1: 0 1px 2px rgba(0,0,0,.24), 0 4px 12px rgba(0,0,0,.20);
+  --shadow-2: 0 2px 6px rgba(0,0,0,.28), 0 10px 24px rgba(0,0,0,.30);
+}
+:root {
+  --font-body: "Inter", -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-display: "Noto Serif SC", "Source Han Serif SC", "Songti SC", serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --radius: 10px;
+  --ease-out: cubic-bezier(.16,1,.3,1);
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { height: 100%; }
+body { font-family: var(--font-body); background: var(--page); color: var(--text-1); font-size: 14px; }
+.num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.up { color: var(--up); } .down { color: var(--down); }
+
+/* ===== workbench 骨架：复刻 creatChat.vue 的布局关系 ===== */
+.wrap { min-height: 100vh; display: flex; justify-content: center; overflow-y: auto; }
+.workbench {
+  display: flex; flex-direction: column; align-items: center;
+  width: 100%; max-width: 960px; gap: 24px; padding: 56px 24px;
+}
+.greeting { text-align: center; }
+.greeting__line { font-family: var(--font-display); font-size: 28px; font-weight: 600; letter-spacing: .01em; line-height: 1.3; }
+.greeting__sub { margin-top: 8px; font-size: 12px; color: var(--text-2); }
+
+.composer {
+  width: 100%; height: 96px; border: 1px solid var(--border); border-radius: 14px;
+  background: var(--container); box-shadow: var(--shadow-1);
+  display: flex; align-items: flex-start; padding: 16px;
+  color: var(--text-3); font-size: 14px;
+}
+
+.section { width: 100%; }
+.section-title {
+  margin-bottom: 10px; font-size: 10px; font-weight: 600;
+  letter-spacing: .08em; text-transform: uppercase; color: var(--text-3);
+}
+
+/* ===== 本次的新增物：大盘预览入口横幅 =====
+   位置：composer 与「继续昨天的工作」之间。沿用 recent-card 的交互语言
+   （hover 抬起 -2px + 暖光阴影、按下 scale(.98)），但形态是通栏横幅：
+   左侧衬线标题，中间三个微型指标（市场 / 情绪 / 与我有关），右侧箭头。 */
+.market-entry {
+  display: flex; align-items: center; gap: 20px;
+  width: 100%; padding: 14px 18px;
+  border: 1px solid var(--border); border-radius: 14px;
+  background: var(--container); box-shadow: var(--shadow-1);
+  cursor: pointer; text-align: left; text-decoration: none; color: inherit;
+  transition: transform .18s var(--ease-out), box-shadow .18s ease-out, border-color .18s ease-out;
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-2);
+    border-color: color-mix(in srgb, var(--brand) 28%, var(--border));
+  }
+  &:active { transform: scale(.98); box-shadow: var(--shadow-1); }
+}
+.market-entry__title { font-family: var(--font-display); font-size: 17px; font-weight: 600; white-space: nowrap; }
+.market-entry__sub { display: block; margin-top: 2px; font-size: 11px; color: var(--text-3); font-family: var(--font-body); font-weight: 400; }
+.market-entry__metrics { display: flex; align-items: center; gap: 0; margin-left: auto; }
+.market-entry__metric { display: flex; flex-direction: column; align-items: flex-end; gap: 0; padding: 0 16px; border-left: 1px solid var(--border); }
+.market-entry__metric .k { font-size: 10px; color: var(--text-3); white-space: nowrap; }
+.market-entry__metric .v { font-size: 13px; font-weight: 600; white-space: nowrap; }
+.market-entry__go {
+  flex: 0 0 auto; width: 30px; height: 30px; border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--brand) 34%, var(--border));
+  color: var(--brand-deep); display: inline-flex; align-items: center; justify-content: center;
+  transition: background .18s ease-out;
+}
+.market-entry:hover .market-entry__go { background: color-mix(in srgb, var(--brand) 8%, transparent); }
+
+/* 既有元素（复刻，证明入口不挤压原布局） */
+.recents { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.recent-card {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
+  padding: 14px 18px; border: 1px solid var(--border); border-radius: 10px;
+  background: var(--container); cursor: pointer;
+  transition: transform .18s var(--ease-out), box-shadow .18s ease-out, border-color .18s ease-out;
+  &:hover { transform: translateY(-2px); box-shadow: var(--shadow-2); border-color: color-mix(in srgb, var(--brand) 28%, var(--border)); }
+}
+.recent-card__title { font-family: var(--font-display); font-size: 14px; font-weight: 600; }
+.recent-card__preview { font-size: 12px; color: var(--text-2); }
+.recent-card__time { font-family: var(--font-mono); font-size: 10px; color: var(--text-3); }
+.sq-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+.sq-card {
+  display: inline-flex; align-items: center; padding: 6px 10px;
+  border: 1px solid var(--border); border-radius: 10px; background: var(--container);
+  font-size: 12px; color: var(--text-2); cursor: pointer;
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="workbench">
+    <header class="greeting">
+      <h1 class="greeting__line">下午好，先从上一件事开始？</h1>
+      <p class="greeting__sub">或者直接问点什么</p>
+    </header>
+
+    <div class="composer">输入问题，@ 提及技能或文件…</div>
+
+    <!-- 新增：大盘预览入口 -->
+    <section class="section">
+      <h2 class="section-title">市场行情</h2>
+      <a class="market-entry" href="dashboard.html">
+        <div>
+          <span class="market-entry__title">大盘预览</span>
+          <span class="market-entry__sub">指数 · 自选 · ETF · 龙虎榜</span>
+        </div>
+        <div class="market-entry__metrics">
+          <span class="market-entry__metric">
+            <span class="k">上证指数</span>
+            <span class="v num up">3,892.45 +0.62%</span>
+          </span>
+          <span class="market-entry__metric">
+            <span class="k">涨停 / 跌停</span>
+            <span class="v num"><span class="up">68</span> / <span class="down">9</span></span>
+          </span>
+          <span class="market-entry__metric">
+            <span class="k">自选股</span>
+            <span class="v num">2 只已触发</span>
+          </span>
+        </div>
+        <span class="market-entry__go">
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M4.5 2.5 9 6.5l-4.5 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </span>
+      </a>
+    </section>
+
+    <section class="section">
+      <h2 class="section-title">继续昨天的工作</h2>
+      <div class="recents">
+        <div class="recent-card">
+          <span class="recent-card__title">宁德时代三季度毛利率拆解</span>
+          <span class="recent-card__preview">从成本结构看，Q3 毛利率回升主要来自…</span>
+          <span class="recent-card__time">昨天 18:42</span>
+        </div>
+        <div class="recent-card">
+          <span class="recent-card__title">对比几家光模块公司的在手订单</span>
+          <span class="recent-card__preview">中际旭创和新易盛的差异在于…</span>
+          <span class="recent-card__time">3 天前</span>
+        </div>
+        <div class="recent-card">
+          <span class="recent-card__title">整理一份高股息池</span>
+          <span class="recent-card__preview">按股息率和分红连续性筛了一遍…</span>
+          <span class="recent-card__time">上周</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2 class="section-title">推荐问题</h2>
+      <div class="sq-grid">
+        <span class="sq-card">今天自选股里有哪些触及了我的提醒条件？</span>
+        <span class="sq-card">中科曙光最近为什么放量？</span>
+        <span class="sq-card">帮我对比 300ETF 和 500ETF 近一年的表现</span>
+      </div>
+    </section>
+  </div>
+</div>
+<script>
+  const q = new URLSearchParams(location.search);
+  if (q.get('theme') === 'dark') document.documentElement.dataset.theme = 'dark';
+</script>
+</body>
+</html>

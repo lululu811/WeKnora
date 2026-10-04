@@ -4776,6 +4776,20 @@ export default {
       yesterday: '昨日',
       daysAgo: '{n} 日前'
     },
+    marketEntry: {
+      sectionTitle: '市場',
+      title: '市場概観',
+      subtitle: '指数 · ウォッチ · ETF · 売買代金情報',
+      open: '市場概観の大画面を開く',
+      metrics: {
+        index: '上证指数',
+        limits: '涨停 / 跌停',
+        watchlist: 'ウォッチ',
+        triggered: '{n} 件トリガー',
+        noWatchlist: 'ウォッチなし',
+        unavailable: '利用不可'
+      }
+    },
     title: 'こんにちは、WeKnoraです。あなたのナレッジを、すぐそばに',
     newSessionTitle: '新しいセッション',
     openProject: 'プロジェクトを選択',
@@ -7341,6 +7355,66 @@ export default {
     myChats: 'マイチャット',
     apiChats: 'APIセッション',
     noSessions: '会話はまだありません'
+  },
+  marketDashboard: {
+    title: '市場概観',
+    back: 'ワークベンチに戻る',
+    backToWorkbench: '戻る',
+    dataTime: 'データ時刻',
+    tickerLabel: '指数',
+    refresh: '更新',
+    refreshFailed: '行情の更新に失敗しました。もう一度お試しください。',
+    themeToDark: 'ダークモードに切替',
+    themeToLight: 'ライトモードに切替',
+    latestLabel: '最新',
+    closedLabel: '終値',
+    state: {
+      open: '取引中',
+      closed: '取引終了',
+      holiday: '非営業日'
+    },
+    holidayNote: '直近の取引日を表示',
+    chartLow: '安 {v}',
+    chartHigh: '高 {v}',
+    prevCloseTitle: '前終値 {v}',
+    chartLegend: '— 60日   ┆ 始値   ┆ 前終値（破線）   ● {point}',
+    sentiment: {
+      title: '市場のムード',
+      caption: '値上がり・値下がり · 全市場',
+      limitUp: '涨停',
+      limitDown: '跌停',
+      broken: '炸板',
+      brokenUnit: '· {rate}%',
+      maxStreak: '最大連騰',
+      streakUnit: '板',
+      trendLabel: '直近5日の涨停家数',
+      breadth: { up: '上昇', flat: '平坦', down: '下落' }
+    },
+    watchlist: {
+      title: 'ウォッチ',
+      count: '{n} 銘柄',
+      all: 'すべて →',
+      empty: 'まだ銘柄がありません。よく見るものを追加しましょう',
+      emptyCta: 'ウォッチページへ',
+      emptyChip: '+ {name}',
+      state: { observing: '監視中', triggered: 'トリガー', holding: '保有', dropped: '削除済み' }
+    },
+    dragonTiger: {
+      title: '売買代金情報',
+      caption: '純買い上位5 · 全市場',
+      full: '詳細を見る →',
+      net: '純買',
+      org: '機関',
+      empty: '本日はデータなし'
+    },
+    etf: {
+      title: '大型 ETF',
+      caption: 'インデックス型'
+    },
+    noData: 'データなし',
+    loading: '読み込み中…',
+    sourceUnavailable: '一部のデータソースが利用できません（{sources}）。該当パネルは空です',
+    indexUnavailable: 'この指数のローカル行情データがありません'
   },
   watchlist: {
     title: '個別銘柄ウォッチ',

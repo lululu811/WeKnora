@@ -27,9 +27,46 @@
                 </div>
             </div>
 
+            <!-- 大盘预览入口：横幅 + 三组微型指标（真实数据），点击进 /dashboard 全屏大屏 -->
+            <section v-if="marketPreview.ok" class="workbench-market" data-rise>
+                <h2 class="workbench-section-title">{{ $t('createChat.marketEntry.sectionTitle') }}</h2>
+                <router-link class="market-entry" to="/dashboard"
+                    :aria-label="$t('createChat.marketEntry.open')">
+                    <span class="market-entry__text">
+                        <span class="market-entry__title">{{ $t('createChat.marketEntry.title') }}</span>
+                        <span class="market-entry__sub">{{ $t('createChat.marketEntry.subtitle') }}</span>
+                    </span>
+                    <span class="market-entry__metrics">
+                        <span class="market-entry__metric">
+                            <span class="k">{{ $t('createChat.marketEntry.metrics.index') }}</span>
+                            <span class="v md-num" :class="marketPreview.indexTone">
+                                {{ marketPreview.indexText }}
+                            </span>
+                        </span>
+                        <span class="market-entry__metric">
+                            <span class="k">{{ $t('createChat.marketEntry.metrics.limits') }}</span>
+                            <span class="v md-num">
+                                <span :class="marketPreview.limitUpTone">{{ marketPreview.limitUpText }}</span>
+                                <span class="md-sep">/</span>
+                                <span :class="marketPreview.limitDownTone">{{ marketPreview.limitDownText }}</span>
+                            </span>
+                        </span>
+                        <span class="market-entry__metric">
+                            <span class="k">{{ $t('createChat.marketEntry.metrics.watchlist') }}</span>
+                            <span class="v md-num">{{ marketPreview.watchlistText }}</span>
+                        </span>
+                    </span>
+                    <span class="market-entry__go" aria-hidden="true">
+                        <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+                            <path d="M4.5 2.5 9 6.5l-4.5 4" stroke="currentColor" stroke-width="1.6"
+                                stroke-linecap="round" stroke-linejoin="round" />
+                        </svg>
+                    </span>
+                </router-link>
+            </section>
+
             <!-- 桌上摊着的便签：继续昨天的工作 -->
-            <section v-if="recentSessions.length > 0" class="workbench-recents" data-rise>
-                <h2 class="workbench-section-title">{{ $t('createChat.workbench.continueTitle') }}</h2>
+            <section v-if="recentSessions.length > 0" class="workbench-recents" data-rise>                <h2 class="workbench-section-title">{{ $t('createChat.workbench.continueTitle') }}</h2>
                 <div class="workbench-recents__grid">
                     <button v-for="(s, i) in recentSessions" :key="s.id" type="button" class="recent-card"
                         :style="{ transitionDelay: `${i * 60}ms` }" @click="resumeSession(s.id)">
@@ -92,6 +129,8 @@ import { useI18n } from 'vue-i18n';
 import KnowledgeBaseEditorModal from '@/views/knowledge/KnowledgeBaseEditorModal.vue';
 import { useKnowledgeBaseCreationNavigation } from '@/hooks/useKnowledgeBaseCreationNavigation';
 import { useStaggerRise } from '@/composables/useMotion';
+import { getMarketSnapshot } from '@/finance/api/market';
+import { listWatchlist } from '@/finance/api/watchlist';
 import { stripMarkdownToPreview, toRelativeTime } from '@/utils/workbenchFormat';
 
 const router = useRouter();
@@ -162,6 +201,67 @@ const resumeSession = (sessionId: string) => {
     router.push(`/platform/chat/${sessionId}`);
 };
 
+// ===== 大盘预览入口横幅 =====
+// 只取三个数（上证涨跌 / 涨停跌停 / 自选触发数），但它们与 /dashboard 大屏读的是
+// 同一个 `/api/market/snapshot` 聚合接口 —— 一次请求两处复用，不额外打一轮。
+//
+// `ok=false` 时整条横幅不渲染：行情服务不可用时，工作台不该多出一块永远空着的
+// 卡片让人以为"今天没行情"。不显示比显示占位更诚实。
+const marketPreview = ref({
+    ok: false,
+    indexText: '—',
+    indexTone: '',
+    limitUpText: '—',
+    limitUpTone: '',
+    limitDownText: '—',
+    limitDownTone: '',
+    watchlistText: '—',
+});
+
+const loadMarketPreview = async () => {
+    try {
+        const [snapRes, watchRes] = await Promise.allSettled([getMarketSnapshot(60), listWatchlist()]);
+        if (snapRes.status !== 'fulfilled') return;
+        const snap = snapRes.value;
+        // 四大指数一个都没拿到 → 不渲染横幅
+        const sse = snap.indices.find((i) => i.thscode === '000001.SH') ?? snap.indices[0];
+        if (!sse) return;
+
+        const tone = (v: number | null) => (v == null ? 'md-flat' : v >= 0 ? 'md-up' : 'md-down');
+        const pct = (v: number | null) => (v == null ? '—' : `${v >= 0 ? '+' : ''}${v.toFixed(2)}%`);
+
+        let watchlistText = t('createChat.marketEntry.metrics.noWatchlist');
+        if (watchRes.status === 'fulfilled') {
+            const items = (watchRes.value.data ?? []).filter((i) => i.state !== 'dropped');
+            const triggered = items.filter((i) => i.state === 'triggered').length;
+            watchlistText = triggered > 0
+                ? t('createChat.marketEntry.metrics.triggered', { n: triggered })
+                : t('createChat.marketEntry.metrics.noWatchlist');
+        }
+
+        const s = snap.sentiment;
+        marketPreview.value = {
+            ok: true,
+            indexText: `${fmtCompact(sse.last)} ${pct(sse.change_pct)}`.trim(),
+            indexTone: tone(sse.change_pct),
+            // null 显示破折号，不显示 0：0 在金融语义里是"真的是零只涨停"
+            limitUpText: s.limit_up == null ? '—' : String(s.limit_up),
+            limitUpTone: 'md-up',
+            limitDownText: s.limit_down == null ? '—' : String(s.limit_down),
+            limitDownTone: 'md-down',
+            watchlistText,
+        };
+    } catch {
+        marketPreview.value.ok = false;
+    }
+};
+
+/** 指数点位：万位以上不硬塞小数（3,892.45 这种在窄横幅里太长）。 */
+const fmtCompact = (v: number | null) => {
+    if (v == null || !Number.isFinite(v)) return '—';
+    return v.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
+
 // ===== 推荐问题 =====
 const suggestedQuestions = ref<SuggestedQuestion[]>([]);
 const sqLoading = ref(true);
@@ -214,6 +314,7 @@ watch(
 onMounted(() => {
     fetchSuggestedQuestions();
     loadRecentSessions();
+    loadMarketPreview();
     // 首次进入：工作台卡片从下方 12px 处依次浮起（stagger 60ms）
     requestAnimationFrame(() => {
         if (workbenchRef.value) rise(workbenchRef.value.querySelectorAll('[data-rise]'));
@@ -473,6 +574,133 @@ async function openProjectDir() {
     font-family: var(--app-font-family-mono);
     font-size: var(--app-text-2xs);
     color: var(--td-text-color-placeholder);
+}
+
+/* ===== 大盘预览入口横幅 =====
+   形态是通栏横幅（不是 recent-card 的三列网格），但交互语言完全沿用 recent-card：
+   hover 抬起 -2px + 暖光阴影、按下 scale(0.98)。分隔线用 --td-component-border
+   （而不是更浅的 --td-component-stroke）—— 样稿评审时把这里从 stroke 加深到
+   border 过一次，三组指标挨得太近时 stroke 分隔读不出来。 */
+.workbench-market {
+    width: 100%;
+}
+
+.md-num {
+    font-family: var(--app-font-family-mono);
+    font-variant-numeric: tabular-nums;
+}
+
+.md-up {
+    color: var(--md-up, #dc2626);
+}
+
+.md-down {
+    color: var(--md-down, #047857);
+}
+
+.md-flat {
+    color: var(--td-text-color-placeholder);
+}
+
+.md-sep {
+    color: var(--td-text-color-placeholder);
+    margin: 0 3px;
+}
+
+.market-entry {
+    display: flex;
+    align-items: center;
+    gap: var(--app-space-5);
+    width: 100%;
+    padding: 14px 18px;
+    border: 1px solid var(--td-component-border);
+    border-radius: var(--app-radius-xl);
+    background: var(--td-bg-color-container);
+    box-shadow: var(--td-shadow-1);
+    text-align: left;
+    text-decoration: none;
+    color: inherit;
+    transition:
+        transform var(--app-motion-base) cubic-bezier(0.16, 1, 0.3, 1),
+        box-shadow var(--app-motion-base) ease-out,
+        border-color var(--app-motion-base) ease-out;
+
+    &:hover {
+        transform: translateY(-2px);
+        box-shadow: var(--td-shadow-2);
+        border-color: color-mix(in srgb, var(--td-brand-color) 28%, var(--td-component-border));
+    }
+
+    &:active {
+        transform: scale(0.98);
+        box-shadow: var(--td-shadow-1);
+    }
+}
+
+.market-entry__text {
+    display: block;
+    min-width: 0;
+}
+
+.market-entry__title {
+    display: block;
+    font-family: var(--app-font-display);
+    font-size: var(--app-text-xl);
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.market-entry__sub {
+    display: block;
+    margin-top: 2px;
+    font-size: var(--app-text-2xs);
+    color: var(--td-text-color-placeholder);
+    white-space: nowrap;
+}
+
+.market-entry__metrics {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    margin-left: auto;
+}
+
+.market-entry__metric {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0;
+    padding: 0 16px;
+    border-left: 1px solid var(--td-component-border);
+
+    .k {
+        font-size: var(--app-text-2xs);
+        color: var(--td-text-color-placeholder);
+        white-space: nowrap;
+    }
+
+    .v {
+        font-size: var(--app-text-md);
+        font-weight: 600;
+        white-space: nowrap;
+    }
+}
+
+.market-entry__go {
+    flex: 0 0 auto;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    border: 1px solid color-mix(in srgb, var(--td-brand-color) 34%, var(--td-component-border));
+    color: var(--td-brand-color-active);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background var(--app-motion-base) ease-out;
+}
+
+.market-entry:hover .market-entry__go {
+    background: color-mix(in srgb, var(--td-brand-color) 8%, transparent);
 }
 
 .project-dir-bar {
