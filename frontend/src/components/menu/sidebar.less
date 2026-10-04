@@ -100,18 +100,27 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 26px;
-    height: 26px;
+    width: 30px;
+    height: 30px;
     flex-shrink: 0;
     cursor: pointer;
     color: var(--td-text-color-secondary);
-    border-radius: var(--app-radius-md);
-    transition: background-color var(--app-motion-base) ease, transform var(--app-motion-fast) ease;
+    border-radius: var(--app-radius-lg);
+    border: 1px solid var(--td-component-stroke);
+    background: var(--td-bg-color-container);
+    transition: background-color var(--app-motion-base) ease, color var(--app-motion-base) ease,
+        transform var(--app-motion-fast) ease, border-color var(--app-motion-base) ease;
     box-sizing: border-box;
+
+    svg {
+        width: 16px;
+        height: 16px;
+    }
 
     &:hover {
         background: var(--td-bg-color-container-hover);
         color: var(--td-text-color-primary);
+        border-color: var(--td-brand-color-light);
     }
 
     // 控件语法：按下 scale(0.98)
@@ -571,7 +580,7 @@
 }
 
 .aside_box .session-list-row--flat {
-    padding-left: var(--sidebar-inset-x);
+    padding: 0;
     gap: 0;
 }
 
@@ -625,15 +634,15 @@
 }
 
 .aside_box .submenu_item_p {
-    padding: 0;
+    padding: 0 6px;
     box-sizing: border-box;
     min-width: 0;
     overflow: hidden;
 
     &.session-chat-row .session-list-row {
-        min-height: 30px;
-        padding-right: 6px;
-        border-radius: var(--app-radius-md);
+        min-height: 34px;
+        padding: 6px 4px 6px 0;
+        border-radius: var(--app-radius-lg);
         transition: background var(--app-motion-fast) ease, color var(--app-motion-fast) ease;
     }
 
@@ -650,7 +659,8 @@
     }
 
     &.session-chat-row--active .session-list-row {
-        background: var(--td-bg-color-container-hover);
+        background: var(--td-bg-color-secondarycontainer-hover);
+        box-shadow: inset 3px 0 0 var(--td-brand-color);
 
         :deep(.submenu_item) {
             color: var(--td-brand-color);
