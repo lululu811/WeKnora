@@ -7896,6 +7896,12 @@ export default {
     actionValuation: 'Analyze Fundamentals & Valuation',
     actionStrategy: 'Calculate Defense & Entry Strategy',
     actionReport: 'Latest Research & Core Logic',
+    // HALO: the full report is rendered in the workbench panel (computed by
+    // Python); these are the agent-facing asks.
+    actionHaloReport: 'HALO Annual Report',
+    actionHaloSix: 'HALO Six Dimensions & Growth',
+    actionHaloSeven: 'Score the Seven Qualitative Dimensions',
+    actionHaloGovernance: 'Governance Integrity Facts',
     noData: 'No market data for {symbol}',
     queryFailed: '{symbol} quote query failed',
     requestRejected: 'Server explicitly rejected this request',

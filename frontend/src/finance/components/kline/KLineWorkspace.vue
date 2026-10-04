@@ -437,6 +437,47 @@
         >
           {{ t('kline.actionReport') }}
         </button>
+
+        <!-- HALO 组。
+             分两类，因为它们的**失败模式不同**：
+             · 「HALO 年报报告」只是打开面板里的对话框（Go 代理 /api/v1/halo/report，
+               与 agent 无关）——任何 agent 下都成立，所以不设门控。
+             · 三条问法是发给 agent 的，只有白名单里有 halo.* 的 agent 能执行。
+               给 Z哥 显示它们等于给一个必定失败的动作，所以按 agentTools 门控。 -->
+        <button
+          type="button"
+          class="action-chip is-halo-report"
+          :disabled="!currentTicker || !currentExchange"
+          :title="t('kline.actionHaloReport')"
+          @click="openHaloReport()"
+        >
+          <t-icon name="article" size="13px" />
+          {{ t('kline.actionHaloReport') }}
+        </button>
+        <template v-if="haloAskReady">
+          <button
+            type="button"
+            class="action-chip is-halo-ask"
+            @click="handleHaloAsk('six')"
+          >
+            {{ t('kline.actionHaloSix') }}
+          </button>
+          <button
+            type="button"
+            class="action-chip is-halo-ask"
+            @click="handleHaloAsk('seven')"
+          >
+            {{ t('kline.actionHaloSeven') }}
+          </button>
+          <button
+            type="button"
+            class="action-chip is-halo-ask"
+            @click="handleHaloAsk('governance')"
+          >
+            {{ t('kline.actionHaloGovernance') }}
+          </button>
+        </template>
+
         <button
           v-if="activePatternNames.length > 0"
           type="button"
@@ -456,8 +497,10 @@ import { ref, shallowRef, computed, watch, onMounted, onUnmounted, nextTick } fr
 import { useI18n } from 'vue-i18n';
 import type { Chart } from 'klinecharts';
 import { useAgentWorkspace } from '@/finance/composables/useAgentWorkspace';
+import { useCurrentWorkbenchComponents } from '@/composables/useWorkbench';
 import { useTheme } from '@/composables/useTheme';
 import { isBoardExchange } from '@/finance/utils/aShareTicker';
+import { buildHaloAskPrompt, haloAskAvailable, type HaloAskKind } from '@/finance/utils/haloAskPresets';
 import type { Adjust, KLineErrorKind, ZettarancDatafeed } from './datafeed';
 import {
   createCoreChart,
@@ -1082,6 +1125,38 @@ const handleActionAsk = (type: 'valuation' | 'strategy' | 'report') => {
   }
 
   workspace.sendToChat(prompt);
+};
+
+// ---------------------------------------------------------------------------
+// HALO：面板里的报告 + 发给 agent 的快捷问法
+// ---------------------------------------------------------------------------
+
+const { agentTools } = useCurrentWorkbenchComponents();
+
+/**
+ * 三条 HALO 问法只在「当前 agent 真能跑 halo.*」时出现。
+ * 这不是审美取舍：白名单决定工具是否进模型的 tool schema，给 Z哥 显示这些
+ * 问法，用户点下去只会得到一句"我没有这个工具"。
+ */
+const haloAskReady = computed(() => haloAskAvailable(agentTools.value));
+
+/** 「HALO 年报报告」只是打开面板对话框，与 agent 无关，所以不设门控。 */
+const openHaloReport = () => {
+  if (!currentTicker.value || !currentExchange.value) return;
+  showHaloReport.value = true;
+};
+
+/**
+ * 把 HALO 问法发进 chat。
+ *
+ * 完整报告走面板（Python 算的数据层，不受回答长度限制），这里只要结论与缺失项
+ * —— chat 每轮有 4096 token 的回答上限，让 agent 在对话里重写一遍完整报告会被
+ * 截断，而且那也不是数据层算出来的东西。
+ */
+const handleHaloAsk = (kind: HaloAskKind) => {
+  const thscode = `${currentTicker.value}.${currentExchange.value}`;
+  const name = workspace.activePick.value?.name ?? null;
+  workspace.sendToChat(buildHaloAskPrompt(kind, { thscode, name }));
 };
 
 // 针对当前光标选中的形态直接向 AI 发起深度研判
@@ -2212,6 +2287,42 @@ onUnmounted(() => {
           background: #f97316;
           color: #ffffff;
         }
+      }
+    }
+
+    // HALO 组与上面三条「问 agent」的按钮不是一类东西，给它们一套中性色：
+    // 「HALO 年报报告」是打开面板对话框（不消耗模型），三条问法是发给 agent 的。
+    // 都保持低调 —— 主色留给默认那三条。
+    &.is-halo-report,
+    &.is-halo-ask {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      border-color: var(--td-gray-color-5);
+      background: transparent;
+      color: var(--td-text-color-secondary);
+
+      .is-dark & {
+        border-color: var(--td-gray-color-7);
+        color: var(--td-text-color-secondary);
+      }
+
+      &:hover {
+        border-color: var(--td-brand-color);
+        background: rgba(0, 82, 217, 0.08);
+        color: var(--td-brand-color);
+
+        .is-dark & {
+          background: rgba(59, 130, 246, 0.15);
+          color: #93c5fd;
+        }
+      }
+
+      &:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+        background: transparent;
+        color: var(--td-text-color-secondary);
       }
     }
   }

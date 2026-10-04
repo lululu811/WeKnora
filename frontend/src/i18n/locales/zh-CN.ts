@@ -7901,6 +7901,11 @@ export default {
     actionValuation: '分析基本面与估值',
     actionStrategy: '测算防守位与试仓策略',
     actionReport: '查阅最新研报与核心逻辑',
+    // HALO：报告本身在面板里出（Python 算的完整版），这几条是给 agent 的问法。
+    actionHaloReport: 'HALO 年报报告',
+    actionHaloSix: 'HALO 六维与成长性',
+    actionHaloSeven: '七个定性维度判分',
+    actionHaloGovernance: '治理诚信事实',
     noData: '本地无 {symbol} 的行情数据',
     queryFailed: '{symbol} 行情查询失败',
     requestRejected: '服务端明确拒绝了这次请求',

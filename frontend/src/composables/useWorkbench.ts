@@ -96,7 +96,8 @@ export function componentsForWorkbench(rawWorkbench: string | undefined | null):
 
 /**
  * agent 列表同样是部署/租户内相对静态的数据，按 id 缓存一份即可。
- * 只用来读 `config.workbench` 这一个字段，不做深比较、不做失效策略——
+ * 读 `config.workbench`（决定渲染哪些面板）与 `config.allowed_tools`（决定面板里
+ * 哪些「按 agent 能力」的入口该出现），不做深比较、不做失效策略——
  * agent 编辑后刷新页面即生效，符合当前「设置存 localStorage」的心智模型。
  */
 const agentsById = ref<Record<string, CustomAgent>>({});
@@ -158,5 +159,14 @@ export function useCurrentWorkbenchComponents() {
     allowedComponents,
     /** 工作台是否允许渲染某个组件。未注册组件一律 false。 */
     allows: (component: string) => allowedComponents.value.includes(component),
-  };
+    /**
+     * 当前 agent 的工具白名单。
+     *
+     * 面板里有些入口是**按 agent 能力**给的（如 K 线底部的 HALO 快捷问法）：
+     * 给一个白名单里没有 halo.* 的 agent（Z哥）显示它们，等于给用户一个必定
+     * 失败的动作 —— 模型只会回"我没有这个工具"。列表拿不到时返回空数组，
+     * 这些入口就不出现，与「拿不到 agent 列表按无工作台处理」同一取向。
+     */
+    agentTools: computed<string[]>(() => agentsById.value[agentId.value]?.config?.allowed_tools ?? []),
+  }
 }
