@@ -254,18 +254,27 @@ cd python-service && python3 -m pytest tests/ -q
 - 摘要 / 多模态 / 图谱 / 问题生成跑在 **enrichment 池**，默认并发 **12**。
 - 若摘要模型指向**并发额度很紧**的端点（典型：DashScope coding 计划 `coding.dashscope.aliyuncs.com/apps/anthropic`），12 路并发会稳定撞 429 `concurrency allocated quota exceeded` —— 实测一天 639 条 `summary:generation` 死信。本部署已设 `WEKNORA_ASYNQ_ENRICHMENT_CONCURRENCY=2`。
 - 观测点：`GET /health/readiness`（带 `X-API-Key`）的 `dead_letter_backlog`；原始档案在 `task_dead_letters` 表。
+- `dead_letter_backlog` 按最新失败时间给三种判语：24 小时内的算 `CURRENTLY FAILING`，其后是 `stopped failing, backlog not yet cleared`，7 天后降级成 `historical debris`。**行不会自己消失**：一次性故障（如 Ollama 没起）留下的死信会一直占着计数，而仓库里没有删除接口（`DeleteByID` 没接出去），要清干净只能手动删 DB 行。
 - 想跑快点就调大，但要盯有没有新的 429 死信。
 
 ### 7.6 本地 embedding（Ollama）
 
-本部署 4 个知识库的 embedding 模型都是 `milkey/wemm-embedding-2b:Q4_K_M`（本地 Ollama）。**Ollama 没起**时，任何需要 embedding 的后台步骤都会失败：
+本部署**有 embedding 模型**的知识库全部指向本地 Ollama：`milkey/wemm-embedding-2b:Q4_K_M`（7 个库）与 `bge-m3:latest`（1 个库）。**Ollama 没起**时，任何需要 embedding 的后台步骤都会失败：
 
 ```
 failed to get embedding vectors: Post "http://host.docker.internal:11434/api/embed":
 dial tcp 192.168.65.254:11434: connect: connection refused
 ```
 
-表现为 `task_dead_letters` 里多一条。起服务：`ollama serve`（或 `brew services start ollama`）。
+表现为 `task_dead_letters` 里多一条（且如上所述会一直留着）。起服务：`ollama serve`（或 `brew services start ollama`）。
+
+验证要从**容器**里发（宿主机通了不代表容器的 `host.docker.internal` 通）：
+
+```bash
+docker exec WeKnora-app wget -qO- --header='Content-Type: application/json' \
+  --post-data='{"model":"milkey/wemm-embedding-2b:Q4_K_M","input":"ok"}' \
+  http://host.docker.internal:11434/api/embed
+```
 
 ### 7.7 自检入口
 
