@@ -26,15 +26,19 @@ func (t *ScreenerTool) Description() string {
 	return `全市场集合式选股。一条 SQL 取回全市场指标 + 价量后在本地判定，
 不走逐只扫描（逐只是 5,571 次往返、36~51 秒）。
 
-14 个策略，按方向分三类。**先看用户想干什么再选策略**：
+20 个策略，按方向分三类。**先看用户想干什么再选策略**：
 
 看涨（超卖共振、买点类）
   oversold_combo / B2 / SB1 / shaofu / limit_up / vol_breakout / donchian_break
-  / hammer_reversal / vortex_bull
+  / hammer_reversal / vortex_bull / needle_under20_combo（长趋势里的短期超跌）
+  / trend_right_combo（转右：白线金叉黄线 / 收盘上穿黄线）
+  / shrink_pullback（缩量回踩，要 70 根窗口，比其余策略慢）
+  / changan_combo（长安三件套；全库十年只命中 117 次，选不出票是常态，不是坏了）
+  / double_gun_combo（双枪放量，要 15 根窗口）
 
 看跌（超买、死叉、空头排列）—— 用于**规避持仓**，比选新票更常用
   overbought_combo（oversold_combo 的镜像） / trend_down / anomaly
-  / shooting_star_reversal
+  / shooting_star_reversal / trend_left_combo（转左：白线死叉黄线 / 收盘下穿黄线）
 
 方向无关（波动本身无方向，涨途中也会出现）
   volatility_spike

@@ -30,5 +30,15 @@ func ScreenerStrategies() []string {
 		"vortex_bull",            // Vortex 多头交叉（VI+ 上穿 VI-）
 		"hammer_reversal",        // 锤头线（底部反转）
 		"shooting_star_reversal", // 流星线（顶部反转，direction=bearish）
+		// 以下六条 Python 侧先落地、Go 侧一直没跟上（2026-10-04 补齐）。
+		// 它们的 match_signals / min_count / min_bars 都在 STRATEGY_RULES 里，
+		// 这里只补名字 —— 缺一个名字就等于"策略存在，但模型按 enum 拼不出来"，
+		// 而 strategies_test.go 就是为了让这种漂移在 CI 里变红。
+		"changan_combo",        // 长安三件套（全库十年仅 117 次命中，刻意保守）
+		"double_gun_combo",     // 双枪放量（15 根窗口）
+		"needle_under20_combo", // 单针下 20（长期强势趋势里的短期超跌）
+		"shrink_pullback",      // 缩量回踩（70 根窗口；Python 侧已改逐片判定）
+		"trend_right_combo",    // 转右：白线金叉黄线 / 收盘上穿黄线（direction=bullish）
+		"trend_left_combo",     // 转左：白线死叉黄线 / 收盘下穿黄线（direction=bearish）
 	}
 }
