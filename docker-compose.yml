@@ -675,8 +675,11 @@ services:
       - NEO4J_apoc_import_file_use__neo4j__config=true
       - NEO4JLABS_PLUGINS=["apoc"]
     ports:
-      - "7474:7474"
-      - "7687:7687"
+      # 默认口令是字面量 password（见上面 NEO4J_AUTH 的 ${NEO4J_PASSWORD:-password}）。
+      # 绑 0.0.0.0 等于把一个弱口令的图数据库连同 APOC 的 import/export 插件一起
+      # 暴露给整个局域网。默认只绑回环，需要远程访问再设 NEO4J_BIND=0.0.0.0。
+      - "${NEO4J_BIND:-127.0.0.1}:7474:7474"
+      - "${NEO4J_BIND:-127.0.0.1}:7687:7687"
     restart: always
     networks:
       - WeKnora-network
@@ -740,8 +743,15 @@ services:
       - CLUSTER_DATA_BIND_PORT=7001
       - RAFT_BOOTSTRAP_EXPECT=1
     ports:
-      - "9035:8080"
-      - "50052:50051"
+      # 50052 与 python-service 撞车：python-service 无 profile（永远启动）且已占
+      # 127.0.0.1:50052，一旦 `--profile weaviate` 启动，这里必然 bind 失败，整栈起不来。
+      # 全仓 grep 50052 的命中**全部**属于 python-service（Go 默认 URL、文档、
+      # 测试），没有任何引用把 50052 当 weaviate 端口，所以直接让位。
+      # 另注：weaviate 开了 AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED=true，匿名可读写，
+      # 因此默认只绑回环；BIND 沿用本文件 searxng 的 ${..._BIND:-127.0.0.1} 写法，
+      # 真要让局域网访问再设 WEAVIATE_BIND=0.0.0.0。
+      - "${WEAVIATE_BIND:-127.0.0.1}:9035:8080"
+      - "${WEAVIATE_BIND:-127.0.0.1}:50053:50051"
     volumes:
       - weaviate_data:/var/lib/weaviate
     networks:
@@ -809,7 +819,8 @@ services:
     image: dexidp/dex:latest
     container_name: dex
     ports:
-      - "5556:5556"
+      # 身份提供方，默认只绑回环；需要局域网访问再设 DEX_BIND=0.0.0.0。
+      - "${DEX_BIND:-127.0.0.1}:5556:5556"
     volumes:
       - ./misc/dex-config.yaml:/etc/dex/config.yaml
     command: ["dex", "serve", "/etc/dex/config.yaml"]
