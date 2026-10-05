@@ -3794,7 +3794,18 @@ export default {
     attachmentParseFailed: '附件解析失败',
     attachmentStillProcessing: '附件 {name} 仍在解析，请稍候',
     klineStudio: {
-      openInPanel: '在右侧栏展开'
+      openInPanel: '在右侧栏展开',
+      empty: '当前没有推送标的。',
+      coverage: {
+        scanned: '扫描 {scanned}/{universe} 只',
+        scannedOnly: '扫描 {scanned} 只',
+        riskRejected: '风险过滤排除 {count} 只',
+        noIndicator: '{count} 只因缺指标数据未参与筛选',
+        priceUnavailable: '价量数据本次不可用，「放量突破」类形态信号已失效',
+        incomplete: '{count} 只数据不完整',
+        truncated: '候选集已截断，结果可能不全',
+        warning: '{text}'
+      }
     },
     klinePanel: {
       title: 'K 线复盘'

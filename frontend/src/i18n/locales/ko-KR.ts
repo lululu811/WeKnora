@@ -3791,7 +3791,18 @@ export default {
     attachmentParseFailed: '첨부 파일 분석 실패',
     attachmentStillProcessing: '첨부 파일 {name}을(를) 아직 분석 중입니다',
     klineStudio: {
-      openInPanel: '사이드 패널에서 열기'
+      openInPanel: '사이드 패널에서 열기',
+      empty: '추천된 종목이 없습니다.',
+      coverage: {
+        scanned: '{universe}종목 중 {scanned}종목 스캔',
+        scannedOnly: '{scanned}종목 스캔',
+        riskRejected: '리스크 필터로 {count}종목 제외',
+        noIndicator: '지표 데이터 누락으로 {count}종목 미참여',
+        priceUnavailable: '가격/거래량 데이터 없음 — 돌파형 신호는 이번 회차 무효',
+        incomplete: '데이터 불완전 {count}종목',
+        truncated: '후보군이 잘려 결과가 부분적일 수 있음',
+        warning: '{text}'
+      }
     },
     klinePanel: {
       title: 'K선 리뷰'

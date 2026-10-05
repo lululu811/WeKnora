@@ -3792,7 +3792,18 @@ export default {
     attachmentParseFailed: 'Не удалось обработать вложение',
     attachmentStillProcessing: 'Вложение {name} ещё обрабатывается',
     klineStudio: {
-      openInPanel: 'Открыть в боковой панели'
+      openInPanel: 'Открыть в боковой панели',
+      empty: 'Нет отобранных акций.',
+      coverage: {
+        scanned: 'Просканировано {scanned} из {universe}',
+        scannedOnly: 'Просканировано {scanned}',
+        riskRejected: 'Отсеяно риск-фильтрами: {count}',
+        noIndicator: '{count} пропущено — нет данных индикаторов',
+        priceUnavailable: 'Нет данных цены/объёма: пробойные сигналы в этом прогоне недействительны',
+        incomplete: 'Неполные данные: {count}',
+        truncated: 'Набор кандидатов усечён, результат может быть неполным',
+        warning: '{text}'
+      }
     },
     klinePanel: {
       title: 'Обзор K-линии'

@@ -465,6 +465,25 @@ export interface KlineStudioData {
     display_type?: 'kline_picks';
     count?: number;
     tickers?: KlineStudioPick[];
+    // 可信度字段。`zettaranc.screener` 已经把它们算好并按 AGENTS.md 要求透出，
+    // 但此前卡片只读 stocks，把这些全丢了——界面上只剩一句"当前没有推送标的"，
+    // 用户无法区分"确实没命中"和"信号失效/被过滤/数据缺失"。
+    // 解析与文案映射见 views/chat/components/tool-results/screenerCoverage.ts。
+    /** 实际参与筛选的标的数（不是清单长度）。 */
+    scanned?: number;
+    /** 本次筛选覆盖的候选集大小；板块/涨停池限定后小于全市场。 */
+    universe?: number;
+    /** 策略命中数，风险过滤之前。 */
+    matched?: number;
+    /** 因缺指标数据被丢掉的标的数。 */
+    no_indicator_count?: number;
+    /** 价量维度是否并上；false 表示放量突破类形态信号本次全部失效。 */
+    price_available?: boolean;
+    /** 实际并上的价量行数，0 同样是信号失效。 */
+    price_merged_rows?: number;
+    truncated?: boolean;
+    risk_rejects?: unknown[] | number;
+    warnings?: string[];
 }
 
 // Union type for all wiki edit data

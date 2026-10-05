@@ -3792,7 +3792,18 @@ export default {
     attachmentParseFailed: '添付ファイルの解析に失敗しました',
     attachmentStillProcessing: '添付ファイル{name}は解析中です',
     klineStudio: {
-      openInPanel: 'サイドパネルで開く'
+      openInPanel: 'サイドパネルで開く',
+      empty: '推送された銘柄はありません。',
+      coverage: {
+        scanned: '{universe} 中 {scanned} 銘柄をスキャン',
+        scannedOnly: '{scanned} 銘柄をスキャン',
+        riskRejected: 'リスクフィルターで {count} 銘柄を除外',
+        noIndicator: '{count} 銘柄は指標データ欠損で未参加',
+        priceUnavailable: '価格出来高データ unavailable：ブレイクアウト系シグナルは今回無効',
+        incomplete: 'データ不完全な銘柄 {count}',
+        truncated: '候補集合が切り詰められました、結果は部分的な可能性',
+        warning: '{text}'
+      }
     },
     klinePanel: {
       title: 'K線レビュー'

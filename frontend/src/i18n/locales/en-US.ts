@@ -4335,7 +4335,18 @@ export default {
       title: 'K-Line Review'
     },
     klineStudio: {
-      openInPanel: 'Open in side panel'
+      openInPanel: 'Open in side panel',
+      empty: 'No candidates pushed.',
+      coverage: {
+        scanned: 'Scanned {scanned}/{universe}',
+        scannedOnly: 'Scanned {scanned}',
+        riskRejected: '{count} rejected by risk filters',
+        noIndicator: '{count} skipped — indicator data missing',
+        priceUnavailable: 'Price/volume data unavailable; breakout-style signals are void this run',
+        incomplete: '{count} with incomplete data',
+        truncated: 'Candidate set truncated; results may be partial',
+        warning: '{text}'
+      }
     }
   ,
     imageReadFailed: 'Failed to read image',
