@@ -47,7 +47,7 @@ day/week/month × 有/无起始日 共 6 条分支，三处差异由适配器一
 
 | 用途 | 实现位置 | 数据来源 |
 |---|---|---|
-| 图表上的 11 个指标（MA/BBI/MACD/KDJ/VOL/涨跌幅/ZX砖型/九转…） | **浏览器** `frontend/src/components/workspace/kline/indicators.ts` 等 | 每次用 K 线 bars 现算 |
+| 图表上的 11 个指标（MA/BBI/MACD/KDJ/VOL/涨跌幅/ZX砖型/九转…） | **浏览器** `frontend/src/finance/components/kline/indicators.ts` 等 | 每次用 K 线 bars 现算 |
 | Agent / 分析工具（231 列） | **仓库外**的 `a-stock/scripts/indicators_sync.py`（宿主 cron，每天 19:00，2–3 小时） | 写入 `indicators.duckdb` |
 | `/api/indicators` 端点 | 只是把上表第二行的列 SELECT 出来 | 本地 DuckDB |
 

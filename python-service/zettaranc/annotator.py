@@ -17,7 +17,7 @@ Z 哥交易体系形态识别器 (Python 实现)
 函数名带上「建仓波」前缀（detect_build_wave_b1）以示区分。
 
 对外的 `type` 字段仍然是 `"b1"`：K 线工作台前端的形态调色板
-（frontend/src/components/workspace/kline/annotate-api.ts）按这个 key 取
+（frontend/src/finance/components/kline/annotate-api.ts）按这个 key 取
 标签和颜色，改 key 会让前端拿不到样式。这是**线上协议**，不是内部命名。
 """
 

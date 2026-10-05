@@ -108,5 +108,5 @@ actually closes it, instead of being quietly forgotten.
 | Side | How |
 |---|---|
 | Go | `internal/indicators.Load(configDir)` — `internal/indicators/meta.go` |
-| Frontend | `frontend/src/components/workspace/kline/indicator-meta.ts`, **generated** from this file (`go test ./internal/indicators/ -run TestGeneratedFrontendModule -update`). The frontend toolchain has no YAML parser and `package.json` is not owned by the metadata work, so the file is codegen'd rather than parsed at runtime; the generator test fails loudly when this file changes without regeneration. |
+| Frontend | `frontend/src/finance/components/kline/indicator-meta.ts`, **generated** from this file (`go test ./internal/indicators/ -run TestGeneratedFrontendModule -update`). The frontend toolchain has no YAML parser and `package.json` is not owned by the metadata work, so the file is codegen'd rather than parsed at runtime; the generator test fails loudly when this file changes without regeneration. |
 | Python | `python-service/zettaranc/indicator_meta.py`, **generated** from this file (`go test ./internal/indicators/ -run TestGeneratedPythonModule -update`). `python-service/requirements.txt` has no YAML dependency and is owned elsewhere, so the module is codegen'd rather than parsed at runtime; the staleness test fails loudly when the YAML changes without regeneration. |

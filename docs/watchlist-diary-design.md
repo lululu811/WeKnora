@@ -121,7 +121,7 @@ tag 与迁移不一致时，**信迁移**。
 
 **复用**：`internal/models` 侧不动；`/api/kline`（python-service，
 `day|week|month`、前复权、默认 5000 根）现成；前端复用
-`components/workspace/kline/core-chart.ts` 与 `theme.ts` 的 chart 初始化与配色。
+`finance/components/kline/core-chart.ts` 与 `theme.ts` 的 chart 初始化与配色。
 
 **形态**：行选中 → 右侧滑出面板 → 轻量 K 线 + 下方日记时间线。
 默认日线 120 根，保留周/月切换。
@@ -331,7 +331,7 @@ PG 侧 `ALTER COLUMN note TYPE TEXT` 的先例见 `000058_expand_knowledge_sourc
 |---|---|---|
 | `stockWatchStateTransitions` | `internal/types/stock_watch.go:104-109` | **一行不改** |
 | 「只有用户能改 state」的测试 | 多个 `*_pool_sqlite_test.go` | **不改** |
-| `KLineWorkspace.vue` | `frontend/src/components/workspace/kline/` | **不动**，新组件独立 |
+| `KLineWorkspace.vue` | `frontend/src/finance/components/kline/` | **不动**，新组件独立 |
 | `StockWatchConditionJob` | `internal/application/service/` | 追加一步，不改现有四步 |
 | `watchcond.Evaluate` | `internal/watchcond/evaluator.go` | **不动** |
 | `ReadOnly` events repo | `repository/stock_watch_events.go` | 仍只读 |

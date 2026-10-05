@@ -10,9 +10,9 @@
  * 或者：npx tsx scripts/measure-kline-cost.mjs
  */
 
-import { computeLevels, pickChartLevels } from '../src/components/workspace/kline/levels.ts'
-import { buildSparklinePath, summarizeCompare } from '../src/components/workspace/kline/compare-bar.ts'
-import { computeChange } from '../src/components/workspace/kline/kline-cache.ts'
+import { computeLevels, pickChartLevels } from '../src/finance/components/kline/levels.ts'
+import { buildSparklinePath, summarizeCompare } from '../src/finance/components/kline/compare-bar.ts'
+import { computeChange } from '../src/finance/components/kline/kline-cache.ts'
 
 const DAY = 86400000
 

@@ -1,7 +1,7 @@
 """
 四块砖 — 短线/趋势/多空/阴阳 四项多空状态合成
 
-对应 TS: frontend/src/components/workspace/kline/indicators.ts:127 calcFourBricksDetails
+对应 TS: frontend/src/finance/components/kline/indicators.ts:127 calcFourBricksDetails
 
 **为什么搬到这里**（2026-10-01）:
   四块砖此前**只在工作台前端算**（5/10/14 三个周期还是硬编码，没进

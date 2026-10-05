@@ -5,7 +5,7 @@
 //
 //	Go       internal/agent/tools/hithink_finance/analysis/*.go
 //	Python   python-service/zettaranc/
-//	Frontend frontend/src/components/workspace/kline/indicators.ts
+//	Frontend frontend/src/finance/components/kline/indicators.ts
 //
 // Formula *implementations* are deliberately NOT unified — each stack keeps its
 // own calc functions. What is unified is the parameter set, because that is

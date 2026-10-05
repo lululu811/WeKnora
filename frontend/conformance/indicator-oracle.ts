@@ -16,7 +16,7 @@
  * 别名的 stock-score.ts，tsx 默认不认别名，得显式指到 app 的 tsconfig。
  */
 
-import { calcDEMA, calcLongBBI, calcZXBrick, type KLineData } from '../src/components/workspace/kline/stock-score';
+import { calcDEMA, calcLongBBI, calcZXBrick, type KLineData } from '../src/finance/components/kline/stock-score';
 import {
   calcBBI,
   calcSMA,
@@ -24,8 +24,8 @@ import {
   calcMACD,
   calcPctRet,
   calcVOL,
-} from '../src/components/workspace/kline/indicators';
-import { indicatorMeta } from '../src/components/workspace/kline/indicator-meta';
+} from '../src/finance/components/kline/indicators';
+import { indicatorMeta } from '../src/finance/components/kline/indicator-meta';
 
 interface OracleSeries {
   key: string;

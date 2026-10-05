@@ -982,7 +982,7 @@ func TestKnownGapsAreStillTrue(t *testing.T) {
 	}
 
 	frontendSrc := readRepoFile(t, root,
-		"frontend/src/components/workspace/kline/indicators.ts")
+		"frontend/src/finance/components/kline/indicators.ts")
 
 	for _, g := range reg.KnownGaps {
 		switch g.ID {

@@ -150,7 +150,7 @@ docker compose --profile searxng up -d  # 仅联网搜索
 | `python-service/zettaranc/` | 投研框架：指标、形态、波浪、选股器（约 4,000 行 Python） |
 | `python-service/halo/` | HALO 基本面评分链路 |
 | `internal/agent/tools/hithink_finance/` | Go 侧 hithink 工具族（HTTP 调 python-service） |
-| `frontend/src/components/workspace/kline/` | K 线复盘终端前端组件 |
+| `frontend/src/finance/components/kline/` | K 线复盘终端前端组件 |
 
 工具调用链：
 
