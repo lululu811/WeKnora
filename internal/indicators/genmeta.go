@@ -16,7 +16,7 @@ import (
 // directly. Instead the registry is rendered into a TypeScript module that is
 // checked in, and TestGeneratedFrontendModule fails loudly whenever the YAML
 // changes without regeneration.
-const FrontendModulePath = "frontend/src/components/workspace/kline/indicator-meta.ts"
+const FrontendModulePath = "frontend/src/finance/components/kline/indicator-meta.ts"
 
 const frontendModuleHeader = `/**
  * GENERATED FILE — DO NOT EDIT BY HAND.
