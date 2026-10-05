@@ -34,15 +34,33 @@ const sqlQueryDescriptionHead = `执行只读 SQL 查询。支持查询所有 Du
 
 `
 
+// 护栏：下面「报告期排序」小节和两条 financials 趋势范例必须一起看。
+//
+// 历史教训：本文件曾在范例里写 `ORDER BY period DESC`，而 period 列只取
+// annual / quarterly 两个值，financials 库里 17 万行 quarterly 全部同值，
+// DuckDB 排序退化成任意顺序。实测 600519.SH 照抄那条范例返回
+// 2026Q2, 2025Q4, 2025Q3, 2024Q4, 2026Q1, 2025Q1, 2025Q2, 2024Q3 ——
+// 既非升序也非降序，且漏掉最近的 2025FY。模型照抄范例做趋势判断，
+// 拿到的就是乱序样本。排序基准见 financial/period.go:4-21。
+//
+// 加新范例时凡涉及 financials 库的跨期查询，排序只能写
+// `ORDER BY period_end_ms DESC, period ASC`。sql_query_test.go 会拦住裸排序回归。
 const sqlQueryDescriptionTail = `
+报告期排序（financials 库必读）：period 列只取 annual / quarterly 两个值，17 万行
+quarterly 全部同值，按 period 排会退化成任意顺序，**绝不要用 ORDER BY period**。
+跨期趋势一律写 ORDER BY period_end_ms DESC, period ASC：period_end_ms 是报告期末
+日期，单列、单调、不受同步污染；period ASC 让年报排在同期末四季报之前。
+报告期本身看 fiscal_year + fiscal_period（如 2026 + Q2 = 2026 年二季报），
+不要把 period 当期别用。
+
 使用示例：
 - 查行情：sql="SELECT date, close, turnover FROM v_daily_qfq WHERE thscode='600519.SH' LIMIT 5", db="market"
 - 查 KDJ：sql="SELECT date, momentum_kdj_9_3_k AS k FROM v_indicators_daily WHERE thscode='600519.SH' LIMIT 10", db="indicators"
 - 这只票属于哪些行业/概念：sql="SELECT name, tag FROM v_index_universe WHERE thscode='600519.SH'", db="index"
 - 同行业还有哪些票：sql="SELECT c.thscode, c.name FROM v_index_constituents c JOIN v_index_universe u ON c.index_thscode=u.thscode WHERE u.tag='industry' AND u.name='半导体'", db="index"
 - 行业板块近20日涨幅：sql="SELECT trade_date, close FROM v_index_daily WHERE thscode=(SELECT thscode FROM v_index_universe WHERE tag='industry' AND name='半导体' LIMIT 1) ORDER BY trade_date DESC LIMIT 20", db="index"
-- 利润率趋势：sql="SELECT period, operating_income, parent_holder_net_profit FROM v_income_statement WHERE thscode='600519.SH' ORDER BY period DESC LIMIT 8", db="financials"
-- 现金流质量：sql="SELECT period, act_cash_flow_net, financing_cash_flow_net FROM v_cash_flow_statement WHERE thscode='600519.SH' ORDER BY period DESC LIMIT 8", db="financials"
+- 利润率趋势：sql="SELECT fiscal_year, fiscal_period, operating_income, parent_holder_net_profit FROM v_income_statement WHERE thscode='600519.SH' ORDER BY period_end_ms DESC, period ASC LIMIT 8", db="financials"
+- 现金流质量：sql="SELECT fiscal_year, fiscal_period, act_cash_flow_net, financing_cash_flow_net FROM v_cash_flow_statement WHERE thscode='600519.SH' ORDER BY period_end_ms DESC, period ASC LIMIT 8", db="financials"
 - 最近炸板：sql="SELECT trade_date, thscode, name, open_times FROM v_limit_break_pool ORDER BY trade_date DESC LIMIT 20", db="special"
 `
 

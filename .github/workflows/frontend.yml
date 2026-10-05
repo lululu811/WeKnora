@@ -58,6 +58,55 @@ jobs:
       - name: Build
         run: npm run build
 
+  # 跨语言指标一致性校验。
+  #
+  # Go 侧 internal/indicators 与前端 finance/components/kline 各自实现了同一批
+  # 指标（KDJ/MACD/BBI/…），两边算错任何一处，图表上显示的数就是错的。oracle
+  # 脚本 frontend/conformance/indicator-oracle.ts 把两侧结果喂进同一份 fixture
+  # 比对，Go 测试 internal/indicators/conformance_test.go 负责驱动。
+  #
+  # 这个 job 放在本 workflow 而不是 app.yml，是因为 app.yml 的 paths 过滤里
+  # 没有 frontend/**：改前端指标算法根本不会触发 app.yml，光在那边装 node 也没用。
+  # 而这里已经按 frontend/** 触发、已装好 node 与 npm 依赖，只缺 Go。
+  #
+  # conformance_test.go 在 CI 下遇到缺依赖会 fail 而非 skip，所以这个 job 红了
+  # 就是真的不一致，不会静默放过。
+  conformance:
+    name: Cross-stack indicator conformance
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GO_VERSION: "1.26"
+      LOG_FORMAT: ""
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: go.sum
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci --no-audit --no-fund
+
+      # oracle 通过 npx tsx 起子进程，并依赖 frontend/node_modules 与
+      # tsconfig.app.json 的路径别名解析，两者缺一即无法执行。
+      #
+      # 刻意不加 -run 过滤：调 oracle 的测试有三条
+      # （TestCrossStackConformance / TestZMainCompositeMatchesItsComponents /
+      # TestAliasIndicatorMatchesItsTarget），名字里不一定带 Conformance，
+      # 窄正则会漏掉其中一条——那正是本 job 要消灭的「以为在跑、其实没跑」。
+      # 整个包 1.3 秒，跑全量比维护正则便宜。
+      - name: Compare Go and TypeScript indicator output
+        run: go test ./internal/indicators/... -v
+
   docker-image:
     name: Docker multi-stage image
     runs-on: ubuntu-latest

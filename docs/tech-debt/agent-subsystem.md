@@ -7,10 +7,10 @@
 - **封住一个进程级崩溃口子**：IM 的 `qaQueue` worker 与 handler 的 `go func()` 都不在 gin's `Recovery()` 保护范围内，QA 链路里任何一个 panic 都会打挂整个进程（`internal/im/qaqueue.go:260`、`internal/handler/im.go:485`）。
 - **沙箱与 MCP 的外圈已经修得很扎实**：SSRF（`ValidateURLForSSRF` + 拨号层 `SSRFSafeDialContext` + 固定 IP 拨号 + 同源重定向）、租户键（`SessionSandboxKey{TenantID, SessionID}`）、OAuth 跨实例租约刷新、Docker 容器内 `timeout -s KILL` 包装、shell 黑名单 + head/tail 截断 —— 这些都经过实读验证，本次不构成债。
 - **`allowed_tools` 白名单是真实闸门**：`registerTools` 的 switch 只注册白名单命中项，未命中落 `default:` 只打一条 warn；MCP 侧另有 `MCPCatalog.authorize`（tenant+principal+oauthPrincipal 三重比对）与调用期二次 `gate.IsEnabled`。没有发现"注册了但未鉴权"的工具。
-- **金融工具里 `financial_indicator_detail.go` 是唯一漏网的**：`ORDER BY report DESC` 绕过了 `financial/period.go` 的唯一排序来源，且该文件零测试、描述文案未说明 `FY→-4` 映射 —— 正是 AGENTS.md 记为"已付出真实调试代价"的陷阱。
+- ~~**金融工具里 `financial_indicator_detail.go` 是唯一漏网的**~~ **（2026-10-05 证伪）**：`ORDER BY report DESC` 看似绕过 `financial/period.go` 的唯一排序来源，但实查库确认 `v_financial_indicators_detail` **没有** `period`/`period_end_ms`/`fiscal_year`/`fiscal_period` 四列，套用 `periodOrderBy` 会 binder 报错把好查询改崩；该表 `report` 实测统一为 `'YYYY-N'`，字典序即时间序，现排序本就正确。该条真正的两个子项（零测试、`Description()` 未说明 `FY→-4`）已修。**真正在教坏模型的是 `query/sql_query.go` 描述里的两条趋势范例**，已一并修正 —— 详见下方 [S2] 结案记录。
 - **`ValidateReadOnlySQL` 是子串黑名单而非词法分析**：`SELECT 1 FROM t WHERE name='DROP'` 这类含关键字字面量的合法只读查询会被误拒；同时 `SET ...` / `PRAGMA` / `IMPORT` 未在名单内（Python 侧才是真正执行点，需确认）。
 - **`stream_manager` 的 memory 后端无任何淘汰逻辑**：`config.StreamManager.CleanupTimeout` 只在 `internal/config/config.go:794` 被校验，从未被 memory manager 读取；`DropMessageStreams` 只在 rewind 路径调用。Lite/桌面模式（`STREAM_MANAGER_TYPE=memory`）下事件缓冲只增不减。
-- **死代码两处**：`internal/agent/tools/finanserv/` 与 `internal/agent/tools/zettarancserv/` 已被 `agent_service.go` 的内联 switch 取代，两个 `register.go` 无任何 importer 且仍在 git 版本控制内。
+- **死代码已清**：`internal/agent/tools/finanserv/` 与 `internal/agent/tools/zettarancserv/` 两个注册包（零 importer、被 `agent_service.go` 的内联 switch 取代）已于 2026-10-05 删除。
 
 ## 发现
 
@@ -66,10 +66,12 @@
 - **修复**：给 `MemoryStreamManager` 加一个基于已有 `lastUpdated` 字段的周期清理（参照 `internal/im/service.go:952` 的 `dedupCleanupLoop` 写法，`ticker` + `m.mu.Lock()` 扫描删除），或让 `NewStreamManager` 把 `CleanupTimeout` 传进来驱动它；两者至少做前者，否则 `lastUpdated` 应删掉。
 - **工作量**：S（<半天）
 
-### [S2] `financial_indicator_detail.go` 绕过统一排序来源且零测试
+### [S2] ~~`financial_indicator_detail.go` 绕过统一排序来源且零测试~~ → **主指控已证伪，其余两属实（2026-10-05 结案）**
 
-- **位置**：`internal/agent/tools/hithink_finance/financial/financial_indicator_detail.go:109`、`internal/agent/tools/hithink_finance/financial/period.go:21`
-- **证据**：AGENTS.md 与 `period.go:6-19` 的注释都把"排序必须来自 `periodOrderBy`"列为硬约束，`period_test.go:26-49` 用 `TestStatementQueriesOrderByPeriodEnd` 锁住了三张表。但第四个财务工具自己内联了一条：
+**结论先行：原文建议的修复方式不可执行，照做会把好查询改崩。** 下面保留原始指控以备查证。
+
+- **位置**：`internal/agent/tools/hithink_finance/financial/financial_indicator_detail.go`、`internal/agent/tools/hithink_finance/financial/period.go:21`
+- **原始证据**：AGENTS.md 与 `period.go:6-19` 的注释都把"排序必须来自 `periodOrderBy`"列为硬约束，`period_test.go:26-49` 用 `TestStatementQueriesOrderByPeriodEnd` 锁住了三张表。但第四个财务工具自己内联了一条：
 
   ```go
   // financial_indicator_detail.go:99-110
@@ -79,13 +81,29 @@
   LIMIT ?
   ```
 
-  该文件**没有任何 `_test.go`**：`grep -rn "financial_indicator_detail|indicator.detail" --include=*_test.go internal/` 返回空。`period_test.go` 的 `TestStatementQueriesOrderByPeriodEnd` 只枚举 `balanceSheetQuery / incomeStatementQuery / cashFlowQuery` 三个常量，`schema_contract_test.go` 只校验表名/列名是否存在于 `testdata/schema.json`（不校验排序语义），所以这条 SQL 完全在测试闸门之外。
+  该文件**没有任何 `_test.go`**。`period_test.go` 的 `TestStatementQueriesOrderByPeriodEnd` 只枚举 `balanceSheetQuery / incomeStatementQuery / cashFlowQuery` 三个常量，`schema_contract_test.go` 只校验表名/列名是否存在于 `testdata/schema.json`（不校验排序语义），所以这条 SQL 完全在测试闸门之外。
 
   同一文件的 `Description()`（`financial_indicator_detail.go:47`）写的是"注意：报告期字段是 report（不是 period）。数据区间 2024-1 至 2026-2"——只说了列名不同，**没有说明 `report` 是 `YYYY-N` 格式且 `FY` 必须映射为 `-4`**。AGENTS.md 明确把这条列为"必须映射否则 join 静默返回空"的陷阱，模型拿不到这个信息。
 
-- **影响**：`periods=N` 在这张表上返回的是**字典序前 N** 个报告期。`report` 是 `YYYY-N` 字符串，`"2026-2" > "2025-4" > "2025-3" > ... > "2024-1"`，跨年时数字部分能比对正确，但同一年内 `2025-10` 这种两位数期别（若未来出现）会排在 `2025-4` 之后错位；更确定的问题是模型按描述把 `report` 当作可读期别，再按 `2025-4 < 2025-10` 推理时序。零测试意味着下次改列名/改视图也不会有人发现。
-- **修复**：① 把这条查询的 `ORDER BY` 提取到 `financial/period.go`（或新增一个 `indicatorReportOrderBy` 常量）并加进 `period_test.go` 的 `TestStatementQueriesOrderByPeriodEnd` 枚举里；② 在 `Description()` 里补一句 `report` 是 `YYYY-N`、`FY` 对应 `-4`；③ 补一个 `_test.go` 至少锁住排序与描述。
-- **工作量**：S（<半天）
+- **证伪证据（2026-10-05 实查 `~/.hithink-finance/financials.duckdb`）**：两张表根本不是同一张。
+
+  | 视图 | 报告期相关列 | `periodOrderBy` 是否适用 |
+  |---|---|---|
+  | `v_income_statement` / `v_cash_flow_statement` / `v_balance_sheet` | `period`、`period_end_ms`、`fiscal_year`、`fiscal_period` 均有 | 适用 |
+  | `v_financial_indicators_detail` | **四列全部不存在**，只有 `thscode`、`report` + 25 个指标列（共 27 列） | **不适用，套用即 binder 报错** |
+
+  ① 套用 `periodOrderBy`（`ORDER BY period_end_ms DESC, period ASC`）会直接让查询报 binder 错误——列不存在。
+  ② 本表 `report` 取值经全表 `SELECT DISTINCT` 验证，统一为 `'YYYY-N'`（N 为 1–4 单字符：`2024-1`…`2026-2`），**字典序与时间序完全一致**，`ORDER BY report DESC` 是正确的。原文"影响"里假设的 `2025-10` 两位数期别在本表不存在（季报只有 1–4）。
+  ③ `period.go` 记录的退化排序（`period` 列只取 `annual`/`quarterly` 两值、17 万行 `quarterly` 同值导致排成任意顺序）是**前三张表**的问题，不传染到本视图。
+
+- **原文仍然成立、已修复的两项**：
+  - ~~该文件零测试~~ → 已补 `financial_indicator_detail_test.go`：锁 `ORDER BY report DESC`、断言**不出现** `periodOrderBy`（防误改成坏查询）、断言描述含 `YYYY-N` 与 `FY→-4`。
+  - ~~`Description()` 未说明 `report` 是 `YYYY-N` 格式且 `FY` 必须映射为 `-4`~~ → 已补。
+- **防复发**：SQL 已从 `Execute` 内联字面量提为包级常量 `financialIndicatorDetailQuery`（与 `period.go` 同样"提成常量是为了可测"），常量上方写明不可改排序及原因。
+
+- **顺带发现（这才是真的退化排序）**：`hithink_finance/query/sql_query.go` 的工具描述里，两条 financials 趋势范例（"利润率趋势""现金流质量"）当时仍在用 `ORDER BY period DESC`——**那三张表确实有这个病**，而范例是模型唯一能看到的 schema 目录，等于持续教模型写错查询。实测 600519.SH 照抄返回 `2026Q2, 2025Q4, 2025Q3, 2024Q4, 2026Q1, 2025Q1, 2025Q2, 2024Q3`：非升序也非降序，且漏掉最近的 2025FY、混入两个 2024 年季度。已改为 `ORDER BY period_end_ms DESC, period ASC`，描述里补了排序规则小节，并加 `sql_query_test.go` 防退回。
+- **对本条的元教训**：#20 的"修复"栏写得很具体、看着很对，但目标表根本不具备所引用的列。债务条目描述**怎么改**时若不先核对真实 schema，就会把文档变成事故脚本。已在代码里留了防误改的测试断言。
+- **工作量**：S（已完成）
 
 ### [S2] `ValidateReadOnlySQL` 用子串黑名单，既可误拒也可绕过
 
@@ -137,17 +155,6 @@
 
 - **影响**：低概率但不可自愈。用户遇到的现象是"发消息永远回'当前排队人数较多，请稍后再试'"，重启服务才好 —— 因为计数在 Redis 里。排查成本很高：日志里 `INCR` 成功、`DECR` 也都成功，只有 `EXPIRE` 那一条无声失败。
 - **修复**：`q.redis.Expire(...)` 检查返回值，失败时 `Del(key)` 或至少打一条 Warn；或用 `INCR` + `EXPIRE` 合并为一个 Lua 脚本（与 `globalGateScript` 同款），保证原子性。同时给 `Enqueue` 里的 Redis 调用换成带 2s 超时的 ctx。
-- **工作量**：S（<半天）
-
-### [S3] `finanserv` / `zettarancserv` 两个注册包是死代码且仍在版本控制内
-
-- **位置**：`internal/agent/tools/finanserv/register.go`、`internal/agent/tools/zettarancserv/register.go`
-- **证据**：`git ls-files` 两个文件都在版本控制内。`grep -rn "tools/finanserv|tools/zettarancserv" --include=*.go .`（排除 node_modules）**返回空** —— 零 importer。
-
-  两者都已被 `internal/application/service/agent_service.go` 的内联 switch 取代：`zettaranc` 走 `agent_service.go:1394` 的 `case "zettaranc.analyze", "zettaranc.screener", "zettaranc.four_bricks"`，`hithink` 走 `agent_service.go:1326-1417` 的 22 个 `case`。`agent_service.go:1400-1418` 有一段长注释解释 `zettaranc.backtest` 为什么被**故意**从 switch 里去掉，而 `zettarancserv/register.go:29-37` 是同一段决策的**旧副本** —— 两处会漂移，且注释里提到的 `TestZettarancWhitelistMatchesRegisteredTools` 保护的是 agent_service 的那份。
-
-- **影响**：读者按包名找 zettaranc 注册会先找到这个已死的 `register.go`，读到一份与真实实现不一致的工具清单（含已删除的 stub 策略）。同时 `finanserv` 里 `hithink_finance.NewDiscoverTool(registry)` 的签名与 `agent_service.go:1332` 用的 `NewDiscoverToolWithConfig(registry, s.hithinkConfig)` 不同 —— 两份 API 已经分叉。
-- **修复**：删除两个目录（`git rm`）。
 - **工作量**：S（<半天）
 
 ### [S3] shell_exec 的 `env` 参数在非 skill 路径上无保留名过滤

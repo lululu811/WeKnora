@@ -42,7 +42,10 @@ func (t *FinancialIndicatorDetailTool) Description() string {
 **分析要点**：net_profit_cash_content（净利润现金含量）低于 0.8 要警惕，
 说明利润没变成真金白银；sale_gross_margin 持续下滑说明议价能力在弱化。
 
-注意：报告期字段是 report（不是 period）。数据区间 2024-1 至 2026-2。
+注意：报告期字段是 report（不是 period），格式为 YYYY-N，N 取 1–4，N=4 即年报
+（FY 必须映射成 -4，否则与三表 join 会静默返回空）。report 是零填充不足的定长
+格式（YYYY 占 4 位、N 占 1 位），因此字典序即时间序，ORDER BY report DESC 正确；
+结果第一行是最新一期。数据区间 2024-1 至 2026-2。
 使用示例：thscode="600519.SH", periods=4`
 }
 
@@ -65,6 +68,44 @@ func (t *FinancialIndicatorDetailTool) Parameters() json.RawMessage {
 	data, _ := json.Marshal(schema)
 	return data
 }
+
+// financialIndicatorDetailQuery 是本工具的唯一 SQL。
+//
+// 提成包级常量的理由与 period.go 相同：可测。Execute 里的字面量只能靠
+// 集成测试覆盖，而排序语义恰恰是必须被断言的那部分。
+//
+// ⚠️ 这里的 ORDER BY report DESC **不可**换成 period.go 的 periodOrderBy。
+// docs/tech-debt（agent-subsystem.md:69、TECH-DEBT-REGISTER.md:94）曾把本行
+// 列为缺陷、要求「统一排序来源」——**那条记载是错的，照做会改崩查询**：
+//
+//  1. v_financial_indicators_detail 视图只有 thscode / report / 25 个指标列。
+//     period、period_end_ms、fiscal_year、fiscal_period 四列全部不存在
+//     （实查 ~/.hithink-finance/financials.duckdb 的 information_schema）。
+//     套用 periodOrderBy 会直接 binder 报错。
+//  2. 本表 report 取值实测全表统一为 'YYYY-N'（N 为 1–4 单字符，如 '2026-2'），
+//     字典序与时间序完全一致，ORDER BY report DESC 是正确的。
+//
+// period.go 记录的退化排序（period 列只有 annual/quarterly 两值、17 万行
+// quarterly 同值）是**另一张表**的问题，不适用于本视图。
+// financial_indicator_detail_test.go 锁住这条，防止后来人「修复」成坏查询。
+const financialIndicatorDetailQuery = `
+	SELECT report,
+	       operating_income_yoy, operating_profit_yoy,
+	       parent_holder_net_profit_yoy, total_assets_growth_ratio,
+	       fixed_asset_invest_expansion_ratio,
+	       weighted_avg_roe, deduct_weighted_avg_roe,
+	       sale_gross_margin, sale_net_interest_ratio,
+	       current_ratio, quick_ratio, cash_ratio, earned_interest_multiple,
+	       assets_debt_ratio, long_term_debt_equity_ratio,
+	       total_assets_turnover_ratio, inventory_turnover_ratio,
+	       current_assets_turnover_ratio, receive_account_turnover_ratio,
+	       net_profit_cash_content, cash_operating_index,
+	       operating_cash_flow_net_divide_income, cash_meet_invest_ratio
+	FROM v_financial_indicators_detail
+	WHERE thscode = ?
+	ORDER BY report DESC
+	LIMIT ?
+`
 
 func (t *FinancialIndicatorDetailTool) Execute(ctx context.Context, args json.RawMessage) (*types.ToolResult, error) {
 	const toolName = "hithink.finance.financial.indicator.detail"
@@ -91,24 +132,7 @@ func (t *FinancialIndicatorDetailTool) Execute(ctx context.Context, args json.Ra
 
 	// 显式列出 26 个指标列而不是 SELECT *：捕获列 captured_at 是入库时间戳，
 	// 对分析没有价值却占着工具输出预算。显式列也让 schema 契约测试能逐列校验。
-	query := `
-		SELECT report,
-		       operating_income_yoy, operating_profit_yoy,
-		       parent_holder_net_profit_yoy, total_assets_growth_ratio,
-		       fixed_asset_invest_expansion_ratio,
-		       weighted_avg_roe, deduct_weighted_avg_roe,
-		       sale_gross_margin, sale_net_interest_ratio,
-		       current_ratio, quick_ratio, cash_ratio, earned_interest_multiple,
-		       assets_debt_ratio, long_term_debt_equity_ratio,
-		       total_assets_turnover_ratio, inventory_turnover_ratio,
-		       current_assets_turnover_ratio, receive_account_turnover_ratio,
-		       net_profit_cash_content, cash_operating_index,
-		       operating_cash_flow_net_divide_income, cash_meet_invest_ratio
-		FROM v_financial_indicators_detail
-		WHERE thscode = ?
-		ORDER BY report DESC
-		LIMIT ?
-	`
+	query := financialIndicatorDetailQuery
 	results, err := hithink_finance.QueryDuckDBParams(ctx, t.config, "financials", query, params.Thscode, params.Periods)
 	if err != nil {
 		return &types.ToolResult{Success: false, Error: hithink_finance.FriendlyQueryError(err, toolName)}, nil
