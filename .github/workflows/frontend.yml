@@ -78,6 +78,10 @@ jobs:
     env:
       GO_VERSION: "1.26"
       LOG_FORMAT: ""
+      # 声明本 job 必须真跑跨栈校验：依赖缺失时 conformance_test.go 会 fail
+      # 而不是静默 skip。不用通用 CI 变量——GitHub 给每个 job 都设 CI=true，
+      # 拿它当开关会让 app.yml 那种本就不负责跑 oracle 的 job 误报。
+      WEKNORA_CONFORMANCE_REQUIRED: "1"
     steps:
       - uses: actions/checkout@v6
 

@@ -461,9 +461,12 @@ type jsResult struct {
 // runOracle executes frontend/conformance/indicator-oracle.ts with the fixture on
 // stdin and returns its parsed results.
 //
-// 依赖 node 与 frontend/node_modules。本地缺失时 skip，好让 `go test ./...`
-// 不装前端依赖也能跑完；但**在 CI 里缺失一律 fail**——静默 skip 的跨栈校验等于
-// 没有校验，而这个检查此前正是这样死了两年：
+// 依赖 node 与 frontend/node_modules。缺失时默认 skip，好让 `go test ./...`
+// 不装前端依赖也能跑完——app.yml 正是这种情况（它跑全包 go test 但从不 npm ci，
+// 且它的 paths 过滤里没有 frontend/**，本来就不负责这件事）。
+//
+// 但在**显式声明需要它的 job** 里缺失必须 fail：静默 skip 的跨栈校验等于没有校验，
+// 而这个检查此前正是这样死了两年：
 //
 //	原注释写「CI frontend job 从 TypeScript 侧跑同一份比对，覆盖不丢失」。
 //	事实是：.github/ 全仓 grep「oracle / conformance」零命中；frontend job 只有
@@ -472,27 +475,30 @@ type jsResult struct {
 //	frontend/**，改前端指标算法压根不触发 Go 侧。于是每次 CI 都走 t.Skip，
 //	而注释让所有人以为它在跑。
 //
-// 现在覆盖由 .github/workflows/frontend.yml 的 conformance job 承担
-// （该 workflow 按 frontend/** 触发，且已装 node 与 npm 依赖）。
-// 那个 job 里 node_modules 必须存在，所以这里的 CI 分支一旦触发就是真在跑。
+// 覆盖由 .github/workflows/frontend.yml 的 conformance job 承担（该 workflow 按
+// frontend/** 触发，且已装 node 与 npm 依赖），它设 WEKNORA_CONFORMANCE_REQUIRED=1。
+//
+// 刻意**不**用通用的 CI 环境变量做开关：GitHub Actions 给每个 job 都设 CI=true，
+// 用它会让 app.yml 那种「本就不负责跑 oracle」的 job 因缺 node_modules 而红，
+// 那是误伤而非保护。开关必须由需要它的 job 显式声明。
 func runOracle(t *testing.T, root string, bars []Bar) jsResult {
 	t.Helper()
 	frontend := filepath.Join(root, "frontend")
-	inCI := os.Getenv("CI") != ""
+	required := os.Getenv("WEKNORA_CONFORMANCE_REQUIRED") != ""
 
 	if _, err := os.Stat(filepath.Join(frontend, "node_modules", "tsx")); err != nil {
-		if inCI {
-			t.Fatalf("CI 中缺少 frontend/node_modules，跨栈一致性检查无法执行。" +
+		if required {
+			t.Fatalf("本 job 声明需要跨栈一致性检查，但缺少 frontend/node_modules。" +
 				"已拒绝静默跳过：Go 侧与前端各自实现了同一批指标（KDJ/MACD/BBI/…），" +
 				"任何一边算错，图上显示的就是错数。" +
-				"请确认 frontend.yml 的 conformance job 装了 npm 依赖。")
+				"请确认该 job 在 go test 之前装了 npm 依赖。")
 		}
 		t.Skip("frontend/node_modules 缺失，跳过跨栈一致性检查（装完 npm install 再跑）")
 	}
 	if _, err := exec.LookPath("node"); err != nil {
-		if inCI {
-			t.Fatalf("CI 中 PATH 里没有 node，跨栈一致性检查无法执行。" +
-				"已拒绝静默跳过：请确认 frontend.yml 的 conformance job 有 setup-node 步骤。")
+		if required {
+			t.Fatalf("本 job 声明需要跨栈一致性检查，但 PATH 里没有 node。" +
+				"已拒绝静默跳过：请确认该 job 有 setup-node 步骤。")
 		}
 		t.Skip("PATH 里没有 node，跳过跨栈一致性检查")
 	}
