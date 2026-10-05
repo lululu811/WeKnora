@@ -9,10 +9,11 @@ from __future__ import annotations
 import json
 import logging
 import re
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from typing import Any, Dict, List, Optional
 
 from .external import Subdomain, datacenter, fetch_json, fetch_text, ExternalError
+from .tz import ts_to_cst_date
 
 logger = logging.getLogger(__name__)
 
@@ -733,8 +734,9 @@ def cninfo_irm(code: str, limit: int = 10) -> Dict[str, Any]:
             "question": _strip_tags(it.get("mainContent"))[:200],
             "answer": _strip_tags(it.get("attachedContent"))[:300],
             "answerer": str(it.get("attachedAuthor") or ""),
-            "time": (datetime.fromtimestamp(pub / 1000).strftime("%Y-%m-%d")
-                     if isinstance(pub, (int, float)) else ""),
+            # 与巨潮公告同一套时间语义：互动易也是境内平台，日期按北京时间落，
+            # 不跟服务器时区走（见 halo/tz.py）。
+            "time": (ts_to_cst_date(pub) if isinstance(pub, (int, float)) else ""),
         })
     return {"items": items, "covered": True, "reason": ""}
 

@@ -38,13 +38,13 @@ import re
 import threading
 import time
 from dataclasses import dataclass
-from datetime import datetime
 from typing import Any, Dict, List, Optional
 from urllib import error as urlerror
 from urllib import parse
 from urllib import request as urlrequest
 
 from .store import REPORT_ANNUAL, REPORT_H1, REPORT_Q1, REPORT_Q3
+from .tz import ts_to_cst_date
 
 logger = logging.getLogger(__name__)
 
@@ -309,17 +309,12 @@ def _strip_html(text: str) -> str:
 
 
 def _ts_to_date(ts: Any) -> str:
-    """Unix 毫秒 → ``YYYY-MM-DD``；畸形值给空串而不是抛异常。
+    """Unix 毫秒 → ``YYYY-MM-DD``，按 Asia/Shanghai 解释。
 
-    巨潮偶尔返回 null 或字符串，硬转 int 会让整批公告解析失败——而一条坏记录
-    不该拖垮另外 29 条。
+    转换实现在 `halo.tz`：日期必须按北京时间落，不能跟服务器时区走。
+    本函数保留是因为模块内多处按 `_ts_to_date` 指代这个语义。
     """
-    try:
-        if isinstance(ts, bool) or not isinstance(ts, (int, float)):
-            return str(ts)[:10] if ts else ""
-        return datetime.fromtimestamp(float(ts) / 1000).strftime("%Y-%m-%d")
-    except (OSError, ValueError, OverflowError, TypeError):
-        return ""
+    return ts_to_cst_date(ts)
 
 
 # ----------------------------------------------------------------------
