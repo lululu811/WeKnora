@@ -562,6 +562,46 @@ INDICATOR_META: Dict[str, Any] = {
       "left": "ztr_white",
       "right": "ztr_yellow",
       "params": [10]
+    },
+    {
+      "id": "MACD_CROSS_UP",
+      "label": "MACD 金叉（DIF 上穿 DEA）",
+      "kind": "cross",
+      "op": "cross_above",
+      "left": "macd.dif",
+      "right": "macd.dea",
+      "params": [12, 26, 9],
+      "compute": "frontend"
+    },
+    {
+      "id": "MACD_CROSS_DOWN",
+      "label": "MACD 死叉（DIF 下穿 DEA）",
+      "kind": "cross",
+      "op": "cross_below",
+      "left": "macd.dif",
+      "right": "macd.dea",
+      "params": [12, 26, 9],
+      "compute": "frontend"
+    },
+    {
+      "id": "KDJ_CROSS_UP",
+      "label": "KDJ 金叉（K 上穿 D）",
+      "kind": "cross",
+      "op": "cross_above",
+      "left": "kdj.k",
+      "right": "kdj.d",
+      "params": [9, 3, 3],
+      "compute": "frontend"
+    },
+    {
+      "id": "KDJ_CROSS_DOWN",
+      "label": "KDJ 死叉（K 下穿 D）",
+      "kind": "cross",
+      "op": "cross_below",
+      "left": "kdj.k",
+      "right": "kdj.d",
+      "params": [9, 3, 3],
+      "compute": "frontend"
     }
   ],
   "mainPresets": [

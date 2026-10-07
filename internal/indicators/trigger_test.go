@@ -151,9 +151,48 @@ func TestTriggersSurviveTheGeneratedPythonModule(t *testing.T) {
 			if alias == "" {
 				continue
 			}
+			if tr.Compute == TriggerComputeFrontend {
+				// compute=frontend 的 left/right 是 "<公式>.<字段>"，由 Go 侧
+				// FrontendFormulaFields 白名单校验；这里只确认公式名也到了
+				// Python 那边，字段名在 frontend_formulas.FORMULAS 里。
+				formula, field, ok := splitComputedRef(alias)
+				if !ok {
+					t.Errorf("触发 %s 的 %q 不是 <公式>.<字段> 形式", tr.ID, alias)
+					continue
+				}
+				if !strings.Contains(py, `"`+formula+`.`+field+`"`) {
+					t.Errorf("触发 %s 用的 %q 没有出现在生成的 indicator_meta.py 里",
+						tr.ID, alias)
+				}
+				continue
+			}
 			if !strings.Contains(py, alias) {
 				t.Errorf("触发 %s 用的别名 %s 不在生成产物里；别名必须来自 "+
 					"storage.columns，不能手写", tr.ID, alias)
+			}
+		}
+	}
+}
+
+// TestFrontendFormulaMirrorMatchesPython 守住 Go 的白名单与 Python 的
+// FORMULAS 表**逐条一致**。
+//
+// 两边各有一份（Go 侧为了在加载期就报错，Python 侧是真正干活的地方）。
+// 没有这道守卫的话，往 Python 加了新公式却忘了同步 Go，config 里引用它就会
+// 在加载期被拒——而报错信息会让人以为是 yaml 写错了。
+func TestFrontendFormulaMirrorMatchesPython(t *testing.T) {
+	_, root := loadRepoRegistry(t)
+	py := string(readRepoFile(t, root,
+		"python-service/zettaranc/frontend_formulas.py"))
+	for formula, fields := range FrontendFormulaFields {
+		if !strings.Contains(py, `"`+formula+`"`) {
+			t.Errorf("Go 白名单里的公式 %q 在 frontend_formulas.py 的 FORMULAS 里不存在",
+				formula)
+			continue
+		}
+		for _, f := range fields {
+			if !strings.Contains(py, `"`+f+`"`) {
+				t.Errorf("公式 %q 的字段 %q 在 Python 侧找不到", formula, f)
 			}
 		}
 	}

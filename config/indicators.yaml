@@ -451,6 +451,24 @@ indicators:
 #
 # 判定时刻一律是**该 bar 收盘**，且只看该 bar 与前一根 bar，不含任何未来信息；
 # 这是前视收益统计能被解释的前提。
+#
+# `compute` 决定 left/right 从哪来 —— 这一栏不是装饰，它是 2026-10-07 一次
+# 实测逼出来的：
+#
+#   触发        前端    库列   同日重合   占前端
+#   KDJ 金叉   10045   9888      9721    96.77%
+#   MACD 金叉   4706   4226      2855    60.67%
+#
+# DuckDB 的 momentum_macd_12_26_9_* 与工作台 MACD 的**跨柱位置**只重合六成，
+# 且数值差随 bar 数**不衰减**（100 根之后中位差仍有 0.03~1.70，最大 49.5）——
+# 那是两条不同的序列，不是 EMA 种子没衰减干净的噪声，也不是取整纪律。
+# KDJ 也差 3%。
+#
+# 所以 MACD / KDJ 一律 `compute: frontend`：评估时用
+# zettaranc/frontend_formulas.py 里工作台公式的逐字移植现算，left/right 写成
+# `<公式>.<字段>`。zettaranc 三列是**证明过**逐位一致的
+# （compare_zettaranc_columns.py：黄线 100.00%、白线 99.9868%），所以它们
+# 走默认的 duckdb 路径，直接读库。
 # ---------------------------------------------------------------------------
 triggers:
   - id: WHITE_CROSS_UP
@@ -467,6 +485,38 @@ triggers:
     left: ztr_white
     right: ztr_yellow
     params: [10]
+  - id: MACD_CROSS_UP
+    label: MACD 金叉（DIF 上穿 DEA）
+    kind: cross
+    op: cross_above
+    compute: frontend
+    left: macd.dif
+    right: macd.dea
+    params: [12, 26, 9]
+  - id: MACD_CROSS_DOWN
+    label: MACD 死叉（DIF 下穿 DEA）
+    kind: cross
+    op: cross_below
+    compute: frontend
+    left: macd.dif
+    right: macd.dea
+    params: [12, 26, 9]
+  - id: KDJ_CROSS_UP
+    label: KDJ 金叉（K 上穿 D）
+    kind: cross
+    op: cross_above
+    compute: frontend
+    left: kdj.k
+    right: kdj.d
+    params: [9, 3, 3]
+  - id: KDJ_CROSS_DOWN
+    label: KDJ 死叉（K 下穿 D）
+    kind: cross
+    op: cross_below
+    compute: frontend
+    left: kdj.k
+    right: kdj.d
+    params: [9, 3, 3]
 
 # ---------------------------------------------------------------------------
 # 主图 / 副图模式。KLineWorkspace.vue 的模式按钮列表从这里读，

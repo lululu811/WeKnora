@@ -67,8 +67,8 @@ import duckdb
 
 # 触发定义与列别名都从生成产物读，不在本文件里硬编码
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+from zettaranc.frontend_formulas import FORMULAS  # noqa: E402
 from zettaranc.indicator_meta import (  # noqa: E402
-    DUCKDB_COLUMNS,
     INDICATOR_META,
     TRIGGERS as YAML_TRIGGERS,
     trigger as trigger_def,
@@ -90,22 +90,6 @@ BOOTSTRAP = 2000
 Z95 = 1.959963985
 
 TRIGGERS = {t["id"]: t["label"] for t in YAML_TRIGGERS}
-
-
-def _sql_cross(t: dict) -> str:
-    """
-    把一条 trigger 定义翻成 SQL 判定式。
-
-    形状固定：cross_above 是 `left <= right` 的前一根 与 `left > right` 的当根，
-    cross_below 是镜像。只用 lag/当前两根，不引入任何未来信息。
-    """
-    left = DUCKDB_COLUMNS[t["left"]]
-    right = DUCKDB_COLUMNS[t["right"]]
-    if t["op"] == "cross_above":
-        return (f"(w > y AND p_w <= p_y)"), left, right
-    if t["op"] == "cross_below":
-        return (f"(w < y AND p_w >= p_y)"), left, right
-    raise ValueError(f"{t['id']}: 不支持的 op {t['op']!r}")
 
 
 @dataclass
@@ -225,6 +209,184 @@ class Stats:
         return mu, lo, hi, k
 
 
+# ---------------------------------------------------------------------------
+# 多重比较校正
+#
+# 为什么要做：一次跑下来有「触发数 × 周期数 × 口径数」个假设
+# （当前 6 触发 × 3 周期 × 2 口径 = 36 个）。在 5% 水平上纯靠运气就能出
+# 1~2 个"显著"，而且这些触发高度相关（都是同一批 K 线上的均线交叉），
+# 有效检验数远小于 36 —— 不校正的话，测得越多，假显著越多。
+#
+# 用 Benjamini-Hochberg 控制 FDR（错误发现率），不是 Bonferroni 校正 FWER：
+# 我们真正在意的是"报告为有效的结论里有多少是错的"，而不是"能不能一个都
+# 不漏"。BH 在相关假设下更不保守，也更符合这份报告的用途。
+# ---------------------------------------------------------------------------
+
+RESULTS: List[dict] = []
+
+
+def two_sided_p(mean: float, se: float) -> float:
+    """
+    均值是否显著异于 0 的双侧 p 值（正态近似）。
+
+    这里用正态近似而不是 t 分布：聚类数是 ~2000 个交易日，t 与正态在这个
+    自由度下差别在第三位，而正态近似省掉一张表且不会因为自由度算错而给出
+    离谱的 p 值。
+    """
+    if se <= 0:
+        return 1.0 if abs(mean) < 1e-15 else 0.0
+    z = abs(mean / se)
+    return math.erfc(z / math.sqrt(2.0))
+
+
+def apply_bh(results: List[dict]) -> None:
+    """给每条结果算 p 值并做 BH 校正。"""
+    for r in results:
+        lo, hi = r["mean_ci"]
+        se = (hi - lo) / (2 * Z95)
+        r["se"] = se
+        r["p"] = two_sided_p(r["mean"], se)
+    m = len(results)
+    order = sorted(range(m), key=lambda i: results[i]["p"])
+    # BH：p_(i) 按升序，阈值 i/m * alpha，取最后一个不超阈值的秩
+    prev = 1.0
+    for rank in range(m, 0, -1):
+        i = order[rank - 1]
+        adj = min(prev, results[i]["p"] * m / rank)
+        results[i]["p_bh"] = adj
+        prev = adj
+
+
+def print_bh(results: List[dict]) -> None:
+    if not results:
+        return
+    print("=" * 96)
+    print(f"多重比较校正（Benjamini-Hochberg，共 {len(results)} 个假设）")
+    print("=" * 96)
+    print("  假设是「触发后的超额/绝对收益均值 = 0」。BH 控的是 FDR。")
+    print("  未经校正的 p 在相关假设下会成批造假显著 —— 这些触发都跑在同一批")
+    print("  K 线的均线交叉上，有效独立检验数远少于假设个数。\n")
+    print(f"  {'触发':<10s} {'周期':>4s} {'口径':<12s} {'均值':>8s} "
+          f"{'原始 p':>10s} {'BH 校正 p':>10s}  判定")
+    sig = 0
+    for r in sorted(results, key=lambda x: x["p"]):
+        keep = r["p_bh"] <= 0.05
+        sig += keep
+        verdict = "显著" if keep else "不显著"
+        if r["mean"] < 0 and keep:
+            verdict = "显著(反向)"
+        print(f"  {r['trigger']:<10s} {r['horizon']:>4d} {r['kind']:<12s} "
+              f"{pct(r['mean']):>+7.2f}% {r['p']:>10.4f} {r['p_bh']:>10.4f}  {verdict}")
+    print(f"\n  BH 后仍显著：{sig} / {len(results)}")
+    if sig == 0:
+        print("  ⇒ **没有任何一个假设在 FDR 5% 下站得住。** 这不是脚本坏了，"
+              "这正是第一刀结论的正式表述。")
+    print()
+
+
+def attach_all(con, timeout: int = 600) -> set:
+    """
+    挂上三个库，遇到锁就等。
+
+    为什么要等：`~/.hithink-finance` 下这些库由 launchd 的定时同步持有
+    （daily-sync 工作日 17:30 / indicators-sync 19:00 / night-sync 03:00）。
+    DuckDB 的写锁是独占的，评估是只读方，抢不过同步 —— 直接抛 IOException
+    只会让人以为脚本坏了。
+
+    **返回实际挂上的库名集合**，而不是无条件成功：index.duckdb 常年被
+    daily-sync 占着（本机实测单次持锁可超过 30 分钟），而它只用来取基准。
+    为一个 1223 行的基准序列干等 30 分钟不划算，所以它降级到本地缓存。
+    """
+    import time
+    attached = set()
+    for name, path in (("ind", IND_DB), ("mkt", MKT_DB), ("idx", IDX_DB)):
+        waited, delay = 0, 5.0
+        while True:
+            try:
+                con.execute(f"ATTACH '{path}' AS {name} (READ_ONLY)")
+                attached.add(name)
+                break
+            except duckdb.IOException as e:
+                if "lock" not in str(e).lower() or waited >= timeout:
+                    if name == "idx":
+                        print(f"  {path.split('/')[-1]} 仍被持锁，改用本地基准缓存",
+                              flush=True)
+                        break
+                    raise
+                if waited == 0:
+                    print(f"  {path.split('/')[-1]} 被同步任务持锁，等待中…",
+                          flush=True)
+                time.sleep(delay)
+                waited += delay
+                delay = min(delay * 1.5, 30.0)
+    return attached
+
+
+BENCH_CACHE = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "data", "bench_000300.csv")
+
+
+def load_benchmark(con, attached: set):
+    """
+    取基准序列，优先读库，失败读缓存，读到就顺手刷新缓存。
+
+    缓存存在的理由不是性能而是**可用性**：daily-sync 每天 17:30 占着
+    index.duckdb 且单次可能持锁半小时以上，而基准只有 1223 个交易日
+    （一年多）的收盘价 —— 它每天都变，但变得很慢，值得缓存。
+    """
+    import csv
+    import os as _os
+    _os.makedirs(_os.path.dirname(BENCH_CACHE), exist_ok=True)
+    if "idx" in attached:
+        rows = con.execute(
+            f"SELECT trade_date, close FROM idx.v_index_daily "
+            f"WHERE thscode='{BENCH}' ORDER BY trade_date").fetchall()
+        if rows:
+            with open(BENCH_CACHE, "w", newline="") as f:
+                w = csv.writer(f)
+                w.writerow(["trade_date", "close"])
+                w.writerows(rows)
+            return [d for d, _ in rows], dict(rows), "库"
+    if _os.path.exists(BENCH_CACHE):
+        rows = []
+        with open(BENCH_CACHE) as f:
+            for rec in csv.DictReader(f):
+                rows.append((rec["trade_date"], float(rec["close"])))
+        return [d for d, _ in rows], dict(rows), "本地缓存"
+    return [], {}, "无"
+
+
+# 等权全市场基准：把样本池里每只票的日收益取均值再连乘。它**不是**沪深300，
+# 报告里必须换个名字 —— 它衡量的是"这个样本池等权之后涨了多少"，与沪深300
+# 的市值加权口径不可混用。之所以要有这条通路：index.duckdb 被 daily-sync
+# 独占的时段可能超过半小时，而评估不该因为取不到基准就整个跑不了。
+EQUITY_BENCH_SQL = """
+SELECT m.date, avg(r) AS mr
+FROM (
+  SELECT m.date,
+         m.close / lag(m.close) OVER (PARTITION BY m.thscode ORDER BY m.date) - 1 AS r
+  FROM mkt.v_daily_qfq m
+  WHERE m.date <= DATE '{end}' AND m.close IS NOT NULL AND m.close > 0
+) m
+WHERE m.r IS NOT NULL
+GROUP BY m.date
+ORDER BY m.date
+"""
+
+
+def _equal_weight_bench(con, end: str):
+    import math as _math
+    rows = con.execute(EQUITY_BENCH_SQL.format(end=end)).fetchall()
+    dates, level = [], 1000.0
+    out = []
+    for d, mr in rows:
+        level *= (1.0 + float(mr))
+        dates.append(d)
+        out.append((d, level))
+    return dates, dict(out)
+
+
 def pct(x: float) -> float:
     return 100.0 * x
 
@@ -234,46 +396,118 @@ def wilson_str(st: Stats) -> str:
     return f"{pct(st.win_rate):6.2f}% [{pct(lo):.2f}, {pct(hi):.2f}]"
 
 
-ROWS_SQL = """
+# 前视收益框架：一次 SQL 算完所有标的的"如果在这天进场、持有 n 天会怎样"，
+# 序列（left/right）不管来自库列还是前端公式，都不在这条 SQL 里。
+#
+# 为什么拆成两段：compute=frontend 的触发**不能**读 v_indicators_daily ——
+# 实测那里的 MACD 与工作台 MACD 的跨柱位置只重合 60.7%，KDJ 差 3%（见
+# zettaranc/frontend_formulas.py 模块头）。把序列放到 Python 里按来源分别取，
+# 判定逻辑就只剩一份，两个来源不会各写一套交叉判定而悄悄分叉。
+FRAME_SQL = """
 WITH cal AS (
   SELECT date, dense_rank() OVER (ORDER BY date) AS cidx
   FROM (SELECT DISTINCT date FROM mkt.v_daily_qfq)
 ),
-base AS (
-  SELECT i.thscode, i.date, cal.cidx,
-         i.{left} AS w,
-         i.{right} AS y,
-         m.open, m.close
-  FROM ind.v_indicators_daily i
-  JOIN mkt.v_daily_qfq m USING (thscode, date)
-  JOIN cal ON cal.date = i.date
-  WHERE i.date <= DATE '{end}'
-),
-l AS (
-  SELECT *, lag(close) OVER win AS prev_close,
-            lag(w) OVER win AS p_w,
-            lag(y) OVER win AS p_y
-  FROM base WINDOW win AS (PARTITION BY thscode ORDER BY date)
-),
-f AS (
-  SELECT thscode, date, cidx, prev_close, w, y, p_w, p_y,
-         lead(open, 1)    OVER win AS open_1,
-         lead(close, {n}) OVER win AS close_n,
-         lead(cidx, {n})  OVER win AS cidx_n,
-         lead(date, {n})  OVER win AS exit_date
-  FROM l WINDOW win AS (PARTITION BY thscode ORDER BY date)
+j AS (
+  SELECT m.thscode, m.date AS date, cal.cidx, m.open, m.high, m.low, m.close,
+         i.zettaranc_zg_white_10 AS ztr_white,
+         i.zettaranc_dg_yellow_14 AS ztr_yellow,
+         i.zettaranc_bbi AS ztr_bbi
+  FROM mkt.v_daily_qfq m
+  JOIN cal ON cal.date = m.date
+  LEFT JOIN ind.v_indicators_daily i
+    ON i.thscode = m.thscode AND i.date = m.date
+  WHERE m.date <= DATE '{end}'
 )
-SELECT thscode, date, exit_date,
-       CASE WHEN thscode LIKE '30%' OR thscode LIKE '68%'
-              THEN open_1 >= prev_close * 1.20 - 0.005
-            WHEN thscode LIKE '8%' OR thscode LIKE '4%'
-              THEN open_1 >= prev_close * 1.30 - 0.005
-            ELSE open_1 >= prev_close * 1.10 - 0.005 END AS seal_1,
-       (cidx_n - cidx) AS gap,
-       (close_n / open_1 - 1) AS r_abs
-FROM f
-WHERE {cond}
+SELECT thscode, date, cidx, open, high, low, close,
+       ztr_white, ztr_yellow, ztr_bbi,
+       lag(close) OVER win AS prev_close,
+       lead(open, 1)    OVER win AS open_1,
+       lead(close, {n}) OVER win AS close_n,
+       lead(cidx, {n})  OVER win AS cidx_n,
+       lead(date, {n})  OVER win AS exit_date
+FROM j WINDOW win AS (PARTITION BY thscode ORDER BY date)
+ORDER BY thscode, date
 """
+
+# 跌停/一字涨停判定用：次日开盘相对前收的幅度。ST 的 ±5% 特例缺失（库里没有
+# 证券简称），这是个已知盲区，会让 ST 股的"买不进"漏判、样本略偏乐观。
+def _seal_flag(thscode: str, prev_close, open_1) -> Optional[bool]:
+    if prev_close is None or open_1 is None or prev_close == 0:
+        return None
+    pct = "30" if (thscode.startswith("30") or thscode.startswith("68")) else \
+          "40" if (thscode.startswith("8") or thscode.startswith("4")) else "10"
+    return open_1 >= prev_close * (1.0 + int(pct) / 100.0) - 0.005
+
+
+def _cross_mask(left, right, above: bool) -> List[bool]:
+    """
+    跨柱判定：只看当根与前一根。
+
+    形状固定且**唯一**——op 只有 cross_above / cross_below 两种，两者互为
+    镜像。front/duckdb 两种数据来源共用这一个函数，就是为了让"库列算出来的
+    跨柱"和"现算出来的跨柱"永远按同一条规则判定。
+    """
+    n = len(left)
+    out = [False] * n
+    for i in range(1, n):
+        a, b, pa, pb = left[i], right[i], left[i - 1], right[i - 1]
+        if None in (a, b, pa, pb):
+            continue
+        if above and pa <= pb and a > b:
+            out[i] = True
+        elif (not above) and pa >= pb and a < b:
+            out[i] = True
+    return out
+
+
+def _compute_frontend_series(name: str, bars: dict) -> dict:
+    """按 frontend_formulas.FORMULAS 的注册表现算一组序列。"""
+    spec = FORMULAS[name]
+    needs = spec["needs"]
+    kwargs = {}
+    if "low" in needs:
+        kwargs["lows"] = bars["low"]
+    if "high" in needs:
+        kwargs["highs"] = bars["high"]
+    params = bars.get("_params_" + name)
+    if params:
+        kwargs.update(params)
+    return spec["fn"](bars["close"], **kwargs)
+
+
+def _duckdb_series(tdef: dict, bars: dict) -> Tuple[list, list]:
+    """
+    走库列的触发。
+
+    **只允许已经被证明逐位一致的列。** config/indicators.yaml 里
+    compute: duckdb 的触发目前只有白线/黄线，它们由
+    compare_zettaranc_columns.py 证明过（黄线 100.00%、白线 99.9868%）。
+    库里的 MACD / KDJ 不满足这个条件 —— 所以那些触发标了 compute: frontend。
+    """
+    left = bars["_col_" + tdef["left"]]
+    right = bars["_col_" + tdef["right"]]
+    return left, right
+
+
+def _series_for(tdef: dict, bars: dict) -> Tuple[list, list]:
+    """
+    取一条触发需要的 left / right 两条序列，按 compute 决定来源。
+
+    duckdb    —— 取已证明逐位一致的库列（当前只有 zettaranc 三列）
+    frontend  —— 用 frontend_formulas 的逐字移植现算
+    """
+    comp = tdef.get("compute") or "duckdb"
+    if comp == "duckdb":
+        return _duckdb_series(tdef, bars)
+    name_l, field_l = tdef["left"].split(".", 1)
+    name_r, field_r = tdef["right"].split(".", 1)
+    computed = _compute_frontend_series(name_l, bars)
+    left = computed[field_l]
+    if name_r == name_l:
+        return left, computed[field_r]
+    computed_r = _compute_frontend_series(name_r, bars)
+    return left, computed_r[field_r]
 
 
 def main() -> int:
@@ -283,9 +517,7 @@ def main() -> int:
     args = ap.parse_args()
 
     con = duckdb.connect()
-    con.execute(f"ATTACH '{IND_DB}' AS ind (READ_ONLY)")
-    con.execute(f"ATTACH '{MKT_DB}' AS mkt (READ_ONLY)")
-    con.execute(f"ATTACH '{IDX_DB}' AS idx (READ_ONLY)")
+    attached = attach_all(con)
 
     total = con.execute(
         "SELECT count(DISTINCT thscode) FROM ind.v_indicators_daily").fetchone()[0]
@@ -301,10 +533,6 @@ def main() -> int:
         SELECT count(DISTINCT thscode) FROM ind.v_indicators_daily
         WHERE date BETWEEN DATE '{span[0]}' AND DATE '{span[0]}' + INTERVAL 90 DAY
     """).fetchone()[0]
-    b0, b1 = con.execute(
-        f"SELECT min(trade_date), max(trade_date) FROM idx.v_index_daily "
-        f"WHERE thscode='{BENCH}'").fetchone()
-
     print(f"数据集 {total} 只  {span[0]} → {span[1]}   基准日 {args.end}")
     # stale==0 不是"样本池干净"，恰恰相反：**没有一只票是因为退市而消失的**。
     if stale == 0:
@@ -316,79 +544,146 @@ def main() -> int:
               f"不可对外引用。")
     else:
         print(f"样本池含 {stale} 只已退市/长期停牌证券（最后行情距基准日 >90 天）")
-    print(f"基准 {BENCH}：{b0} → {b1}  ← 超额口径仅此区间可用\n")
 
-    bench = con.execute(
-        f"SELECT trade_date, close FROM idx.v_index_daily WHERE thscode='{BENCH}' "
-        f"ORDER BY trade_date").fetchall()
-    bdates = [d for d, _ in bench]
-    bclose = dict(bench)
+    bdates, bclose, bsrc = load_benchmark(con, attached)
+    if not bdates and "mkt" in attached:
+        bdates, bclose, bsrc = _equal_weight_bench(con, args.end)
+        print("⚠ 沪深300 不可得（index.duckdb 被 daily-sync 持锁），"
+              "本次超额口径改用 **等权全市场** 基准（口径不同，不可与"
+              "沪深300 结果混读）")
+    if not bdates:
+        print("⚠ 基准不可得：本次只出绝对收益，**不出超额口径**。\n")
+    else:
+        print(f"基准 {BENCH}：{bdates[0]} → {bdates[-1]}（来源：{bsrc}）\n")
 
     for n in args.horizons:
-        st = {tid: {"abs": Stats(), "exc": Stats()} for tid in TRIGGERS}
-        dr = {"suspend": 0, "seal": 0, "bench": 0}
+        st = {tid: {"abs": Stats(), "exc": Stats()} for t_ in [0]
+              for tid in TRIGGERS}
+        dr = {"suspend": 0, "seal": 0, "bench": 0, "nofwd": 0}
         fired = {tid: 0 for tid in TRIGGERS}
 
-        # 逐个触发跑：定义来自 yaml，SQL 由定义拼出来，不在本文件里重述一遍
-        for tid in TRIGGERS:
-            tdef = trigger_def(tid)
-            cond, left, right = _sql_cross(tdef)
-            rows = con.execute(ROWS_SQL.format(
-                n=n, end=args.end, left=left, right=right, cond=cond)).fetchall()
-            fired[tid] = len(rows)
-            for _code, date, exit_date, seal_1, gap, r_abs in rows:
-                if r_abs is None:
-                    continue
-                if gap != n:                   # 后验窗口跨停牌 → 剔除
-                    dr["suspend"] += 1
-                    continue
-                if seal_1:                     # 次日一字涨停，买不进
-                    dr["seal"] += 1
-                    continue
-                st[tid]["abs"].add(r_abs, date)
-                k0 = bisect.bisect_left(bdates, date)
-                k1 = bisect.bisect_left(bdates, exit_date)
-                if k0 < len(bdates) and k1 < len(bdates):
-                    d0, d1 = bclose[bdates[k0]], bclose[bdates[k1]]
-                    if d0:
-                        st[tid]["exc"].add(r_abs - (d1 / d0 - 1), date)
-                else:
-                    dr["bench"] += 1
+        # 一次 SQL 取回全部标的的前视收益框架，按 thscode 顺序流式消费。
+        # 序列（left/right）在 Python 里按来源取：库列走 _duckdb_series，
+        # 前端公式走 _compute_frontend_series。两种来源共用 _cross_mask。
+        cur = con.execute(FRAME_SQL.format(n=n, end=args.end))
+        col_names = [d[0] for d in cur.description]
+        cur_code = None
+        batch: list = []
+
+        def flush(rows: list) -> None:
+            """处理一只标的的全部 bar：算序列 → 判跨柱 → 记账。"""
+            if not rows:
+                return
+            nb = len(rows)
+            bars = {c: [r[i] for r in rows] for i, c in enumerate(col_names)
+                    if c in ("open", "high", "low", "close",
+                             "ztr_white", "ztr_yellow", "ztr_bbi")}
+            bars["_col_ztr_white"] = bars.get("ztr_white")
+            bars["_col_ztr_yellow"] = bars.get("ztr_yellow")
+            for tdef_id, tdef in ((t, trigger_def(t)) for t in TRIGGERS):
+                try:
+                    p = tdef.get("params") or []
+                    if tdef["left"].startswith("macd.") and len(p) >= 3:
+                        bars["_params_macd"] = dict(
+                            short=p[0], long=p[1], signal=p[2])
+                    if tdef["left"].startswith("kdj.") and len(p) >= 3:
+                        bars["_params_kdj"] = dict(
+                            n=p[0], k_smooth=p[1], d_smooth=p[2])
+                    left, right = _series_for(tdef, bars)
+                except (KeyError, TypeError) as e:
+                    raise SystemExit(
+                        f"触发 {tdef_id} 取序列失败: {e}\n"
+                        f"若新增了公式，记得同时更新 internal/indicators/meta.go 的 "
+                        f"FrontendFormulaFields 与 zettaranc/frontend_formulas.py 的 FORMULAS")
+                mask = _cross_mask(left, right, tdef["op"] == "cross_above")
+                fired[tdef_id] += sum(mask)
+                for i, hit in enumerate(mask):
+                    if not hit:
+                        continue
+                    r_open = rows[i][col_names.index("open_1")]
+                    r_close = rows[i][col_names.index("close_n")]
+                    cidx_n = rows[i][col_names.index("cidx_n")]
+                    # 末尾几根：lead(cidx, n) 越过股票最后一行 → None，
+                    # 那不是"跨停牌"，是根本没有前视窗口。两种要分开计数。
+                    if r_open is None or r_close is None or cidx_n is None:
+                        dr["nofwd"] += 1
+                        continue
+                    gap = cidx_n - rows[i][2]
+                    if gap != n:                # 后验窗口跨停牌 → 剔除
+                        dr["suspend"] += 1
+                        continue
+                    if _seal_flag(rows[0][0],
+                                  rows[i][col_names.index("prev_close")],
+                                  r_open):
+                        dr["seal"] += 1       # 次日一字涨停，买不进
+                        continue
+                    date = rows[i][1]
+                    exit_date = rows[i][col_names.index("exit_date")]
+                    r_abs = r_close / r_open - 1
+                    st[tdef_id]["abs"].add(r_abs, date)
+                    k0 = bisect.bisect_left(bdates, date)
+                    k1 = bisect.bisect_left(bdates, exit_date)
+                    if k0 < len(bdates) and k1 < len(bdates):
+                        d0, d1 = bclose[bdates[k0]], bclose[bdates[k1]]
+                        if d0:
+                            st[tdef_id]["exc"].add(
+                                r_abs - (d1 / d0 - 1), date)
+                    else:
+                        dr["bench"] += 1
+
+        while True:
+            chunk = cur.fetchmany(20000)
+            if not chunk:
+                break
+            for row in chunk:
+                code = row[0]
+                if code != cur_code:
+                    if batch:
+                        flush(batch)
+                    cur_code, batch = code, []
+                batch.append(row)
+        if batch:
+            flush(batch)
 
         total_kept = sum(v["abs"].n for v in st.values())
         total_fired = sum(fired.values())
-        print("=" * 92)
+        print("=" * 96)
         print(f"持有 {n} 个交易日 · 进场=T+1 开盘可成交价 · 出场=T+1+{n-1} 收盘")
-        print("=" * 92)
+        print("=" * 96)
         print(f"触发 {total_fired} 次，可用 {total_kept} 次"
               f"（剔除 跨停牌 {dr['suspend']} / 一字涨停买不进 {dr['seal']}"
-              f" / 超出基准区间 {dr['bench']}）")
+              f" / 超出基准区间 {dr['bench']} / 无前视窗口 {dr['nofwd']}）")
         print(f"触发定义来源：config/indicators.yaml triggers:（schema "
               f"{SCHEMA_VERSION}），经 zettaranc.indicator_meta 生成")
-        print("注：触发高度跨股票相关（同一天全市场共振），Wilson/朴素 bootstrap "
-              "假设样本独立，会偏窄；\n    以「聚类稳健（按触发日聚类）」区间为准。\n")
+        print("注：触发高度跨股票相关（同一天全市场共振），区间一律按"
+              "「按触发日聚类」的稳健标准误给出。\n")
 
         for t, label in TRIGGERS.items():
             a, e = st[t]["abs"], st[t]["exc"]
-            print(f"  {label}  [触发 {fired[t]} 次]")
-            for nm, s in (("绝对收益", a), ("超额 vs 沪深300", e)):
-                if s.n < MIN_SAMPLES:
-                    print(f"    {nm:18s} 不可判定（样本 {s.n} < {MIN_SAMPLES}）")
+            src = trigger_def(t).get("compute") or "duckdb"
+            print(f"  {label}  [触发 {fired[t]} 次 · 序列来源 {src}]")
+            for nm, s_ in (("绝对收益", a), ("超额 vs 沪深300", e)):
+                if s_.n < MIN_SAMPLES:
+                    print(f"    {nm:18s} 不可判定（样本 {s_.n} < {MIN_SAMPLES}）")
                     continue
-                mu, clo, chi, k = s._cluster_robust(s.rets)
-                vmu, vlo, vhi, _ = s._cluster_robust(
-                    [1.0 if r > 0 else 0.0 for r in s.rets])
-                wlo, whi = s.wilson()
+                mu, clo, chi, k = s_._cluster_robust(s_.rets)
+                vmu, vlo, vhi, _ = s_._cluster_robust(
+                    [1.0 if r > 0 else 0.0 for r in s_.rets])
+                RESULTS.append({
+                    "trigger": t, "label": label, "horizon": n, "kind": nm,
+                    "n": s_.n, "clusters": k, "mean": mu,
+                    "mean_ci": (clo, chi), "win_rate": vmu,
+                    "win_ci": (vlo, vhi), "median": s_.median(), "src": src,
+                })
                 print(f"    {nm}")
-                print(f"      N={s.n:<6d} 聚类数 {k} 个交易日"
-                      f"（朴素区间假设独立，偏窄）")
-                print(f"      胜率 {pct(vmu):6.2f}%  "
-                      f"朴素Wilson [{pct(wlo):.2f}, {pct(whi):.2f}]  "
-                      f"聚类稳健 [{pct(vlo):.2f}, {pct(vhi):.2f}]")
-                print(f"      均值 {pct(mu):+6.2f}%  "
-                      f"聚类稳健95%CI [{pct(clo):+.2f}, {pct(chi):+.2f}]  "
-                      f"中位 {pct(s.median()):+6.2f}%")
+                print(f"      N={s_.n:<6d} 聚类数 {k} 个交易日")
+                print(f"      胜率 {pct(vmu):6.2f}%  聚类稳健 [{pct(vlo):.2f}, {pct(vhi):.2f}]")
+                print(f"      均值 {pct(mu):+6.2f}%  聚类稳健95%CI "
+                      f"[{pct(clo):+.2f}, {pct(chi):+.2f}]  中位 {pct(s_.median()):+6.2f}%")
             print()
+
+    apply_bh(RESULTS)
+    print_bh(RESULTS)
 
     con.close()
     return 0

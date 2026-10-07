@@ -223,6 +223,18 @@ type Trigger struct {
 	Left   string `yaml:"left"   json:"left"`
 	Right  string `yaml:"right"  json:"right"`
 	Params []int  `yaml:"params" json:"params"`
+	// Compute 决定 Left/Right 从哪来：
+	//
+	//	"" / "duckdb" —— Left/Right 是某个指标 storage.columns 里的**别名**。
+	//	"frontend"     —— Left/Right 是 "<公式>.<字段>"，评估管线用
+	//	                  zettaranc/frontend_formulas.py 里的逐字移植**现算**。
+	//
+	// 为什么需要第二种：2026-10-07 实测，DuckDB 的 momentum_macd_12_26_9_* 与
+	// 工作台 MACD 的**跨柱位置**只重合 60.7%，且数值差随 bar 数不衰减 ——
+	// 那是两条不同的序列，不是取整噪声。读它统计出来的"金叉"会得到一个关于
+	// 另一个指标的结论。KDJ 也差 3%。zettaranc 三列则是证明过逐位一致的
+	// （compare_zettaranc_columns.py），所以它们走 duckdb 路径。
+	Compute string `yaml:"compute" json:"compute,omitempty"`
 }
 
 // Trigger kinds / operations.
@@ -241,6 +253,59 @@ const (
 // ValidTriggerOp reports whether op is a supported trigger operation.
 func ValidTriggerOp(op string) bool {
 	return op == TriggerCrossAbove || op == TriggerCrossBelow
+}
+
+// Compute sources for a trigger's Left/Right.
+const (
+	// TriggerComputeDuckDB reads a declared storage column alias. Only valid for
+	// columns whose values have been *proved* equal to the workbench's, which
+	// today means only the zettaranc three.
+	TriggerComputeDuckDB = "duckdb"
+	// TriggerComputeFrontend evaluates a verbatim port of the workbench formula
+	// at analysis time (python-service/zettaranc/frontend_formulas.py).
+	TriggerComputeFrontend = "frontend"
+)
+
+// FrontendFormulaFields mirrors FORMULAS in
+// python-service/zettaranc/frontend_formulas.py: formula name -> its fields.
+//
+// Kept as a literal rather than generated, on purpose. It is the allow-list
+// that stops config/indicators.yaml from naming a formula that only exists on
+// the Python side; if that table grows, whoever adds it must add it here too,
+// and TestFrontendFormulaMirrorMatchesPython is what catches the drift.
+var FrontendFormulaFields = map[string][]string{
+	"dema":     {"line"},
+	"long_bbi": {"line"},
+	"bbi":      {"line"},
+	"macd":     {"dif", "dea", "hist"},
+	"kdj":      {"k", "d", "j"},
+}
+
+// splitComputedRef splits "macd.dif" into ("macd", "dif").
+func splitComputedRef(ref string) (string, string, bool) {
+	i := strings.IndexByte(ref, '.')
+	if i <= 0 || i == len(ref)-1 {
+		return "", "", false
+	}
+	return ref[:i], ref[i+1:], true
+}
+
+func contains(list []string, v string) bool {
+	for _, x := range list {
+		if x == v {
+			return true
+		}
+	}
+	return false
+}
+
+func sortedKeys(m map[string][]string) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // file is the whole YAML document.
@@ -505,6 +570,11 @@ func (r *Registry) Validate() error {
 			if alias == "" {
 				return fmt.Errorf("%s: trigger %s side is empty", t.ID, side)
 			}
+			// compute=frontend 时 left/right 是 "<公式>.<字段>"，不是列别名，
+			// 由下面那段单独校验；只有走库列的触发才必须是声明过的别名。
+			if t.Compute == TriggerComputeFrontend {
+				continue
+			}
 			if _, ok := declaredAlias[alias]; !ok {
 				return fmt.Errorf("%s: trigger %s = %q is not a declared storage column alias "+
 					"(declared: %v)", t.ID, side, alias, aliasKeys(declaredAlias))
@@ -512,6 +582,24 @@ func (r *Registry) Validate() error {
 		}
 		if t.Left == t.Right {
 			return fmt.Errorf("%s: trigger left and right must differ", t.ID)
+		}
+		if t.Compute == TriggerComputeFrontend {
+			// "<公式>.<字段>"：公式名必须在白名单里，字段必须属于该公式。
+			// 白名单是硬编码的，因为对端是 python-service/zettaranc/
+			// frontend_formulas.py 的 FORMULAS 表 —— 这里放行一个那边没有的
+			// 名字，只会在跑评估时才炸，那时结论已经产出一半了。
+			formula, field, ok := splitComputedRef(t.Left)
+			if !ok {
+				return fmt.Errorf("%s: compute=frontend 时 left %q 必须是 "+
+					"<公式>.<字段> 形式", t.ID, t.Left)
+			}
+			if fields, known := FrontendFormulaFields[formula]; !known {
+				return fmt.Errorf("%s: compute=frontend 引用了未知公式 %q（可用: %v）",
+					t.ID, formula, sortedKeys(FrontendFormulaFields))
+			} else if !contains(fields, field) {
+				return fmt.Errorf("%s: 公式 %s 没有字段 %q（可用: %v）",
+					t.ID, formula, field, fields)
+			}
 		}
 	}
 
