@@ -37,6 +37,12 @@ data/files/
 data/weknora.db
 data/weknora.db-wal
 data/weknora.db-shm
+
+# python-service/data/ 是**构建产物**，不是源码：market_breadth.csv 由
+# python-service/scripts/build_breadth_cache.py 从本地 DuckDB 重新生成。
+# 数据源本身在 ~/.hithink-finance（本机，不随仓库分发），所以这个目录
+# 里的一切都可以随时重建，入库只会让 137KB 的 CSV 在每次 diff 里挡路。
+python-service/data/
 skills-lock.json
 
 # 误建的零字节文件（名字里带引号），2026-10 误提交后清理
