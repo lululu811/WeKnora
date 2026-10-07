@@ -223,6 +223,7 @@ class Stats:
 # ---------------------------------------------------------------------------
 
 RESULTS: List[dict] = []
+CTRL: Dict[Tuple[str, int], Optional[float]] = {}
 
 
 def two_sided_p(mean: float, se: float) -> float:
@@ -266,21 +267,102 @@ def print_bh(results: List[dict]) -> None:
     print("  假设是「触发后的超额/绝对收益均值 = 0」。BH 控的是 FDR。")
     print("  未经校正的 p 在相关假设下会成批造假显著 —— 这些触发都跑在同一批")
     print("  K 线的均线交叉上，有效独立检验数远少于假设个数。\n")
-    print(f"  {'触发':<10s} {'周期':>4s} {'口径':<12s} {'均值':>8s} "
-          f"{'原始 p':>10s} {'BH 校正 p':>10s}  判定")
-    sig = 0
+    print("  ⚠ 只看 p 值在这里会误导：样本量 87 万 + 2300 个交易日簇，"
+          "0.04% 的差异")
+    print("    照样 p<1e-4。所以下表同时给出**最小经济显著性**判定："
+          f"超额 <{pct(MIN_ECONOMIC_EXCESS):.2f}% 视为无意义。\n")
+    print(f"  {'触发':<16s} {'周期':>4s} {'口径':<14s} {'均值':>8s} "
+          f"{'原始 p':>9s} {'BH p':>9s}  判定")
+    sig = econ = 0
     for r in sorted(results, key=lambda x: x["p"]):
         keep = r["p_bh"] <= 0.05
         sig += keep
-        verdict = "显著" if keep else "不显著"
-        if r["mean"] < 0 and keep:
-            verdict = "显著(反向)"
-        print(f"  {r['trigger']:<10s} {r['horizon']:>4d} {r['kind']:<12s} "
-              f"{pct(r['mean']):>+7.2f}% {r['p']:>10.4f} {r['p_bh']:>10.4f}  {verdict}")
-    print(f"\n  BH 后仍显著：{sig} / {len(results)}")
-    if sig == 0:
-        print("  ⇒ **没有任何一个假设在 FDR 5% 下站得住。** 这不是脚本坏了，"
-              "这正是第一刀结论的正式表述。")
+        is_excess = "超额" in r["kind"]
+        big = (not is_excess) or abs(r["mean"]) >= MIN_ECONOMIC_EXCESS
+        econ += keep and big
+        if keep and big:
+            verdict = "显著+有效"
+        elif keep:
+            verdict = "显著但效应太小"
+        else:
+            verdict = "不显著"
+        print(f"  {r['trigger']:<16s} {r['horizon']:>4d} {r['kind']:<14s} "
+              f"{pct(r['mean']):>+7.2f}% {r['p']:>9.4f} {r['p_bh']:>9.4f}  {verdict}")
+    print(f"\n  BH 后统计显著：{sig} / {len(results)}")
+    print(f"  显著**且**效应量有经济意义：{econ} / {len(results)}")
+    if sig and not econ:
+        print("  ⇒ 全部'显著'都来自巨大的样本量，不是来自可用的信号。")
+    print()
+
+
+def print_paired(results: List[dict], baseline: Optional[float]) -> None:
+    """
+    配对差值检验：镜像触发对之差。
+
+    这是唯一能回答"信号有没有方向信息"的判据 —— 两个镜像触发共享基准漂移、
+    无择时暴露和市场 beta，相减之后剩下的才是信号本身携带的东西。
+    """
+    idx = {(r["trigger"], r["horizon"], r["kind"]): r for r in results}
+    print("=" * 96)
+    print("配对差值检验：金叉 − 死叉（同一基准、同一日、同一只票）")
+    print("=" * 96)
+    print("镜像触发共享大盘漂移与 beta，相减把这些共同项消掉；剩下的差值")
+    print("才是信号的信息量。区间覆盖 0 ⇒ 该信号在这个周期上方向不可判定。\n")
+    if baseline is not None:
+        print(f"  参照：无信号对照（随机一天进场持有 N 日的超额）= "
+              f"{pct(baseline):+.2f}%")
+        print("  若配对差值与它同量级，看到的就全是漂移，不是信号。\n")
+    print(f"  {'触发对':<22s} {'周期':>4s} {'金叉':>8s} {'死叉':>8s} "
+          f"{'差值':>8s} {'95% CI':>20s} {'p':>8s} {'BH p':>8s}")
+    decided = undecided = 0
+    rows = []
+    for up, dn, label in PAIRS:
+        for h in sorted({r["horizon"] for r in results}):
+            ru, rd = idx.get((up, h, "超额 vs 沪深300")), idx.get((dn, h, "超额 vs 沪深300"))
+            if not ru or not rd:
+                continue
+            se = math.sqrt(
+                (((rd["mean_ci"][1] - rd["mean_ci"][0]) / (2 * Z95)) ** 2)
+                + (((ru["mean_ci"][1] - ru["mean_ci"][0]) / (2 * Z95)) ** 2))
+            diff = ru["mean"] - rd["mean"]
+            lo, hi = diff - Z95 * se, diff + Z95 * se
+            pv = two_sided_p(diff, se)
+            rows.append((label, h, ru, rd, diff, lo, hi, pv))
+    # 配对这一层同样要做多重比较校正。原始表里 MACD 20 日 p=0.0062 看着
+    # 很给力，但它是 9 次检验里的 1 次，BH 阈值 = 1/9 × 0.05 = 0.0056，
+    # 差一点点就够不着 —— 这种"擦边显著"正是多重比较要拦的东西。
+    m = len(rows)
+    order = sorted(range(m), key=lambda i: rows[i][7])
+    pbh = [1.0] * m
+    prev = 1.0
+    for rank in range(m, 0, -1):
+        i = order[rank - 1]
+        prev = min(prev, rows[i][7] * m / rank)
+        pbh[i] = prev
+    for i, (label, h, ru, rd, diff, lo, hi, pv) in enumerate(rows):
+        raw_ok = lo > 0 or hi < 0
+        bh_ok = raw_ok and pbh[i] <= 0.05
+        econ = abs(diff) >= MIN_ECONOMIC_EXCESS
+        decided += bh_ok and econ
+        undecided += (not (bh_ok and econ))
+        if bh_ok and econ and diff > 0:
+            flag = "✅ 有方向"
+        elif bh_ok and econ:
+            flag = "⚠️  反向"
+        elif raw_ok:
+            flag = f"擦边(校正后 {pbh[i]:.3f})"
+        else:
+            flag = "— 不可判定"
+        print(f"  {label:<22s} {h:>4d} {pct(ru['mean']):>+7.2f}% "
+              f"{pct(rd['mean']):>+7.2f}% {pct(diff):>+7.2f}% "
+              f"{f'[{pct(lo):+.2f}, {pct(hi):+.2f}]':>20s} {pv:>8.4f} "
+              f"{pbh[i]:>8.4f}  {flag}")
+    print(f"\n  BH 校正后方向可判定：{decided} / {m}"
+          f"   不可判定：{undecided}")
+    if decided == 0:
+        print("  ⇒ **没有任何一个信号在任一周期上显示出可判定的方向信息。**")
+        print("    矩阵里那些全正、全显著的均值来自大盘漂移（无条件基线就是")
+        print("    正的），配对相减之后信号本身的信息量落到了区间内。")
     print()
 
 
@@ -385,6 +467,57 @@ def _equal_weight_bench(con, end: str):
         dates.append(d)
         out.append((d, level))
     return dates, dict(out)
+
+
+# 镜像触发对：每对的两个方向在同一天、同一只票上互为镜像。配对差值能把
+# 基准漂移、无择时暴露、市场 beta 这些共同项消掉，剩下的才是信号信息。
+PAIRS = [
+    ("WHITE_CROSS_UP", "WHITE_CROSS_DOWN", "白线金叉 vs 死叉"),
+    ("MACD_CROSS_UP", "MACD_CROSS_DOWN", "MACD 金叉 vs 死叉"),
+    ("KDJ_CROSS_UP", "KDJ_CROSS_DOWN", "KDJ 金叉 vs 死叉"),
+]
+
+# 最小经济显著性：超额低于这个数即使 p 再小也不值得当成"有效信号"。
+# 定这个阈值不是拍脑袋 —— 一次触发只做一单向交易，双边成本按 0.1% 计，
+# 低于 0.2% 的超额连成本都盖不住，更谈不上预测力。
+MIN_ECONOMIC_EXCESS = 0.002
+
+
+def _cluster_mean(by_date: Dict[object, List[float]], n: int, total: float
+                  ) -> Optional[tuple]:
+    """
+    对"已经按日期分好组"的样本求聚类稳健均值与区间。
+
+    与 Stats._cluster_robust 同一定义（mean = Σx/N，Var = Σ_g(Σ(x-mean))²/N²），
+    区别只在于输入已经是簇 —— 无条件基线有 40 万个观测，不能全存下来。
+    返回 (mean, lo, hi, 簇数)。
+    """
+    groups = [v for v in by_date.values() if v]
+    if not groups or n == 0:
+        return None
+    mu = total / n
+    acc = 0.0
+    for g in groups:
+        acc += (sum(g) - len(g) * mu) ** 2
+    se = math.sqrt(acc) / n
+    return mu, mu - Z95 * se, mu + Z95 * se, len(groups)
+
+
+def paired_diff(up: "Stats", dn: "Stats") -> dict:
+    """
+    金叉触发 − 死叉触发 的均值差，聚类稳健标准误。
+
+    两序列各自抽样独立，差值方差 = se_up² + se_dn²。
+    """
+    am, al, ah, _ = up._cluster_robust(up.rets)
+    bm, bl, bh, _ = dn._cluster_robust(dn.rets)
+    se_a = (ah - al) / (2 * Z95)
+    se_b = (bh - bl) / (2 * Z95)
+    diff = am - bm
+    se = math.sqrt(se_a ** 2 + se_b ** 2)
+    return {"up": am, "dn": bm, "diff": diff, "se": se,
+            "lo": diff - Z95 * se, "hi": diff + Z95 * se,
+            "p": two_sided_p(diff, se), "n_up": up.n, "n_dn": dn.n}
 
 
 def pct(x: float) -> float:
@@ -570,6 +703,20 @@ def main() -> int:
         cur_code = None
         batch: list = []
 
+        # 无信号对照 = **无条件均值**：把所有 (股票, 交易日) 上可比的样本
+        # 全部汇进来，不做任何择时。它的超额就是"这段行情的漂移"。
+        #
+        # 第一版这里取的是"每只票的第 137 根" —— 那不是随机，是**系统性**
+        # 挑了一个历史位置，于是它衡量的是"那个位置发生了什么"，不是漂移。
+        # 拿它当标尺会得出完全错误的结论（第一版它给出 -1.52%）。
+        #
+        # 这里按日期聚合而不是存全部样本：2500 个交易日 × 40 万观测，
+        # 存 list 会吃几百 MB；聚类稳健只需要"每日簇的均值"。
+        ctrl_n = 0
+        ctrl_wins = 0
+        ctrl_sum = 0.0
+        ctrl_by_date: Dict[object, List[float]] = {}
+        ctrl_exc_by_date: Dict[object, List[float]] = {}
         def flush(rows: list) -> None:
             """处理一只标的的全部 bar：算序列 → 判跨柱 → 记账。"""
             if not rows:
@@ -631,6 +778,44 @@ def main() -> int:
                     else:
                         dr["bench"] += 1
 
+        def _control(rows: list) -> None:
+            """
+            把这一只票**所有**可比 bar 汇进无条件基线。
+
+            可比 = 前视窗口完整、不跨停牌、次日不是一字涨停。与触发样本用
+            完全相同的剔除规则，否则对照组和实验组的口径就不一样了 ——
+            那会让漂移被高估或低估。
+            """
+            nonlocal ctrl_n, ctrl_wins, ctrl_sum
+            i_open = col_names.index("open_1")
+            i_close = col_names.index("close_n")
+            i_cidxn = col_names.index("cidx_n")
+            i_prev = col_names.index("prev_close")
+            i_exit = col_names.index("exit_date")
+            for i in range(len(rows)):
+                r_open, r_close = rows[i][i_open], rows[i][i_close]
+                cidx_n = rows[i][i_cidxn]
+                if r_open is None or r_close is None or cidx_n is None:
+                    continue
+                if cidx_n - rows[i][2] != n:          # 跨停牌
+                    continue
+                if _seal_flag(rows[0][0], rows[i][i_prev], r_open):
+                    continue                            # 一字涨停买不进
+                date = rows[i][1]
+                r_abs = r_close / r_open - 1
+                ctrl_n += 1
+                ctrl_sum += r_abs
+                if r_abs > 0:
+                    ctrl_wins += 1
+                ctrl_by_date.setdefault(date, []).append(r_abs)
+                k0 = bisect.bisect_left(bdates, date)
+                k1 = bisect.bisect_left(bdates, rows[i][i_exit])
+                if k0 < len(bdates) and k1 < len(bdates):
+                    d0, d1 = bclose[bdates[k0]], bclose[bdates[k1]]
+                    if d0:
+                        ctrl_exc_by_date.setdefault(
+                            date, []).append(r_abs - (d1 / d0 - 1))
+
         while True:
             chunk = cur.fetchmany(20000)
             if not chunk:
@@ -640,10 +825,21 @@ def main() -> int:
                 if code != cur_code:
                     if batch:
                         flush(batch)
+                        _control(batch)
                     cur_code, batch = code, []
                 batch.append(row)
         if batch:
             flush(batch)
+            _control(batch)
+
+        ctrl = _cluster_mean(ctrl_by_date, ctrl_n, ctrl_sum)
+        ctrl_e = _cluster_mean(ctrl_exc_by_date, ctrl_n, ctrl_sum)
+        CTRL[("exc", n)] = ctrl_e[0] if ctrl_e else None
+        CTRL[("abs", n)] = ctrl[0] if ctrl else None
+        CTRL[("n", n)] = ctrl_n
+        print(f"  无信号对照（无条件，N={ctrl_n:,}）："
+              f"绝对 {pct(ctrl[0]) if ctrl else 0:+.2f}%  "
+              f"超额 {pct(ctrl_e[0]) if ctrl_e else 0:+.2f}%")
 
         total_kept = sum(v["abs"].n for v in st.values())
         total_fired = sum(fired.values())
@@ -684,6 +880,7 @@ def main() -> int:
 
     apply_bh(RESULTS)
     print_bh(RESULTS)
+    print_paired(RESULTS, CTRL.get(("exc", args.horizons[0])))
 
     con.close()
     return 0
