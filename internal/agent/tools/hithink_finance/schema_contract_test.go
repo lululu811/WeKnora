@@ -103,6 +103,110 @@ func looksLikeSQL(s string) bool {
 	return true
 }
 
+// stripSQLComments removes `--` line comments and `/* */` block comments from a
+// SQL literal, so the column-extraction regexes below never see prose.
+//
+// It is a small state machine rather than a regex because the naive version
+// breaks in two directions that both show up in real tool SQL:
+//
+//   - a `--` inside a single-quoted literal ('a--b') is data, not a comment;
+//   - a `”` inside a literal is an escaped quote, not a string terminator.
+//
+// DuckDB only has these two comment forms (no `#`), so that is all it handles.
+// An unterminated block comment swallows the rest of the string rather than
+// panicking — the caller only regex-matches the result.
+func stripSQLComments(sql string) string {
+	var b strings.Builder
+	b.Grow(len(sql))
+	inStr := false
+	for i := 0; i < len(sql); {
+		c := sql[i]
+		if inStr {
+			b.WriteByte(c)
+			if c == '\'' {
+				if i+1 < len(sql) && sql[i+1] == '\'' {
+					b.WriteByte('\'')
+					i += 2
+					continue
+				}
+				inStr = false
+			}
+			i++
+			continue
+		}
+		switch {
+		case c == '\'':
+			inStr = true
+			b.WriteByte(c)
+			i++
+		case c == '-' && i+1 < len(sql) && sql[i+1] == '-':
+			for i < len(sql) && sql[i] != '\n' {
+				i++
+			}
+		case c == '/' && i+1 < len(sql) && sql[i+1] == '*':
+			i += 2
+			for i+1 < len(sql) && !(sql[i] == '*' && sql[i+1] == '/') {
+				if sql[i] == '\n' {
+					b.WriteByte('\n') // 保行号
+				}
+				i++
+			}
+			if i+1 < len(sql) {
+				i += 2
+			} else {
+				i = len(sql)
+			}
+		default:
+			b.WriteByte(c)
+			i++
+		}
+	}
+	return b.String()
+}
+
+// TestStripSQLComments pins the two cases a plain regex gets wrong, plus the
+// regression that motivated the function: a comment mentioning a column prefix
+// used to be parsed as a column reference.
+func TestStripSQLComments(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		// 行内注释吃掉**本行内容但保留换行**，所以剥完之后行数不变 ——
+		// 报错信息里的行号仍然对得上源码。
+		{"行内注释整行去掉（保留换行）", "SELECT a,\n-- zettaranc 适配列\nb FROM t", "SELECT a,\n\nb FROM t"},
+		{"行尾注释", "SELECT a FROM t -- trailing", "SELECT a FROM t "},
+		{"块注释", "SELECT /* mid */ a FROM t", "SELECT  a FROM t"},
+		{"多行块注释", "SELECT a /*\nmulti\nline\n*/ FROM t", "SELECT a \n\n\n FROM t"},
+		{"字符串里的双横线不是注释", "SELECT 'a--b' AS x FROM t", "SELECT 'a--b' AS x FROM t"},
+		{"字符串里的双引号转义", "SELECT 'it''s--x' AS y FROM t", "SELECT 'it''s--x' AS y FROM t"},
+		{"未闭合块注释不 panic", "SELECT a /* unterminated", "SELECT a "},
+		{"无注释原样返回", "SELECT a, b FROM t", "SELECT a, b FROM t"},
+	}
+	for _, c := range cases {
+		got := stripSQLComments(c.in)
+		if got != c.want {
+			t.Errorf("%s:\n got %q\nwant %q", c.name, got, c.want)
+		}
+		// 行号稳定性：只有单行块注释才会减少行数，逐个豁免太啰嗦，
+		// 这里只要求"不会把多行查询压成一行"。
+		if strings.Count(c.in, "\n") > 1 && strings.Count(got, "\n") < 2 {
+			t.Errorf("%s: 多行查询被压成单行，报错行号会失真", c.name)
+		}
+	}
+
+	// 回归本体：注释里出现列名前缀，剥掉之后就不该再被当成列引用。
+	sql := stripSQLComments("SELECT\n  zettaranc_zg_white_10 AS w,\n" +
+		"  -- 这里解释 zettaranc 适配列\n  close AS c\nFROM v_indicators_daily")
+	cleaned := regexp.MustCompile(`(?is)\bAS\s+[a-zA-Z_][a-zA-Z0-9_]*`).ReplaceAllString(sql, " ")
+	for _, ident := range identRe.FindAllString(cleaned, -1) {
+		if ident == "zettaranc" {
+			t.Fatalf("剥注释后仍从注释里读出了裸词 zettaranc：%q", sql)
+		}
+	}
+}
+
 func TestSchemaSnapshotIsUsable(t *testing.T) {
 	snap := loadSchema(t)
 	if len(snap) != 7 {
@@ -170,7 +274,13 @@ func TestToolSQLMatchesSchema(t *testing.T) {
 				t.Fatalf("读取 %s 失败：%v", path, err)
 			}
 			for i, m := range sqlLiteralRe.FindAllStringSubmatch(string(src), -1) {
-				sql := m[1]
+				// 注释必须先剥掉。2026-10-07 之前这里直接把原文交给正则，
+				// 于是 analysis/data.go 里一句 `-- zettaranc 适配列……` 的
+				// 行内注释被 selectListRe 当成列清单，把注释里的裸词
+				// `zettaranc` 报成「引用了不存在的列」——而真实列
+				// `zettaranc_zg_white_10` 就在快照里。报错信息还完全指不到
+				// 真正的原因，只能让人盯着 SQL 找。
+				sql := stripSQLComments(m[1])
 				if !looksLikeSQL(sql) {
 					continue
 				}

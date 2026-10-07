@@ -860,15 +860,32 @@ func TestFullPrecisionStackDivergesFromDisplayRounded(t *testing.T) {
 	}
 	t.Logf("ZG_WHITE (DEMA %d): 全精度递归与「每级四舍五入」在 %d 根 fixture 上最大偏差 %.2f（容差 %.2f）",
 		whiteSeries, len(closes), worst, reg.Conformance.AbsTolerance)
-	switch {
-	case worst == 0:
-		t.Logf("两种约定在数值上完全等价 —— 改成全精度不会改变任何一根 K 线")
-	case worst <= reg.Conformance.AbsTolerance/2:
-		t.Logf("偏差小于半个显示单位：只是看起来有差异，不会改变任何一次金叉/死叉或评分档位")
-	default:
-		t.Logf("偏差已达一个显示单位：全精度栈与前端在 DEMA/BBI/多空线这类两级指标上会画出可见不同的线，" +
-			"并且可能改变交叉的判定位置。谁对谁错取决于业务口径，本次不做裁决。")
+
+	// 2026-10-07：这条断言从「记录并放过」升级为「锁定结论」。
+	//
+	// 此前只 t.Logf 一句「谁对谁错取决于业务口径，本次不做裁决」。现在裁决有了：
+	// python-service/scripts/compare_zettaranc_columns.py 用真实 DuckDB 数据
+	// （indicators.duckdb 1034 万行 × 60 只抽样 = 104,820 bar）逐点比对库侧列
+	// 与两种实现 ——
+	//
+	//	全精度递归      逐点一致 100.00%（白线 99.9868%，残差 4.66e-09 末位噪声）
+	//	每级 toFixed(2) 与库侧最大偏差 ≤0.0097
+	//
+	// 也就是**库侧是全精度栈，前端是显示取整栈**，两端算的是同一个指标。
+	// 代价是它们永远不可能逐点相等，所以下面这条断言的上界是"一个显示单位"
+	// 而不是 0 —— 再紧就是在测浮点噪声，而那与业务无关。
+	//
+	// 这也解释了 DuckDB 那批列为什么可以放心声明给其他栈用
+	// （config/indicators.yaml 里 ZG_WHITE / DG_YELLOW / Z_BBI 的 storage）。
+	upper := reg.Conformance.AbsTolerance
+	if worst > upper {
+		t.Errorf("全精度栈与前端取整栈的偏差 %.2f 超过 %.2f —— 两种取整纪律"+
+			"开始影响交叉判定位置（改了要同步 python-service/scripts/compare_zettaranc_columns.py 的结论）",
+			worst, upper)
+		return
 	}
+	t.Logf("在容差 %.2f 内成立：库侧=全精度栈、前端=显示取整栈，算的是同一个指标。"+
+		"跨栈断言必须用容差，不能用相等。", upper)
 }
 
 // refDEMAFullPrecision is the same DEMA with no intermediate rounding: the

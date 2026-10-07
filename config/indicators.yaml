@@ -15,7 +15,7 @@
 # 该测试在忘记重新生成时会**大声失败**（这是刻意的，见 internal/indicators/meta_test.go）。
 #
 # 字段说明见同目录 docs: config/indicators.schema.md
-schema_version: 1
+schema_version: 2
 
 # 跨栈一致性判定的公共设置，被 internal/indicators/conformance_test.go 使用。
 conformance:
@@ -68,11 +68,28 @@ indicators:
         line_width: 1.8
         params: [3, 6, 12, 24]
     storage:
-      backend: frontend
-      duckdb_view: ""
-      # Go / Python 栈的 v_indicators_daily 里**没有** DEMA / 多空线 / BBI 列，
-      # 这三条线只在浏览器里算。conformance_test.go 会断言这里为空是真的为空。
-      columns: []
+      # 本字段描述的是**其他栈**（Go / Python / eval）从哪里取同一个数，
+      # 与"图表怎么画"无关 —— 画图由 series[].formula 在浏览器里算。
+      #
+      # 2026-10-07 实测更正：v_indicators_daily 里这三列一直存在且有数据
+      # （最新交易日覆盖率 98.5%~99.7%，全表 1034 万行 / 5572 只 / 2016-09-12 起）。
+      # 此前注释写的"Go / Python 栈里**没有** DEMA / 多空线 / BBI 列"是错的。
+      # 逐点一致性由 python-service/scripts/compare_zettaranc_columns.py 证明：
+      # 黄线 100.00%、白线 99.9868% 与**全精度**实现逐位相同，残差是 float64
+      # 末位噪声（最大 4.66e-09）。行情源同为 v_daily_qfq 前复权。
+      #
+      # 取整纪律不同：前端每级 toFixed(2)，库侧全程双精度。因此两端永远不
+      # 可能逐点相等，前端相对库侧最大偏离 ≤0.0097 —— 跨栈断言必须用容差。
+      backend: duckdb
+      duckdb_view: v_indicators_daily
+      # 只声明白线：Z_MAIN 的真实 params 只有 white_period=10（calc_params 里的
+      # 14 是历史残留槽位，calc 不读它）。黄线 14 与 BBI 3/6/12/24 的周期由
+      # DG_YELLOW / Z_BBI 各自定义，列就挂在那个指标名下 ——
+      # TestPeriodsMatchTheDuckDBColumnNames 会拒绝把 14 周期的列挂在只声明了
+      # 10 的指标上，这是它在正常工作。
+      columns:
+        - alias: ztr_white
+          column: zettaranc_zg_white_10
 
   - id: Z_SIGNALS
     short_name: 信号层
@@ -110,9 +127,11 @@ indicators:
         line_width: 1.8
         params: [10]
     storage:
-      backend: frontend
-      duckdb_view: ""
-      columns: []
+      backend: duckdb
+      duckdb_view: v_indicators_daily
+      columns:
+        - alias: ztr_white
+          column: zettaranc_zg_white_10
 
   - id: DG_YELLOW
     short_name: 黄线
@@ -136,9 +155,11 @@ indicators:
         line_width: 1.8
         params: [14, 28, 57, 114]
     storage:
-      backend: frontend
-      duckdb_view: ""
-      columns: []
+      backend: duckdb
+      duckdb_view: v_indicators_daily
+      columns:
+        - alias: ztr_yellow
+          column: zettaranc_dg_yellow_14
 
   - id: Z_BBI
     short_name: BBI
@@ -162,9 +183,11 @@ indicators:
         line_width: 1.8
         params: [3, 6, 12, 24]
     storage:
-      backend: frontend
-      duckdb_view: ""
-      columns: []
+      backend: duckdb
+      duckdb_view: v_indicators_daily
+      columns:
+        - alias: ztr_bbi
+          column: zettaranc_bbi
 
   # ---------------------------------------------------------------- 副图 ----
   - id: Z_VOL
@@ -413,6 +436,39 @@ indicators:
       columns: []
 
 # ---------------------------------------------------------------------------
+# 触发定义（2026-10-07 新增，schema_version 1 → 2）
+#
+# "某根 K 线上发生了某件事"的**机器可判定**定义。评估管线
+# （python-service/scripts/eval_trigger_power.py）统计的是"触发之后发生了什么"，
+# 所以这个定义一旦只活在脚本里，第二个消费者就得重新推导一遍 —— 那正是
+# Z_RSL / 砖型图两次漂移的成因。把它放在这里、和它读的列待在一起，
+# 再经生成链路进 Python，触发就只有一个源头。
+#
+# 刻意**不含**：战法的解释（红2=黄金买点那类）。那些留在知识库，不进计算层。
+#
+# `left` / `right` 用的是 storage 的 **alias**，不是裸列名 —— 改列名时不会
+# 留下一个指向空气的触发。loader 会校验 alias 必须是某个指标真实声明的列。
+#
+# 判定时刻一律是**该 bar 收盘**，且只看该 bar 与前一根 bar，不含任何未来信息；
+# 这是前视收益统计能被解释的前提。
+# ---------------------------------------------------------------------------
+triggers:
+  - id: WHITE_CROSS_UP
+    label: 白线金叉黄线（DEMA10 上穿 多空线 14/28/57/114）
+    kind: cross
+    op: cross_above
+    left: ztr_white
+    right: ztr_yellow
+    params: [10]
+  - id: WHITE_CROSS_DOWN
+    label: 白线死叉黄线
+    kind: cross
+    op: cross_below
+    left: ztr_white
+    right: ztr_yellow
+    params: [10]
+
+# ---------------------------------------------------------------------------
 # 主图 / 副图模式。KLineWorkspace.vue 的模式按钮列表从这里读，
 # 代码里不再出现任何指标名字符串。
 #
@@ -438,18 +494,10 @@ views:
       hint: 布林带 BOLL(20,2) + 战法信号层。价格触上轨偏强、触下轨偏弱，带宽收窄常预示变盘
       indicators: [BOLL, Z_SIGNALS]
   sub_presets:
-    - id: VOL_AND_BRICK
-      label: 量+ZX砖型 (推荐)
-      hint: 成交量 + 同花顺知行砖型图。砖型把连续同向的 K 线合并成一块，块数代表趋势强度：4 块以上为强势。推荐作为默认副图。
-      indicators: [Z_VOL, ZX_BRICK]
-    - id: ZX_BRICK
-      label: ZX砖型图
-      hint: 仅砖型图，不带成交量。适合专注看多空节奏；减号标记回调、止字标记止跌。
-      indicators: [ZX_BRICK]
-    - id: VOL_AND_MACD
-      label: 量+MACD
-      hint: 成交量 + MACD。DIF/DEA 金叉死叉会打标记，红柱绿柱表示动能强弱，适合判断趋势转折。
-      indicators: [Z_VOL, Z_MACD]
+    - id: MACD_VOL_KDJ_BRICK
+      label: 经典四合一 (默认)
+      hint: MACD + 成交量 + KDJ + ZX砖型图 四维立体副图共振，默认全景呈现。
+      indicators: [Z_MACD, Z_VOL, Z_KDJ, ZX_BRICK]
     - id: Z_VOL
       label: 成交量
       hint: 成交量柱 + MA5/MA10 均量线。放量上涨代表资金进场，缩量回调代表抛压不重。
@@ -462,6 +510,10 @@ views:
       label: KDJ
       hint: KDJ 随机指标 (9,3,3)。K/D 在 20 以下为超卖区、80 以上为超买区，金叉死叉会打标记。
       indicators: [Z_KDJ]
+    - id: ZX_BRICK
+      label: ZX砖型图
+      hint: 仅砖型图，不带成交量。适合专注看多空节奏；减号标记回调、止字标记止跌。
+      indicators: [ZX_BRICK]
     - id: Z_PCT_RET
       label: 涨跌幅
       hint: 区间涨跌幅（百分比），3 日与 21 日两个周期。向上表示这只票在涨，适合快速比对强弱。与 RSL 百分位排名不同指标。

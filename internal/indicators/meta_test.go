@@ -265,8 +265,8 @@ func TestViewPresets(t *testing.T) {
 	if len(reg.MainPresets()) != 4 {
 		t.Errorf("main_presets = %d, want 4", len(reg.MainPresets()))
 	}
-	if len(reg.SubPresets()) != 7 {
-		t.Errorf("sub_presets = %d, want 7", len(reg.SubPresets()))
+	if len(reg.SubPresets()) != 6 {
+		t.Errorf("sub_presets = %d, want 6", len(reg.SubPresets()))
 	}
 	// 第一个主图模式必须是 Z_MAIN —— 它是默认模式。
 	if reg.MainPresets()[0].ID != "zettaranc" {
@@ -277,8 +277,8 @@ func TestViewPresets(t *testing.T) {
 		t.Errorf("zettaranc 模式 = %v, want [Z_MAIN]", first.Indicators)
 	}
 	// 默认副图
-	if reg.SubPresets()[0].ID != "VOL_AND_BRICK" {
-		t.Errorf("默认副图模式 = %q, want %q", reg.SubPresets()[0].ID, "VOL_AND_BRICK")
+	if reg.SubPresets()[0].ID != "MACD_VOL_KDJ_BRICK" {
+		t.Errorf("默认副图模式 = %q, want %q", reg.SubPresets()[0].ID, "MACD_VOL_KDJ_BRICK")
 	}
 	// 每个副图按钮都必须有 tooltip（历史上 7 个按钮一个都没有）。
 	for _, v := range reg.SubPresets() {

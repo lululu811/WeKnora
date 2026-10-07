@@ -392,6 +392,27 @@ DUCKDB_COLUMNS: Dict[str, str] = {
     for c in ind["storage"]["columns"]
 }
 
+#: 触发定义（config/indicators.yaml 的 triggers: 块，原样生成）。
+#: 评估管线 scripts/eval_trigger_power.py 从这里读，不再自己硬编码一份 ——
+#: 触发如果有两个定义，"图上标的那次" 和 "报告统计的那次" 就会悄悄分叉。
+#:
+#: left / right 是 DUCKDB_COLUMNS 的 key（别名），不是裸列名。
+TRIGGERS: List[Dict[str, Any]] = INDICATOR_META["triggers"]
+
+TRIGGERS_BY_ID: Dict[str, Dict[str, Any]] = {t["id"]: t for t in TRIGGERS}
+
+
+def trigger(trigger_id: str) -> Dict[str, Any]:
+    """按 id 取触发定义。未知 id 抛错。
+
+    拼错 id 必须炸掉 —— 一个拼错的 id 如果静默返回空，评估结果会变成
+    "该触发在全市场从未出现"，读起来像一个真实的负面结论。
+    """
+    found = TRIGGERS_BY_ID.get(trigger_id)
+    if found is None:
+        raise KeyError(f"未知触发 id: {trigger_id!r}（已知: {sorted(TRIGGERS_BY_ID)}）")
+    return found
+
 #: 跨栈容差（|go - js| <= 该值视为一致）
 ABS_TOLERANCE: float = INDICATOR_META["absTolerance"]
 
@@ -428,6 +449,7 @@ func RenderPythonModule(reg *Registry) (string, error) {
 		FixtureBars   int         `json:"fixtureBars"`
 		IDs           []string    `json:"ids"`
 		Indicators    []Indicator `json:"indicators"`
+		Triggers      []Trigger   `json:"triggers"`
 		MainPresets   []View      `json:"mainPresets"`
 		SubPresets    []View      `json:"subPresets"`
 		KnownGaps     []KnownGap  `json:"knownGaps"`
@@ -437,9 +459,13 @@ func RenderPythonModule(reg *Registry) (string, error) {
 		FixtureBars:   reg.Conformance.FixtureBars,
 		IDs:           reg.IDs(),
 		Indicators:    reg.Indicators,
+		Triggers:      reg.Triggers,
 		MainPresets:   reg.Views.MainPresets,
 		SubPresets:    reg.Views.SubPresets,
 		KnownGaps:     reg.KnownGaps,
+	}
+	if payload.Triggers == nil {
+		payload.Triggers = []Trigger{}
 	}
 	if payload.MainPresets == nil {
 		payload.MainPresets = []View{}

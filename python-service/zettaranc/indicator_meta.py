@@ -16,10 +16,10 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 INDICATOR_META: Dict[str, Any] = {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "absTolerance": 0.01,
   "fixtureBars": 260,
   "ids": [
@@ -85,9 +85,14 @@ INDICATOR_META: Dict[str, Any] = {
         }
       ],
       "storage": {
-        "backend": "frontend",
-        "duckdbView": "",
-        "columns": []
+        "backend": "duckdb",
+        "duckdbView": "v_indicators_daily",
+        "columns": [
+          {
+            "alias": "ztr_white",
+            "column": "zettaranc_zg_white_10"
+          }
+        ]
       }
     },
     {
@@ -135,9 +140,14 @@ INDICATOR_META: Dict[str, Any] = {
         }
       ],
       "storage": {
-        "backend": "frontend",
-        "duckdbView": "",
-        "columns": []
+        "backend": "duckdb",
+        "duckdbView": "v_indicators_daily",
+        "columns": [
+          {
+            "alias": "ztr_white",
+            "column": "zettaranc_zg_white_10"
+          }
+        ]
       }
     },
     {
@@ -180,9 +190,14 @@ INDICATOR_META: Dict[str, Any] = {
         }
       ],
       "storage": {
-        "backend": "frontend",
-        "duckdbView": "",
-        "columns": []
+        "backend": "duckdb",
+        "duckdbView": "v_indicators_daily",
+        "columns": [
+          {
+            "alias": "ztr_yellow",
+            "column": "zettaranc_dg_yellow_14"
+          }
+        ]
       }
     },
     {
@@ -225,9 +240,14 @@ INDICATOR_META: Dict[str, Any] = {
         }
       ],
       "storage": {
-        "backend": "frontend",
-        "duckdbView": "",
-        "columns": []
+        "backend": "duckdb",
+        "duckdbView": "v_indicators_daily",
+        "columns": [
+          {
+            "alias": "ztr_bbi",
+            "column": "zettaranc_bbi"
+          }
+        ]
       }
     },
     {
@@ -524,6 +544,26 @@ INDICATOR_META: Dict[str, Any] = {
       }
     }
   ],
+  "triggers": [
+    {
+      "id": "WHITE_CROSS_UP",
+      "label": "白线金叉黄线（DEMA10 上穿 多空线 14/28/57/114）",
+      "kind": "cross",
+      "op": "cross_above",
+      "left": "ztr_white",
+      "right": "ztr_yellow",
+      "params": [10]
+    },
+    {
+      "id": "WHITE_CROSS_DOWN",
+      "label": "白线死叉黄线",
+      "kind": "cross",
+      "op": "cross_below",
+      "left": "ztr_white",
+      "right": "ztr_yellow",
+      "params": [10]
+    }
+  ],
   "mainPresets": [
     {
       "id": "zettaranc",
@@ -563,29 +603,14 @@ INDICATOR_META: Dict[str, Any] = {
   ],
   "subPresets": [
     {
-      "id": "VOL_AND_BRICK",
-      "label": "量+ZX砖型 (推荐)",
-      "hint": "成交量 + 同花顺知行砖型图。砖型把连续同向的 K 线合并成一块，块数代表趋势强度：4 块以上为强势。推荐作为默认副图。",
+      "id": "MACD_VOL_KDJ_BRICK",
+      "label": "经典四合一 (默认)",
+      "hint": "MACD + 成交量 + KDJ + ZX砖型图 四维立体副图共振，默认全景呈现。",
       "indicators": [
+        "Z_MACD",
         "Z_VOL",
+        "Z_KDJ",
         "ZX_BRICK"
-      ]
-    },
-    {
-      "id": "ZX_BRICK",
-      "label": "ZX砖型图",
-      "hint": "仅砖型图，不带成交量。适合专注看多空节奏；减号标记回调、止字标记止跌。",
-      "indicators": [
-        "ZX_BRICK"
-      ]
-    },
-    {
-      "id": "VOL_AND_MACD",
-      "label": "量+MACD",
-      "hint": "成交量 + MACD。DIF/DEA 金叉死叉会打标记，红柱绿柱表示动能强弱，适合判断趋势转折。",
-      "indicators": [
-        "Z_VOL",
-        "Z_MACD"
       ]
     },
     {
@@ -610,6 +635,14 @@ INDICATOR_META: Dict[str, Any] = {
       "hint": "KDJ 随机指标 (9,3,3)。K/D 在 20 以下为超卖区、80 以上为超买区，金叉死叉会打标记。",
       "indicators": [
         "Z_KDJ"
+      ]
+    },
+    {
+      "id": "ZX_BRICK",
+      "label": "ZX砖型图",
+      "hint": "仅砖型图，不带成交量。适合专注看多空节奏；减号标记回调、止字标记止跌。",
+      "indicators": [
+        "ZX_BRICK"
       ]
     },
     {
@@ -642,6 +675,27 @@ DUCKDB_COLUMNS: Dict[str, str] = {
     for ind in INDICATOR_META["indicators"]
     for c in ind["storage"]["columns"]
 }
+
+#: 触发定义（config/indicators.yaml 的 triggers: 块，原样生成）。
+#: 评估管线 scripts/eval_trigger_power.py 从这里读，不再自己硬编码一份 ——
+#: 触发如果有两个定义，"图上标的那次" 和 "报告统计的那次" 就会悄悄分叉。
+#:
+#: left / right 是 DUCKDB_COLUMNS 的 key（别名），不是裸列名。
+TRIGGERS: List[Dict[str, Any]] = INDICATOR_META["triggers"]
+
+TRIGGERS_BY_ID: Dict[str, Dict[str, Any]] = {t["id"]: t for t in TRIGGERS}
+
+
+def trigger(trigger_id: str) -> Dict[str, Any]:
+    """按 id 取触发定义。未知 id 抛错。
+
+    拼错 id 必须炸掉 —— 一个拼错的 id 如果静默返回空，评估结果会变成
+    "该触发在全市场从未出现"，读起来像一个真实的负面结论。
+    """
+    found = TRIGGERS_BY_ID.get(trigger_id)
+    if found is None:
+        raise KeyError(f"未知触发 id: {trigger_id!r}（已知: {sorted(TRIGGERS_BY_ID)}）")
+    return found
 
 #: 跨栈容差（|go - js| <= 该值视为一致）
 ABS_TOLERANCE: float = INDICATOR_META["absTolerance"]

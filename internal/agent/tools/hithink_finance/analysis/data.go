@@ -44,6 +44,9 @@ type marketRow struct {
 	AroonUp, AroonDown float64
 	LinSlope           float64
 	ZScore             float64
+	// zettaranc 适配列：白线 DEMA(10) / 黄线 多空线(14/28/57/114) / BBI(3/6/12/24)。
+	// 列名与 python-service/zettaranc/data_loader.py 的 ztr_* 别名一一对应。
+	ZtrWhite, ZtrYellow, ZtrBbi float64
 	// Candlestick patterns
 	CdlHammer, CdlShootingStar, CdlDoji       float64
 	CdlEngulfing, CdlHarami, CdlMorningStar   float64
@@ -104,6 +107,20 @@ func FetchMarketData(ctx context.Context, config *hithink_finance.Config, thscod
 
 	// Fetch from indicators DB: all technical indicators.
 	//
+	// 末尾三列是 zettaranc 适配列（2026-10-07 起按 config/indicators.yaml 声明接入）：
+	// 白线 DEMA(10) / 黄线 多空线(14/28/57/114) / BBI 牵牛绳(3/6/12/24)。
+	// 跨栈一致性已用真实数据实测（python-service/scripts/compare_zettaranc_columns.py，
+	// 104820 bar × 3 列）：库侧是**全精度栈**，与前端逐点一致，残差 4.66e-09
+	// （float64 末位噪声）。前端每级 toFixed(2)，故两端最大偏离 ≤0.0097 ——
+	// 算的是同一个指标，但跨栈断言必须用容差，不能用相等。
+	//
+	// 图表仍在浏览器里算（由 series[].formula 驱动），这三列供 agent / eval
+	// 侧取同一个数，不是工作台画线的来源。
+	//
+	// 注意：SQL 串里**不要写 -- 行内注释**。schema_contract_test.go 提取 SELECT
+	// 列清单时不剥离注释，注释里的裸词会被当成列名并报「不存在的列」。
+	// 说明写在字符串外面。
+	//
 	// COALESCE(col, 0) is deliberately NOT used: a NULL indicator means "not
 	// computed", and coercing it to 0 makes RSI6=0 read as "oversold", which
 	// produced fabricated buy signals on instruments with no indicator data.
@@ -153,7 +170,10 @@ func FetchMarketData(ctx context.Context, config *hithink_finance.Config, thscod
 			candles_cdl_piercing_0 AS cdl_piercing,
 			candles_cdl_darkcloudcover_0 AS cdl_dark_cloud,
 			candles_cdl_3whitesoldiers_0 AS cdl_3white,
-			candles_cdl_3blackcrows_0 AS cdl_3black
+			candles_cdl_3blackcrows_0 AS cdl_3black,
+		zettaranc_zg_white_10 AS ztr_white,
+		zettaranc_dg_yellow_14 AS ztr_yellow,
+		zettaranc_bbi AS ztr_bbi
 		FROM v_indicators_daily
 		WHERE thscode = ?
 		ORDER BY date DESC
@@ -247,6 +267,9 @@ func FetchMarketData(ctx context.Context, config *hithink_finance.Config, thscod
 			row.CdlDarkCloud = toF64(ind["cdl_dark_cloud"])
 			row.Cdl3WhiteSold = toF64(ind["cdl_3white"])
 			row.Cdl3BlackCrows = toF64(ind["cdl_3black"])
+			row.ZtrWhite = toF64(ind["ztr_white"])
+			row.ZtrYellow = toF64(ind["ztr_yellow"])
+			row.ZtrBbi = toF64(ind["ztr_bbi"])
 		}
 		rows = append(rows, row)
 	}

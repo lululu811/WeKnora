@@ -59,9 +59,53 @@ day/week/month × 有/无起始日 共 6 条分支，三处差异由适配器一
 - **231 列的生成脚本不在本仓库**（`a-stock/` 不在这个 checkout 里）。所以
   `indicators.duckdb` 是"外部产物"，本仓库只读它；改指标口径要动那个仓库。
 
+### 3.1 白线 / 黄线 / BBI：库里有列，且与工作台逐点一致（2026-10-07 更正）
+
+这一节修正本文档早期版本和 `config/indicators.yaml` 里的一处错误陈述：
+"库里的 `v_indicators_daily` 没有 DEMA / 多空线 / BBI 列"。**它们一直存在**：
+
+| 列 | 含义 | 最新交易日覆盖率 |
+|---|---|---|
+| `zettaranc_zg_white_10` | 白线 DEMA(10) | 99.7% |
+| `zettaranc_dg_yellow_14` | 黄线 多空线(14/28/57/114) | 98.5% |
+| `zettaranc_bbi` | BBI 牵牛绳(3/6/12/24) | 99.6% |
+| `zettaranc_brick_value` | 知行 ZX 砖型（通达信口径） | 100.0% |
+
 因此板块指标**没有走后端**：`v_indicators_daily` 里 `.TI` 行数为 0，而图表本来就
 自己算，所以板块拿到的 MA/MACD/KDJ/VOL 与个股同源（同一份前端实现、同一批 bars），
 不存在两套公式漂移的问题。
+
+### 3.2 两端是同一个指标，差别只在取整纪律
+
+`python-service/scripts/compare_zettaranc_columns.py` 用真实数据逐点比对
+（60 只抽样 × 104,820 bar × 3 列，行情源 `v_daily_qfq` 前复权）：
+
+| 实现 | 与库侧的关系 |
+|---|---|
+| 全精度递归 | 逐点一致 **100.00%**（白线 99.9868%，残差 4.66e-09 = float64 末位噪声） |
+| 每级 `toFixed(2)`（前端） | 最大偏差 **≤0.0097** |
+
+结论：**库侧是全精度栈，前端是显示取整栈，算的是同一个指标。** 因此
+
+- 跨栈断言**必须用容差**（约 0.011，见 `conformance.abs_tolerance`），不能用相等；
+- 这三列现在正式声明给其他栈用（`config/indicators.yaml` 中
+  `ZG_WHITE` / `DG_YELLOW` / `Z_BBI` 的 `storage.backend: duckdb`），
+  `TestDuckDBColumnContractHoldsInBothStacks` 会逐列核对 Go / Python 两侧的拼写。
+
+注意 `Z_MAIN` 只声明了白线：它的真实 `params` 只有 `white_period=10`
+（`calc_params` 里的 14 是有注释的历史残留槽位，calc 不读它），
+`TestPeriodsMatchTheDuckDBColumnNames` 会拒绝把 14 周期的列挂在它名下。
+
+### 3.3 触发定义在 yaml，不在评估脚本里
+
+`config/indicators.yaml` 的 `triggers:` 块（`schema_version: 2` 新增）定义
+"某根 K 线上发生了某件事"的**机器可判定**形式，经 `genmeta.go` 生成进
+`python-service/zettaranc/indicator_meta.py` 的 `TRIGGERS`，评估脚本
+`scripts/eval_trigger_power.py` 从那里读。
+
+定义若只活在脚本里，第二个消费者就得重新推导一遍，"图上标的那次"和
+"报告统计的那次"会悄悄分叉 —— 那正是 Z_RSL 与砖型图两次同名不同义的成因。
+战法的**解释**（红2=黄金买点那类）刻意留在知识库，不进计算层。
 
 ## 4. SQL 目录（工具描述）
 

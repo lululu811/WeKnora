@@ -31,7 +31,12 @@ const FileName = "indicators.yaml"
 // SupportedSchemaVersion is the only schema_version this loader understands.
 // Bump it in config/indicators.yaml whenever a field changes meaning; a newer
 // file must fail loudly rather than be half-interpreted.
-const SupportedSchemaVersion = 1
+//
+// 2 (2026-10-07): added the top-level `triggers:` block — cross definitions
+// evaluated by python-service/scripts/eval_trigger_power.py. Before this, the
+// trigger existed only inside that script, so a second consumer would have had
+// to re-derive it.
+const SupportedSchemaVersion = 2
 
 // Indicator kinds.
 const (
@@ -195,11 +200,55 @@ type KnownGap struct {
 	Resolution string   `yaml:"resolution"  json:"resolution"`
 }
 
+// Trigger is one entry of config/indicators.yaml `triggers:` — a *machine
+// checkable* definition of "something happened on this bar", as opposed to the
+// prose 战法 explanations that live in the knowledge base and are deliberately
+// NOT part of this registry.
+//
+// Why this exists (2026-10-07): the evaluation pipeline
+// (python-service/scripts/eval_trigger_power.py) counts what happened after a
+// trigger. If that definition lives only in the script, the same concept gets
+// two definitions the moment someone writes a second consumer — exactly the
+// Z_RSL / brick-formula drift this registry was created to stop. So the
+// definition sits here, next to the columns it reads, and reaches Python via
+// the generated indicator_meta.py.
+//
+// Left/Right are storage *aliases* (Column.Alias), never raw column names, so
+// renaming a DuckDB column can't silently leave a trigger pointing at nothing.
+type Trigger struct {
+	ID     string `yaml:"id"     json:"id"`
+	Label  string `yaml:"label"  json:"label"`
+	Kind   string `yaml:"kind"   json:"kind"`
+	Op     string `yaml:"op"     json:"op"`
+	Left   string `yaml:"left"   json:"left"`
+	Right  string `yaml:"right"  json:"right"`
+	Params []int  `yaml:"params" json:"params"`
+}
+
+// Trigger kinds / operations.
+const (
+	// TriggerCross is the only kind today: a relationship between two columns
+	// that flips on some bar.
+	TriggerCross = "cross"
+	// TriggerCrossAbove fires when Left rises through Right (前一日 <=, 当日 >);
+	// TriggerCrossBelow is its mirror. Both are decided at that bar's close
+	// from that bar and the one before it only — no lookahead, which is what
+	// makes forward-return statistics interpretable at all.
+	TriggerCrossAbove = "cross_above"
+	TriggerCrossBelow = "cross_below"
+)
+
+// ValidTriggerOp reports whether op is a supported trigger operation.
+func ValidTriggerOp(op string) bool {
+	return op == TriggerCrossAbove || op == TriggerCrossBelow
+}
+
 // file is the whole YAML document.
 type file struct {
 	SchemaVersion int         `yaml:"schema_version"`
 	Conformance   Conformance `yaml:"conformance"`
 	Indicators    []Indicator `yaml:"indicators"`
+	Triggers      []Trigger   `yaml:"triggers"`
 	Views         Views       `yaml:"views"`
 	KnownGaps     []KnownGap  `yaml:"known_gaps"`
 }
@@ -209,10 +258,22 @@ type Registry struct {
 	SchemaVersion int
 	Conformance   Conformance
 	Indicators    []Indicator
+	Triggers      []Trigger
 	Views         Views
 	KnownGaps     []KnownGap
 
 	byID map[string]*Indicator
+}
+
+// aliasKeys returns the sorted-ish keys of an alias->column map, for error
+// messages that should tell the reader what *was* available.
+func aliasKeys(m map[string]string) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // GapFor returns the known gap covering an indicator+stack pair, or nil.
@@ -276,6 +337,7 @@ func LoadFromFile(path string) (*Registry, error) {
 		SchemaVersion: f.SchemaVersion,
 		Conformance:   f.Conformance,
 		Indicators:    f.Indicators,
+		Triggers:      f.Triggers,
 		Views:         f.Views,
 		KnownGaps:     f.KnownGaps,
 		byID:          make(map[string]*Indicator, len(f.Indicators)),
@@ -409,6 +471,48 @@ func (r *Registry) Validate() error {
 			return fmt.Errorf("%s: storage.backend=frontend must not declare duckdb_view/columns", ind.ID)
 		}
 		byID[ind.ID] = ind
+	}
+
+	// Triggers must point at columns that some indicator actually declares.
+	// Without this the eval pipeline would silently compute against a key that
+	// no longer exists — and a trigger that never fires looks exactly like a
+	// trigger with no predictive power, which is the one conclusion this
+	// registry exists to keep trustworthy.
+	declaredAlias := map[string]string{} // alias -> column, across all indicators
+	for i := range r.Indicators {
+		for _, c := range r.Indicators[i].Storage.Columns {
+			declaredAlias[c.Alias] = c.Column
+		}
+	}
+	seenTrigger := map[string]bool{}
+	for i := range r.Triggers {
+		t := &r.Triggers[i]
+		if t.ID == "" {
+			return fmt.Errorf("triggers[%d]: id is required", i)
+		}
+		if seenTrigger[t.ID] {
+			return fmt.Errorf("triggers: duplicate id %q", t.ID)
+		}
+		seenTrigger[t.ID] = true
+		if t.Kind != TriggerCross {
+			return fmt.Errorf("%s: trigger kind %q not in {cross}", t.ID, t.Kind)
+		}
+		if !ValidTriggerOp(t.Op) {
+			return fmt.Errorf("%s: trigger op %q not in {cross_above, cross_below}",
+				t.ID, t.Op)
+		}
+		for side, alias := range map[string]string{"left": t.Left, "right": t.Right} {
+			if alias == "" {
+				return fmt.Errorf("%s: trigger %s side is empty", t.ID, side)
+			}
+			if _, ok := declaredAlias[alias]; !ok {
+				return fmt.Errorf("%s: trigger %s = %q is not a declared storage column alias "+
+					"(declared: %v)", t.ID, side, alias, aliasKeys(declaredAlias))
+			}
+		}
+		if t.Left == t.Right {
+			return fmt.Errorf("%s: trigger left and right must differ", t.ID)
+		}
 	}
 
 	// Aliases must be indistinguishable from their target, otherwise the two ids

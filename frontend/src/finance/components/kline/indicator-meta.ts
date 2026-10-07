@@ -81,7 +81,7 @@ export interface IndicatorRegistryMeta {
 }
 
 export const INDICATOR_META: IndicatorRegistryMeta = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   absTolerance: 0.01,
   fixtureBars: 260,
   indicators: [
@@ -134,9 +134,14 @@ export const INDICATOR_META: IndicatorRegistryMeta = {
         }
       ],
       storage: {
-        backend: "frontend",
-        duckdbView: "",
-        columns: []
+        backend: "duckdb",
+        duckdbView: "v_indicators_daily",
+        columns: [
+          {
+            alias: "ztr_white",
+            column: "zettaranc_zg_white_10"
+          }
+        ]
       }
     },
     {
@@ -184,9 +189,14 @@ export const INDICATOR_META: IndicatorRegistryMeta = {
         }
       ],
       storage: {
-        backend: "frontend",
-        duckdbView: "",
-        columns: []
+        backend: "duckdb",
+        duckdbView: "v_indicators_daily",
+        columns: [
+          {
+            alias: "ztr_white",
+            column: "zettaranc_zg_white_10"
+          }
+        ]
       }
     },
     {
@@ -229,9 +239,14 @@ export const INDICATOR_META: IndicatorRegistryMeta = {
         }
       ],
       storage: {
-        backend: "frontend",
-        duckdbView: "",
-        columns: []
+        backend: "duckdb",
+        duckdbView: "v_indicators_daily",
+        columns: [
+          {
+            alias: "ztr_yellow",
+            column: "zettaranc_dg_yellow_14"
+          }
+        ]
       }
     },
     {
@@ -274,9 +289,14 @@ export const INDICATOR_META: IndicatorRegistryMeta = {
         }
       ],
       storage: {
-        backend: "frontend",
-        duckdbView: "",
-        columns: []
+        backend: "duckdb",
+        duckdbView: "v_indicators_daily",
+        columns: [
+          {
+            alias: "ztr_bbi",
+            column: "zettaranc_bbi"
+          }
+        ]
       }
     },
     {
@@ -612,29 +632,14 @@ export const INDICATOR_META: IndicatorRegistryMeta = {
   ],
   subPresets: [
     {
-      id: "VOL_AND_BRICK",
-      label: "量+ZX砖型 (推荐)",
-      hint: "成交量 + 同花顺知行砖型图。砖型把连续同向的 K 线合并成一块，块数代表趋势强度：4 块以上为强势。推荐作为默认副图。",
+      id: "MACD_VOL_KDJ_BRICK",
+      label: "经典四合一 (默认)",
+      hint: "MACD + 成交量 + KDJ + ZX砖型图 四维立体副图共振，默认全景呈现。",
       indicators: [
+        "Z_MACD",
         "Z_VOL",
+        "Z_KDJ",
         "ZX_BRICK"
-      ]
-    },
-    {
-      id: "ZX_BRICK",
-      label: "ZX砖型图",
-      hint: "仅砖型图，不带成交量。适合专注看多空节奏；减号标记回调、止字标记止跌。",
-      indicators: [
-        "ZX_BRICK"
-      ]
-    },
-    {
-      id: "VOL_AND_MACD",
-      label: "量+MACD",
-      hint: "成交量 + MACD。DIF/DEA 金叉死叉会打标记，红柱绿柱表示动能强弱，适合判断趋势转折。",
-      indicators: [
-        "Z_VOL",
-        "Z_MACD"
       ]
     },
     {
@@ -659,6 +664,14 @@ export const INDICATOR_META: IndicatorRegistryMeta = {
       hint: "KDJ 随机指标 (9,3,3)。K/D 在 20 以下为超卖区、80 以上为超买区，金叉死叉会打标记。",
       indicators: [
         "Z_KDJ"
+      ]
+    },
+    {
+      id: "ZX_BRICK",
+      label: "ZX砖型图",
+      hint: "仅砖型图，不带成交量。适合专注看多空节奏；减号标记回调、止字标记止跌。",
+      indicators: [
+        "ZX_BRICK"
       ]
     },
     {
