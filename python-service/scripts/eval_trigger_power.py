@@ -483,6 +483,13 @@ PAIRS = [
 MIN_ECONOMIC_EXCESS = 0.002
 
 
+def _parse_date(s: str):
+    """'YYYY-MM-DD' → datetime.date。空串返回 None（不过滤）。"""
+    import datetime as _dt
+    s = (s or "").strip()
+    return _dt.date.fromisoformat(s) if s else None
+
+
 def _cluster_mean(by_date: Dict[object, List[float]], n: int, total: float
                   ) -> Optional[tuple]:
     """
@@ -647,6 +654,9 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--horizons", type=int, nargs="+", default=[5, 10, 20])
     ap.add_argument("--end", default="2026-09-30")
+    ap.add_argument("--from-date", default="",
+                    help="只统计该日期（含）之后触发的样本。用于样本外验证："
+                         "先用前段找候选，再用后段检验它是否复现。")
     args = ap.parse_args()
 
     con = duckdb.connect()
@@ -698,7 +708,15 @@ def main() -> int:
         # 一次 SQL 取回全部标的的前视收益框架，按 thscode 顺序流式消费。
         # 序列（left/right）在 Python 里按来源取：库列走 _duckdb_series，
         # 前端公式走 _compute_frontend_series。两种来源共用 _cross_mask。
+        # 样本外的过滤**放在 Python 侧按触发日做，不放进 SQL**。
+        #
+        # 放进 WHERE 会先删行再做窗口函数，那样 compute:frontend 的 EMA 种子
+        # 就从起始日重新开始 —— 等于换了一套序列在算。样本外验证最忌讳这种
+        # 偷偷换口径：候选是在前段找的，检验时序列必须还是同一条。
         cur = con.execute(FRAME_SQL.format(n=n, end=args.end))
+        # rows[i][1] 是 datetime.date，跟 str 比会 TypeError。解析一次，
+        # 不是每根 bar 都 parse。
+        dmin = _parse_date(args.from_date)
         col_names = [d[0] for d in cur.description]
         cur_code = None
         batch: list = []
@@ -747,6 +765,8 @@ def main() -> int:
                 for i, hit in enumerate(mask):
                     if not hit:
                         continue
+                    if dmin and rows[i][1] < dmin:
+                        continue          # 样本外：只统计起始日之后的触发
                     r_open = rows[i][col_names.index("open_1")]
                     r_close = rows[i][col_names.index("close_n")]
                     cidx_n = rows[i][col_names.index("cidx_n")]
@@ -793,6 +813,8 @@ def main() -> int:
             i_prev = col_names.index("prev_close")
             i_exit = col_names.index("exit_date")
             for i in range(len(rows)):
+                if dmin and rows[i][1] < dmin:
+                    continue          # 与触发同口径：样本外基线也要只取后段
                 r_open, r_close = rows[i][i_open], rows[i][i_close]
                 cidx_n = rows[i][i_cidxn]
                 if r_open is None or r_close is None or cidx_n is None:
