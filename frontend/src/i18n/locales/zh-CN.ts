@@ -1,100 +1,189 @@
 export default {
-  wechat: {
-    send: '提问',
-    clear: '清空',
-    openOriginal: '查看原文 ↗',
-    loading: '载入中…',
-    pickHintClosed: '列表已收起，点右上角「显示列表」选择文章',
-    pickHint: '从左侧选择一篇文章',
-    vault: { off: '未配置 vault，图片可能无法显示' },
-    list: { show: '显示列表', hide: '隐藏列表', loading: '载入文章…', empty: '该知识库还没有公众号文章' },
-    item: { indexing: '索引中' },
-    scope: { doc: '只问这一篇', kb: '问整个知识库' },
-    chat: { empty: '就这篇文章提问，或切到「问整个知识库」做跨篇检索。', placeholder: '针对这篇文章提问，Enter 发送' },
-    tabs: {
-      radar: '动态雷达',
-      study: '精读问答',
-    },
-    radar: {
-      openExternal: '独立窗口打开',
-      reload: '刷新',
-      offlineHint: '未连接到公众号服务 (http://127.0.0.1:5030/biz)',
-      retry: '重试连接',
-    },
+  samples: {
+    markdown: 'Markdown 文档',
+    faq: '问答对 FAQ',
+    chapter: '多章节长文',
+    plain: '纯文本段落'
   },
-  halo: {
-    title: 'HALO 年报分析',
-    open: 'HALO 报告',
-    refresh: '重新生成',
-    archive: '归档到知识库',
-    archiving: '归档中…',
-    close: '关闭',
-    loading: '正在生成报告…',
-    loadFailed: '报告加载失败',
-    noDataTitle: '该标的尚无已落库的年报事实',
-    noDataHint: '点下方按钮同步巨潮年报，事实落库后本面板会立即重试取报告。',
-    syncCostHint: '同步需要下载并逐页解析年报 PDF，通常耗时 1–3 分钟，请勿关闭页面。',
-    syncAndRetry: '同步年报并重试',
-    syncing: '正在同步年报…',
-    syncDone: '年报已同步，正在重新生成报告',
-    syncFailed: '同步年报失败',
-    retry: '重试',
-    launchFullReport: '让 agent 生成完整报告',
-    skeletonNotice:
-      '本面板只呈现评分内核算出的数据层与量化锚点。7 个定性维度（护城河 / 滞胀防御 / ESG / 管理层 / 股东资金面 / 估值 / 风险）需由模型判分，此处不提供结论；需要完整分析请在会话中让 agent 执行 halo.analyze。',
-    scoreCard: '核心评分',
-    haloSix: 'HALO 六维',
-    haloSixDetail: 'HALO 六维明细',
-    growthLabel: '成长性',
-    growthDetail: '成长性子项',
-    notComputable: '不可计算',
-    growthMissing: '成长性缺以下输入，未参与加权：{keys}',
-    dim: '维度',
-    raw: '原始值',
-    weight: '权重',
-    score: '得分',
-    basis: '计算依据',
-    qualitativeDims: '定性维度（待判分）',
-    qualitativeHint: '以下维度由模型判分，面板只给出判分所需的量化锚点，不给结论。',
-    hasAnchor: '锚点齐全',
-    noAnchor: '锚点缺失',
-    pendingScore: '待判分',
-    anchors: '量化锚点',
-    noAnchors: '未取到锚点：{keys}',
-    facts: '年报事实',
-    value: '值',
-    page: '页码',
-    sourceText: '年报原文',
-    announcements: '公告',
-    rawMarkdown: '骨架原文（含待判分槽位）',
-    rawMarkdownHint: '归档进知识库的就是这份内容，未填的槽位显示为「待判分」。',
-    assetHeavy: '重资产',
-    assetMixed: '混合型',
-    assetLight: '轻资产',
-    dims: {
-      tangible: '有形资产密集度',
-      fixedIntensity: '固定资产密集度',
-      fixedShare: '固定资产份额',
-      capitalLabor: '资本-劳动力比率',
-      capexIntensity: 'Capex 密集度',
-      capexBurden: 'Capex 负担',
-    },
-    growthSubs: {
-      revenue: '营收增长',
-      profit: '利润增长',
-      quality: '增长质量',
-      sustainability: '增长持续性',
-    },
-    entryHint: '基于巨潮年报事实的评分内核数据：HALO 六维、成长性与各维度的量化锚点。',
-    period: '报告期',
-    assetType: '资产类型',
-    llmNote: '报告中 7 个定性维度（护城河/滞胀防御/ESG/管理层/股东资金面/估值/风险）由模型判分，其余数值由评分内核计算。报告有效期 30 天。',
-    pickKb: '归档到',
-    kbPlaceholder: '选择知识库',
-    archiveOk: '已归档为草稿，解析完成后可检索',
-    archiveUpdated: '已更新既有归档文档',
-    archiveFailed: '归档失败',
-    needKb: '请先选择知识库',
+  klineCompare: {
+    loading: '加载中 ({count})',
+    collapse: '点击折叠',
+    expand: '点击展开',
+    switchTo: '切换主图到 {name} ({thscode})'
+  },
+  lab: {
+    darkBase: '暗色基底',
+    afternoonGreeting: '下午好，今天想研究点什么？',
+    continueYesterday: '继续昨天的工作',
+    recentLoadFailed: '最近会话加载失败',
+    noPreview: '暂无消息预览',
+    messagesLoadFailed: '会话消息加载失败',
+    noMessages: '这个会话还没有消息。',
+    continueAsk: '继续追问…',
+    morningBrief: '研究晨报',
+    whatToResearch: '今天想研究点什么？',
+    pastIssues: '往期目录',
+    pastIssuesFailed: '往期目录加载失败',
+    researchDispatch: '研究长卷',
+    references: '参考来源',
+    noExcerpts: '无摘录内容',
+    todayHot: '今日热门',
+    knowledgeBase: '知识库',
+    weekendMarket: '周末市集开张啦',
+    vendorNotOpen: '摊主还没出摊',
+    browseAround: '先随便逛逛',
+    vendorPreparing: '摊主正在制作，马上就好…',
+    noOrders: '这个摊位还没有订单，开个头吧。',
+    print: '付印',
+    sendEnter: '发送（Enter）',
+    noPastIssues: '还没有往期研究',
+    composerPlaceholder: '问点什么…',
+    browseOrAsk: '先逛逛，或者直接问点什么…'
+  },
+  welcome: {
+    slogan: '让今天的知识，成为明天的智慧',
+    todayChats: '今日对话',
+    knowledgeBases: '知识库',
+    totalDocs: '文档总数',
+    insights: '知识洞察',
+    startExploring: '开始探索',
+    newChat: '新对话',
+    newChatDesc: '与 AI 助手开始新的知识探索',
+    browseKB: '浏览知识库',
+    browseKBDesc: '管理和探索你的知识资产',
+    agents: '智能体',
+    agentsDesc: '定制化 AI 助手满足特定需求'
+  },
+  mentionedStocks: {
+    title: '本轮提及个股',
+    viewKline: '看K线',
+    viewTitle: '切换主图到 {name} ({thscode})',
+    viewing: '正在查看',
+    viewingTitle: '当前主图已是 {name} ({thscode})'
+  },
+  watchDetail: {
+    notSet: '未设置',
+    cost: '成本',
+    stopLoss: '止损',
+    costPlaceholder: '目标成本价 (元)',
+    stopPlaceholder: '止损价 (元)'
+  },
+  stockCitation: {
+    noChangeData: '涨跌幅无数据',
+    analyzing: '正在分析战法指标与量化结构...',
+    insufficientData: '数据不足，暂不给战法评级',
+    valuation: '估值',
+    capitalFlow: '资金面',
+    volRatio: '量比',
+    amplitude: '振幅',
+    engine: '同花顺知行量化指标引擎',
+    amountWan: '{value}万',
+    amountYi: '{value}亿',
+    barsAsOf: '{bars}根K线 · 截至{asOf}',
+    barsInsufficient: 'K线不足24根({bars}根)',
+    continuousBoard: '{days}连板',
+    dragonCount: '龙虎榜{count}次',
+    hotRank: '热度第{rank}',
+    last30Days: '近30日',
+    limitBreakCount: '炸板{count}次',
+    limitUpCount: '涨停{count}次',
+    limitUpTitle: '最近涨停: {date}，连板: {days}天',
+    loss: '亏损',
+    moreSectors: '还有{count}个板块',
+    netAmountWan: '{direction}{value}万',
+    netAmountYi: '{direction}{value}亿',
+    netBuy: '净买入',
+    netSell: '净卖出',
+    noQuoteData: '暂无行情数据',
+    openWorkspace: '打开工作台',
+    queryFailed: '查询失败',
+    queryFailedDetail: '查询失败: {message}',
+    range20d: '近20日',
+    range5d: '近5日',
+    range60d: '近60日',
+    sourcesUnavailable: '数据源不可用: ',
+    yellowDegraded: '黄线降级'
+  },
+  kline: {
+    picksBar: '候选池 ({count})',
+    picksHint: '[↑/↓] 键快速切股',
+    searchSwitch: '点击搜索切换股票',
+    bbiTitle: '收盘价与BBI多空平衡线关系',
+    period: '周期',
+    adjust: '复权',
+    boardNoAdjust: '板块不复权',
+    searchPlaceholder: '输入股票代码/名称/拼音 (如 600519、宁德时代)',
+    searching: '正在搜索...',
+    noMatch: '未匹配到相关标的',
+    board: '板块',
+    mainChart: '主图:',
+    subChart: '副图:',
+    drawing: '画线:',
+    td9: '九转序列',
+    patternBubbles: '形态气泡',
+    patternOutline: '形态轮廓',
+    askAgent: '继续向 Agent 提问:',
+    actionValuation: '分析基本面与估值',
+    actionStrategy: '测算防守位与试仓策略',
+    actionReport: '查阅最新研报与核心逻辑',
+    actionHaloReport: 'HALO 年报报告',
+    actionHaloSix: 'HALO 六维与成长性',
+    actionHaloSeven: '七个定性维度判分',
+    actionHaloGovernance: '治理诚信事实',
+    noData: '本地无 {symbol} 的行情数据',
+    queryFailed: '{symbol} 行情查询失败',
+    volumeLabel: '成交量',
+    turnoverLabel: '成交额',
+    patternLabel: '形态',
+    patternAskSuffix: '，向 Agent 提问',
+    patternAskTitle: '点击向 Agent 提问当前形态：{patterns}',
+    zxBrickLabel: '知行砖',
+    zxBrickTitle: '同花顺知行砖型图 连续红绿砖数砖战法',
+    dualLineTitle: '白线 DEMA10 ({white}) vs 黄线 LongBBI ({yellow})',
+    dualLineBelow: '黄线下方·空头',
+    dualLineAbove: '双线上行·多头',
+    dualLineRetrace: '回踩整理',
+    aboveBBI: 'BBI多头',
+    belowBBI: 'BBI空头',
+    boardAdjustTitle: '板块指数无复权数据',
+    td9Title: '神奇九转序列：连续9天同向收盘后的转折信号',
+    patternBubbleLabel: '气泡',
+    patternBubbleBtnTitle: '在图表上显示顶底形态气泡',
+    patternBubbleHint: '点击气泡可查看形态详情或向 Agent 提问',
+    patternOutlineLabel: '轮廓',
+    patternOutlineBtnTitle: '在图表上绘制形态结构轮廓线',
+    patternOutlineHint: '展示形态的颈线与趋势通道',
+    boardNoPattern: '板块无形态',
+    boardNoPatternDetail: '板块指数不提供形态识别',
+    boardNoPatternOutlineDetail: '板块指数不提供形态轮廓',
+    noPatternDetected: '未检测到形态',
+    expandWorkspace: '展开工作台',
+    collapseWorkspace: '折叠工作台',
+    requestRejectedHint: '服务端明确拒绝了请求：{message}',
+    fetchPathIssueHint: '取数链路异常：{message}',
+    noDataHint: '暂无行情数据',
+    periodDay: '日K',
+    periodWeek: '周K',
+    periodMonth: '月K',
+    adjustNone: '不复权',
+    adjustForward: '前复权',
+    adjustBackward: '后复权',
+    unitShou: '手',
+    unitWanShou: '万手',
+    unitYiShou: '亿手',
+    unitWan: '万',
+    unitYi: '亿',
+    levelsLabel: '关键位',
+    levelsTitle: '支撑位与阻力位',
+    groupCandle: 'K线',
+    groupTactics: '战法',
+    oscillation: '震荡',
+    actionPatternDeep: '深入分析形态结构',
+    brickTitle: '同花顺知行砖型图 连续红绿砖数砖战法',
+    keyLevels: '关键位',
+    requestRejected: '服务端明确拒绝了这次请求',
+    retryWontHelp: '重试不会有不同结果',
+    fetchPathIssue: '这是取数链路的问题'
   },
   imageAttr: {
     contain_data_visual: {
@@ -851,6 +940,10 @@ export default {
     guideStep1_notion: '在 Notion 中打开你想要同步的页面或数据库',
     guideStep2_notion: '点击右上角的「···」菜单，选择「Connect to」或「Add connections」',
     guideStep3_notion: '搜索并选择你的集成应用（Integration），然后回到这里点重新加载',
+    noResourcesDesc_seafile: '该令牌能访问的资料库为空，或全部为加密资料库（不支持同步）',
+    guideStep1_seafile: '登录 Seafile，确认账号至少拥有一个未加密资料库的读取权限',
+    guideStep2_seafile: '在「设置 → Web API 令牌」中生成或重新生成令牌',
+    guideStep3_seafile: '回到这里填入新令牌并点重新加载',
     permissionDocLink: '查看飞书知识库权限配置文档',
     syncScheduleLabel: '同步频率',
     conflictLabel: '冲突策略',
@@ -940,17 +1033,27 @@ export default {
     minutesAgo: '{n} 分钟前',
     hoursAgo: '{n} 小时前',
     daysAgo: '{n} 天前',
+    resumeFailed: '恢复失败',
     syncError: {
       dingtalk_document_failed: '无法读取钉钉文档，请检查访问权限后重试同步。',
       dingtalk_resource_failed: '钉钉资源不可用，请检查访问权限和已选资源后重试。',
       deletion_lookup_failed: '删除前查找文档失败，请查看服务器日志',
       deletion_failed: '删除失败，请查看服务器日志',
-      ingest_failed: '导入失败，请查看服务器日志'
+      ingest_failed: '导入失败，请查看服务器日志',
+      seafile_permission_denied: '无权访问该 Seafile 文件，请检查令牌所属账号的资料库权限。',
+      seafile_not_found: 'Seafile 文件不存在或已被移动，下次同步将重试。',
+      seafile_file_too_large: 'Seafile 文件超过大小限制，请调大 MAX_FILE_SIZE_MB 或缩小该文件。',
+      seafile_empty_file: 'Seafile 文件内容为空，已跳过。',
+      seafile_source_changed: 'Seafile 文件在获取过程中发生变化，下次同步将重试。',
+      seafile_invalid_response: 'Seafile 返回了无法解析的响应，请检查服务器版本与反向代理配置。',
+      seafile_ssrf_blocked: 'Seafile 文件下载地址被 SSRF 策略拦截，请将 fileserver 域名加入 SSRF_WHITELIST。',
+      seafile_fetch_failed: '从 Seafile 获取文件失败，下次同步将重试。'
     },
     resourceType: {
       wikiSpace: '知识库空间',
       docCategory: '文档标签',
-      book: '语雀知识库'
+      book: '语雀知识库',
+      library: 'Seafile 资料库'
     },
     scheduleHuman: {
       '30min': '每 30 分钟',
@@ -1011,7 +1114,8 @@ export default {
       dingtalk: '同步钉钉知识库中的在线文档',
       rss: '同步 RSS / Atom 订阅源中的文章',
       ima: '同步腾讯 IMA 知识库中的文档、笔记与文件（暂不支持 AI 会话与视频解析）',
-      gitlab: '同步 GitLab 项目中的文件'
+      gitlab: '同步 GitLab 项目中的文件',
+      seafile: '同步 Seafile 资料库中的目录与文件'
     },
     connector: {
       feishu: '飞书',
@@ -1024,7 +1128,8 @@ export default {
       dingtalk: '钉钉文档',
       rss: 'RSS / Atom 订阅',
       ima: '腾讯 IMA',
-      gitlab: 'GitLab'
+      gitlab: 'GitLab',
+      seafile: 'Seafile'
     },
     logDetail: {
       startTime: '开始时间',
@@ -1061,6 +1166,13 @@ export default {
       overwrite: '覆盖更新',
       skip: '跳过已存在'
     },
+    seafile: {
+      baseUrl: 'Seafile 地址',
+      apiToken: 'API 令牌',
+      apiTokenHint: '在 Seafile「设置 → Web API 令牌」中生成；账号对所选资料库有读权限即可，令牌不会随文件下载请求发送。',
+      singleLibraryOnly: '一个数据源只能同步一个资料库，请先取消已选资料库中的内容再改选。',
+      selectionRequired: '请至少勾选一个资料库、目录或文件'
+    },
     gitlab: {
       baseUrl: 'GitLab 地址',
       accessToken: '个人访问令牌',
@@ -1085,8 +1197,6 @@ export default {
       incremental: '增量同步',
       full: '全量同步'
     }
-  ,
-    resumeFailed: '恢复失败',
   },
   ollama: {
     unknown: '未知',
@@ -2713,6 +2823,7 @@ export default {
   },
   language: {
     zhCN: '简体中文',
+    zhTW: '繁體中文',
     enUS: 'English',
     ruRU: 'Русский',
     koKR: '한국어',
@@ -2730,33 +2841,6 @@ export default {
     selectModelPlaceholder: '请选择模型',
     searchPlaceholder: '搜索模型...',
     builtinTag: '内置',
-    // 思考强度。key 由 utils/reasoningEffort.ts 的 levelLabelKey() /
-    // levelDescriptionKey() **动态拼出**（model.reasoning.levels.*），
-    // 而 localeGapScan 只扫源码里的静态 $t('...') 字面量，扫不到动态 key，
-    // 所以这里必须与 REASONING_LEVELS 保持同步 —— 缺一项，界面就直接把
-    // "model.reasoning.levels.xxx" 原样回显给用户。
-    reasoning: {
-      levels: {
-        off: '关闭',
-        auto: '自动',
-        minimal: '极简',
-        low: '低',
-        medium: '中',
-        high: '高',
-        xhigh: '超高',
-        max: '最高',
-      },
-      levelDescriptions: {
-        off: '关闭思考，直接给出回答',
-        auto: '由模型自行决定思考强度',
-        minimal: '极少思考，优先保证响应速度',
-        low: '轻度思考，兼顾速度与深度',
-        medium: '均衡强度，适合大多数问题',
-        high: '深度思考，适合复杂推理',
-        xhigh: '超深度思考，耗时更长',
-        max: '模型支持的最高思考强度',
-      },
-    },
     editor: {
       maxOutputTokensLabel: '最大输出 tokens',
       maxOutputTokensPlaceholder: '留空使用目录默认',
@@ -2798,6 +2882,8 @@ export default {
       dimensionOverrideDesc: '仅在确认该模型支持 dimensions 参数时开启；默认只使用检测到的实际维度。',
       supportsVisionLabel: '支持视觉/多模态',
       supportsVisionDesc: '模型是否支持图片等多模态输入',
+      embeddingImageInputLabel: '图片输入',
+      embeddingImageInputDesc: '模型能把图片编码到与文本相同的向量空间。目录内的模型自动识别，自定义模型需手动声明',
       contextWindowLabel: '上下文窗口',
       contextWindowPlaceholder: '默认 {value}',
       contextWindowDesc: '该模型一次请求能容纳的 token 数。智能体压缩对话历史会按此上限工作。留空则使用默认 200000（200K）。请按厂商文档填写真实值，填大会导致压缩不触发、上游直接拒绝请求。',
@@ -2897,6 +2983,28 @@ export default {
         reasoning: '推理',
         vision: '视觉',
         hint: '可从厂商内置目录选择，也可直接输入自定义模型名。'
+      }
+    },
+    reasoning: {
+      levelDescriptions: {
+        off: '关闭思考，直接给出回答',
+        auto: '由模型自行决定思考强度',
+        minimal: '极少思考，优先保证响应速度',
+        low: '轻度思考，兼顾速度与深度',
+        medium: '均衡强度，适合大多数问题',
+        high: '深度思考，适合复杂推理',
+        xhigh: '超深度思考，耗时更长',
+        max: '模型支持的最高思考强度'
+      },
+      levels: {
+        off: '关闭',
+        auto: '自动',
+        minimal: '极简',
+        low: '低',
+        medium: '中',
+        high: '高',
+        xhigh: '超高',
+        max: '最高'
       }
     }
   },
@@ -3189,7 +3297,8 @@ export default {
           },
           registration_mode: {
             self_serve: '自助注册（任何人可注册）',
-            invite_only: '仅邀请（关闭公网注册）'
+            invite_register: '仅限邀请注册（需有效邀请链接）',
+            invite_only: '禁止注册（已有账号仍可接受邀请）'
           }
         }
       },
@@ -3219,7 +3328,7 @@ export default {
           whitelist: 'SSRF 防护白名单。可填入 example.com / *.foo.com / 10.0.0.0/8 / 2001:db8::1。修改后立即生效。SSRF_WHITELIST_EXTRA 环境变量仍由部署方维护，不在此处覆盖。'
         },
         auth: {
-          registration_mode: '自助注册模式。self_serve = 任何人可注册账号；invite_only = 关闭公网注册，仅 Owner/Admin 可邀请。修改后立即生效，但谨慎对待 self_serve（公网会接受 spam）。',
+          registration_mode: '注册模式。开放注册允许任何人创建账号；仅限邀请注册要求有效邀请链接；禁止注册不允许创建账号，但已有账号仍可接受邀请。保存后立即生效。',
           default_tenant_mode: '公开注册后的空间初始化策略。create_personal 会自动创建个人空间并授予 Owner；tenantless 仅创建账户，用户需要接受邀请或主动创建空间。只影响之后注册的用户。',
           complex_password_enabled: '是否启用复杂密码。开启后密码必须包含大小写字母、数字和特殊字符。修改后立即生效，只影响新注册用户或新密码修改/重置操作。特殊字符包含：{specialChars}'
         }
@@ -3250,7 +3359,7 @@ export default {
           whitelist: 'SSRF 防护白名单'
         },
         auth: {
-          registration_mode: '自助注册模式',
+          registration_mode: '注册模式',
           default_tenant_mode: '注册默认空间策略',
           complex_password_enabled: '启用复杂密码'
         }
@@ -3793,6 +3902,7 @@ export default {
     attachmentUploadFailed: '附件上传失败',
     attachmentParseFailed: '附件解析失败',
     attachmentStillProcessing: '附件 {name} 仍在解析，请稍候',
+    imageReadFailed: '图片读取失败',
     klineStudio: {
       openInPanel: '在右侧栏展开',
       empty: '当前没有推送标的。',
@@ -3865,8 +3975,6 @@ export default {
       thisYear: '{month}月{day}日 {time}',
       otherYear: '{year}年{month}月{day}日 {time}'
     }
-  ,
-    imageReadFailed: '图片读取失败',
   },
   knowledgeEditor: {
     titleCreate: '新建知识库',
@@ -3888,6 +3996,9 @@ export default {
         customInstructionsPlaceholder: '例如：重点识别设备铭牌、型号、告警代码和表格中的单位…',
         imageAttrsLabel: '图片属性观察',
         imageAttrsDescription: '开启后，解析时对每张图片先「观察属性＋描述」，再按属性决定是否对图内文字再跑一轮 OCR；关闭则沿用基础模式：所有图片逐张描述并全部 OCR',
+        imageVectorLabel: '图片向量检索',
+        imageVectorDescription: '开启后，生成图片描述之后再用向量模型直接对图片编码，检索时按图片内容召回描述没写到的信息。需要向量模型支持图片输入；每张图片多一次向量调用，向量检索的候选范围也会放大。只对此后入库或重新解析的文档生效，扫描件 PDF 页不生成',
+        imageVectorModelUnsupported: '当前向量模型未声明图片输入，开启后不会生成或召回图片向量',
         imageAttrsSchemaLabel: '可观察的图片属性',
         imageAttrsSchemaDescription: '模型会观察以下属性（由后端注册表定义）以驱动 OCR 策略',
         imageAttrsOcrConditions: '根据观察到的属性条件触发 OCR',
@@ -4244,13 +4355,6 @@ export default {
       editingBadge: '编辑中',
       pageActions: '页面操作',
       viewTabs: '知识库视图',
-      tabDocuments: '文档',
-      tabDocumentsTip: '查看并管理该知识库中的文档',
-      tabWikiTip: '浏览由知识库自动生成的 Wiki 页面',
-      tabGraph: '关系图谱',
-      tabGraphTip: '查看文档与页面之间的关系图谱',
-      tabGallery: '图库',
-      tabGalleryTip: '查看知识库中的图片资源',
       searchPlaceholder: '搜索 Wiki 页面...',
       searchNoResults: '没有找到匹配的页面',
       viewModeToggle: '切换目录视图',
@@ -4355,6 +4459,13 @@ export default {
       fixStartError: '启动修复助手失败',
       issueFixPromptSingle: '请修复页面 [[{slug}]] 上的问题 (ID: {id})。',
       issueFixPromptAutoStart: '请修复页面 [[{slug}]] 上的以下问题：',
+      tabDocuments: '文档',
+      tabDocumentsTip: '查看并管理该知识库中的文档',
+      tabWikiTip: '浏览由知识库自动生成的 Wiki 页面',
+      tabGraph: '关系图谱',
+      tabGraphTip: '查看文档与页面之间的关系图谱',
+      tabGallery: '图库',
+      tabGalleryTip: '查看知识库中的图片资源',
       gallery: {
         attr: {
           builtin_caption: '描述',
@@ -4789,15 +4900,14 @@ export default {
     }
   },
   createChat: {
-    workbench: {
-      greeting: { morning: '早上好', afternoon: '下午好', evening: '晚上好', night: '夜深了' },
-      greetingSub: '今天想研究点什么？',
-      continueTitle: '继续昨天的工作',
-      untitledSession: '未命名会话',
-      minutesAgo: '{n} 分钟前',
-      hoursAgo: '{n} 小时前',
-      yesterday: '昨天',
-      daysAgo: '{n} 天前'
+    title: '你好，这里是@:{\'appName\'}，让知识触手可及',
+    newSessionTitle: '新会话',
+    openProject: '选择项目',
+    clearProject: '取消绑定',
+    pickFailed: '无法打开所选路径',
+    messages: {
+      createFailed: '创建会话失败',
+      createError: '创建会话失败，请稍后重试'
     },
     marketEntry: {
       sectionTitle: '市场行情',
@@ -4813,14 +4923,20 @@ export default {
         unavailable: '暂不可用'
       }
     },
-    title: '你好，这里是@:{\'appName\'}，让知识触手可及',
-    newSessionTitle: '新会话',
-    openProject: '选择项目',
-    clearProject: '取消绑定',
-    pickFailed: '无法打开所选路径',
-    messages: {
-      createFailed: '创建会话失败',
-      createError: '创建会话失败，请稍后重试'
+    workbench: {
+      greetingSub: '今天想研究点什么？',
+      continueTitle: '继续昨天的工作',
+      untitledSession: '未命名会话',
+      minutesAgo: '{n} 分钟前',
+      hoursAgo: '{n} 小时前',
+      yesterday: '昨天',
+      daysAgo: '{n} 天前',
+      greeting: {
+        morning: '早上好',
+        afternoon: '下午好',
+        evening: '晚上好',
+        night: '夜深了'
+      }
     }
   },
   input: {
@@ -4855,6 +4971,16 @@ export default {
     modelLockedByAgent: '当前智能体已锁定模型配置',
     imageUploadDisabledByAgent: '当前智能体未启用图片上传',
     goToAgentSettings: '去设置智能体',
+    fileUpload: {
+      label: '上传文件',
+      tooltip: '上传文件',
+      tooMany: '文件数量超出限制',
+      tooLarge: '文件大小超出限制'
+    },
+    imageUpload: {
+      label: '上传图片',
+      tooltip: '上传图片分析'
+    },
     messages: {
       enterContent: '请先输入内容!',
       replying: '正在回复中，请稍后再试!',
@@ -4879,21 +5005,9 @@ export default {
     webSearch: {
       toggleOn: '开启网络搜索',
       toggleOff: '关闭网络搜索',
-      notConfigured: '未配置网络搜索引擎'
-    ,
-      label: '网络搜索',
-  }
-  ,
-    imageUpload: {
-      label: '上传图片',
-      tooltip: '上传图片分析',
-    },
-    fileUpload: {
-      label: '上传文件',
-      tooltip: '上传文件',
-      tooMany: '文件数量超出限制',
-      tooLarge: '文件大小超出限制',
-    },
+      notConfigured: '未配置网络搜索引擎',
+      label: '网络搜索'
+    }
   },
   manualEditor: {
     defaultTitlePrefix: '新建文档',
@@ -4999,9 +5113,8 @@ export default {
     }
   },
   file: {
-    upload: '上传文件'
-  ,
-    downloadFailed: '下载失败，请稍后重试',
+    upload: '上传文件',
+    downloadFailed: '下载失败，请稍后重试'
   },
   mentionDetail: {
     readOnlyFromAgent: '仅在此对话中只读，不显示在知识库列表中',
@@ -5700,10 +5813,9 @@ export default {
       mineruLegacySectionHint: 'MinerU 4.0 已移除以下请求参数，连接 4.0 及以上服务时会被忽略；VLM 地址改在 MinerU 服务端配置。',
       paddleocrVlEndpointPlaceholder: '如 http://your-paddleocr-vl:8080',
       paddleocrVlEndpointHint: '填写 PaddleOCR-VL 完整服务（pipeline）地址，无需 /layout-parsing 后缀',
-      paddleocrVlCloudTokenPlaceholder: 'PaddleOCR-VL 飞桨星河社区 Token'
-    ,
-      checking: '正在检测...',
-  },
+      paddleocrVlCloudTokenPlaceholder: 'PaddleOCR-VL 飞桨星河社区 Token',
+      checking: '正在检测...'
+    },
     weknoraCloud: {
       title: 'WeKnora Cloud',
       description: '配置 WeKnora Cloud 的 APPID 和 APPSECRET 凭证。凭证用于模型服务和文档解析引擎。',
@@ -6784,6 +6896,7 @@ export default {
     channelConfluence: 'Confluence',
     channelYuque: '语雀',
     channelGitLab: 'GitLab',
+    channelSeafile: 'Seafile',
     channelIma: '腾讯 IMA',
     channelUpload: '上传',
     channelManual: '手动',
@@ -6975,6 +7088,8 @@ export default {
     filesSkippedNoEngine: '{count} 个文件因无可用解析引擎被跳过',
     deleteSuccess: '已删除知识',
     chunkLoadFailed: '分块加载失败',
+    selectKnowledgeBase: '请选择知识库',
+    tagDeleteDesc: '确定删除标签"{name}"？该标签下的所有 FAQ 将被一并删除',
     moveToFolder: {
       action: '移动到目录',
       newFolderPlaceholder: '输入新目录名称',
@@ -6987,7 +7102,6 @@ export default {
     folderTree: {
       totalDocuments: '共 {count} 个文档',
       countHint: '当前目录 {direct} 个文档，含子目录共 {total} 个',
-      filteredCount: '匹配 {count} 个文档',
       title: '目录',
       rootRow: '根目录',
       rootRowTip: '知识库根目录，未归入子文件夹的文档在此',
@@ -7001,7 +7115,8 @@ export default {
       renamePlaceholder: '输入文件夹名称',
       renameSuccess: '文件夹已重命名',
       renameFailed: '文件夹重命名失败',
-      renameInvalid: '不能把文件夹移动到它自己的子目录下'
+      renameInvalid: '不能把文件夹移动到它自己的子目录下',
+      filteredCount: '匹配 {count} 个文档'
     },
     sort: {
       title: '排序',
@@ -7051,9 +7166,6 @@ export default {
       sharedAt: '共享于',
       lastUpdated: '最后更新'
     }
-  ,
-    selectKnowledgeBase: '请选择知识库',
-    tagDeleteDesc: '确定删除标签"{name}"？该标签下的所有 FAQ 将被一并删除',
   },
   resourceOrigin: {
     mine: '我创建',
@@ -7379,68 +7491,6 @@ export default {
     apiChats: 'API 会话',
     noSessions: '暂无对话'
   },
-  marketDashboard: {
-    title: '大盘预览',
-    back: '返回工作台',
-    backToWorkbench: '返回',
-    dataTime: '数据时间',
-    tickerLabel: '指数',
-    refresh: '刷新',
-    refreshFailed: '行情刷新失败，请稍后重试',
-    themeToDark: '切到深色',
-    themeToLight: '切到浅色',
-    /** 盘后与非交易日统一叫「收盘」：那一刻的读数是收盘价，不是"最新"。 */
-    latestLabel: '最新',
-    closedLabel: '收盘',
-    state: {
-      open: '盘中',
-      closed: '盘后',
-      holiday: '非交易日'
-    },
-    holidayNote: '展示最近交易日',
-    chartLow: '低 {v}',
-    chartHigh: '高 {v}',
-    prevCloseTitle: '昨收 {v}',
-    chartLegend: '— 近60日   ┆ 今开   ┆ 昨收（虚线）   ● {point}',
-    sentiment: {
-      title: '市场情绪',
-      caption: '涨跌停池 · 全市场',
-      limitUp: '涨停',
-      limitDown: '跌停',
-      broken: '炸板',
-      brokenUnit: '只 · {rate}%',
-      maxStreak: '最高连板',
-      streakUnit: '板',
-      trendLabel: '近5日涨停家数',
-      breadth: { up: '上涨', flat: '平盘', down: '下跌' }
-    },
-    watchlist: {
-      title: '自选股',
-      count: '{n} 只',
-      all: '全部 →',
-      empty: '还没有自选股，先加几只常看的',
-      emptyCta: '去自选页添加',
-      emptyChip: '+ {name}',
-      state: { observing: '观察', triggered: '已触发', holding: '持有', dropped: '已移出' }
-    },
-    dragonTiger: {
-      title: '龙虎榜',
-      caption: '净买入前五 · 全市场',
-      full: '完整榜单 →',
-      net: '净买',
-      org: '机构',
-      empty: '今日暂无数据'
-    },
-    etf: {
-      title: '权重 ETF',
-      caption: '宽基'
-    },
-    noData: '暂无数据',
-    loading: '加载中…',
-    sourceUnavailable: '部分数据源未就绪（{sources}），相关格子为空',
-    /** 指数格整体不可用时（本地没有该指数行情）才用这一句，不是"今天休市"。 */
-    indexUnavailable: '该指数暂无本地行情数据'
-  },
   watchlist: {
     title: '个股追踪',
     subtitle: '关注标的的最新价与涨跌，数据来自本地行情库（前复权）',
@@ -7538,18 +7588,6 @@ export default {
     triggeredToday: '今日触发',
     addToPool: '进池',
     inPool: '已在池中',
-    columns: {
-      code: '代码',
-      name: '名称',
-      state: '状态',
-      note: '备注',
-      price: '最新价',
-      change: '涨跌',
-      turnover: '成交额',
-      date: '最新交易日',
-      actions: '操作'
-    }
-  ,
     backtestBadgeText: '回测胜率 {winRate}% ({wins}/{total}胜，平均最大涨幅+{maxGain}%)',
     backtestBadgeTitle: '基于历史买点信号的客观回测统计（持有至止盈止损或20个交易日）',
     commonPresets: '常用预设',
@@ -7574,6 +7612,86 @@ export default {
     todayAlerts: '今日预警',
     totalTracked: '追踪总数',
     watchPool: '重点观察',
+    columns: {
+      code: '代码',
+      name: '名称',
+      state: '状态',
+      note: '备注',
+      price: '最新价',
+      change: '涨跌',
+      turnover: '成交额',
+      date: '最新交易日',
+      actions: '操作'
+    }
+  },
+  marketDashboard: {
+    title: '大盘预览',
+    back: '返回工作台',
+    dataTime: '数据时间',
+    tickerLabel: '指数',
+    refresh: '刷新',
+    themeToDark: '切到深色',
+    themeToLight: '切到浅色',
+    latestLabel: '最新',
+    closedLabel: '收盘',
+    holidayNote: '展示最近交易日',
+    chartLow: '低 {v}',
+    chartHigh: '高 {v}',
+    prevCloseTitle: '昨收 {v}',
+    chartLegend: '— 近60日   ┆ 今开   ┆ 昨收（虚线）   ● {point}',
+    noData: '暂无数据',
+    sourceUnavailable: '部分数据源未就绪（{sources}），相关格子为空',
+    indexUnavailable: '该指数暂无本地行情数据',
+    backToWorkbench: '返回',
+    refreshFailed: '行情刷新失败，请稍后重试',
+    loading: '加载中…',
+    etf: {
+      title: '权重 ETF',
+      caption: '宽基'
+    },
+    dragonTiger: {
+      title: '龙虎榜',
+      caption: '净买入前五 · 全市场',
+      net: '净买',
+      org: '机构',
+      empty: '今日暂无数据',
+      full: '完整榜单 →'
+    },
+    watchlist: {
+      title: '自选股',
+      count: '{n} 只',
+      all: '全部 →',
+      empty: '还没有自选股，先加几只常看的',
+      emptyCta: '去自选页添加',
+      emptyChip: '+ {name}',
+      state: {
+        observing: '观察',
+        triggered: '已触发',
+        holding: '持有',
+        dropped: '已移出'
+      }
+    },
+    sentiment: {
+      title: '市场情绪',
+      caption: '涨跌停池 · 全市场',
+      limitUp: '涨停',
+      limitDown: '跌停',
+      broken: '炸板',
+      brokenUnit: '只 · {rate}%',
+      maxStreak: '最高连板',
+      streakUnit: '板',
+      trendLabel: '近5日涨停家数',
+      breadth: {
+        up: '上涨',
+        flat: '平盘',
+        down: '下跌'
+      }
+    },
+    state: {
+      open: '盘中',
+      closed: '盘后',
+      holiday: '非交易日'
+    }
   },
   resourceSort: {
     title: '排序',
@@ -7888,196 +8006,115 @@ export default {
       explicit: '各空间在模型配置中填写的参数始终优先；修改目录不会改写已保存的模型。'
     }
   },
-  kline: {
-    picksBar: '候选池 ({count})',
-    picksHint: '[↑/↓] 键快速切股',
-    searchSwitch: '点击搜索切换股票',
-    brickTitle: '同花顺知行砖型图 连续红绿砖数砖战法',
-    bbiTitle: '收盘价与BBI多空平衡线关系',
-    period: '周期',
-    adjust: '复权',
-    boardNoAdjust: '板块不复权',
-    searchPlaceholder: '输入股票代码/名称/拼音 (如 600519、宁德时代)',
-    searching: '正在搜索...',
-    noMatch: '未匹配到相关标的',
-    board: '板块',
-    mainChart: '主图:',
-    subChart: '副图:',
-    drawing: '画线:',
-    td9: '九转序列',
-    patternBubbles: '形态气泡',
-    patternOutline: '形态轮廓',
-    keyLevels: '关键位',
-    askAgent: '继续向 Agent 提问:',
-    actionValuation: '分析基本面与估值',
-    actionStrategy: '测算防守位与试仓策略',
-    actionReport: '查阅最新研报与核心逻辑',
-    // HALO：报告本身在面板里出（Python 算的完整版），这几条是给 agent 的问法。
-    actionHaloReport: 'HALO 年报报告',
-    actionHaloSix: 'HALO 六维与成长性',
-    actionHaloSeven: '七个定性维度判分',
-    actionHaloGovernance: '治理诚信事实',
-    noData: '本地无 {symbol} 的行情数据',
-    queryFailed: '{symbol} 行情查询失败',
-    requestRejected: '服务端明确拒绝了这次请求',
-    retryWontHelp: '重试不会有不同结果',
-    fetchPathIssue: '这是取数链路的问题',
-  
-    volumeLabel: '成交量',
-    turnoverLabel: '成交额',
-    patternLabel: '形态',
-    patternAskSuffix: '，向 Agent 提问',
-    patternAskTitle: '点击向 Agent 提问当前形态：{patterns}',
-    zxBrickLabel: '知行砖',
-    zxBrickTitle: '同花顺知行砖型图 连续红绿砖数砖战法',
-    dualLineTitle: '白线 DEMA10 ({white}) vs 黄线 LongBBI ({yellow})',
-    dualLineBelow: '黄线下方·空头',
-    dualLineAbove: '双线上行·多头',
-    dualLineRetrace: '回踩整理',
-    aboveBBI: 'BBI多头',
-    belowBBI: 'BBI空头',
-    boardAdjustTitle: '板块指数无复权数据',
-    td9Title: '神奇九转序列：连续9天同向收盘后的转折信号',
-    patternBubbleLabel: '气泡',
-    patternBubbleBtnTitle: '在图表上显示顶底形态气泡',
-    patternBubbleHint: '点击气泡可查看形态详情或向 Agent 提问',
-    patternOutlineLabel: '轮廓',
-    patternOutlineBtnTitle: '在图表上绘制形态结构轮廓线',
-    patternOutlineHint: '展示形态的颈线与趋势通道',
-    boardNoPattern: '板块无形态',
-    boardNoPatternDetail: '板块指数不提供形态识别',
-    boardNoPatternOutlineDetail: '板块指数不提供形态轮廓',
-    noPatternDetected: '未检测到形态',
-    expandWorkspace: '展开工作台',
-    collapseWorkspace: '折叠工作台',
-    requestRejectedHint: '服务端明确拒绝了请求：{message}',
-    fetchPathIssueHint: '取数链路异常：{message}',
-    noDataHint: '暂无行情数据',
-    periodDay: '日K',
-    periodWeek: '周K',
-    periodMonth: '月K',
-    adjustNone: '不复权',
-    adjustForward: '前复权',
-    adjustBackward: '后复权',
-    unitShou: '手',
-    unitWanShou: '万手',
-    unitYiShou: '亿手',
-    unitWan: '万',
-    unitYi: '亿',
-    levelsLabel: '关键位',
-    levelsTitle: '支撑位与阻力位',
-    groupCandle: 'K线',
-    groupTactics: '战法',
-    oscillation: '震荡',
-    actionPatternDeep: '深入分析形态结构',
+  halo: {
+    title: 'HALO 年报分析',
+    open: 'HALO 报告',
+    refresh: '重新生成',
+    archive: '归档到知识库',
+    archiving: '归档中…',
+    loading: '正在生成报告…',
+    loadFailed: '报告加载失败',
+    noDataTitle: '该标的尚无已落库的年报事实',
+    noDataHint: '点下方按钮同步巨潮年报，事实落库后本面板会立即重试取报告。',
+    syncCostHint: '同步需要下载并逐页解析年报 PDF，通常耗时 1–3 分钟，请勿关闭页面。',
+    syncAndRetry: '同步年报并重试',
+    syncing: '正在同步年报…',
+    syncDone: '年报已同步，正在重新生成报告',
+    syncFailed: '同步年报失败',
+    retry: '重试',
+    launchFullReport: '让 agent 生成完整报告',
+    skeletonNotice: '本面板只呈现评分内核算出的数据层与量化锚点。7 个定性维度（护城河 / 滞胀防御 / ESG / 管理层 / 股东资金面 / 估值 / 风险）需由模型判分，此处不提供结论；需要完整分析请在会话中让 agent 执行 halo.analyze。',
+    scoreCard: '核心评分',
+    haloSix: 'HALO 六维',
+    haloSixDetail: 'HALO 六维明细',
+    growthLabel: '成长性',
+    growthDetail: '成长性子项',
+    notComputable: '不可计算',
+    growthMissing: '成长性缺以下输入，未参与加权：{keys}',
+    dim: '维度',
+    raw: '原始值',
+    weight: '权重',
+    score: '得分',
+    basis: '计算依据',
+    qualitativeDims: '定性维度（待判分）',
+    qualitativeHint: '以下维度由模型判分，面板只给出判分所需的量化锚点，不给结论。',
+    hasAnchor: '锚点齐全',
+    noAnchor: '锚点缺失',
+    pendingScore: '待判分',
+    anchors: '量化锚点',
+    noAnchors: '未取到锚点：{keys}',
+    facts: '年报事实',
+    value: '值',
+    page: '页码',
+    sourceText: '年报原文',
+    announcements: '公告',
+    rawMarkdown: '骨架原文（含待判分槽位）',
+    rawMarkdownHint: '归档进知识库的就是这份内容，未填的槽位显示为「待判分」。',
+    assetHeavy: '重资产',
+    assetMixed: '混合型',
+    assetLight: '轻资产',
+    entryHint: '基于巨潮年报事实的评分内核数据：HALO 六维、成长性与各维度的量化锚点。',
+    period: '报告期',
+    assetType: '资产类型',
+    pickKb: '归档到',
+    kbPlaceholder: '选择知识库',
+    archiveOk: '已归档为草稿，解析完成后可检索',
+    archiveUpdated: '已更新既有归档文档',
+    archiveFailed: '归档失败',
+    needKb: '请先选择知识库',
+    close: '关闭',
+    llmNote: '报告中 7 个定性维度（护城河/滞胀防御/ESG/管理层/股东资金面/估值/风险）由模型判分，其余数值由评分内核计算。报告有效期 30 天。',
+    growthSubs: {
+      revenue: '营收增长',
+      profit: '利润增长',
+      quality: '增长质量',
+      sustainability: '增长持续性'
+    },
+    dims: {
+      tangible: '有形资产密集度',
+      fixedIntensity: '固定资产密集度',
+      fixedShare: '固定资产份额',
+      capitalLabor: '资本-劳动力比率',
+      capexIntensity: 'Capex 密集度',
+      capexBurden: 'Capex 负担'
+    }
   },
-  stockCitation: {
-    noChangeData: '涨跌幅无数据',
-    analyzing: '正在分析战法指标与量化结构...',
-    insufficientData: '数据不足，暂不给战法评级',
-    valuation: '估值',
-    capitalFlow: '资金面',
-    volRatio: '量比',
-    amplitude: '振幅',
-    engine: '同花顺知行量化指标引擎',
-  
-    amountWan: '{value}万',
-    amountYi: '{value}亿',
-    barsAsOf: '{bars}根K线 · 截至{asOf}',
-    barsInsufficient: 'K线不足24根({bars}根)',
-    continuousBoard: '{days}连板',
-    dragonCount: '龙虎榜{count}次',
-    hotRank: '热度第{rank}',
-    last30Days: '近30日',
-    limitBreakCount: '炸板{count}次',
-    limitUpCount: '涨停{count}次',
-    limitUpTitle: '最近涨停: {date}，连板: {days}天',
-    loss: '亏损',
-    moreSectors: '还有{count}个板块',
-    netAmountWan: '{direction}{value}万',
-    netAmountYi: '{direction}{value}亿',
-    netBuy: '净买入',
-    netSell: '净卖出',
-    noQuoteData: '暂无行情数据',
-    openWorkspace: '打开工作台',
-    queryFailed: '查询失败',
-    queryFailedDetail: '查询失败: {message}',
-    range20d: '近20日',
-    range5d: '近5日',
-    range60d: '近60日',
-    sourcesUnavailable: '数据源不可用: ',
-    yellowDegraded: '黄线降级',
-  },
-  watchDetail: {
-    notSet: '未设置',
-    cost: '成本',
-    stopLoss: '止损',
-  
-    costPlaceholder: '目标成本价 (元)',
-    stopPlaceholder: '止损价 (元)',
-  },
-  mentionedStocks: {
-    title: '本轮提及个股',
-  
-    viewKline: '看K线',
-    viewTitle: '切换主图到 {name} ({thscode})',
-    viewing: '正在查看',
-    viewingTitle: '当前主图已是 {name} ({thscode})',
-  },
-  welcome: {
-    slogan: '让今天的知识，成为明天的智慧',
-    todayChats: '今日对话',
-    knowledgeBases: '知识库',
-    totalDocs: '文档总数',
-    insights: '知识洞察',
-    startExploring: '开始探索',
-    newChat: '新对话',
-    newChatDesc: '与 AI 助手开始新的知识探索',
-    browseKB: '浏览知识库',
-    browseKBDesc: '管理和探索你的知识资产',
-    agents: '智能体',
-    agentsDesc: '定制化 AI 助手满足特定需求',
-  },
-  lab: {
-    darkBase: '暗色基底',
-    afternoonGreeting: '下午好，今天想研究点什么？',
-    continueYesterday: '继续昨天的工作',
-    recentLoadFailed: '最近会话加载失败',
-    noPreview: '暂无消息预览',
-    messagesLoadFailed: '会话消息加载失败',
-    noMessages: '这个会话还没有消息。',
-    continueAsk: '继续追问…',
-    morningBrief: '研究晨报',
-    whatToResearch: '今天想研究点什么？',
-    pastIssues: '往期目录',
-    pastIssuesFailed: '往期目录加载失败',
-    noPastIssues: '还没有往期研究',
-    researchDispatch: '研究长卷',
-    references: '参考来源',
-    noExcerpts: '无摘录内容',
-    todayHot: '今日热门',
-    knowledgeBase: '知识库',
-    weekendMarket: '周末市集开张啦',
-    vendorNotOpen: '摊主还没出摊',
-    browseAround: '先随便逛逛',
-    vendorPreparing: '摊主正在制作，马上就好…',
-    noOrders: '这个摊位还没有订单，开个头吧。',
-    composerPlaceholder: '问点什么…',
-    print: '付印',
-    sendEnter: '发送（Enter）',
-    browseOrAsk: '先逛逛，或者直接问点什么…',
-  },
-
-  klineCompare: {
-    loading: '加载中 ({count})',
-    collapse: '点击折叠',
-    expand: '点击展开',
-    switchTo: '切换主图到 {name} ({thscode})',
-  },
-  samples: {
-    markdown: 'Markdown 文档',
-    faq: '问答对 FAQ',
-    chapter: '多章节长文',
-    plain: '纯文本段落',
-  },
+  wechat: {
+    openOriginal: '查看原文 ↗',
+    send: '提问',
+    clear: '清空',
+    loading: '载入中…',
+    pickHintClosed: '列表已收起，点右上角「显示列表」选择文章',
+    pickHint: '从左侧选择一篇文章',
+    radar: {
+      openExternal: '独立窗口打开',
+      reload: '刷新',
+      offlineHint: '未连接到公众号服务 (http://127.0.0.1:5030/biz)',
+      retry: '重试连接'
+    },
+    tabs: {
+      radar: '动态雷达',
+      study: '精读问答'
+    },
+    chat: {
+      empty: '就这篇文章提问，或切到「问整个知识库」做跨篇检索。',
+      placeholder: '针对这篇文章提问，Enter 发送'
+    },
+    scope: {
+      doc: '只问这一篇',
+      kb: '问整个知识库'
+    },
+    item: {
+      indexing: '索引中'
+    },
+    list: {
+      show: '显示列表',
+      hide: '隐藏列表',
+      loading: '载入文章…',
+      empty: '该知识库还没有公众号文章'
+    },
+    vault: {
+      off: '未配置 vault，图片可能无法显示'
+    }
+  }
 }

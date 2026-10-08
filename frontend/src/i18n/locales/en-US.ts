@@ -1,26 +1,41 @@
 export default {
   wechat: {
+    openOriginal: 'View original ↗',
     send: 'Ask',
     clear: 'Clear',
-    openOriginal: 'View original ↗',
     loading: 'Loading…',
     pickHintClosed: 'List is collapsed — use “Show list” at the top right to pick an article',
     pickHint: 'Pick an article on the left',
-    vault: { off: 'Vault not configured — images may not load' },
-    list: { show: 'Show list', hide: 'Hide list', loading: 'Loading articles…', empty: 'No WeChat articles in this knowledge base' },
-    item: { indexing: 'indexing' },
-    scope: { doc: 'This article', kb: 'Whole knowledge base' },
-    chat: { empty: 'Ask about this article, or switch to the whole knowledge base for cross-article search.', placeholder: 'Ask about this article. Enter to send' },
+    vault: {
+      off: 'Vault not configured — images may not load'
+    },
+    list: {
+      show: 'Show list',
+      hide: 'Hide list',
+      loading: 'Loading articles…',
+      empty: 'No WeChat articles in this knowledge base'
+    },
+    item: {
+      indexing: 'indexing'
+    },
+    scope: {
+      doc: 'This article',
+      kb: 'Whole knowledge base'
+    },
+    chat: {
+      empty: 'Ask about this article, or switch to the whole knowledge base for cross-article search.',
+      placeholder: 'Ask about this article. Enter to send'
+    },
     tabs: {
       radar: 'Dynamic Radar',
-      study: 'Deep Reading',
+      study: 'Deep Reading'
     },
     radar: {
       openExternal: 'Open in new window',
       reload: 'Reload',
       offlineHint: 'Could not connect to WeChat service (http://127.0.0.1:5030/biz)',
-      retry: 'Retry connection',
-    },
+      retry: 'Retry connection'
+    }
   },
   halo: {
     title: 'HALO annual-report analysis',
@@ -28,7 +43,6 @@ export default {
     refresh: 'Regenerate',
     archive: 'Archive to knowledge base',
     archiving: 'Archiving…',
-    close: 'Close',
     loading: 'Generating report…',
     loadFailed: 'Failed to load the report',
     noDataTitle: 'No annual-report facts have been synced for this symbol yet',
@@ -40,8 +54,7 @@ export default {
     syncFailed: 'Failed to sync the annual report',
     retry: 'Retry',
     launchFullReport: 'Have the agent generate the full report',
-    skeletonNotice:
-      'This panel shows only the data layer computed by the scoring kernel and its quantitative anchors. The seven qualitative dimensions (moat / stagflation defence / ESG / management / shareholder & flow / valuation / risk) are scored by a model and carry no conclusion here; for a full analysis ask the agent to run halo.analyze in a session.',
+    skeletonNotice: 'This panel shows only the data layer computed by the scoring kernel and its quantitative anchors. The seven qualitative dimensions (moat / stagflation defence / ESG / management / shareholder & flow / valuation / risk) are scored by a model and carry no conclusion here; for a full analysis ask the agent to run halo.analyze in a session.',
     scoreCard: 'Core scores',
     haloSix: 'HALO six dimensions',
     haloSixDetail: 'HALO six-dimension detail',
@@ -77,24 +90,25 @@ export default {
       fixedShare: 'Fixed-asset share',
       capitalLabor: 'Capital–labour ratio',
       capexIntensity: 'Capex intensity',
-      capexBurden: 'Capex burden',
+      capexBurden: 'Capex burden'
     },
     growthSubs: {
       revenue: 'Revenue growth',
       profit: 'Profit growth',
       quality: 'Growth quality',
-      sustainability: 'Growth sustainability',
+      sustainability: 'Growth sustainability'
     },
     entryHint: 'Scoring-kernel data derived from CNINFO annual-report facts: the six HALO dimensions, growth, and the quantitative anchors per dimension.',
     period: 'Period',
     assetType: 'Asset type',
-    llmNote: 'Seven qualitative dimensions (moat / stagflation defence / ESG / management / shareholder & flow / valuation / risk) are scored by the model; every other number is computed by the scoring kernel. The report is valid for 30 days.',
     pickKb: 'Archive to',
     kbPlaceholder: 'Select a knowledge base',
     archiveOk: 'Archived as a draft; searchable once parsing completes',
     archiveUpdated: 'Existing archived document updated',
     archiveFailed: 'Archive failed',
     needKb: 'Select a knowledge base first',
+    close: 'Close',
+    llmNote: 'Seven qualitative dimensions (moat / stagflation defence / ESG / management / shareholder & flow / valuation / risk) are scored by the model; every other number is computed by the scoring kernel. The report is valid for 30 days.'
   },
   modelCatalog: {
     title: 'Model catalog',
@@ -412,11 +426,9 @@ export default {
   marketDashboard: {
     title: 'Market Overview',
     back: 'Back to workbench',
-    backToWorkbench: 'Back',
     dataTime: 'As of',
     tickerLabel: 'Index',
     refresh: 'Refresh',
-    refreshFailed: 'Failed to refresh quotes. Please try again.',
     themeToDark: 'Switch to dark',
     themeToLight: 'Switch to light',
     latestLabel: 'Latest',
@@ -441,7 +453,11 @@ export default {
       maxStreak: 'Max streak',
       streakUnit: 'boards',
       trendLabel: 'Limit-ups, last 5 days',
-      breadth: { up: 'Up', flat: 'Flat', down: 'Down' }
+      breadth: {
+        up: 'Up',
+        flat: 'Flat',
+        down: 'Down'
+      }
     },
     watchlist: {
       title: 'Watchlist',
@@ -449,25 +465,32 @@ export default {
       all: 'All →',
       empty: 'No watchlist items yet — add a few you follow',
       emptyCta: 'Add in watchlist',
-      emptyChip: '+ {name}',
-      state: { observing: 'Watching', triggered: 'Triggered', holding: 'Holding', dropped: 'Removed' }
+      state: {
+        observing: 'Watching',
+        triggered: 'Triggered',
+        holding: 'Holding',
+        dropped: 'Removed'
+      },
+      emptyChip: '+ {name}'
     },
     dragonTiger: {
       title: 'Top traded',
       caption: 'Top 5 net buys · All market',
-      full: 'Full list →',
       net: 'Net',
       org: 'Inst.',
-      empty: 'No data today'
+      empty: 'No data today',
+      full: 'Full list →'
     },
     etf: {
       title: 'Broad ETFs',
       caption: 'Broad-based'
     },
     noData: 'No data',
-    loading: 'Loading…',
     sourceUnavailable: 'Some data sources are unavailable ({sources}); those panels are empty',
-    indexUnavailable: 'No local quote data for this index'
+    indexUnavailable: 'No local quote data for this index',
+    backToWorkbench: 'Back',
+    refreshFailed: 'Failed to refresh quotes. Please try again.',
+    loading: 'Loading…'
   },
   watchlist: {
     title: 'Watchlist',
@@ -576,8 +599,7 @@ export default {
       turnover: 'Turnover',
       date: 'Last trade date',
       actions: 'Actions'
-    }
-  ,
+    },
     backtestBadgeText: 'Backtest Win Rate {winRate}% ({wins}/{total}, avg max gain +{maxGain}%)',
     backtestBadgeTitle: 'Backtest statistics based on historical buy signals',
     commonPresets: 'Common Presets',
@@ -601,7 +623,7 @@ export default {
     targetStop: 'Stop Loss',
     todayAlerts: 'Today Alerts',
     totalTracked: 'Total Tracked',
-    watchPool: 'Watch Pool',
+    watchPool: 'Watch Pool'
   },
   menu: {
     sessionInProgress: 'Conversation in progress',
@@ -990,7 +1012,6 @@ export default {
     folderTree: {
       totalDocuments: '{count} documents total',
       countHint: '{direct} documents in this folder; {total} including subfolders',
-      filteredCount: '{count} matching documents',
       title: 'Folders',
       rootRow: 'Root',
       rootRowTip: 'Knowledge base root; documents not in a subfolder live here',
@@ -1004,7 +1025,8 @@ export default {
       renamePlaceholder: 'Folder name',
       renameSuccess: 'Folder renamed',
       renameFailed: 'Could not rename the folder',
-      renameInvalid: 'A folder cannot be moved inside itself'
+      renameInvalid: 'A folder cannot be moved inside itself',
+      filteredCount: '{count} matching documents'
     },
     moveToFolder: {
       action: 'Move to folder',
@@ -1077,6 +1099,7 @@ export default {
     channelConfluence: 'Confluence',
     channelYuque: 'Yuque',
     channelGitLab: 'GitLab',
+    channelSeafile: 'Seafile',
     channelIma: 'Tencent IMA',
     channelUpload: 'Upload',
     channelManual: 'Manual',
@@ -1267,10 +1290,9 @@ export default {
     allFilesSkippedNoEngine: 'All selected files were skipped due to no available parser engine',
     filesSkippedNoEngine: '{count} file(s) skipped due to no available parser engine',
     deleteSuccess: 'Knowledge deleted successfully!',
-    chunkLoadFailed: 'Failed to load chunks'
-  ,
+    chunkLoadFailed: 'Failed to load chunks',
     selectKnowledgeBase: 'Please select a knowledge base',
-    tagDeleteDesc: 'Are you sure you want to delete tag "{name}"? All FAQs under this tag will also be deleted',
+    tagDeleteDesc: 'Are you sure you want to delete tag "{name}"? All FAQs under this tag will also be deleted'
   },
   uploadConfirm: {
     documentSummary: 'Document summary',
@@ -2352,10 +2374,9 @@ export default {
       mineruLegacySectionHint: 'MinerU 4.0 removed these request parameters, so they are ignored by 4.0+ servers; configure the VLM server on the MinerU side instead.',
       paddleocrVlEndpointPlaceholder: 'e.g. http://your-paddleocr-vl:8080',
       paddleocrVlEndpointHint: 'Base URL of the full PaddleOCR-VL pipeline service; no /layout-parsing suffix needed',
-      paddleocrVlCloudTokenPlaceholder: 'PaddleOCR-VL AI Studio Token'
-    ,
-      checking: 'Checking...',
-  },
+      paddleocrVlCloudTokenPlaceholder: 'PaddleOCR-VL AI Studio Token',
+      checking: 'Checking...'
+    },
     storageBackend: {
       description: 'Manage the storage instances used for files and images; multiple instances of the same type can be configured.',
       empty: 'No storage instances configured yet',
@@ -2980,9 +3001,8 @@ export default {
     noCompatibleKbForAgent: 'This agent\'s tools don\'t match any knowledge base\'s capabilities in scope, so nothing can be referenced.'
   },
   file: {
-    upload: 'Upload File'
-  ,
-    downloadFailed: 'Download failed, please try again later',
+    upload: 'Upload File',
+    downloadFailed: 'Download failed, please try again later'
   },
   manualEditor: {
     placeholders: {
@@ -3105,10 +3125,9 @@ export default {
     webSearch: {
       toggleOn: 'Enable Web Search',
       toggleOff: 'Disable Web Search',
-      notConfigured: 'Web search engine not configured'
-    ,
-      label: 'Web Search',
-  },
+      notConfigured: 'Web search engine not configured',
+      label: 'Web Search'
+    },
     knowledgeBase: 'Knowledge Base',
     knowledgeBaseWithCount: 'Knowledge Base ({count})',
     notConfigured: 'Not configured',
@@ -3146,22 +3165,26 @@ export default {
     kbDisabledByAgent: 'Knowledge base is disabled by the current agent',
     modelLockedByAgent: 'Model selection is locked by the current agent',
     imageUploadDisabledByAgent: 'Image upload is not enabled for this agent',
-    goToAgentSettings: 'Go to agent settings'
-  ,
+    goToAgentSettings: 'Go to agent settings',
     imageUpload: {
       label: 'Upload image',
-      tooltip: 'Upload image for analysis',
+      tooltip: 'Upload image for analysis'
     },
     fileUpload: {
       label: 'Upload file',
       tooltip: 'Upload file',
       tooMany: 'Too many files',
-      tooLarge: 'File too large',
-    },
+      tooLarge: 'File too large'
+    }
   },
   createChat: {
     workbench: {
-      greeting: { morning: 'Good morning', afternoon: 'Good afternoon', evening: 'Good evening', night: 'Late night' },
+      greeting: {
+        morning: 'Good morning',
+        afternoon: 'Good afternoon',
+        evening: 'Good evening',
+        night: 'Late night'
+      },
       greetingSub: 'What would you like to work on today?',
       continueTitle: 'Pick up where you left off',
       untitledSession: 'Untitled session',
@@ -3672,13 +3695,6 @@ export default {
       editingBadge: 'Editing',
       pageActions: 'Page actions',
       viewTabs: 'Knowledge base views',
-      tabDocuments: 'Documents',
-      tabDocumentsTip: 'View and manage documents in this knowledge base',
-      tabWikiTip: 'Browse the Wiki pages generated from this knowledge base',
-      tabGraph: 'Graph',
-      tabGraphTip: 'View the relationship graph between documents and pages',
-      tabGallery: 'Gallery',
-      tabGalleryTip: 'View image assets in this knowledge base',
       gallery: {
         attr: {
           builtin_caption: 'Caption',
@@ -3798,7 +3814,14 @@ export default {
       issueFixSingle: 'Fix',
       fixStartError: 'Failed to start fix assistant',
       issueFixPromptSingle: 'Please fix the issue (ID: {id}) on page [[{slug}]].',
-      issueFixPromptAutoStart: 'Please fix the following issues on page [[{slug}]]:'
+      issueFixPromptAutoStart: 'Please fix the following issues on page [[{slug}]]:',
+      tabDocuments: 'Documents',
+      tabDocumentsTip: 'View and manage documents in this knowledge base',
+      tabWikiTip: 'Browse the Wiki pages generated from this knowledge base',
+      tabGraph: 'Graph',
+      tabGraphTip: 'View the relationship graph between documents and pages',
+      tabGallery: 'Gallery',
+      tabGalleryTip: 'View image assets in this knowledge base'
     },
     buttons: {
       create: 'Create Knowledge Base',
@@ -4104,6 +4127,9 @@ export default {
         customInstructionsPlaceholder: 'For example: prioritize nameplates, model numbers, alarm codes, and table units…',
         imageAttrsLabel: 'Image attribute observation',
         imageAttrsDescription: 'When on, each image is first observed for attributes and described, then the attributes decide whether an OCR round runs for the text in the image. When off, the basic mode applies: every image is described and OCR runs for all of them',
+        imageVectorLabel: 'Image vector search',
+        imageVectorDescription: 'When on, each image is also encoded by the embedding model itself after its description is generated, so searches can find images by what they show even where the description leaves it out. Needs an embedding model that takes images; costs one extra embedding call per image and widens the vector search pool. Applies to documents ingested or re-parsed afterwards; scanned PDF pages are skipped',
+        imageVectorModelUnsupported: 'The current embedding model does not declare image input, so no image vectors will be indexed or recalled',
         imageAttrsSchemaLabel: 'Observable image attributes',
         imageAttrsSchemaDescription: 'The model observes the attributes below (defined by the backend registry) to drive the OCR policy',
         imageAttrsOcrConditions: 'Trigger OCR based on the observed attribute conditions',
@@ -4347,9 +4373,8 @@ export default {
         truncated: 'Candidate set truncated; results may be partial',
         warning: '{text}'
       }
-    }
-  ,
-    imageReadFailed: 'Failed to read image',
+    },
+    imageReadFailed: 'Failed to read image'
   },
   tenant: {
     title: 'Workspace Information',
@@ -4778,7 +4803,7 @@ export default {
       },
       keyLabels: {
         auth: {
-          registration_mode: 'Self-service registration mode',
+          registration_mode: 'Registration mode',
           default_tenant_mode: 'Default workspace provisioning',
           complex_password_enabled: 'Require complex password'
         },
@@ -4809,7 +4834,7 @@ export default {
       },
       keyDescriptions: {
         auth: {
-          registration_mode: 'Self-service registration mode. self_serve = anyone can register an account; invite_only = public registration is disabled and only Owners/Admins can invite. Takes effect immediately after saving, but use self_serve with care (the public internet will send spam sign-ups).',
+          registration_mode: 'Registration mode. Open registration allows anyone to create an account; invitation registration requires a valid invitation link; disabled registration prevents account creation while existing accounts can still accept invitations. Changes take effect immediately.',
           default_tenant_mode: 'Workspace provisioning after public registration. create_personal creates an Owner workspace; tenantless creates only the account until the user accepts an invitation or creates a workspace. Applies to new users only.',
           complex_password_enabled: 'Whether to require complex passwords. When enabled, passwords must contain uppercase and lowercase letters, numbers, and special characters. Changes take effect immediately and only apply to newly registered users or new password changes/resets. Special characters include {specialChars}'
         },
@@ -4842,7 +4867,8 @@ export default {
         auth: {
           registration_mode: {
             self_serve: 'Self-service (anyone can register)',
-            invite_only: 'Invite only (public registration disabled)'
+            invite_register: 'Invitation registration (valid link required)',
+            invite_only: 'Registration disabled (existing accounts can accept invitations)'
           },
           default_tenant_mode: {
             create_personal: 'Create personal workspace',
@@ -5089,9 +5115,6 @@ export default {
     loadFailed: 'Failed to load model list',
     selectModelPlaceholder: 'Select a model',
     searchPlaceholder: 'Search models...',
-    // Dynamically composed by levelLabelKey()/levelDescriptionKey() in
-    // utils/reasoningEffort.ts, so the static-key locale scan cannot see it.
-    // Keep in sync with REASONING_LEVELS.
     reasoning: {
       levels: {
         off: 'Off',
@@ -5101,7 +5124,7 @@ export default {
         medium: 'Medium',
         high: 'High',
         xhigh: 'X-High',
-        max: 'Max',
+        max: 'Max'
       },
       levelDescriptions: {
         off: 'No thinking, answer directly',
@@ -5111,8 +5134,8 @@ export default {
         medium: 'Balanced depth for most questions',
         high: 'Deep thinking for complex reasoning',
         xhigh: 'Very deep thinking, slower',
-        max: 'The highest level this model supports',
-      },
+        max: 'The highest level this model supports'
+      }
     },
     editor: {
       maxOutputTokensLabel: 'Max output tokens',
@@ -5215,6 +5238,8 @@ export default {
       dimensionOverrideDesc: 'Enable only if the provider documentation says this model accepts a dimensions parameter.',
       supportsVisionLabel: 'Supports Vision / Multimodal',
       supportsVisionDesc: 'Whether the model accepts image and multimodal input',
+      embeddingImageInputLabel: 'Image Input',
+      embeddingImageInputDesc: 'The model embeds images into the same vector space as text. Catalogued models are detected automatically; declare it for custom models',
       contextWindowLabel: 'Context Window',
       contextWindowPlaceholder: 'Default {value}',
       contextWindowDesc: 'How many tokens this model can take in one request. Agent history compaction uses this limit. Leave empty for the default 200000 (200K). Use the provider’s real window — a larger guess means compaction never fires and the provider rejects the request.',
@@ -5260,6 +5285,7 @@ export default {
   },
   language: {
     zhCN: '简体中文',
+    zhTW: 'Traditional Chinese',
     enUS: 'English',
     ruRU: 'Русский',
     koKR: '한국어',
@@ -6948,6 +6974,13 @@ export default {
       addProject: 'Add project',
       projectRequired: 'Add at least one GitLab project'
     },
+    seafile: {
+      baseUrl: 'Seafile URL',
+      apiToken: 'API token',
+      apiTokenHint: 'Generate it under "Settings → Web API token" in Seafile; the account only needs read access to the libraries you select, and the token is never sent with file downloads.',
+      singleLibraryOnly: 'A data source syncs one library; clear the current library before selecting another.',
+      selectionRequired: 'Select at least one library, folder or file'
+    },
     resourceHint: 'Select the spaces or folders to sync',
     untitled: 'Untitled',
     resourceLoadFailed: 'Failed to load resources',
@@ -6961,6 +6994,10 @@ export default {
     guideStep1_notion: 'Open the page or database you want to sync in Notion',
     guideStep2_notion: 'Click the "···" menu at the top right, select "Connect to" or "Add connections"',
     guideStep3_notion: 'Search and select your Integration app, then come back and click Retry',
+    noResourcesDesc_seafile: 'The token can reach no libraries, or every library is encrypted (encrypted libraries cannot be synced)',
+    guideStep1_seafile: 'Sign in to Seafile and confirm the account can read at least one unencrypted library',
+    guideStep2_seafile: 'Generate or regenerate the token under "Settings → Web API token"',
+    guideStep3_seafile: 'Come back, enter the new token and click Retry',
     permissionDocLink: 'View Feishu wiki permission docs',
     syncScheduleLabel: 'Sync schedule',
     conflictLabel: 'Conflict strategy',
@@ -7019,7 +7056,8 @@ export default {
       dingtalk: 'DingTalk Docs',
       rss: 'RSS / Atom Feed',
       ima: 'Tencent IMA',
-      gitlab: 'GitLab'
+      gitlab: 'GitLab',
+      seafile: 'Seafile'
     },
     connectorDesc: {
       feishu: 'Sync documents, spreadsheets and files from Feishu Wiki',
@@ -7032,7 +7070,8 @@ export default {
       dingtalk: 'Sync online documents from DingTalk knowledge bases',
       rss: 'Sync articles from RSS / Atom feeds',
       ima: 'Sync documents, notes and files from Tencent IMA knowledge bases (AI sessions and video parses are not supported)',
-      gitlab: 'Sync files from GitLab projects'
+      gitlab: 'Sync files from GitLab projects',
+      seafile: 'Sync folders and files from Seafile libraries'
     },
     drive: {
       folderTokenLabel: 'Drive folder token',
@@ -7157,7 +7196,8 @@ export default {
     resourceType: {
       wikiSpace: 'Wiki Space',
       docCategory: 'Document Tag',
-      book: 'Yuque Book'
+      book: 'Yuque Book',
+      library: 'Seafile Library'
     },
     neverSynced: 'Never synced',
     justNow: 'Just now',
@@ -7169,10 +7209,17 @@ export default {
       dingtalk_resource_failed: 'DingTalk resource is unavailable; check access and the saved selection, then retry.',
       deletion_lookup_failed: 'Failed to look up the item before deletion; see server logs',
       deletion_failed: 'Deletion failed; see server logs',
-      ingest_failed: 'Ingest failed; see server logs'
-    }
-  ,
-    resumeFailed: 'Failed to resume',
+      ingest_failed: 'Ingest failed; see server logs',
+      seafile_permission_denied: 'Access to the Seafile file was denied; check the library permissions of the token owner.',
+      seafile_not_found: 'The Seafile file no longer exists or was moved; the next sync retries it.',
+      seafile_file_too_large: 'The Seafile file exceeds the size limit; raise MAX_FILE_SIZE_MB or shrink the file.',
+      seafile_empty_file: 'The Seafile file is empty and was skipped.',
+      seafile_source_changed: 'The Seafile file changed while it was being fetched; the next sync retries it.',
+      seafile_invalid_response: 'Seafile returned a response that could not be parsed; check the server version and reverse proxy.',
+      seafile_ssrf_blocked: 'The Seafile download URL was blocked by the SSRF policy; add the fileserver host to SSRF_WHITELIST.',
+      seafile_fetch_failed: 'Failed to fetch the file from Seafile; the next sync retries it.'
+    },
+    resumeFailed: 'Failed to resume'
   },
   integrations: {
     cli: {
@@ -7888,7 +7935,6 @@ export default {
     picksBar: 'Watchlist ({count})',
     picksHint: '[↑/↓] keys to switch stocks',
     searchSwitch: 'Click to search and switch stock',
-    brickTitle: 'THS ZX Brick Chart - consecutive red/green brick strategy',
     bbiTitle: 'Close price vs BBI bullish/bearish balance line',
     period: 'Period',
     adjust: 'Adjust',
@@ -7903,23 +7949,16 @@ export default {
     td9: 'TD9 Sequence',
     patternBubbles: 'Pattern Bubbles',
     patternOutline: 'Pattern Outline',
-    keyLevels: 'Key Levels',
     askAgent: 'Ask Agent:',
     actionValuation: 'Analyze Fundamentals & Valuation',
     actionStrategy: 'Calculate Defense & Entry Strategy',
     actionReport: 'Latest Research & Core Logic',
-    // HALO: the full report is rendered in the workbench panel (computed by
-    // Python); these are the agent-facing asks.
     actionHaloReport: 'HALO Annual Report',
     actionHaloSix: 'HALO Six Dimensions & Growth',
     actionHaloSeven: 'Score the Seven Qualitative Dimensions',
     actionHaloGovernance: 'Governance Integrity Facts',
     noData: 'No market data for {symbol}',
     queryFailed: '{symbol} quote query failed',
-    requestRejected: 'Server explicitly rejected this request',
-    retryWontHelp: 'Retrying will not yield different results',
-    fetchPathIssue: 'This is a data fetch path issue',
-  
     volumeLabel: 'Volume',
     turnoverLabel: 'Turnover',
     patternLabel: 'Pattern',
@@ -7967,6 +8006,11 @@ export default {
     groupTactics: 'Tactics',
     oscillation: 'Oscillating',
     actionPatternDeep: 'Deep Pattern Analysis',
+    brickTitle: 'THS ZX Brick Chart - consecutive red/green brick strategy',
+    keyLevels: 'Key Levels',
+    requestRejected: 'Server explicitly rejected this request',
+    retryWontHelp: 'Retrying will not yield different results',
+    fetchPathIssue: 'This is a data fetch path issue'
   },
   stockCitation: {
     noChangeData: 'No change data',
@@ -7977,7 +8021,6 @@ export default {
     volRatio: 'Volume Ratio',
     amplitude: 'Amplitude',
     engine: 'THS ZX Quantitative Engine',
-  
     amountWan: '{value}0k',
     amountYi: '{value}00M',
     barsAsOf: '{bars} bars · As of {asOf}',
@@ -8003,23 +8046,21 @@ export default {
     range5d: '5d',
     range60d: '60d',
     sourcesUnavailable: 'Sources unavailable: ',
-    yellowDegraded: 'Yellow line degraded',
+    yellowDegraded: 'Yellow line degraded'
   },
   watchDetail: {
     notSet: 'Not set',
     cost: 'Cost',
     stopLoss: 'Stop Loss',
-  
     costPlaceholder: 'Target cost price',
-    stopPlaceholder: 'Stop loss price',
+    stopPlaceholder: 'Stop loss price'
   },
   mentionedStocks: {
     title: 'Stocks Mentioned',
-  
     viewKline: 'View K-Line',
     viewTitle: 'Switch chart to {name} ({thscode})',
     viewing: 'Viewing',
-    viewingTitle: 'Currently viewing {name} ({thscode})',
+    viewingTitle: 'Currently viewing {name} ({thscode})'
   },
   welcome: {
     slogan: 'Let today\'s knowledge become tomorrow\'s wisdom',
@@ -8033,7 +8074,7 @@ export default {
     browseKB: 'Browse Knowledge Base',
     browseKBDesc: 'Manage and explore your knowledge assets',
     agents: 'Agents',
-    agentsDesc: 'Customized AI assistants for specific needs',
+    agentsDesc: 'Customized AI assistants for specific needs'
   },
   lab: {
     darkBase: 'Dark Base',
@@ -8048,7 +8089,6 @@ export default {
     whatToResearch: 'What would you like to research today?',
     pastIssues: 'Past Issues',
     pastIssuesFailed: 'Failed to load past issues',
-    noPastIssues: 'No past research yet',
     researchDispatch: 'Research Dispatch',
     references: 'References',
     noExcerpts: 'No excerpts',
@@ -8059,22 +8099,22 @@ export default {
     browseAround: 'Just browsing',
     vendorPreparing: 'Vendor is preparing, coming soon…',
     noOrders: 'No orders yet at this stall. Start one!',
-    composerPlaceholder: 'Ask something…',
     print: 'Print',
     sendEnter: 'Send (Enter)',
-    browseOrAsk: 'Browse around, or ask something…',
+    noPastIssues: 'No past research yet',
+    composerPlaceholder: 'Ask something…',
+    browseOrAsk: 'Browse around, or ask something…'
   },
-
   klineCompare: {
     loading: 'Loading ({count})',
     collapse: 'Click to collapse',
     expand: 'Click to expand',
-    switchTo: 'Switch chart to {name} ({thscode})',
+    switchTo: 'Switch chart to {name} ({thscode})'
   },
   samples: {
     markdown: 'Markdown Document',
     faq: 'Q&A FAQ',
     chapter: 'Multi-chapter Document',
-    plain: 'Plain Text Paragraph',
-  },
+    plain: 'Plain Text Paragraph'
+  }
 }

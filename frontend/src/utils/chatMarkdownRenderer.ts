@@ -3,6 +3,7 @@ import markedKatex from 'marked-katex-extension'
 import type { Tokens } from 'marked'
 
 import type { CachedMermaidSvgHtml } from './mermaidStreaming.ts'
+import { ensureLiteralSingleTildeOnGlobalMarked } from './markedLiteralTilde.ts'
 import { normalizeSandboxArtifactRefs } from './sandboxArtifactRefs.ts'
 import {
   collapseStandaloneCitationParagraphs,
@@ -50,6 +51,7 @@ export type RenderChatMarkdownOptions = {
 export function configureMarkedForChatMarkdown(): void {
   if (markedConfigured) return
   marked.use({ breaks: true, gfm: true })
+  ensureLiteralSingleTildeOnGlobalMarked()
   marked.use(markedKatex({ throwOnError: false, nonStandard: true }))
   markedConfigured = true
 }

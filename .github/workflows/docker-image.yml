@@ -182,13 +182,11 @@ jobs:
           flavor: |
             suffix=-cube,onlatest=true
 
-      # amd64 only: cubesandbox-base, the source of the envd binary, publishes
-      # no arm64 image.
       - name: Build sandbox Cube Image
         uses: docker/build-push-action@v7
         with:
           push: true
-          platforms: linux/amd64
+          platforms: linux/amd64,linux/arm64
           file: docker/Dockerfile.sandbox
           target: cube
           context: .
@@ -226,12 +224,11 @@ jobs:
           flavor: |
             suffix=-desktop-cube,onlatest=true
 
-      # amd64 only: same cubesandbox-base constraint as the cube target.
       - name: Build sandbox desktop Cube Image
         uses: docker/build-push-action@v7
         with:
           push: true
-          platforms: linux/amd64
+          platforms: linux/amd64,linux/arm64
           file: docker/Dockerfile.sandbox
           target: desktop-cube
           context: .

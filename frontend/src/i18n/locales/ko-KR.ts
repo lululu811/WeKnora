@@ -1,100 +1,189 @@
 export default {
-  wechat: {
-    send: '질문',
-    clear: '지우기',
-    openOriginal: '원문 보기 ↗',
-    loading: '불러오는 중…',
-    pickHintClosed: '목록이 접혀 있습니다. 오른쪽 위 "목록 보기"로 기사를 선택하세요',
-    pickHint: '왼쪽에서 기사를 선택하세요',
-    vault: { off: 'vault 미설정 — 이미지가 표시되지 않을 수 있습니다' },
-    list: { show: '목록 보기', hide: '목록 숨기기', loading: '기사 불러오는 중…', empty: '이 지식베이스에 위챗 기사가 없습니다' },
-    item: { indexing: '인덱싱 중' },
-    scope: { doc: '이 기사만', kb: '지식베이스 전체' },
-    chat: { empty: '이 기사에 질문하거나, 「지식베이스 전체」로 전환해 통합 검색하세요.', placeholder: '이 기사에 질문 (Enter 전송)' },
-    tabs: {
-      radar: '동적 레이더',
-      study: '정독 질의응답',
-    },
-    radar: {
-      openExternal: '새 창에서 열기',
-      reload: '새로고침',
-      offlineHint: '공식 계정 서비스에 연결할 수 없습니다 (http://127.0.0.1:5030/biz)',
-      retry: '다시 시도',
-    },
+  samples: {
+    markdown: 'Markdown 문서',
+    faq: 'FAQ',
+    chapter: '다중 챕터 문서',
+    plain: '일반 텍스트 단락'
   },
-  halo: {
-    title: 'HALO 연차보고서 분석',
-    open: 'HALO 보고서',
-    refresh: '다시 생성',
-    archive: '지식베이스에 보관',
-    archiving: '보관 중…',
-    close: '닫기',
-    loading: '보고서를 생성하는 중…',
-    loadFailed: '보고서를 불러오지 못했습니다',
-    noDataTitle: '이 종목의 연차보고서 팩트가 아직 동기화되지 않았습니다',
-    noDataHint: '아래 버튼으로 자오인포 연차보고서를 동기화하면, 팩트가 적재되는 즉시 이 패널이 다시 조회합니다.',
-    syncCostHint: '동기화는 연차보고서 PDF를 다운로드해 페이지별로 파싱하므로 보통 1~3분 걸립니다. 페이지를 닫지 마세요.',
-    syncAndRetry: '보고서 동기화 후 재시도',
-    syncing: '연차보고서 동기화 중…',
-    syncDone: '연차보고서를 동기화했습니다. 보고서를 다시 생성합니다',
-    syncFailed: '연차보고서 동기화 실패',
-    retry: '재시도',
-    launchFullReport: '에이전트가 전체 보고서를 생성하도록',
-    skeletonNotice:
-      '이 패널은 채점 커널이 계산한 데이터 계층과 정량 앵커만 표시합니다. 7개 정성 차원(해자/스태그플레이션 방어/ESG/경영진/주주·자금/밸류에이션/리스크)은 모델이 채점하므로 여기서는 결론을 제공하지 않습니다. 전체 분석이 필요하면 세션에서 에이전트에게 halo.analyze를 실행시키세요.',
-    scoreCard: '핵심 점수',
-    haloSix: 'HALO 6개 차원',
-    haloSixDetail: 'HALO 6개 차원 세부',
-    growthLabel: '성장성',
-    growthDetail: '성장성 세부 점수',
-    notComputable: '산출 불가',
-    growthMissing: '성장성 산출에 다음 입력값이 없어 가중에서 제외되었습니다: {keys}',
-    dim: '차원',
-    raw: '원시 값',
-    weight: '가중치',
-    score: '점수',
-    basis: '산출 근거',
-    qualitativeDims: '정성 차원(채점 대기)',
-    qualitativeHint: '아래 차원은 모델이 채점합니다. 패널은 채점에 필요한 정량 앵커만 제공하고 결론은 제공하지 않습니다.',
-    hasAnchor: '앵커 완비',
-    noAnchor: '앵커 부족',
-    pendingScore: '채점 대기',
-    anchors: '정량 앵커',
-    noAnchors: '가져오지 못한 앵커: {keys}',
-    facts: '연차보고서 팩트',
-    value: '값',
-    page: '쪽',
-    sourceText: '원문',
-    announcements: '공시',
-    rawMarkdown: '스켈레톤 원문(채점 대기 슬롯 포함)',
-    rawMarkdownHint: '지식베이스에 보관되는 것이 이 내용이며, 비어 있는 슬롯은 "채점 대기"로 표시됩니다.',
-    assetHeavy: '자산 집약형',
-    assetMixed: '복합형',
-    assetLight: '자산 경량형',
-    dims: {
-      tangible: '유형자산 집약도',
-      fixedIntensity: '고정자산 집약도',
-      fixedShare: '고정자산 비중',
-      capitalLabor: '자본-노동 비율',
-      capexIntensity: 'Capex 집약도',
-      capexBurden: 'Capex 부담',
-    },
-    growthSubs: {
-      revenue: '매출 성장',
-      profit: '이익 성장',
-      quality: '성장 질',
-      sustainability: '성장 지속성',
-    },
-    entryHint: '자오인포 연차보고서 팩트에서 나온 채점 커널 데이터: HALO 6개 차원, 성장성, 차원별 정량 앵커.',
-    period: '보고 기간',
-    assetType: '자산 유형',
-    llmNote: '7개 정성 차원(해자/스태그플레이션 방어/ESG/경영진/주주·자금/밸류에이션/리스크)은 모델이 채점하고, 나머지 수치는 채점 커널이 계산합니다. 보고서 유효기간은 30일입니다.',
-    pickKb: '보관 위치',
-    kbPlaceholder: '지식베이스 선택',
-    archiveOk: '초안으로 보관했습니다. 파싱이 끝나면 검색할 수 있습니다',
-    archiveUpdated: '기존 보관 문서를 업데이트했습니다',
-    archiveFailed: '보관 실패',
-    needKb: '먼저 지식베이스를 선택하세요',
+  klineCompare: {
+    loading: '로딩 중 ({count})',
+    collapse: '접기',
+    expand: '펼치기',
+    switchTo: '{name} ({thscode}) 차트로 전환'
+  },
+  lab: {
+    darkBase: 'Dark Base',
+    afternoonGreeting: 'Good afternoon, what would you like to research today?',
+    continueYesterday: 'Continue yesterday\'s work',
+    recentLoadFailed: 'Recent sessions failed to load',
+    noPreview: 'No message preview',
+    messagesLoadFailed: 'Failed to load session messages',
+    noMessages: 'This session has no messages yet.',
+    continueAsk: 'Continue asking…',
+    morningBrief: 'Research Morning Brief',
+    whatToResearch: 'What would you like to research today?',
+    pastIssues: 'Past Issues',
+    pastIssuesFailed: 'Failed to load past issues',
+    researchDispatch: 'Research Dispatch',
+    references: 'References',
+    noExcerpts: 'No excerpts',
+    todayHot: 'Today\'s Hot',
+    knowledgeBase: 'Knowledge Base',
+    weekendMarket: 'Weekend Market is Open',
+    vendorNotOpen: 'Vendor has not opened yet',
+    browseAround: 'Just browsing',
+    vendorPreparing: 'Vendor is preparing, coming soon…',
+    noOrders: 'No orders yet at this stall. Start one!',
+    print: 'Print',
+    sendEnter: 'Send (Enter)',
+    noPastIssues: 'No past research yet',
+    composerPlaceholder: 'Ask something…',
+    browseOrAsk: 'Browse around, or ask something…'
+  },
+  welcome: {
+    slogan: 'Let today\'s knowledge become tomorrow\'s wisdom',
+    todayChats: 'Today\'s Chats',
+    knowledgeBases: 'Knowledge Bases',
+    totalDocs: 'Total Documents',
+    insights: 'Insights',
+    startExploring: 'Start Exploring',
+    newChat: 'New Chat',
+    newChatDesc: 'Start a new knowledge exploration with AI',
+    browseKB: 'Browse Knowledge Base',
+    browseKBDesc: 'Manage and explore your knowledge assets',
+    agents: 'Agents',
+    agentsDesc: 'Customized AI assistants for specific needs'
+  },
+  mentionedStocks: {
+    title: 'Stocks Mentioned',
+    viewKline: 'K선 보기',
+    viewTitle: '{name} ({thscode}) 차트로 전환',
+    viewing: '보기 중',
+    viewingTitle: '현재 보기 중: {name} ({thscode})'
+  },
+  watchDetail: {
+    notSet: 'Not set',
+    cost: 'Cost',
+    stopLoss: 'Stop Loss',
+    costPlaceholder: '목표 매수가',
+    stopPlaceholder: '손절가'
+  },
+  stockCitation: {
+    noChangeData: 'No change data',
+    analyzing: 'Analyzing strategy indicators and quantitative structure...',
+    insufficientData: 'Insufficient data for strategy rating',
+    valuation: 'Valuation',
+    capitalFlow: 'Capital Flow',
+    volRatio: 'Volume Ratio',
+    amplitude: 'Amplitude',
+    engine: 'THS ZX Quantitative Engine',
+    amountWan: '{value}만',
+    amountYi: '{value}억',
+    barsAsOf: '{bars}개 봉 · {asOf} 기준',
+    barsInsufficient: '봉 부족(24개 미만: {bars}개)',
+    continuousBoard: '{days}연속 상한가',
+    dragonCount: '용호방 {count}회',
+    hotRank: '인기 순위 {rank}위',
+    last30Days: '최근 30일',
+    limitBreakCount: '상한가 이탈 {count}회',
+    limitUpCount: '상한가 {count}회',
+    limitUpTitle: '최근 상한가: {date}, 연속: {days}일',
+    loss: '손실',
+    moreSectors: '외 {count}개 업종',
+    netAmountWan: '{direction}{value}만',
+    netAmountYi: '{direction}{value}억',
+    netBuy: '순매수 ',
+    netSell: '순매도 ',
+    noQuoteData: '시세 데이터 없음',
+    openWorkspace: '작업공간 열기',
+    queryFailed: '조회 실패',
+    queryFailedDetail: '조회 실패: {message}',
+    range20d: '20일',
+    range5d: '5일',
+    range60d: '60일',
+    sourcesUnavailable: '사용 불가한 데이터 소스: ',
+    yellowDegraded: '황선 저하'
+  },
+  kline: {
+    picksBar: 'Watchlist ({count})',
+    picksHint: '[↑/↓] keys to switch stocks',
+    searchSwitch: 'Click to search and switch stock',
+    bbiTitle: 'Close price vs BBI bullish/bearish balance line',
+    period: 'Period',
+    adjust: 'Adjust',
+    boardNoAdjust: 'Board: no adjustment',
+    searchPlaceholder: 'Enter stock code/name/pinyin (e.g. 600519)',
+    searching: 'Searching...',
+    noMatch: 'No matching symbols found',
+    board: 'Board',
+    mainChart: 'Main:',
+    subChart: 'Sub:',
+    drawing: 'Draw:',
+    td9: 'TD9 Sequence',
+    patternBubbles: 'Pattern Bubbles',
+    patternOutline: 'Pattern Outline',
+    askAgent: 'Ask Agent:',
+    actionValuation: 'Analyze Fundamentals & Valuation',
+    actionStrategy: 'Calculate Defense & Entry Strategy',
+    actionReport: 'Latest Research & Core Logic',
+    actionHaloReport: 'HALO Annual Report',
+    actionHaloSix: 'HALO Six Dimensions & Growth',
+    actionHaloSeven: 'Score the Seven Qualitative Dimensions',
+    actionHaloGovernance: 'Governance Integrity Facts',
+    noData: 'No market data for {symbol}',
+    queryFailed: '{symbol} quote query failed',
+    volumeLabel: '거래량',
+    turnoverLabel: '거래대금',
+    patternLabel: '패턴',
+    patternAskSuffix: ', Agent에게 질문',
+    patternAskTitle: '현재 패턴에 대해 Agent에게 질문: {patterns}',
+    zxBrickLabel: '지행 벽돌',
+    zxBrickTitle: '동화순 지행 벽돌 차트 전략',
+    dualLineTitle: '백선 DEMA10 ({white}) vs 황선 LongBBI ({yellow})',
+    dualLineBelow: '황선 아래 · 약세',
+    dualLineAbove: '양선 상승 · 강세',
+    dualLineRetrace: '눌림목 조정',
+    aboveBBI: 'BBI 강세',
+    belowBBI: 'BBI 약세',
+    boardAdjustTitle: '업종 지수는 수정주가 데이터를 제공하지 않습니다',
+    td9Title: 'TD9 시퀀스 반전 신호',
+    patternBubbleLabel: '버블',
+    patternBubbleBtnTitle: '차트에 고점/저점 패턴 버블 표시',
+    patternBubbleHint: '버블을 클릭하여 패턴 세부 정보를 보거나 Agent에게 질문',
+    patternOutlineLabel: '윤곽선',
+    patternOutlineBtnTitle: '차트에 패턴 구조 윤곽선 그리기',
+    patternOutlineHint: '넥라인 및 추세 채널 표시',
+    boardNoPattern: '업종 패턴 없음',
+    boardNoPatternDetail: '업종 지수는 패턴 인식을 제공하지 않습니다',
+    boardNoPatternOutlineDetail: '업종 지수는 패턴 윤곽을 제공하지 않습니다',
+    noPatternDetected: '패턴이 감지되지 않음',
+    expandWorkspace: '작업공간 펼치기',
+    collapseWorkspace: '작업공간 접기',
+    requestRejectedHint: '서버에서 요청을 거부했습니다: {message}',
+    fetchPathIssueHint: '데이터 경로 이상: {message}',
+    noDataHint: '시세 데이터 없음',
+    periodDay: '일봉',
+    periodWeek: '주봉',
+    periodMonth: '월봉',
+    adjustNone: '미수정',
+    adjustForward: '수정(선행)',
+    adjustBackward: '수정(후행)',
+    unitShou: '주(手)',
+    unitWanShou: '만주(手)',
+    unitYiShou: '억주(手)',
+    unitWan: '만',
+    unitYi: '억',
+    levelsLabel: '핵심 레벨',
+    levelsTitle: '지지선 및 저항선',
+    groupCandle: '캔들',
+    groupTactics: '전략',
+    oscillation: '박스권',
+    actionPatternDeep: '패턴 구조 심층 분석',
+    brickTitle: 'THS ZX Brick Chart - consecutive red/green brick strategy',
+    keyLevels: 'Key Levels',
+    requestRejected: 'Server explicitly rejected this request',
+    retryWontHelp: 'Retrying will not yield different results',
+    fetchPathIssue: 'This is a data fetch path issue'
   },
   imageAttr: {
     contain_data_visual: {
@@ -851,6 +940,10 @@ export default {
     guideStep1_notion: 'Notion에서 동기화하려는 페이지나 데이터베이스를 엽니다',
     guideStep2_notion: '오른쪽 상단의 \'···\' 메뉴를 클릭하고 \'Connect to\' 또는 \'Add connections\'를 선택합니다',
     guideStep3_notion: 'Integration 앱을 검색하여 선택한 후, 돌아와서 다시 시도를 클릭하세요',
+    noResourcesDesc_seafile: '이 토큰으로 접근할 수 있는 라이브러리가 없거나 모두 암호화 라이브러리입니다(암호화 라이브러리는 동기화할 수 없음)',
+    guideStep1_seafile: 'Seafile에 로그인하여 계정이 암호화되지 않은 라이브러리를 하나 이상 읽을 수 있는지 확인하세요',
+    guideStep2_seafile: '\'설정 → Web API 토큰\'에서 토큰을 생성하거나 다시 생성하세요',
+    guideStep3_seafile: '여기로 돌아와 새 토큰을 입력하고 다시 시도를 클릭하세요',
     permissionDocLink: '페이슈 위키 권한 설정 문서 보기',
     syncScheduleLabel: '동기화 주기',
     conflictLabel: '충돌 전략',
@@ -940,17 +1033,27 @@ export default {
     minutesAgo: '{n}분 전',
     hoursAgo: '{n}시간 전',
     daysAgo: '{n}일 전',
+    resumeFailed: '재개 실패',
     syncError: {
       dingtalk_document_failed: 'DingTalk 문서를 읽을 수 없습니다. 접근 권한을 확인하고 동기화를 다시 시도하세요.',
       dingtalk_resource_failed: 'DingTalk 리소스를 사용할 수 없습니다. 접근 권한과 선택한 리소스를 확인한 후 다시 시도하세요.',
       deletion_lookup_failed: '삭제 전 항목 조회에 실패했습니다. 서버 로그를 확인하세요',
       deletion_failed: '삭제에 실패했습니다. 서버 로그를 확인하세요',
-      ingest_failed: '가져오기에 실패했습니다. 서버 로그를 확인하세요'
+      ingest_failed: '가져오기에 실패했습니다. 서버 로그를 확인하세요',
+      seafile_permission_denied: 'Seafile 파일에 접근할 수 없습니다. 토큰 소유자의 라이브러리 권한을 확인하세요.',
+      seafile_not_found: 'Seafile 파일이 존재하지 않거나 이동되었습니다. 다음 동기화에서 다시 시도합니다.',
+      seafile_file_too_large: 'Seafile 파일이 크기 제한을 초과합니다. MAX_FILE_SIZE_MB를 늘리거나 파일을 줄이세요.',
+      seafile_empty_file: 'Seafile 파일이 비어 있어 건너뛰었습니다.',
+      seafile_source_changed: '가져오는 동안 Seafile 파일이 변경되었습니다. 다음 동기화에서 다시 시도합니다.',
+      seafile_invalid_response: 'Seafile이 해석할 수 없는 응답을 반환했습니다. 서버 버전과 리버스 프록시 설정을 확인하세요.',
+      seafile_ssrf_blocked: 'Seafile 다운로드 URL이 SSRF 정책에 의해 차단되었습니다. fileserver 호스트를 SSRF_WHITELIST에 추가하세요.',
+      seafile_fetch_failed: 'Seafile에서 파일을 가져오지 못했습니다. 다음 동기화에서 다시 시도합니다.'
     },
     resourceType: {
       wikiSpace: '위키 공간',
       docCategory: '문서 태그',
-      book: 'Yuque 지식베이스'
+      book: 'Yuque 지식베이스',
+      library: 'Seafile 라이브러리'
     },
     scheduleHuman: {
       '30min': '30분마다',
@@ -1011,7 +1114,8 @@ export default {
       dingtalk: 'DingTalk 지식베이스의 온라인 문서 동기화',
       rss: 'RSS / Atom 피드에서 글 동기화',
       ima: 'Tencent IMA 지식베이스에서 문서, 노트 및 파일 동기화 (AI 세션과 동영상 분석은 지원되지 않음)',
-      gitlab: 'GitLab 프로젝트의 파일 동기화'
+      gitlab: 'GitLab 프로젝트의 파일 동기화',
+      seafile: 'Seafile 라이브러리의 폴더와 파일 동기화'
     },
     connector: {
       feishu: '페이슈 (Feishu)',
@@ -1024,7 +1128,8 @@ export default {
       dingtalk: 'DingTalk 문서',
       rss: 'RSS / Atom 피드',
       ima: 'Tencent IMA',
-      gitlab: 'GitLab'
+      gitlab: 'GitLab',
+      seafile: 'Seafile'
     },
     logDetail: {
       startTime: '시작 시간',
@@ -1061,6 +1166,13 @@ export default {
       overwrite: '덮어쓰기',
       skip: '기존 항목 건너뛰기'
     },
+    seafile: {
+      baseUrl: 'Seafile URL',
+      apiToken: 'API 토큰',
+      apiTokenHint: 'Seafile의 \'설정 → Web API 토큰\'에서 생성하세요. 계정에 선택한 라이브러리의 읽기 권한만 있으면 되며 토큰은 파일 다운로드 요청에 전송되지 않습니다.',
+      singleLibraryOnly: '데이터 소스 하나는 라이브러리 하나만 동기화합니다. 다른 라이브러리를 선택하기 전에 현재 선택을 해제하세요.',
+      selectionRequired: '라이브러리, 폴더 또는 파일을 하나 이상 선택하세요'
+    },
     gitlab: {
       baseUrl: 'GitLab URL',
       accessToken: '개인 액세스 토큰',
@@ -1085,8 +1197,6 @@ export default {
       incremental: '증분 동기화',
       full: '전체 동기화'
     }
-  ,
-    resumeFailed: '재개 실패',
   },
   ollama: {
     unknown: '알 수 없음',
@@ -2713,6 +2823,7 @@ export default {
   },
   language: {
     zhCN: '简体中文',
+    zhTW: '번체 중국어',
     enUS: 'English',
     ruRU: 'Русский',
     koKR: '한국어',
@@ -2730,30 +2841,6 @@ export default {
     selectModelPlaceholder: '모델을 선택해주세요',
     searchPlaceholder: '모델 검색...',
     builtinTag: '내장',
-    // utils/reasoningEffort.ts의 levelLabelKey()/levelDescriptionKey()가 동적으로
-    // 조합하는 key이므로 정적 키 스캔으로 감지되지 않는다. REASONING_LEVELS와 동기화.
-    reasoning: {
-      levels: {
-        off: '끄기',
-        auto: '자동',
-        minimal: '최소',
-        low: '낮음',
-        medium: '보통',
-        high: '높음',
-        xhigh: '매우 높음',
-        max: '최대',
-      },
-      levelDescriptions: {
-        off: '추론 없이 바로 답변합니다',
-        auto: '모델이 강도를 직접 선택합니다',
-        minimal: '최소한의 추론, 속도 우선',
-        low: '가벼운 추론, 속도와 깊이의 균형',
-        medium: '균형 잡힌 깊이, 대부분의 질문에 적합',
-        high: '복잡한 추론을 위한 깊은 사고',
-        xhigh: '매우 깊은 사고, 시간이 더 걸립니다',
-        max: '이 모델이 지원하는 최대 강도',
-      },
-    },
     editor: {
       maxOutputTokensLabel: '최대 출력 토큰',
       maxOutputTokensPlaceholder: '비워 두면 카탈로그 기본값',
@@ -2795,6 +2882,8 @@ export default {
       dimensionOverrideDesc: '제공자 문서에서 이 모델이 dimensions 매개변수를 지원한다고 확인한 경우에만 켜세요.',
       supportsVisionLabel: '비전/멀티모달 지원',
       supportsVisionDesc: '모델의 이미지 등 멀티모달 입력 지원 여부',
+      embeddingImageInputLabel: '이미지 입력',
+      embeddingImageInputDesc: '모델이 이미지를 텍스트와 같은 벡터 공간에 임베딩할 수 있는지 여부. 카탈로그 모델은 자동으로 인식되며, 사용자 정의 모델은 직접 선언합니다',
       contextWindowLabel: '컨텍스트 창',
       contextWindowPlaceholder: '기본값 {value}',
       contextWindowDesc: '모델이 한 요청에 수용할 수 있는 토큰 수입니다. 에이전트 대화 압축이 이 한도를 사용합니다. 비워 두면 기본값 200000(200K)을 사용합니다. 공급자 문서의 실제 값을 입력하세요. 더 크게 설정하면 압축이 발생하지 않고 요청이 거부될 수 있습니다.',
@@ -2894,6 +2983,28 @@ export default {
         reasoning: '추론',
         vision: '비전',
         hint: '공급사 카탈로그에서 선택하거나 사용자 지정 모델 이름을 입력할 수 있습니다.'
+      }
+    },
+    reasoning: {
+      levelDescriptions: {
+        off: '추론 없이 바로 답변합니다',
+        auto: '모델이 강도를 직접 선택합니다',
+        minimal: '최소한의 추론, 속도 우선',
+        low: '가벼운 추론, 속도와 깊이의 균형',
+        medium: '균형 잡힌 깊이, 대부분의 질문에 적합',
+        high: '복잡한 추론을 위한 깊은 사고',
+        xhigh: '매우 깊은 사고, 시간이 더 걸립니다',
+        max: '이 모델이 지원하는 최대 강도'
+      },
+      levels: {
+        off: '끄기',
+        auto: '자동',
+        minimal: '최소',
+        low: '낮음',
+        medium: '보통',
+        high: '높음',
+        xhigh: '매우 높음',
+        max: '최대'
       }
     }
   },
@@ -3186,7 +3297,8 @@ export default {
           },
           registration_mode: {
             self_serve: '셀프 가입 (누구나 가입 가능)',
-            invite_only: '초대 전용 (공개 가입 비활성)'
+            invite_register: '초대 가입 (유효한 링크 필요)',
+            invite_only: '가입 금지 (기존 계정은 초대 수락 가능)'
           }
         }
       },
@@ -3216,7 +3328,7 @@ export default {
           whitelist: 'SSRF 보호 허용 목록입니다. example.com / *.foo.com / 10.0.0.0/8 / 2001:db8::1 형식을 입력할 수 있습니다. 저장 즉시 적용됩니다. SSRF_WHITELIST_EXTRA 환경 변수는 배포자가 관리하며 여기서 덮어쓰지 않습니다.'
         },
         auth: {
-          registration_mode: '셀프 가입 모드입니다. self_serve = 누구나 계정을 만들 수 있음; invite_only = 공개 가입을 끄고 Owner/Admin만 초대 가능. 저장 즉시 적용되며, self_serve는 스팸 가입이 들어올 수 있으니 신중히 사용하세요.',
+          registration_mode: '가입 모드입니다. 공개 가입은 누구나 계정을 만들 수 있고, 초대 가입은 유효한 초대 링크가 필요합니다. 가입 금지 상태에서도 기존 계정은 초대를 수락할 수 있습니다. 저장 즉시 적용됩니다.',
           default_tenant_mode: '공개 가입 후 공간 초기화 정책입니다. create_personal은 개인 공간을 만들고 Owner를 부여하며, tenantless는 초대 수락 또는 직접 공간 생성 전까지 계정만 만듭니다.',
           complex_password_enabled: '복잡한 비밀번호를 사용할지 여부입니다. 활성화하면 비밀번호에 대문자, 소문자, 숫자 및 특수 문자가 포함되어야 합니다. 변경 사항은 즉시 적용되며, 새로 가입하는 사용자 또는 비밀번호를 새로 변경하거나 재설정하는 경우에만 적용됩니다. 특수 문자는 다음을 포함합니다: {specialChars}'
         }
@@ -3247,7 +3359,7 @@ export default {
           whitelist: 'SSRF 보호 허용 목록'
         },
         auth: {
-          registration_mode: '셀프 가입 모드',
+          registration_mode: '가입 모드',
           default_tenant_mode: '기본 공간 프로비저닝',
           complex_password_enabled: '복잡한 비밀번호 사용'
         }
@@ -3790,6 +3902,7 @@ export default {
     attachmentUploadFailed: '첨부 파일 업로드 실패',
     attachmentParseFailed: '첨부 파일 분석 실패',
     attachmentStillProcessing: '첨부 파일 {name}을(를) 아직 분석 중입니다',
+    imageReadFailed: '이미지 읽기 실패',
     klineStudio: {
       openInPanel: '사이드 패널에서 열기',
       empty: '추천된 종목이 없습니다.',
@@ -3862,8 +3975,6 @@ export default {
       thisYear: '{month}월 {day}일 {time}',
       otherYear: '{year}년 {month}월 {day}일 {time}'
     }
-  ,
-    imageReadFailed: '이미지 읽기 실패',
   },
   knowledgeEditor: {
     titleCreate: '지식베이스 생성',
@@ -3885,6 +3996,9 @@ export default {
         customInstructionsPlaceholder: '예: 명판, 모델 번호, 경고 코드 및 표 단위를 중점적으로 인식…',
         imageAttrsLabel: '이미지 속성 관찰',
         imageAttrsDescription: '켜면 각 이미지를 먼저 속성 관찰+설명한 뒤, 속성에 따라 이미지 내 텍스트에 OCR을 실행할지 결정합니다. 끄면 기본 모드: 모든 이미지를 하나씩 설명하고 모두 OCR합니다',
+        imageVectorLabel: '이미지 벡터 검색',
+        imageVectorDescription: '켜면 이미지 설명을 생성한 뒤 임베딩 모델로 이미지 자체도 인코딩하여, 설명에 없는 내용으로도 이미지를 검색할 수 있습니다. 이미지 입력을 지원하는 임베딩 모델이 필요하며, 이미지마다 임베딩 호출이 한 번 늘고 벡터 검색 후보 범위도 넓어집니다. 이후 수집하거나 다시 파싱한 문서에만 적용되며, 스캔 PDF 페이지는 제외됩니다',
+        imageVectorModelUnsupported: '현재 임베딩 모델은 이미지 입력을 선언하지 않아 이미지 벡터가 생성되거나 검색되지 않습니다',
         imageAttrsSchemaLabel: '관찰 가능한 이미지 속성',
         imageAttrsSchemaDescription: '모델은 아래 속성(백엔드 레지스트리 정의)을 관찰해 OCR 정책을 결정합니다',
         imageAttrsOcrConditions: '관찰된 속성 조건에 따라 OCR 실행',
@@ -4241,13 +4355,6 @@ export default {
       editingBadge: '편집 중',
       pageActions: '페이지 작업',
       viewTabs: '지식베이스 보기',
-      tabDocuments: '문서',
-      tabDocumentsTip: '이 지식베이스의 문서를 확인하고 관리합니다',
-      tabWikiTip: '지식베이스에서 생성된 Wiki 페이지를 둘러봅니다',
-      tabGraph: '그래프',
-      tabGraphTip: '문서와 페이지 간 관계 그래프를 확인합니다',
-      tabGallery: '갤러리',
-      tabGalleryTip: '이 지식베이스의 이미지 자산을 확인합니다',
       searchPlaceholder: 'Wiki 페이지 검색...',
       searchNoResults: '일치하는 페이지가 없습니다',
       viewModeToggle: '디렉터리 보기 전환',
@@ -4352,6 +4459,13 @@ export default {
       fixStartError: '수정 도우미 시작 실패',
       issueFixPromptSingle: '페이지 [[{slug}]] 의 문제(ID: {id})를 수정해 주세요.',
       issueFixPromptAutoStart: '페이지 [[{slug}]] 의 다음 문제들을 수정해 주세요:',
+      tabDocuments: '문서',
+      tabDocumentsTip: '이 지식베이스의 문서를 확인하고 관리합니다',
+      tabWikiTip: '지식베이스에서 생성된 Wiki 페이지를 둘러봅니다',
+      tabGraph: '그래프',
+      tabGraphTip: '문서와 페이지 간 관계 그래프를 확인합니다',
+      tabGallery: '갤러리',
+      tabGalleryTip: '이 지식베이스의 이미지 자산을 확인합니다',
       gallery: {
         attr: {
           builtin_caption: '설명',
@@ -4786,15 +4900,14 @@ export default {
     }
   },
   createChat: {
-    workbench: {
-      greeting: { morning: '좋은 아침입니다', afternoon: '안녕하세요', evening: '좋은 저녁입니다', night: '늦은 밤입니다' },
-      greetingSub: '오늘은 무엇을 조사할까요?',
-      continueTitle: '어제 한 작업 이어서',
-      untitledSession: '제목 없는 대화',
-      minutesAgo: '{n}분 전',
-      hoursAgo: '{n}시간 전',
-      yesterday: '어제',
-      daysAgo: '{n}일 전'
+    title: '안녕하세요, WeKnora입니다 — 당신의 지식을 손끝에',
+    newSessionTitle: '새 세션',
+    openProject: '프로젝트 선택',
+    clearProject: '바인딩 해제',
+    pickFailed: '선택한 경로를 열 수 없습니다',
+    messages: {
+      createFailed: '세션 생성 실패',
+      createError: '세션 생성 실패, 나중에 다시 시도해주세요'
     },
     marketEntry: {
       sectionTitle: '시장',
@@ -4810,14 +4923,20 @@ export default {
         unavailable: '사용 불가'
       }
     },
-    title: '안녕하세요, WeKnora입니다 — 당신의 지식을 손끝에',
-    newSessionTitle: '새 세션',
-    openProject: '프로젝트 선택',
-    clearProject: '바인딩 해제',
-    pickFailed: '선택한 경로를 열 수 없습니다',
-    messages: {
-      createFailed: '세션 생성 실패',
-      createError: '세션 생성 실패, 나중에 다시 시도해주세요'
+    workbench: {
+      greetingSub: '오늘은 무엇을 조사할까요?',
+      continueTitle: '어제 한 작업 이어서',
+      untitledSession: '제목 없는 대화',
+      minutesAgo: '{n}분 전',
+      hoursAgo: '{n}시간 전',
+      yesterday: '어제',
+      daysAgo: '{n}일 전',
+      greeting: {
+        morning: '좋은 아침입니다',
+        afternoon: '안녕하세요',
+        evening: '좋은 저녁입니다',
+        night: '늦은 밤입니다'
+      }
     }
   },
   input: {
@@ -4852,6 +4971,16 @@ export default {
     modelLockedByAgent: '현재 에이전트는 모델 구성을 잠갔습니다.',
     imageUploadDisabledByAgent: '현재 에이전트에서 이미지 업로드가 활성화되지 않았습니다',
     goToAgentSettings: '에이전트 설정으로 이동',
+    fileUpload: {
+      label: '파일 업로드',
+      tooltip: '파일 업로드',
+      tooMany: '파일 수가 제한을 초과했습니다',
+      tooLarge: '파일 크기가 제한을 초과했습니다'
+    },
+    imageUpload: {
+      label: '이미지 업로드',
+      tooltip: '분석용 이미지 업로드'
+    },
     messages: {
       enterContent: '먼저 내용을 입력해주세요!',
       replying: '응답 중입니다. 잠시 후 다시 시도해주세요!',
@@ -4876,21 +5005,9 @@ export default {
     webSearch: {
       toggleOn: '웹 검색 켜기',
       toggleOff: '웹 검색 끄기',
-      notConfigured: '웹 검색 엔진이 구성되지 않았습니다'
-    ,
-      label: '웹 검색',
-  }
-  ,
-    imageUpload: {
-      label: '이미지 업로드',
-      tooltip: '분석용 이미지 업로드',
-    },
-    fileUpload: {
-      label: '파일 업로드',
-      tooltip: '파일 업로드',
-      tooMany: '파일 수가 제한을 초과했습니다',
-      tooLarge: '파일 크기가 제한을 초과했습니다',
-    },
+      notConfigured: '웹 검색 엔진이 구성되지 않았습니다',
+      label: '웹 검색'
+    }
   },
   manualEditor: {
     defaultTitlePrefix: '새 문서',
@@ -4996,9 +5113,8 @@ export default {
     }
   },
   file: {
-    upload: '파일 업로드'
-  ,
-    downloadFailed: '다운로드 실패, 나중에 다시 시도해 주세요',
+    upload: '파일 업로드',
+    downloadFailed: '다운로드 실패, 나중에 다시 시도해 주세요'
   },
   mentionDetail: {
     readOnlyFromAgent: '이 대화에서는 읽기 전용이며 지식베이스 목록에는 표시되지 않습니다.',
@@ -5697,10 +5813,9 @@ export default {
       mineruLegacySectionHint: 'MinerU 4.0에서 아래 요청 파라미터가 제거되어 4.0 이상 서버에서는 무시됩니다. VLM 서버는 MinerU 쪽에서 설정하세요.',
       paddleocrVlEndpointPlaceholder: '예: http://your-paddleocr-vl:8080',
       paddleocrVlEndpointHint: 'PaddleOCR-VL 전체 서비스(pipeline) 주소를 입력하세요. /layout-parsing 접미사는 불필요합니다',
-      paddleocrVlCloudTokenPlaceholder: 'PaddleOCR-VL AI Studio Token'
-    ,
-      checking: '확인 중...',
-  },
+      paddleocrVlCloudTokenPlaceholder: 'PaddleOCR-VL AI Studio Token',
+      checking: '확인 중...'
+    },
     weknoraCloud: {
       title: 'WeKnora Cloud',
       description: 'WeKnora Cloud APPID 및 APPSECRET 자격 증명을 설정합니다. 자격 증명은 모델 서비스와 문서 파싱 엔진에 사용됩니다.',
@@ -6781,6 +6896,7 @@ export default {
     channelConfluence: 'Confluence',
     channelYuque: 'Yuque',
     channelGitLab: 'GitLab',
+    channelSeafile: 'Seafile',
     channelIma: 'Tencent IMA',
     channelUpload: '업로드',
     channelManual: '수동',
@@ -6972,6 +7088,8 @@ export default {
     filesSkippedNoEngine: '{count}개 파일이 사용 가능한 파싱 엔진이 없어 건너뛰었습니다',
     deleteSuccess: '지식이 성공적으로 삭제되었습니다!',
     chunkLoadFailed: '청크 로드 실패',
+    selectKnowledgeBase: '지식 베이스를 선택하세요',
+    tagDeleteDesc: '"{name}" 태그를 삭제하시겠습니까? 이 태그에 속한 모든 FAQ도 함께 삭제됩니다',
     moveToFolder: {
       action: '폴더로 이동',
       newFolderPlaceholder: '새 폴더 이름',
@@ -6984,7 +7102,6 @@ export default {
     folderTree: {
       totalDocuments: '전체 문서 {count}개',
       countHint: '현재 폴더 문서 {direct}개, 하위 폴더 포함 {total}개',
-      filteredCount: '일치하는 문서 {count}개',
       title: '폴더',
       rootRow: '루트',
       rootRowTip: '지식 베이스 루트 디렉터리, 하위 폴더에 없는 문서가 여기에 있습니다',
@@ -6998,7 +7115,8 @@ export default {
       renamePlaceholder: '폴더 이름',
       renameSuccess: '폴더 이름을 변경했습니다',
       renameFailed: '폴더 이름을 변경할 수 없습니다',
-      renameInvalid: '폴더를 자기 하위로 이동할 수 없습니다'
+      renameInvalid: '폴더를 자기 하위로 이동할 수 없습니다',
+      filteredCount: '일치하는 문서 {count}개'
     },
     sort: {
       title: '정렬',
@@ -7048,9 +7166,6 @@ export default {
       sharedAt: '공유일시',
       lastUpdated: '마지막 업데이트'
     }
-  ,
-    selectKnowledgeBase: '지식 베이스를 선택하세요',
-    tagDeleteDesc: '"{name}" 태그를 삭제하시겠습니까? 이 태그에 속한 모든 FAQ도 함께 삭제됩니다',
   },
   resourceOrigin: {
     mine: '내 생성',
@@ -7376,66 +7491,6 @@ export default {
     apiChats: 'API 세션',
     noSessions: '대화가 없습니다'
   },
-  marketDashboard: {
-    title: '시장 개요',
-    back: '워크벤치로 돌아가기',
-    backToWorkbench: '뒤로',
-    dataTime: '데이터 시각',
-    tickerLabel: '지수',
-    refresh: '새로고침',
-    refreshFailed: '시세 갱신에 실패했습니다. 다시 시도해 주세요.',
-    themeToDark: '다크 모드로 전환',
-    themeToLight: '라이트 모드로 전환',
-    latestLabel: '최신',
-    closedLabel: '종가',
-    state: {
-      open: '장중',
-      closed: '장 마감',
-      holiday: '휴장일'
-    },
-    holidayNote: '최근 거래일 기준',
-    chartLow: '저 {v}',
-    chartHigh: '고 {v}',
-    prevCloseTitle: '전일 종가 {v}',
-    chartLegend: '— 60일   ┆ 시가   ┆ 전일 종가(파선)   ● {point}',
-    sentiment: {
-      title: '시장 심리',
-      caption: '상·하한가 · 전 시장',
-      limitUp: '상한가',
-      limitDown: '하한가',
-      broken: '상한가 이탈',
-      brokenUnit: '· {rate}%',
-      maxStreak: '최대 연속',
-      streakUnit: '판',
-      trendLabel: '최근 5일 상한가 수',
-      breadth: { up: '상승', flat: '보합', down: '하락' }
-    },
-    watchlist: {
-      title: '관심 종목',
-      count: '{n}종목',
-      all: '전체 →',
-      empty: '아직 관심 종목이 없습니다. 자주 보는 종목을 추가해 보세요',
-      emptyCta: '관심 종목 페이지로',
-      emptyChip: '+ {name}',
-      state: { observing: '관찰', triggered: '발생', holding: '보유', dropped: '제외됨' }
-    },
-    dragonTiger: {
-      title: '상향종목',
-      caption: '순매수 상위 5 · 전 시장',
-      full: '전체 보기 →',
-      net: '순매수',
-      org: '기관',
-      empty: '오늘 데이터 없음'
-    },
-    etf: {
-      title: '대형 ETF',
-      caption: '지수형'
-    },
-    noData: '데이터 없음',
-    loading: '불러오는 중…',
-    sourceUnavailable: '일부 데이터 소스를 사용할 수 없습니다({sources}). 해당 패널은 비어 있습니다',
-    indexUnavailable: '이 지수의 로컬 시세 데이터가 없습니다'
-  },
   watchlist: {
     title: '종목 추적',
     subtitle: '관심 종목의 최신 가격과 등락률 (로컬 시세 DB, 전방 수정주가)',
@@ -7533,18 +7588,6 @@ export default {
     triggeredToday: '오늘 발생',
     addToPool: '관심 종목 담기',
     inPool: '담김',
-    columns: {
-      code: '코드',
-      name: '이름',
-      state: '상태',
-      note: '메모',
-      price: '현재가',
-      change: '등락',
-      turnover: '거래대금',
-      date: '최근 거래일',
-      actions: '작업'
-    }
-  ,
     backtestBadgeText: '백테스트 승률 {winRate}% ({wins}/{total}승, 평균 최대 상승폭+{maxGain}%)',
     backtestBadgeTitle: '과거 매수 신호 기반 객관적 백테스트 통계',
     commonPresets: '자주 쓰는 프리셋',
@@ -7569,6 +7612,86 @@ export default {
     todayAlerts: '오늘의 경보',
     totalTracked: '총 추적 수',
     watchPool: '중점 관찰',
+    columns: {
+      code: '코드',
+      name: '이름',
+      state: '상태',
+      note: '메모',
+      price: '현재가',
+      change: '등락',
+      turnover: '거래대금',
+      date: '최근 거래일',
+      actions: '작업'
+    }
+  },
+  marketDashboard: {
+    title: '시장 개요',
+    back: '워크벤치로 돌아가기',
+    dataTime: '데이터 시각',
+    tickerLabel: '지수',
+    refresh: '새로고침',
+    themeToDark: '다크 모드로 전환',
+    themeToLight: '라이트 모드로 전환',
+    latestLabel: '최신',
+    closedLabel: '종가',
+    holidayNote: '최근 거래일 기준',
+    chartLow: '저 {v}',
+    chartHigh: '고 {v}',
+    prevCloseTitle: '전일 종가 {v}',
+    chartLegend: '— 60일   ┆ 시가   ┆ 전일 종가(파선)   ● {point}',
+    noData: '데이터 없음',
+    sourceUnavailable: '일부 데이터 소스를 사용할 수 없습니다({sources}). 해당 패널은 비어 있습니다',
+    indexUnavailable: '이 지수의 로컬 시세 데이터가 없습니다',
+    backToWorkbench: '뒤로',
+    refreshFailed: '시세 갱신에 실패했습니다. 다시 시도해 주세요.',
+    loading: '불러오는 중…',
+    etf: {
+      title: '대형 ETF',
+      caption: '지수형'
+    },
+    dragonTiger: {
+      title: '상향종목',
+      caption: '순매수 상위 5 · 전 시장',
+      net: '순매수',
+      org: '기관',
+      empty: '오늘 데이터 없음',
+      full: '전체 보기 →'
+    },
+    watchlist: {
+      title: '관심 종목',
+      count: '{n}종목',
+      all: '전체 →',
+      empty: '아직 관심 종목이 없습니다. 자주 보는 종목을 추가해 보세요',
+      emptyCta: '관심 종목 페이지로',
+      emptyChip: '+ {name}',
+      state: {
+        observing: '관찰',
+        triggered: '발생',
+        holding: '보유',
+        dropped: '제외됨'
+      }
+    },
+    sentiment: {
+      title: '시장 심리',
+      caption: '상·하한가 · 전 시장',
+      limitUp: '상한가',
+      limitDown: '하한가',
+      broken: '상한가 이탈',
+      brokenUnit: '· {rate}%',
+      maxStreak: '최대 연속',
+      streakUnit: '판',
+      trendLabel: '최근 5일 상한가 수',
+      breadth: {
+        up: '상승',
+        flat: '보합',
+        down: '하락'
+      }
+    },
+    state: {
+      open: '장중',
+      closed: '장 마감',
+      holiday: '휴장일'
+    }
   },
   resourceSort: {
     title: '정렬',
@@ -7883,197 +8006,115 @@ export default {
       explicit: '워크스페이스에서 모델 설정에 입력한 값이 항상 우선하며, 저장된 모델은 다시 쓰이지 않습니다.'
     }
   },
-  kline: {
-    picksBar: 'Watchlist ({count})',
-    picksHint: '[↑/↓] keys to switch stocks',
-    searchSwitch: 'Click to search and switch stock',
-    brickTitle: 'THS ZX Brick Chart - consecutive red/green brick strategy',
-    bbiTitle: 'Close price vs BBI bullish/bearish balance line',
-    period: 'Period',
-    adjust: 'Adjust',
-    boardNoAdjust: 'Board: no adjustment',
-    searchPlaceholder: 'Enter stock code/name/pinyin (e.g. 600519)',
-    searching: 'Searching...',
-    noMatch: 'No matching symbols found',
-    board: 'Board',
-    mainChart: 'Main:',
-    subChart: 'Sub:',
-    drawing: 'Draw:',
-    td9: 'TD9 Sequence',
-    patternBubbles: 'Pattern Bubbles',
-    patternOutline: 'Pattern Outline',
-    keyLevels: 'Key Levels',
-    askAgent: 'Ask Agent:',
-    actionValuation: 'Analyze Fundamentals & Valuation',
-    actionStrategy: 'Calculate Defense & Entry Strategy',
-    actionReport: 'Latest Research & Core Logic',
-    // HALO: the full report is rendered in the workbench panel (computed by
-    // Python); these are the agent-facing asks.
-    actionHaloReport: 'HALO Annual Report',
-    actionHaloSix: 'HALO Six Dimensions & Growth',
-    actionHaloSeven: 'Score the Seven Qualitative Dimensions',
-    actionHaloGovernance: 'Governance Integrity Facts',
-    noData: 'No market data for {symbol}',
-    queryFailed: '{symbol} quote query failed',
-    requestRejected: 'Server explicitly rejected this request',
-    retryWontHelp: 'Retrying will not yield different results',
-    fetchPathIssue: 'This is a data fetch path issue',
-  
-    volumeLabel: '거래량',
-    turnoverLabel: '거래대금',
-    patternLabel: '패턴',
-    patternAskSuffix: ', Agent에게 질문',
-    patternAskTitle: '현재 패턴에 대해 Agent에게 질문: {patterns}',
-    zxBrickLabel: '지행 벽돌',
-    zxBrickTitle: '동화순 지행 벽돌 차트 전략',
-    dualLineTitle: '백선 DEMA10 ({white}) vs 황선 LongBBI ({yellow})',
-    dualLineBelow: '황선 아래 · 약세',
-    dualLineAbove: '양선 상승 · 강세',
-    dualLineRetrace: '눌림목 조정',
-    aboveBBI: 'BBI 강세',
-    belowBBI: 'BBI 약세',
-    boardAdjustTitle: '업종 지수는 수정주가 데이터를 제공하지 않습니다',
-    td9Title: 'TD9 시퀀스 반전 신호',
-    patternBubbleLabel: '버블',
-    patternBubbleBtnTitle: '차트에 고점/저점 패턴 버블 표시',
-    patternBubbleHint: '버블을 클릭하여 패턴 세부 정보를 보거나 Agent에게 질문',
-    patternOutlineLabel: '윤곽선',
-    patternOutlineBtnTitle: '차트에 패턴 구조 윤곽선 그리기',
-    patternOutlineHint: '넥라인 및 추세 채널 표시',
-    boardNoPattern: '업종 패턴 없음',
-    boardNoPatternDetail: '업종 지수는 패턴 인식을 제공하지 않습니다',
-    boardNoPatternOutlineDetail: '업종 지수는 패턴 윤곽을 제공하지 않습니다',
-    noPatternDetected: '패턴이 감지되지 않음',
-    expandWorkspace: '작업공간 펼치기',
-    collapseWorkspace: '작업공간 접기',
-    requestRejectedHint: '서버에서 요청을 거부했습니다: {message}',
-    fetchPathIssueHint: '데이터 경로 이상: {message}',
-    noDataHint: '시세 데이터 없음',
-    periodDay: '일봉',
-    periodWeek: '주봉',
-    periodMonth: '월봉',
-    adjustNone: '미수정',
-    adjustForward: '수정(선행)',
-    adjustBackward: '수정(후행)',
-    unitShou: '주(手)',
-    unitWanShou: '만주(手)',
-    unitYiShou: '억주(手)',
-    unitWan: '만',
-    unitYi: '억',
-    levelsLabel: '핵심 레벨',
-    levelsTitle: '지지선 및 저항선',
-    groupCandle: '캔들',
-    groupTactics: '전략',
-    oscillation: '박스권',
-    actionPatternDeep: '패턴 구조 심층 분석',
+  halo: {
+    title: 'HALO 연차보고서 분석',
+    open: 'HALO 보고서',
+    refresh: '다시 생성',
+    archive: '지식베이스에 보관',
+    archiving: '보관 중…',
+    loading: '보고서를 생성하는 중…',
+    loadFailed: '보고서를 불러오지 못했습니다',
+    noDataTitle: '이 종목의 연차보고서 팩트가 아직 동기화되지 않았습니다',
+    noDataHint: '아래 버튼으로 자오인포 연차보고서를 동기화하면, 팩트가 적재되는 즉시 이 패널이 다시 조회합니다.',
+    syncCostHint: '동기화는 연차보고서 PDF를 다운로드해 페이지별로 파싱하므로 보통 1~3분 걸립니다. 페이지를 닫지 마세요.',
+    syncAndRetry: '보고서 동기화 후 재시도',
+    syncing: '연차보고서 동기화 중…',
+    syncDone: '연차보고서를 동기화했습니다. 보고서를 다시 생성합니다',
+    syncFailed: '연차보고서 동기화 실패',
+    retry: '재시도',
+    launchFullReport: '에이전트가 전체 보고서를 생성하도록',
+    skeletonNotice: '이 패널은 채점 커널이 계산한 데이터 계층과 정량 앵커만 표시합니다. 7개 정성 차원(해자/스태그플레이션 방어/ESG/경영진/주주·자금/밸류에이션/리스크)은 모델이 채점하므로 여기서는 결론을 제공하지 않습니다. 전체 분석이 필요하면 세션에서 에이전트에게 halo.analyze를 실행시키세요.',
+    scoreCard: '핵심 점수',
+    haloSix: 'HALO 6개 차원',
+    haloSixDetail: 'HALO 6개 차원 세부',
+    growthLabel: '성장성',
+    growthDetail: '성장성 세부 점수',
+    notComputable: '산출 불가',
+    growthMissing: '성장성 산출에 다음 입력값이 없어 가중에서 제외되었습니다: {keys}',
+    dim: '차원',
+    raw: '원시 값',
+    weight: '가중치',
+    score: '점수',
+    basis: '산출 근거',
+    qualitativeDims: '정성 차원(채점 대기)',
+    qualitativeHint: '아래 차원은 모델이 채점합니다. 패널은 채점에 필요한 정량 앵커만 제공하고 결론은 제공하지 않습니다.',
+    hasAnchor: '앵커 완비',
+    noAnchor: '앵커 부족',
+    pendingScore: '채점 대기',
+    anchors: '정량 앵커',
+    noAnchors: '가져오지 못한 앵커: {keys}',
+    facts: '연차보고서 팩트',
+    value: '값',
+    page: '쪽',
+    sourceText: '원문',
+    announcements: '공시',
+    rawMarkdown: '스켈레톤 원문(채점 대기 슬롯 포함)',
+    rawMarkdownHint: '지식베이스에 보관되는 것이 이 내용이며, 비어 있는 슬롯은 "채점 대기"로 표시됩니다.',
+    assetHeavy: '자산 집약형',
+    assetMixed: '복합형',
+    assetLight: '자산 경량형',
+    entryHint: '자오인포 연차보고서 팩트에서 나온 채점 커널 데이터: HALO 6개 차원, 성장성, 차원별 정량 앵커.',
+    period: '보고 기간',
+    assetType: '자산 유형',
+    pickKb: '보관 위치',
+    kbPlaceholder: '지식베이스 선택',
+    archiveOk: '초안으로 보관했습니다. 파싱이 끝나면 검색할 수 있습니다',
+    archiveUpdated: '기존 보관 문서를 업데이트했습니다',
+    archiveFailed: '보관 실패',
+    needKb: '먼저 지식베이스를 선택하세요',
+    close: '닫기',
+    llmNote: '7개 정성 차원(해자/스태그플레이션 방어/ESG/경영진/주주·자금/밸류에이션/리스크)은 모델이 채점하고, 나머지 수치는 채점 커널이 계산합니다. 보고서 유효기간은 30일입니다.',
+    growthSubs: {
+      revenue: '매출 성장',
+      profit: '이익 성장',
+      quality: '성장 질',
+      sustainability: '성장 지속성'
+    },
+    dims: {
+      tangible: '유형자산 집약도',
+      fixedIntensity: '고정자산 집약도',
+      fixedShare: '고정자산 비중',
+      capitalLabor: '자본-노동 비율',
+      capexIntensity: 'Capex 집약도',
+      capexBurden: 'Capex 부담'
+    }
   },
-  stockCitation: {
-    noChangeData: 'No change data',
-    analyzing: 'Analyzing strategy indicators and quantitative structure...',
-    insufficientData: 'Insufficient data for strategy rating',
-    valuation: 'Valuation',
-    capitalFlow: 'Capital Flow',
-    volRatio: 'Volume Ratio',
-    amplitude: 'Amplitude',
-    engine: 'THS ZX Quantitative Engine',
-  
-    amountWan: '{value}만',
-    amountYi: '{value}억',
-    barsAsOf: '{bars}개 봉 · {asOf} 기준',
-    barsInsufficient: '봉 부족(24개 미만: {bars}개)',
-    continuousBoard: '{days}연속 상한가',
-    dragonCount: '용호방 {count}회',
-    hotRank: '인기 순위 {rank}위',
-    last30Days: '최근 30일',
-    limitBreakCount: '상한가 이탈 {count}회',
-    limitUpCount: '상한가 {count}회',
-    limitUpTitle: '최근 상한가: {date}, 연속: {days}일',
-    loss: '손실',
-    moreSectors: '외 {count}개 업종',
-    netAmountWan: '{direction}{value}만',
-    netAmountYi: '{direction}{value}억',
-    netBuy: '순매수 ',
-    netSell: '순매도 ',
-    noQuoteData: '시세 데이터 없음',
-    openWorkspace: '작업공간 열기',
-    queryFailed: '조회 실패',
-    queryFailedDetail: '조회 실패: {message}',
-    range20d: '20일',
-    range5d: '5일',
-    range60d: '60일',
-    sourcesUnavailable: '사용 불가한 데이터 소스: ',
-    yellowDegraded: '황선 저하',
-  },
-  watchDetail: {
-    notSet: 'Not set',
-    cost: 'Cost',
-    stopLoss: 'Stop Loss',
-  
-    costPlaceholder: '목표 매수가',
-    stopPlaceholder: '손절가',
-  },
-  mentionedStocks: {
-    title: 'Stocks Mentioned',
-  
-    viewKline: 'K선 보기',
-    viewTitle: '{name} ({thscode}) 차트로 전환',
-    viewing: '보기 중',
-    viewingTitle: '현재 보기 중: {name} ({thscode})',
-  },
-  welcome: {
-    slogan: 'Let today\'s knowledge become tomorrow\'s wisdom',
-    todayChats: 'Today\'s Chats',
-    knowledgeBases: 'Knowledge Bases',
-    totalDocs: 'Total Documents',
-    insights: 'Insights',
-    startExploring: 'Start Exploring',
-    newChat: 'New Chat',
-    newChatDesc: 'Start a new knowledge exploration with AI',
-    browseKB: 'Browse Knowledge Base',
-    browseKBDesc: 'Manage and explore your knowledge assets',
-    agents: 'Agents',
-    agentsDesc: 'Customized AI assistants for specific needs',
-  },
-  lab: {
-    darkBase: 'Dark Base',
-    afternoonGreeting: 'Good afternoon, what would you like to research today?',
-    continueYesterday: 'Continue yesterday\'s work',
-    recentLoadFailed: 'Recent sessions failed to load',
-    noPreview: 'No message preview',
-    messagesLoadFailed: 'Failed to load session messages',
-    noMessages: 'This session has no messages yet.',
-    continueAsk: 'Continue asking…',
-    morningBrief: 'Research Morning Brief',
-    whatToResearch: 'What would you like to research today?',
-    pastIssues: 'Past Issues',
-    pastIssuesFailed: 'Failed to load past issues',
-    noPastIssues: 'No past research yet',
-    researchDispatch: 'Research Dispatch',
-    references: 'References',
-    noExcerpts: 'No excerpts',
-    todayHot: 'Today\'s Hot',
-    knowledgeBase: 'Knowledge Base',
-    weekendMarket: 'Weekend Market is Open',
-    vendorNotOpen: 'Vendor has not opened yet',
-    browseAround: 'Just browsing',
-    vendorPreparing: 'Vendor is preparing, coming soon…',
-    noOrders: 'No orders yet at this stall. Start one!',
-    composerPlaceholder: 'Ask something…',
-    print: 'Print',
-    sendEnter: 'Send (Enter)',
-    browseOrAsk: 'Browse around, or ask something…',
-  },
-
-  klineCompare: {
-    loading: '로딩 중 ({count})',
-    collapse: '접기',
-    expand: '펼치기',
-    switchTo: '{name} ({thscode}) 차트로 전환',
-  },
-  samples: {
-    markdown: 'Markdown 문서',
-    faq: 'FAQ',
-    chapter: '다중 챕터 문서',
-    plain: '일반 텍스트 단락',
-  },
+  wechat: {
+    openOriginal: '원문 보기 ↗',
+    send: '질문',
+    clear: '지우기',
+    loading: '불러오는 중…',
+    pickHintClosed: '목록이 접혀 있습니다. 오른쪽 위 "목록 보기"로 기사를 선택하세요',
+    pickHint: '왼쪽에서 기사를 선택하세요',
+    radar: {
+      openExternal: '새 창에서 열기',
+      reload: '새로고침',
+      offlineHint: '공식 계정 서비스에 연결할 수 없습니다 (http://127.0.0.1:5030/biz)',
+      retry: '다시 시도'
+    },
+    tabs: {
+      radar: '동적 레이더',
+      study: '정독 질의응답'
+    },
+    chat: {
+      empty: '이 기사에 질문하거나, 「지식베이스 전체」로 전환해 통합 검색하세요.',
+      placeholder: '이 기사에 질문 (Enter 전송)'
+    },
+    scope: {
+      doc: '이 기사만',
+      kb: '지식베이스 전체'
+    },
+    item: {
+      indexing: '인덱싱 중'
+    },
+    list: {
+      show: '목록 보기',
+      hide: '목록 숨기기',
+      loading: '기사 불러오는 중…',
+      empty: '이 지식베이스에 위챗 기사가 없습니다'
+    },
+    vault: {
+      off: 'vault 미설정 — 이미지가 표시되지 않을 수 있습니다'
+    }
+  }
 }

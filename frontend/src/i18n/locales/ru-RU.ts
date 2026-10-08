@@ -1,100 +1,189 @@
 export default {
-  wechat: {
-    send: 'Спросить',
-    clear: 'Очистить',
-    openOriginal: 'Открыть оригинал ↗',
-    loading: 'Загрузка…',
-    pickHintClosed: 'Список свёрнут — нажмите «Показать список» справа вверху',
-    pickHint: 'Выберите статью слева',
-    vault: { off: 'vault не настроен — изображения могут не загрузиться' },
-    list: { show: 'Показать список', hide: 'Скрыть список', loading: 'Загрузка статей…', empty: 'В этой базе знаний нет статей WeChat' },
-    item: { indexing: 'индексация' },
-    scope: { doc: 'Только эта статья', kb: 'Вся база знаний' },
-    chat: { empty: 'Задайте вопрос об этой статье или переключитесь на «Вся база знаний» для поиска по всем.', placeholder: 'Спросить об этой статье. Enter — отправить' },
-    tabs: {
-      radar: 'Динамический радар',
-      study: 'Глубокое чтение',
-    },
-    radar: {
-      openExternal: 'Открыть в новом окне',
-      reload: 'Обновить',
-      offlineHint: 'Не удалось подключиться к службе (http://127.0.0.1:5030/biz)',
-      retry: 'Повторить попытку',
-    },
+  samples: {
+    markdown: 'Документ Markdown',
+    faq: 'Вопросы и ответы FAQ',
+    chapter: 'Многоглавный документ',
+    plain: 'Простой текст'
   },
-  halo: {
-    title: 'HALO: анализ годового отчёта',
-    open: 'Отчёт HALO',
-    refresh: 'Сформировать заново',
-    archive: 'В архив базы знаний',
-    archiving: 'Архивирование…',
-    close: 'Закрыть',
-    loading: 'Формируется отчёт…',
-    loadFailed: 'Не удалось загрузить отчёт',
-    noDataTitle: 'Для этого инструмента ещё нет синхронизированных фактов годового отчёта',
-    noDataHint: 'Нажмите кнопку ниже, чтобы синхронизировать годовой отчёт с CNINFO; панель повторит запрос, как только факты попадут в базу.',
-    syncCostHint: 'Синхронизация скачивает PDF годового отчёта и разбирает его постранично — обычно 1–3 минуты. Не закрывайте панель.',
-    syncAndRetry: 'Синхронизировать и повторить',
-    syncing: 'Синхронизация годового отчёта…',
-    syncDone: 'Годовой отчёт синхронизирован, формирую отчёт заново',
-    syncFailed: 'Не удалось синхронизировать годовой отчёт',
-    retry: 'Повторить',
-    launchFullReport: 'Попросить агента построить полный отчёт',
-    skeletonNotice:
-      'Панель показывает только вычисленный ядром оценки слой данных и количественные якоря. Семь качественных измерений (защитная способность, устойчивость к стагфляции, ESG, менеджмент, акционеры и потоки, оценка, риски) оценивает модель, и здесь вывода по ним нет; за полным анализом обратитесь к агенту с halo.analyze в сессии.',
-    scoreCard: 'Ключевые оценки',
-    haloSix: 'Шесть измерений HALO',
-    haloSixDetail: 'Детализация шести измерений HALO',
-    growthLabel: 'Рост',
-    growthDetail: 'Подоценки роста',
-    notComputable: 'Не рассчитывается',
-    growthMissing: 'Рост не рассчитан из-за отсутствия: {keys} — эти данные не вошли в вес',
-    dim: 'Измерение',
-    raw: 'Исходное значение',
-    weight: 'Вес',
-    score: 'Балл',
-    basis: 'Основание',
-    qualitativeDims: 'Качественные измерения (ожидают оценки)',
-    qualitativeHint: 'Эти измерения оценивает модель. Панель даёт только количественные якоря, необходимые для оценки, но не вывод.',
-    hasAnchor: 'Якоря полные',
-    noAnchor: 'Якоря неполные',
-    pendingScore: 'Ожидает оценки',
-    anchors: 'Количественные якоря',
-    noAnchors: 'Якоря не получены: {keys}',
-    facts: 'Факты годового отчёта',
-    value: 'Значение',
-    page: 'Стр.',
-    sourceText: 'Исходный текст',
-    announcements: 'Объявления',
-    rawMarkdown: 'Исходный каркас (с незаполненными слотами)',
-    rawMarkdownHint: 'Именно это содержимое архивируется в базу знаний; незаполненные слоты показаны как «ожидают оценки».',
-    assetHeavy: 'Тяжёлые активы',
-    assetMixed: 'Смешанный',
-    assetLight: 'Лёгкие активы',
-    dims: {
-      tangible: 'Плотность материальных активов',
-      fixedIntensity: 'Плотность основных средств',
-      fixedShare: 'Доля основных средств',
-      capitalLabor: 'Капитало-трудовой коэффициент',
-      capexIntensity: 'Плотность капзатрат',
-      capexBurden: 'Бремя капзатрат',
-    },
-    growthSubs: {
-      revenue: 'Рост выручки',
-      profit: 'Рост прибыли',
-      quality: 'Качество роста',
-      sustainability: 'Устойчивость роста',
-    },
-    entryHint: 'Данные ядра оценки по фактам годового отчёта CNINFO: шесть измерений HALO, рост и количественные якоря по каждому измерению.',
-    period: 'Отчётный период',
-    assetType: 'Тип активов',
-    llmNote: 'Семь качественных измерений (защитная способность, устойчивость к стагфляции, ESG, менеджмент, акционеры и потоки, оценка, риски) оценивает модель; все остальные числа рассчитывает ядро оценки. Отчёт действителен 30 дней.',
-    pickKb: 'Архивировать в',
-    kbPlaceholder: 'Выберите базу знаний',
-    archiveOk: 'Сохранено как черновик; станет доступно для поиска после разбора',
-    archiveUpdated: 'Существующий архивный документ обновлён',
-    archiveFailed: 'Не удалось архивировать',
-    needKb: 'Сначала выберите базу знаний',
+  klineCompare: {
+    loading: 'Загрузка ({count})',
+    collapse: 'Свернуть',
+    expand: 'Развернуть',
+    switchTo: 'Переключить график на {name} ({thscode})'
+  },
+  lab: {
+    darkBase: 'Dark Base',
+    afternoonGreeting: 'Good afternoon, what would you like to research today?',
+    continueYesterday: 'Continue yesterday\'s work',
+    recentLoadFailed: 'Recent sessions failed to load',
+    noPreview: 'No message preview',
+    messagesLoadFailed: 'Failed to load session messages',
+    noMessages: 'This session has no messages yet.',
+    continueAsk: 'Continue asking…',
+    morningBrief: 'Research Morning Brief',
+    whatToResearch: 'What would you like to research today?',
+    pastIssues: 'Past Issues',
+    pastIssuesFailed: 'Failed to load past issues',
+    researchDispatch: 'Research Dispatch',
+    references: 'References',
+    noExcerpts: 'No excerpts',
+    todayHot: 'Today\'s Hot',
+    knowledgeBase: 'Knowledge Base',
+    weekendMarket: 'Weekend Market is Open',
+    vendorNotOpen: 'Vendor has not opened yet',
+    browseAround: 'Just browsing',
+    vendorPreparing: 'Vendor is preparing, coming soon…',
+    noOrders: 'No orders yet at this stall. Start one!',
+    print: 'Print',
+    sendEnter: 'Send (Enter)',
+    noPastIssues: 'No past research yet',
+    composerPlaceholder: 'Ask something…',
+    browseOrAsk: 'Browse around, or ask something…'
+  },
+  welcome: {
+    slogan: 'Let today\'s knowledge become tomorrow\'s wisdom',
+    todayChats: 'Today\'s Chats',
+    knowledgeBases: 'Knowledge Bases',
+    totalDocs: 'Total Documents',
+    insights: 'Insights',
+    startExploring: 'Start Exploring',
+    newChat: 'New Chat',
+    newChatDesc: 'Start a new knowledge exploration with AI',
+    browseKB: 'Browse Knowledge Base',
+    browseKBDesc: 'Manage and explore your knowledge assets',
+    agents: 'Agents',
+    agentsDesc: 'Customized AI assistants for specific needs'
+  },
+  mentionedStocks: {
+    title: 'Stocks Mentioned',
+    viewKline: 'Свечной график',
+    viewTitle: 'Переключить график на {name} ({thscode})',
+    viewing: 'Просмотр',
+    viewingTitle: 'В настоящее время отображается {name} ({thscode})'
+  },
+  watchDetail: {
+    notSet: 'Not set',
+    cost: 'Cost',
+    stopLoss: 'Stop Loss',
+    costPlaceholder: 'Целевая цена покупки',
+    stopPlaceholder: 'Цена стоп-лосса'
+  },
+  stockCitation: {
+    noChangeData: 'No change data',
+    analyzing: 'Analyzing strategy indicators and quantitative structure...',
+    insufficientData: 'Insufficient data for strategy rating',
+    valuation: 'Valuation',
+    capitalFlow: 'Capital Flow',
+    volRatio: 'Volume Ratio',
+    amplitude: 'Amplitude',
+    engine: 'THS ZX Quantitative Engine',
+    amountWan: '{value}0 тыс.',
+    amountYi: '{value}00 млн',
+    barsAsOf: '{bars} свечей · По состоянию на {asOf}',
+    barsInsufficient: 'Недостаточно свечей (<24: {bars})',
+    continuousBoard: '{days} подряд планок вверх',
+    dragonCount: 'Список лидеров {count} раз',
+    hotRank: 'Рейтинг популярности №{rank}',
+    last30Days: 'Последние 30 дней',
+    limitBreakCount: 'Срыв планки {count} раз',
+    limitUpCount: 'Планка вверх {count} раз',
+    limitUpTitle: 'Последняя планка: {date}, серия: {days}д',
+    loss: 'Убыток',
+    moreSectors: 'Еще {count} секторов',
+    netAmountWan: '{direction}{value}0 тыс.',
+    netAmountYi: '{direction}{value}00 млн',
+    netBuy: 'Чистая покупка ',
+    netSell: 'Чистая продажа ',
+    noQuoteData: 'Рыночные данные отсутствуют',
+    openWorkspace: 'Открыть рабочую область',
+    queryFailed: 'Сбой запроса',
+    queryFailedDetail: 'Сбой запроса: {message}',
+    range20d: '20д',
+    range5d: '5д',
+    range60d: '60д',
+    sourcesUnavailable: 'Источники недоступны: ',
+    yellowDegraded: 'Желтая линия деградирована'
+  },
+  kline: {
+    picksBar: 'Watchlist ({count})',
+    picksHint: '[↑/↓] keys to switch stocks',
+    searchSwitch: 'Click to search and switch stock',
+    bbiTitle: 'Close price vs BBI bullish/bearish balance line',
+    period: 'Period',
+    adjust: 'Adjust',
+    boardNoAdjust: 'Board: no adjustment',
+    searchPlaceholder: 'Enter stock code/name/pinyin (e.g. 600519)',
+    searching: 'Searching...',
+    noMatch: 'No matching symbols found',
+    board: 'Board',
+    mainChart: 'Main:',
+    subChart: 'Sub:',
+    drawing: 'Draw:',
+    td9: 'TD9 Sequence',
+    patternBubbles: 'Pattern Bubbles',
+    patternOutline: 'Pattern Outline',
+    askAgent: 'Ask Agent:',
+    actionValuation: 'Analyze Fundamentals & Valuation',
+    actionStrategy: 'Calculate Defense & Entry Strategy',
+    actionReport: 'Latest Research & Core Logic',
+    actionHaloReport: 'HALO Annual Report',
+    actionHaloSix: 'HALO Six Dimensions & Growth',
+    actionHaloSeven: 'Score the Seven Qualitative Dimensions',
+    actionHaloGovernance: 'Governance Integrity Facts',
+    noData: 'No market data for {symbol}',
+    queryFailed: '{symbol} quote query failed',
+    volumeLabel: 'Объем',
+    turnoverLabel: 'Оборот',
+    patternLabel: 'Паттерн',
+    patternAskSuffix: ', спросить Agent',
+    patternAskTitle: 'Спросить Agent о текущем паттерне: {patterns}',
+    zxBrickLabel: 'Кирпич ZX',
+    zxBrickTitle: 'Стратегия кирпичного графика THS Zhixing',
+    dualLineTitle: 'Белая DEMA10 ({white}) vs Желтая LongBBI ({yellow})',
+    dualLineBelow: 'Ниже желтой · Медвежий',
+    dualLineAbove: 'Обе растут · Бычий',
+    dualLineRetrace: 'Откат и консолидация',
+    aboveBBI: 'BBI Бычий',
+    belowBBI: 'BBI Медвежий',
+    boardAdjustTitle: 'Для индексов секторов нет скорректированных данных',
+    td9Title: 'Сигнал разворота девятикратной последовательности TD9',
+    patternBubbleLabel: 'Пузыри',
+    patternBubbleBtnTitle: 'Показать пузыри паттернов вершин/оснований на графике',
+    patternBubbleHint: 'Нажмите на пузырь для просмотра деталей паттерна или вопроса Agent',
+    patternOutlineLabel: 'Контур',
+    patternOutlineBtnTitle: 'Нарисовать контуры структуры паттерна на графике',
+    patternOutlineHint: 'Показать линии шеи и каналы тренда',
+    boardNoPattern: 'Нет паттернов сектора',
+    boardNoPatternDetail: 'Индексы секторов не поддерживают распознавание паттернов',
+    boardNoPatternOutlineDetail: 'Индексы секторов не поддерживают контуры паттернов',
+    noPatternDetected: 'Паттерны не обнаружены',
+    expandWorkspace: 'Развернуть рабочую область',
+    collapseWorkspace: 'Свернуть рабочую область',
+    requestRejectedHint: 'Сервер отклонил запрос: {message}',
+    fetchPathIssueHint: 'Ошибка пути получения данных: {message}',
+    noDataHint: 'Рыночные данные отсутствуют',
+    periodDay: 'День',
+    periodWeek: 'Неделя',
+    periodMonth: 'Месяц',
+    adjustNone: 'Без коррекции',
+    adjustForward: 'Прямая',
+    adjustBackward: 'Обратная',
+    unitShou: ' лот.',
+    unitWanShou: '0 тыс. лот.',
+    unitYiShou: '00 млн лот.',
+    unitWan: '0 тыс.',
+    unitYi: '00 млн',
+    levelsLabel: 'Ключевые уровни',
+    levelsTitle: 'Уровни поддержки и сопротивления',
+    groupCandle: 'Свечи',
+    groupTactics: 'Тактика',
+    oscillation: 'Боковик',
+    actionPatternDeep: 'Глубокий анализ паттернов',
+    brickTitle: 'THS ZX Brick Chart - consecutive red/green brick strategy',
+    keyLevels: 'Key Levels',
+    requestRejected: 'Server explicitly rejected this request',
+    retryWontHelp: 'Retrying will not yield different results',
+    fetchPathIssue: 'This is a data fetch path issue'
   },
   imageAttr: {
     contain_data_visual: {
@@ -851,6 +940,10 @@ export default {
     guideStep1_notion: 'Откройте страницу или базу данных, которую хотите синхронизировать в Notion',
     guideStep2_notion: 'Нажмите меню «···» в правом верхнем углу, выберите «Connect to» или «Add connections»',
     guideStep3_notion: 'Найдите и выберите ваше интеграционное приложение, затем вернитесь и нажмите Повторить',
+    noResourcesDesc_seafile: 'Токену недоступна ни одна библиотека, либо все библиотеки зашифрованы (зашифрованные библиотеки не синхронизируются)',
+    guideStep1_seafile: 'Войдите в Seafile и убедитесь, что у аккаунта есть доступ на чтение хотя бы к одной незашифрованной библиотеке',
+    guideStep2_seafile: 'Создайте или пересоздайте токен в разделе «Настройки → Web API токен»',
+    guideStep3_seafile: 'Вернитесь сюда, введите новый токен и нажмите Повторить',
     permissionDocLink: 'Документация по настройке прав доступа',
     syncScheduleLabel: 'Расписание синхронизации',
     conflictLabel: 'Стратегия конфликтов',
@@ -940,17 +1033,27 @@ export default {
     minutesAgo: '{n} мин назад',
     hoursAgo: '{n} ч назад',
     daysAgo: '{n} д назад',
+    resumeFailed: 'Сбой возобновления',
     syncError: {
       dingtalk_document_failed: 'Не удалось прочитать документ DingTalk. Проверьте права доступа и повторите синхронизацию.',
       dingtalk_resource_failed: 'Ресурс DingTalk недоступен. Проверьте права доступа и выбранные ресурсы, затем повторите попытку.',
       deletion_lookup_failed: 'Не удалось найти элемент перед удалением; подробности в журнале сервера',
       deletion_failed: 'Не удалось удалить элемент; подробности в журнале сервера',
-      ingest_failed: 'Не удалось импортировать элемент; подробности в журнале сервера'
+      ingest_failed: 'Не удалось импортировать элемент; подробности в журнале сервера',
+      seafile_permission_denied: 'Доступ к файлу Seafile запрещён. Проверьте права владельца токена на библиотеку.',
+      seafile_not_found: 'Файл Seafile не существует или был перемещён; при следующей синхронизации попытка повторится.',
+      seafile_file_too_large: 'Файл Seafile превышает ограничение размера. Увеличьте MAX_FILE_SIZE_MB или уменьшите файл.',
+      seafile_empty_file: 'Файл Seafile пуст и был пропущен.',
+      seafile_source_changed: 'Файл Seafile изменился во время получения; при следующей синхронизации попытка повторится.',
+      seafile_invalid_response: 'Seafile вернул ответ, который не удалось разобрать. Проверьте версию сервера и обратный прокси.',
+      seafile_ssrf_blocked: 'URL скачивания Seafile заблокирован политикой SSRF. Добавьте хост fileserver в SSRF_WHITELIST.',
+      seafile_fetch_failed: 'Не удалось получить файл из Seafile; при следующей синхронизации попытка повторится.'
     },
     resourceType: {
       wikiSpace: 'Пространство вики',
       docCategory: 'Тег документа',
-      book: 'База знаний Yuque'
+      book: 'База знаний Yuque',
+      library: 'Библиотека Seafile'
     },
     scheduleHuman: {
       '30min': 'Каждые 30 мин',
@@ -1011,7 +1114,8 @@ export default {
       dingtalk: 'Синхронизация онлайн-документов из баз знаний DingTalk',
       rss: 'Синхронизация статей из лент RSS / Atom',
       ima: 'Синхронизация документов, заметок и файлов из баз знаний Tencent IMA (ИИ-сессии и разбор видео не поддерживаются)',
-      gitlab: 'Синхронизация файлов из проектов GitLab'
+      gitlab: 'Синхронизация файлов из проектов GitLab',
+      seafile: 'Синхронизация папок и файлов из библиотек Seafile'
     },
     connector: {
       feishu: 'Feishu (Фэйшу)',
@@ -1024,7 +1128,8 @@ export default {
       dingtalk: 'Документы DingTalk',
       rss: 'RSS / Atom лента',
       ima: 'Tencent IMA',
-      gitlab: 'GitLab'
+      gitlab: 'GitLab',
+      seafile: 'Seafile'
     },
     logDetail: {
       startTime: 'Время начала',
@@ -1061,6 +1166,13 @@ export default {
       overwrite: 'Перезаписать',
       skip: 'Пропустить существующие'
     },
+    seafile: {
+      baseUrl: 'URL Seafile',
+      apiToken: 'API-токен',
+      apiTokenHint: 'Создайте его в Seafile: «Настройки → Web API токен». Учётной записи достаточно прав на чтение выбранных библиотек; токен не передаётся при скачивании файлов.',
+      singleLibraryOnly: 'Один источник данных синхронизирует одну библиотеку. Снимите текущий выбор, прежде чем выбрать другую библиотеку.',
+      selectionRequired: 'Выберите хотя бы одну библиотеку, папку или файл'
+    },
     gitlab: {
       baseUrl: 'URL GitLab',
       accessToken: 'Персональный токен доступа',
@@ -1085,8 +1197,6 @@ export default {
       incremental: 'Инкрементная',
       full: 'Полная'
     }
-  ,
-    resumeFailed: 'Сбой возобновления',
   },
   ollama: {
     unknown: 'Неизвестно',
@@ -2713,6 +2823,7 @@ export default {
   },
   language: {
     zhCN: '简体中文',
+    zhTW: 'Традиционный китайский',
     enUS: 'English',
     ruRU: 'Русский',
     koKR: '한국어',
@@ -2730,31 +2841,6 @@ export default {
     selectModelPlaceholder: 'Выберите модель',
     searchPlaceholder: 'Поиск моделей...',
     builtinTag: 'Built-in',
-    // Ключи собираются динамически в levelLabelKey()/levelDescriptionKey()
-    // (utils/reasoningEffort.ts), поэтому статический скан их не видит.
-    // Держите в синхроне с REASONING_LEVELS.
-    reasoning: {
-      levels: {
-        off: 'Выкл.',
-        auto: 'Авто',
-        minimal: 'Минимум',
-        low: 'Низкий',
-        medium: 'Средний',
-        high: 'Высокий',
-        xhigh: 'Очень высокий',
-        max: 'Максимум',
-      },
-      levelDescriptions: {
-        off: 'Без размышлений, прямой ответ',
-        auto: 'Модель сама выбирает интенсивность',
-        minimal: 'Минимальные размышления, приоритет скорости',
-        low: 'Небольшие размышления, баланс скорости и глубины',
-        medium: 'Сбалансированная глубина для большинства задач',
-        high: 'Глубокие размышления для сложных задач',
-        xhigh: 'Очень глубокие размышления, дольше по времени',
-        max: 'Максимальный уровень, поддерживаемый моделью',
-      },
-    },
     editor: {
       maxOutputTokensLabel: 'Макс. выходных токенов',
       maxOutputTokensPlaceholder: 'Пусто — значение из каталога',
@@ -2796,6 +2882,8 @@ export default {
       dimensionOverrideDesc: 'Включайте только если документация провайдера подтверждает поддержку параметра dimensions.',
       supportsVisionLabel: 'Поддержка визуального / мультимодального ввода',
       supportsVisionDesc: 'Поддерживает ли модель изображения и другой мультимодальный ввод',
+      embeddingImageInputLabel: 'Ввод изображений',
+      embeddingImageInputDesc: 'Модель встраивает изображения в то же векторное пространство, что и текст. Для моделей из каталога определяется автоматически, для своих моделей укажите вручную',
       contextWindowLabel: 'Контекстное окно',
       contextWindowPlaceholder: 'По умолчанию {value}',
       contextWindowDesc: 'Сколько токенов модель принимает за один запрос. Сжатие истории агента использует этот лимит. Пустое значение — по умолчанию 200000 (200K). Укажите реальное окно провайдера: завышенное значение не запускает сжатие, и провайдер отклоняет запрос.',
@@ -2895,6 +2983,28 @@ export default {
         reasoning: 'Рассуждение',
         vision: 'Зрение',
         hint: 'Выберите модель из каталога поставщика или введите своё имя модели.'
+      }
+    },
+    reasoning: {
+      levelDescriptions: {
+        off: 'Без размышлений, прямой ответ',
+        auto: 'Модель сама выбирает интенсивность',
+        minimal: 'Минимальные размышления, приоритет скорости',
+        low: 'Небольшие размышления, баланс скорости и глубины',
+        medium: 'Сбалансированная глубина для большинства задач',
+        high: 'Глубокие размышления для сложных задач',
+        xhigh: 'Очень глубокие размышления, дольше по времени',
+        max: 'Максимальный уровень, поддерживаемый моделью'
+      },
+      levels: {
+        off: 'Выкл.',
+        auto: 'Авто',
+        minimal: 'Минимум',
+        low: 'Низкий',
+        medium: 'Средний',
+        high: 'Высокий',
+        xhigh: 'Очень высокий',
+        max: 'Максимум'
       }
     }
   },
@@ -3187,7 +3297,8 @@ export default {
           },
           registration_mode: {
             self_serve: 'Самостоятельная (любой может зарегистрироваться)',
-            invite_only: 'Только по приглашению (открытая регистрация отключена)'
+            invite_register: 'Регистрация по приглашению (нужна действующая ссылка)',
+            invite_only: 'Регистрация закрыта (существующие аккаунты могут принять приглашение)'
           }
         }
       },
@@ -3217,7 +3328,7 @@ export default {
           whitelist: 'Белый список SSRF-защиты. Можно указать example.com / *.foo.com / 10.0.0.0/8 / 2001:db8::1. Вступает в силу сразу после сохранения. Переменная окружения SSRF_WHITELIST_EXTRA по-прежнему задаётся при развёртывании и здесь не переопределяется.'
         },
         auth: {
-          registration_mode: 'Режим самостоятельной регистрации. self_serve = любой может создать аккаунт; invite_only = открытая регистрация отключена, приглашать могут только Owner/Admin. Вступает в силу сразу после сохранения; используйте self_serve осторожно (в публичном интернете появятся спам-регистрации).',
+          registration_mode: 'Режим регистрации. Открытая регистрация позволяет любому создать аккаунт; регистрация по приглашению требует действующую ссылку; при закрытой регистрации существующие аккаунты могут принимать приглашения. Изменения применяются сразу.',
           default_tenant_mode: 'Политика пространства после открытой регистрации. create_personal создаёт личное пространство с ролью Owner; tenantless создаёт только аккаунт до принятия приглашения или самостоятельного создания пространства.',
           complex_password_enabled: 'Определяет, требуется ли сложный пароль. При включении пароль должен содержать прописные и строчные буквы, цифры и специальные символы. Изменение вступает в силу немедленно и применяется только к новым пользователям при регистрации, а также при изменении или сбросе пароля. Специальные символы включают: {specialChars}'
         }
@@ -3248,7 +3359,7 @@ export default {
           whitelist: 'Белый список SSRF-защиты'
         },
         auth: {
-          registration_mode: 'Режим самостоятельной регистрации',
+          registration_mode: 'Режим регистрации',
           default_tenant_mode: 'Создание пространства по умолчанию',
           complex_password_enabled: 'Включить сложные пароли'
         }
@@ -3791,6 +3902,7 @@ export default {
     attachmentUploadFailed: 'Не удалось загрузить вложение',
     attachmentParseFailed: 'Не удалось обработать вложение',
     attachmentStillProcessing: 'Вложение {name} ещё обрабатывается',
+    imageReadFailed: 'Не удалось прочитать изображение',
     klineStudio: {
       openInPanel: 'Открыть в боковой панели',
       empty: 'Нет отобранных акций.',
@@ -3863,8 +3975,6 @@ export default {
       thisYear: '{day}.{month} {time}',
       otherYear: '{day}.{month}.{year} {time}'
     }
-  ,
-    imageReadFailed: 'Не удалось прочитать изображение',
   },
   knowledgeEditor: {
     titleCreate: 'Создать базу знаний',
@@ -3886,6 +3996,9 @@ export default {
         customInstructionsPlaceholder: 'Например: распознавать шильдики, модели, коды ошибок и единицы таблиц…',
         imageAttrsLabel: 'Наблюдение атрибутов изображений',
         imageAttrsDescription: 'Когда включено, каждое изображение сначала наблюдается на атрибуты и описывается, затем атрибуты решают, нужен ли OCR текста в изображении. Когда выключено — базовый режим: каждое изображение описывается и распознаётся',
+        imageVectorLabel: 'Поиск по векторам изображений',
+        imageVectorDescription: 'Когда включено, после генерации описания изображение также кодируется самой моделью эмбеддингов, и поиск находит изображения по их содержимому, даже если описание этого не упоминает. Нужна модель эмбеддингов с поддержкой изображений; на каждое изображение добавляется один вызов эмбеддинга, а пул кандидатов векторного поиска расширяется. Действует для документов, загруженных или повторно разобранных после включения; страницы сканированных PDF пропускаются',
+        imageVectorModelUnsupported: 'Текущая модель эмбеддингов не заявляет поддержку изображений, поэтому векторы изображений не будут ни созданы, ни найдены',
         imageAttrsSchemaLabel: 'Наблюдаемые атрибуты изображений',
         imageAttrsSchemaDescription: 'Модель наблюдает перечисленные ниже атрибуты (определены реестром бэкенда), чтобы управлять политикой OCR',
         imageAttrsOcrConditions: 'Запуск OCR по наблюдаемым условиям атрибутов',
@@ -4242,13 +4355,6 @@ export default {
       editingBadge: 'Редактирование',
       pageActions: 'Действия со страницей',
       viewTabs: 'Представления базы знаний',
-      tabDocuments: 'Документы',
-      tabDocumentsTip: 'Просмотр документов этой базы знаний и управление ими',
-      tabWikiTip: 'Просмотр Wiki-страниц, созданных из этой базы знаний',
-      tabGraph: 'Граф',
-      tabGraphTip: 'Просмотр графа связей между документами и страницами',
-      tabGallery: 'Галерея',
-      tabGalleryTip: 'Просмотр изображений в этой базе знаний',
       searchPlaceholder: 'Поиск Wiki-страниц...',
       searchNoResults: 'Страницы не найдены',
       viewModeToggle: 'Переключить вид каталога',
@@ -4353,6 +4459,13 @@ export default {
       fixStartError: 'Не удалось запустить помощник исправления',
       issueFixPromptSingle: 'Пожалуйста, исправьте проблему (ID: {id}) на странице [[{slug}]].',
       issueFixPromptAutoStart: 'Пожалуйста, исправьте следующие проблемы на странице [[{slug}]]:',
+      tabDocuments: 'Документы',
+      tabDocumentsTip: 'Просмотр документов этой базы знаний и управление ими',
+      tabWikiTip: 'Просмотр Wiki-страниц, созданных из этой базы знаний',
+      tabGraph: 'Граф',
+      tabGraphTip: 'Просмотр графа связей между документами и страницами',
+      tabGallery: 'Галерея',
+      tabGalleryTip: 'Просмотр изображений в этой базе знаний',
       gallery: {
         attr: {
           builtin_caption: 'Описание',
@@ -4787,15 +4900,14 @@ export default {
     }
   },
   createChat: {
-    workbench: {
-      greeting: { morning: 'Доброе утро', afternoon: 'Добрый день', evening: 'Добрый вечер', night: 'Поздний вечер' },
-      greetingSub: 'Что будем изучать сегодня?',
-      continueTitle: 'Продолжить вчерашнюю работу',
-      untitledSession: 'Без названия',
-      minutesAgo: '{n} мин назад',
-      hoursAgo: '{n} ч назад',
-      yesterday: 'Вчера',
-      daysAgo: '{n} дн назад'
+    title: 'Привет, я WeKnora — ваши знания всегда под рукой',
+    newSessionTitle: 'Новая сессия',
+    openProject: 'Выбрать проект',
+    clearProject: 'Снять привязку',
+    pickFailed: 'Не удалось открыть выбранный путь',
+    messages: {
+      createFailed: 'Не удалось создать сессию',
+      createError: 'Не удалось создать сессию, попробуйте позже'
     },
     marketEntry: {
       sectionTitle: 'Рынок',
@@ -4811,14 +4923,20 @@ export default {
         unavailable: 'Недоступно'
       }
     },
-    title: 'Привет, я WeKnora — ваши знания всегда под рукой',
-    newSessionTitle: 'Новая сессия',
-    openProject: 'Выбрать проект',
-    clearProject: 'Снять привязку',
-    pickFailed: 'Не удалось открыть выбранный путь',
-    messages: {
-      createFailed: 'Не удалось создать сессию',
-      createError: 'Не удалось создать сессию, попробуйте позже'
+    workbench: {
+      greetingSub: 'Что будем изучать сегодня?',
+      continueTitle: 'Продолжить вчерашнюю работу',
+      untitledSession: 'Без названия',
+      minutesAgo: '{n} мин назад',
+      hoursAgo: '{n} ч назад',
+      yesterday: 'Вчера',
+      daysAgo: '{n} дн назад',
+      greeting: {
+        morning: 'Доброе утро',
+        afternoon: 'Добрый день',
+        evening: 'Добрый вечер',
+        night: 'Поздний вечер'
+      }
     }
   },
   input: {
@@ -4853,6 +4971,16 @@ export default {
     modelLockedByAgent: 'Model selection is locked by the current agent',
     imageUploadDisabledByAgent: 'Image upload is not enabled for this agent',
     goToAgentSettings: 'Go to agent settings',
+    fileUpload: {
+      label: 'Загрузить файл',
+      tooltip: 'Загрузить файл',
+      tooMany: 'Превышено количество файлов',
+      tooLarge: 'Файл слишком большой'
+    },
+    imageUpload: {
+      label: 'Загрузить изображение',
+      tooltip: 'Загрузить изображение для анализа'
+    },
     messages: {
       enterContent: 'Сначала введите содержимое!',
       replying: 'Ответ формируется, попробуйте позже!',
@@ -4877,21 +5005,9 @@ export default {
     webSearch: {
       toggleOn: 'Включить веб-поиск',
       toggleOff: 'Выключить веб-поиск',
-      notConfigured: 'Веб-поиск не настроен'
-    ,
-      label: 'Поиск в Интернете',
-  }
-  ,
-    imageUpload: {
-      label: 'Загрузить изображение',
-      tooltip: 'Загрузить изображение для анализа',
-    },
-    fileUpload: {
-      label: 'Загрузить файл',
-      tooltip: 'Загрузить файл',
-      tooMany: 'Превышено количество файлов',
-      tooLarge: 'Файл слишком большой',
-    },
+      notConfigured: 'Веб-поиск не настроен',
+      label: 'Поиск в Интернете'
+    }
   },
   manualEditor: {
     defaultTitlePrefix: 'Новый документ',
@@ -4997,9 +5113,8 @@ export default {
     }
   },
   file: {
-    upload: 'Загрузить файл'
-  ,
-    downloadFailed: 'Сбой загрузки, повторите попытку позже',
+    upload: 'Загрузить файл',
+    downloadFailed: 'Сбой загрузки, повторите попытку позже'
   },
   mentionDetail: {
     readOnlyFromAgent: 'Только чтение (от агента)',
@@ -5698,10 +5813,9 @@ export default {
       mineruLegacySectionHint: 'В MinerU 4.0 эти параметры запроса удалены, поэтому серверы 4.0+ их игнорируют; VLM-сервер настраивается на стороне MinerU.',
       paddleocrVlEndpointPlaceholder: 'напр. http://your-paddleocr-vl:8080',
       paddleocrVlEndpointHint: 'Адрес полного сервиса PaddleOCR-VL (pipeline); суффикс /layout-parsing не требуется',
-      paddleocrVlCloudTokenPlaceholder: 'Токен PaddleOCR-VL AI Studio'
-    ,
-      checking: 'Проверка...',
-  },
+      paddleocrVlCloudTokenPlaceholder: 'Токен PaddleOCR-VL AI Studio',
+      checking: 'Проверка...'
+    },
     weknoraCloud: {
       title: 'WeKnora Cloud',
       description: 'Настройте учётные данные APPID и APPSECRET для WeKnora Cloud. Данные используются для модельных сервисов и движка парсинга документов.',
@@ -6782,6 +6896,7 @@ export default {
     channelConfluence: 'Confluence',
     channelYuque: 'Yuque',
     channelGitLab: 'GitLab',
+    channelSeafile: 'Seafile',
     channelIma: 'Tencent IMA',
     channelUpload: 'Загрузка',
     channelManual: 'Вручную',
@@ -6973,6 +7088,8 @@ export default {
     filesSkippedNoEngine: '{count} файл(ов) пропущено из-за отсутствия парсера',
     deleteSuccess: 'Знание удалено!',
     chunkLoadFailed: 'Не удалось загрузить фрагменты',
+    selectKnowledgeBase: 'Выберите базу знаний',
+    tagDeleteDesc: 'Удалить тег "{name}"? Все FAQ с этим тегом также будут удалены',
     moveToFolder: {
       action: 'Переместить в папку',
       newFolderPlaceholder: 'Название новой папки',
@@ -6985,7 +7102,6 @@ export default {
     folderTree: {
       totalDocuments: 'Всего документов: {count}',
       countHint: 'В этой папке: {direct}, с подпапками: {total}',
-      filteredCount: 'Найдено документов: {count}',
       title: 'Папки',
       rootRow: 'Корень',
       rootRowTip: 'Корневая папка базы знаний; документы без подпапки находятся здесь',
@@ -6999,7 +7115,8 @@ export default {
       renamePlaceholder: 'Название папки',
       renameSuccess: 'Папка переименована',
       renameFailed: 'Не удалось переименовать папку',
-      renameInvalid: 'Папку нельзя переместить внутрь себя'
+      renameInvalid: 'Папку нельзя переместить внутрь себя',
+      filteredCount: 'Найдено документов: {count}'
     },
     sort: {
       title: 'Сортировка',
@@ -7049,9 +7166,6 @@ export default {
       sharedAt: 'Дата общего доступа',
       lastUpdated: 'Последнее обновление'
     }
-  ,
-    selectKnowledgeBase: 'Выберите базу знаний',
-    tagDeleteDesc: 'Удалить тег "{name}"? Все FAQ с этим тегом также будут удалены',
   },
   resourceOrigin: {
     mine: 'Мои',
@@ -7377,66 +7491,6 @@ export default {
     apiChats: 'Сессии API',
     noSessions: 'Пока нет диалогов'
   },
-  marketDashboard: {
-    title: 'Обзор рынка',
-    back: 'Назад к рабочей области',
-    backToWorkbench: 'Назад',
-    dataTime: 'Данные на',
-    tickerLabel: 'Индекс',
-    refresh: 'Обновить',
-    refreshFailed: 'Не удалось обновить котировки. Попробуйте ещё раз.',
-    themeToDark: 'Переключить на тёмную тему',
-    themeToLight: 'Переключить на светлую тему',
-    latestLabel: 'Последняя',
-    closedLabel: 'Закрытие',
-    state: {
-      open: 'Торги',
-      closed: 'Торги завершены',
-      holiday: 'Нет торгов'
-    },
-    holidayNote: 'показан последний торговый день',
-    chartLow: 'Мин {v}',
-    chartHigh: 'Макс {v}',
-    prevCloseTitle: 'Пред. закрытие {v}',
-    chartLegend: '— 60 дн.   ┆ Открытие   ┆ Пред. закрытие (пунктир)   ● {point}',
-    sentiment: {
-      title: 'Настроения рынка',
-      caption: 'Пределы ±10% · Весь рынок',
-      limitUp: 'Верхний предел',
-      limitDown: 'Нижний предел',
-      broken: 'Сорвались',
-      brokenUnit: '· {rate}%',
-      maxStreak: 'Макс. серия',
-      streakUnit: 'дн.',
-      trendLabel: 'Верхний предел за 5 дней',
-      breadth: { up: 'Рост', flat: 'Без изм.', down: 'Падение' }
-    },
-    watchlist: {
-      title: 'Избранное',
-      count: '{n} бумаг',
-      all: 'Все →',
-      empty: 'Список пуст — добавьте бумаги, за которыми следите',
-      emptyCta: 'Перейти в избранное',
-      emptyChip: '+ {name}',
-      state: { observing: 'Наблюдение', triggered: 'Сработало', holding: 'Держу', dropped: 'Убрано' }
-    },
-    dragonTiger: {
-      title: 'Особые сделки',
-      caption: 'Топ-5 по нетто-покупкам · Весь рынок',
-      full: 'Весь список →',
-      net: 'Нетто',
-      org: 'Институты',
-      empty: 'Сегодня данных нет'
-    },
-    etf: {
-      title: 'Крупные ETF',
-      caption: 'Индексные'
-    },
-    noData: 'Нет данных',
-    loading: 'Загрузка…',
-    sourceUnavailable: 'Некоторые источники недоступны ({sources}); соответствующие панели пусты',
-    indexUnavailable: 'Нет локальных котировок по этому индексу'
-  },
   watchlist: {
     title: 'Отслеживание акций',
     subtitle: 'Последняя цена и изменение по выбранным бумагам (локальная база котировок, с учётом дивидендов)',
@@ -7534,18 +7588,6 @@ export default {
     triggeredToday: 'Сработало сегодня',
     addToPool: 'В список',
     inPool: 'В списке',
-    columns: {
-      code: 'Код',
-      name: 'Название',
-      state: 'Статус',
-      note: 'Заметка',
-      price: 'Цена',
-      change: 'Изменение',
-      turnover: 'Оборот',
-      date: 'Последняя сделка',
-      actions: 'Действия'
-    }
-  ,
     backtestBadgeText: 'Винрейт бэктеста {winRate}% ({wins}/{total} побед, ср. макс. рост +{maxGain}%)',
     backtestBadgeTitle: 'Статистика бэктеста на основе исторических сигналов покупки',
     commonPresets: 'Общие пресеты',
@@ -7570,6 +7612,86 @@ export default {
     todayAlerts: 'Оповещения сегодня',
     totalTracked: 'Всего отслеживается',
     watchPool: 'Пул наблюдения',
+    columns: {
+      code: 'Код',
+      name: 'Название',
+      state: 'Статус',
+      note: 'Заметка',
+      price: 'Цена',
+      change: 'Изменение',
+      turnover: 'Оборот',
+      date: 'Последняя сделка',
+      actions: 'Действия'
+    }
+  },
+  marketDashboard: {
+    title: 'Обзор рынка',
+    back: 'Назад к рабочей области',
+    dataTime: 'Данные на',
+    tickerLabel: 'Индекс',
+    refresh: 'Обновить',
+    themeToDark: 'Переключить на тёмную тему',
+    themeToLight: 'Переключить на светлую тему',
+    latestLabel: 'Последняя',
+    closedLabel: 'Закрытие',
+    holidayNote: 'показан последний торговый день',
+    chartLow: 'Мин {v}',
+    chartHigh: 'Макс {v}',
+    prevCloseTitle: 'Пред. закрытие {v}',
+    chartLegend: '— 60 дн.   ┆ Открытие   ┆ Пред. закрытие (пунктир)   ● {point}',
+    noData: 'Нет данных',
+    sourceUnavailable: 'Некоторые источники недоступны ({sources}); соответствующие панели пусты',
+    indexUnavailable: 'Нет локальных котировок по этому индексу',
+    backToWorkbench: 'Назад',
+    refreshFailed: 'Не удалось обновить котировки. Попробуйте ещё раз.',
+    loading: 'Загрузка…',
+    etf: {
+      title: 'Крупные ETF',
+      caption: 'Индексные'
+    },
+    dragonTiger: {
+      title: 'Особые сделки',
+      caption: 'Топ-5 по нетто-покупкам · Весь рынок',
+      net: 'Нетто',
+      org: 'Институты',
+      empty: 'Сегодня данных нет',
+      full: 'Весь список →'
+    },
+    watchlist: {
+      title: 'Избранное',
+      count: '{n} бумаг',
+      all: 'Все →',
+      empty: 'Список пуст — добавьте бумаги, за которыми следите',
+      emptyCta: 'Перейти в избранное',
+      emptyChip: '+ {name}',
+      state: {
+        observing: 'Наблюдение',
+        triggered: 'Сработало',
+        holding: 'Держу',
+        dropped: 'Убрано'
+      }
+    },
+    sentiment: {
+      title: 'Настроения рынка',
+      caption: 'Пределы ±10% · Весь рынок',
+      limitUp: 'Верхний предел',
+      limitDown: 'Нижний предел',
+      broken: 'Сорвались',
+      brokenUnit: '· {rate}%',
+      maxStreak: 'Макс. серия',
+      streakUnit: 'дн.',
+      trendLabel: 'Верхний предел за 5 дней',
+      breadth: {
+        up: 'Рост',
+        flat: 'Без изм.',
+        down: 'Падение'
+      }
+    },
+    state: {
+      open: 'Торги',
+      closed: 'Торги завершены',
+      holiday: 'Нет торгов'
+    }
   },
   resourceSort: {
     title: 'Сортировка',
@@ -7884,197 +8006,115 @@ export default {
       explicit: 'Значения, заданные в рабочем пространстве в настройках модели, всегда важнее; изменения каталога не перезаписывают сохранённые модели.'
     }
   },
-  kline: {
-    picksBar: 'Watchlist ({count})',
-    picksHint: '[↑/↓] keys to switch stocks',
-    searchSwitch: 'Click to search and switch stock',
-    brickTitle: 'THS ZX Brick Chart - consecutive red/green brick strategy',
-    bbiTitle: 'Close price vs BBI bullish/bearish balance line',
-    period: 'Period',
-    adjust: 'Adjust',
-    boardNoAdjust: 'Board: no adjustment',
-    searchPlaceholder: 'Enter stock code/name/pinyin (e.g. 600519)',
-    searching: 'Searching...',
-    noMatch: 'No matching symbols found',
-    board: 'Board',
-    mainChart: 'Main:',
-    subChart: 'Sub:',
-    drawing: 'Draw:',
-    td9: 'TD9 Sequence',
-    patternBubbles: 'Pattern Bubbles',
-    patternOutline: 'Pattern Outline',
-    keyLevels: 'Key Levels',
-    askAgent: 'Ask Agent:',
-    actionValuation: 'Analyze Fundamentals & Valuation',
-    actionStrategy: 'Calculate Defense & Entry Strategy',
-    actionReport: 'Latest Research & Core Logic',
-    // HALO: the full report is rendered in the workbench panel (computed by
-    // Python); these are the agent-facing asks.
-    actionHaloReport: 'HALO Annual Report',
-    actionHaloSix: 'HALO Six Dimensions & Growth',
-    actionHaloSeven: 'Score the Seven Qualitative Dimensions',
-    actionHaloGovernance: 'Governance Integrity Facts',
-    noData: 'No market data for {symbol}',
-    queryFailed: '{symbol} quote query failed',
-    requestRejected: 'Server explicitly rejected this request',
-    retryWontHelp: 'Retrying will not yield different results',
-    fetchPathIssue: 'This is a data fetch path issue',
-  
-    volumeLabel: 'Объем',
-    turnoverLabel: 'Оборот',
-    patternLabel: 'Паттерн',
-    patternAskSuffix: ', спросить Agent',
-    patternAskTitle: 'Спросить Agent о текущем паттерне: {patterns}',
-    zxBrickLabel: 'Кирпич ZX',
-    zxBrickTitle: 'Стратегия кирпичного графика THS Zhixing',
-    dualLineTitle: 'Белая DEMA10 ({white}) vs Желтая LongBBI ({yellow})',
-    dualLineBelow: 'Ниже желтой · Медвежий',
-    dualLineAbove: 'Обе растут · Бычий',
-    dualLineRetrace: 'Откат и консолидация',
-    aboveBBI: 'BBI Бычий',
-    belowBBI: 'BBI Медвежий',
-    boardAdjustTitle: 'Для индексов секторов нет скорректированных данных',
-    td9Title: 'Сигнал разворота девятикратной последовательности TD9',
-    patternBubbleLabel: 'Пузыри',
-    patternBubbleBtnTitle: 'Показать пузыри паттернов вершин/оснований на графике',
-    patternBubbleHint: 'Нажмите на пузырь для просмотра деталей паттерна или вопроса Agent',
-    patternOutlineLabel: 'Контур',
-    patternOutlineBtnTitle: 'Нарисовать контуры структуры паттерна на графике',
-    patternOutlineHint: 'Показать линии шеи и каналы тренда',
-    boardNoPattern: 'Нет паттернов сектора',
-    boardNoPatternDetail: 'Индексы секторов не поддерживают распознавание паттернов',
-    boardNoPatternOutlineDetail: 'Индексы секторов не поддерживают контуры паттернов',
-    noPatternDetected: 'Паттерны не обнаружены',
-    expandWorkspace: 'Развернуть рабочую область',
-    collapseWorkspace: 'Свернуть рабочую область',
-    requestRejectedHint: 'Сервер отклонил запрос: {message}',
-    fetchPathIssueHint: 'Ошибка пути получения данных: {message}',
-    noDataHint: 'Рыночные данные отсутствуют',
-    periodDay: 'День',
-    periodWeek: 'Неделя',
-    periodMonth: 'Месяц',
-    adjustNone: 'Без коррекции',
-    adjustForward: 'Прямая',
-    adjustBackward: 'Обратная',
-    unitShou: ' лот.',
-    unitWanShou: '0 тыс. лот.',
-    unitYiShou: '00 млн лот.',
-    unitWan: '0 тыс.',
-    unitYi: '00 млн',
-    levelsLabel: 'Ключевые уровни',
-    levelsTitle: 'Уровни поддержки и сопротивления',
-    groupCandle: 'Свечи',
-    groupTactics: 'Тактика',
-    oscillation: 'Боковик',
-    actionPatternDeep: 'Глубокий анализ паттернов',
+  halo: {
+    title: 'HALO: анализ годового отчёта',
+    open: 'Отчёт HALO',
+    refresh: 'Сформировать заново',
+    archive: 'В архив базы знаний',
+    archiving: 'Архивирование…',
+    loading: 'Формируется отчёт…',
+    loadFailed: 'Не удалось загрузить отчёт',
+    noDataTitle: 'Для этого инструмента ещё нет синхронизированных фактов годового отчёта',
+    noDataHint: 'Нажмите кнопку ниже, чтобы синхронизировать годовой отчёт с CNINFO; панель повторит запрос, как только факты попадут в базу.',
+    syncCostHint: 'Синхронизация скачивает PDF годового отчёта и разбирает его постранично — обычно 1–3 минуты. Не закрывайте панель.',
+    syncAndRetry: 'Синхронизировать и повторить',
+    syncing: 'Синхронизация годового отчёта…',
+    syncDone: 'Годовой отчёт синхронизирован, формирую отчёт заново',
+    syncFailed: 'Не удалось синхронизировать годовой отчёт',
+    retry: 'Повторить',
+    launchFullReport: 'Попросить агента построить полный отчёт',
+    skeletonNotice: 'Панель показывает только вычисленный ядром оценки слой данных и количественные якоря. Семь качественных измерений (защитная способность, устойчивость к стагфляции, ESG, менеджмент, акционеры и потоки, оценка, риски) оценивает модель, и здесь вывода по ним нет; за полным анализом обратитесь к агенту с halo.analyze в сессии.',
+    scoreCard: 'Ключевые оценки',
+    haloSix: 'Шесть измерений HALO',
+    haloSixDetail: 'Детализация шести измерений HALO',
+    growthLabel: 'Рост',
+    growthDetail: 'Подоценки роста',
+    notComputable: 'Не рассчитывается',
+    growthMissing: 'Рост не рассчитан из-за отсутствия: {keys} — эти данные не вошли в вес',
+    dim: 'Измерение',
+    raw: 'Исходное значение',
+    weight: 'Вес',
+    score: 'Балл',
+    basis: 'Основание',
+    qualitativeDims: 'Качественные измерения (ожидают оценки)',
+    qualitativeHint: 'Эти измерения оценивает модель. Панель даёт только количественные якоря, необходимые для оценки, но не вывод.',
+    hasAnchor: 'Якоря полные',
+    noAnchor: 'Якоря неполные',
+    pendingScore: 'Ожидает оценки',
+    anchors: 'Количественные якоря',
+    noAnchors: 'Якоря не получены: {keys}',
+    facts: 'Факты годового отчёта',
+    value: 'Значение',
+    page: 'Стр.',
+    sourceText: 'Исходный текст',
+    announcements: 'Объявления',
+    rawMarkdown: 'Исходный каркас (с незаполненными слотами)',
+    rawMarkdownHint: 'Именно это содержимое архивируется в базу знаний; незаполненные слоты показаны как «ожидают оценки».',
+    assetHeavy: 'Тяжёлые активы',
+    assetMixed: 'Смешанный',
+    assetLight: 'Лёгкие активы',
+    entryHint: 'Данные ядра оценки по фактам годового отчёта CNINFO: шесть измерений HALO, рост и количественные якоря по каждому измерению.',
+    period: 'Отчётный период',
+    assetType: 'Тип активов',
+    pickKb: 'Архивировать в',
+    kbPlaceholder: 'Выберите базу знаний',
+    archiveOk: 'Сохранено как черновик; станет доступно для поиска после разбора',
+    archiveUpdated: 'Существующий архивный документ обновлён',
+    archiveFailed: 'Не удалось архивировать',
+    needKb: 'Сначала выберите базу знаний',
+    close: 'Закрыть',
+    llmNote: 'Семь качественных измерений (защитная способность, устойчивость к стагфляции, ESG, менеджмент, акционеры и потоки, оценка, риски) оценивает модель; все остальные числа рассчитывает ядро оценки. Отчёт действителен 30 дней.',
+    growthSubs: {
+      revenue: 'Рост выручки',
+      profit: 'Рост прибыли',
+      quality: 'Качество роста',
+      sustainability: 'Устойчивость роста'
+    },
+    dims: {
+      tangible: 'Плотность материальных активов',
+      fixedIntensity: 'Плотность основных средств',
+      fixedShare: 'Доля основных средств',
+      capitalLabor: 'Капитало-трудовой коэффициент',
+      capexIntensity: 'Плотность капзатрат',
+      capexBurden: 'Бремя капзатрат'
+    }
   },
-  stockCitation: {
-    noChangeData: 'No change data',
-    analyzing: 'Analyzing strategy indicators and quantitative structure...',
-    insufficientData: 'Insufficient data for strategy rating',
-    valuation: 'Valuation',
-    capitalFlow: 'Capital Flow',
-    volRatio: 'Volume Ratio',
-    amplitude: 'Amplitude',
-    engine: 'THS ZX Quantitative Engine',
-  
-    amountWan: '{value}0 тыс.',
-    amountYi: '{value}00 млн',
-    barsAsOf: '{bars} свечей · По состоянию на {asOf}',
-    barsInsufficient: 'Недостаточно свечей (<24: {bars})',
-    continuousBoard: '{days} подряд планок вверх',
-    dragonCount: 'Список лидеров {count} раз',
-    hotRank: 'Рейтинг популярности №{rank}',
-    last30Days: 'Последние 30 дней',
-    limitBreakCount: 'Срыв планки {count} раз',
-    limitUpCount: 'Планка вверх {count} раз',
-    limitUpTitle: 'Последняя планка: {date}, серия: {days}д',
-    loss: 'Убыток',
-    moreSectors: 'Еще {count} секторов',
-    netAmountWan: '{direction}{value}0 тыс.',
-    netAmountYi: '{direction}{value}00 млн',
-    netBuy: 'Чистая покупка ',
-    netSell: 'Чистая продажа ',
-    noQuoteData: 'Рыночные данные отсутствуют',
-    openWorkspace: 'Открыть рабочую область',
-    queryFailed: 'Сбой запроса',
-    queryFailedDetail: 'Сбой запроса: {message}',
-    range20d: '20д',
-    range5d: '5д',
-    range60d: '60д',
-    sourcesUnavailable: 'Источники недоступны: ',
-    yellowDegraded: 'Желтая линия деградирована',
-  },
-  watchDetail: {
-    notSet: 'Not set',
-    cost: 'Cost',
-    stopLoss: 'Stop Loss',
-  
-    costPlaceholder: 'Целевая цена покупки',
-    stopPlaceholder: 'Цена стоп-лосса',
-  },
-  mentionedStocks: {
-    title: 'Stocks Mentioned',
-  
-    viewKline: 'Свечной график',
-    viewTitle: 'Переключить график на {name} ({thscode})',
-    viewing: 'Просмотр',
-    viewingTitle: 'В настоящее время отображается {name} ({thscode})',
-  },
-  welcome: {
-    slogan: 'Let today\'s knowledge become tomorrow\'s wisdom',
-    todayChats: 'Today\'s Chats',
-    knowledgeBases: 'Knowledge Bases',
-    totalDocs: 'Total Documents',
-    insights: 'Insights',
-    startExploring: 'Start Exploring',
-    newChat: 'New Chat',
-    newChatDesc: 'Start a new knowledge exploration with AI',
-    browseKB: 'Browse Knowledge Base',
-    browseKBDesc: 'Manage and explore your knowledge assets',
-    agents: 'Agents',
-    agentsDesc: 'Customized AI assistants for specific needs',
-  },
-  lab: {
-    darkBase: 'Dark Base',
-    afternoonGreeting: 'Good afternoon, what would you like to research today?',
-    continueYesterday: 'Continue yesterday\'s work',
-    recentLoadFailed: 'Recent sessions failed to load',
-    noPreview: 'No message preview',
-    messagesLoadFailed: 'Failed to load session messages',
-    noMessages: 'This session has no messages yet.',
-    continueAsk: 'Continue asking…',
-    morningBrief: 'Research Morning Brief',
-    whatToResearch: 'What would you like to research today?',
-    pastIssues: 'Past Issues',
-    pastIssuesFailed: 'Failed to load past issues',
-    noPastIssues: 'No past research yet',
-    researchDispatch: 'Research Dispatch',
-    references: 'References',
-    noExcerpts: 'No excerpts',
-    todayHot: 'Today\'s Hot',
-    knowledgeBase: 'Knowledge Base',
-    weekendMarket: 'Weekend Market is Open',
-    vendorNotOpen: 'Vendor has not opened yet',
-    browseAround: 'Just browsing',
-    vendorPreparing: 'Vendor is preparing, coming soon…',
-    noOrders: 'No orders yet at this stall. Start one!',
-    composerPlaceholder: 'Ask something…',
-    print: 'Print',
-    sendEnter: 'Send (Enter)',
-    browseOrAsk: 'Browse around, or ask something…',
-  },
-
-  klineCompare: {
-    loading: 'Загрузка ({count})',
-    collapse: 'Свернуть',
-    expand: 'Развернуть',
-    switchTo: 'Переключить график на {name} ({thscode})',
-  },
-  samples: {
-    markdown: 'Документ Markdown',
-    faq: 'Вопросы и ответы FAQ',
-    chapter: 'Многоглавный документ',
-    plain: 'Простой текст',
-  },
+  wechat: {
+    openOriginal: 'Открыть оригинал ↗',
+    send: 'Спросить',
+    clear: 'Очистить',
+    loading: 'Загрузка…',
+    pickHintClosed: 'Список свёрнут — нажмите «Показать список» справа вверху',
+    pickHint: 'Выберите статью слева',
+    radar: {
+      openExternal: 'Открыть в новом окне',
+      reload: 'Обновить',
+      offlineHint: 'Не удалось подключиться к службе (http://127.0.0.1:5030/biz)',
+      retry: 'Повторить попытку'
+    },
+    tabs: {
+      radar: 'Динамический радар',
+      study: 'Глубокое чтение'
+    },
+    chat: {
+      empty: 'Задайте вопрос об этой статье или переключитесь на «Вся база знаний» для поиска по всем.',
+      placeholder: 'Спросить об этой статье. Enter — отправить'
+    },
+    scope: {
+      doc: 'Только эта статья',
+      kb: 'Вся база знаний'
+    },
+    item: {
+      indexing: 'индексация'
+    },
+    list: {
+      show: 'Показать список',
+      hide: 'Скрыть список',
+      loading: 'Загрузка статей…',
+      empty: 'В этой базе знаний нет статей WeChat'
+    },
+    vault: {
+      off: 'vault не настроен — изображения могут не загрузиться'
+    }
+  }
 }

@@ -104,7 +104,7 @@ function countMatches(rule) {
   let total = 0
   for (const dir of SCAN_DIRS) {
     for (const file of walk(join(SRC_ROOT, dir))) {
-      const rel = relative(SRC_ROOT, file)
+      const rel = relative(SRC_ROOT, file).replaceAll('\\', '/')
       if (EXEMPT_FILES.has(rel)) continue
       if (EXEMPT_DIRS.some((dir) => rel.startsWith(dir))) continue
       const text = readFileSync(file, 'utf8')

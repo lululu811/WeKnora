@@ -1,100 +1,189 @@
 export default {
-  wechat: {
-    send: '質問',
-    clear: 'クリア',
-    openOriginal: '元の記事を開く ↗',
-    loading: '読み込み中…',
-    pickHintClosed: 'リストは折りたたまれています。右上の「リストを表示」から記事を選んでください',
-    pickHint: '左から記事を選択してください',
-    vault: { off: 'vault が未設定のため画像が表示されない場合があります' },
-    list: { show: 'リストを表示', hide: 'リストを隠す', loading: '記事を読み込み中…', empty: 'このナレッジベースには WeChat 記事がありません' },
-    item: { indexing: '索引中' },
-    scope: { doc: 'この記事のみ', kb: 'ナレッジベース全体' },
-    chat: { empty: 'この記事について質問するか、「ナレッジベース全体」に切り替えて横断検索。', placeholder: 'この記事について質問（Enter で送信）' },
-    tabs: {
-      radar: '動的レーダー',
-      study: '精読・質疑',
-    },
-    radar: {
-      openExternal: '別ウィンドウで開く',
-      reload: '再読み込み',
-      offlineHint: '公式アカウントサービスに接続できません (http://127.0.0.1:5030/biz)',
-      retry: '再試行',
-    },
+  samples: {
+    markdown: 'Markdown ドキュメント',
+    faq: 'FAQ',
+    chapter: '複数章のドキュメント',
+    plain: 'プレーンテキスト段落'
   },
-  halo: {
-    title: 'HALO 年次報告分析',
-    open: 'HALO レポート',
-    refresh: '再生成',
-    archive: 'ナレッジベースにアーカイブ',
-    archiving: 'アーカイブ中…',
-    close: '閉じる',
-    loading: 'レポートを生成しています…',
-    loadFailed: 'レポートの読み込みに失敗しました',
-    noDataTitle: 'この銘柄の年次報告ファクトはまだ同期されていません',
-    noDataHint: '下のボタンで巨潮情報網の年次報告を同期すると、ファクトが登録された時点でこのパネルが自動で再取得します。',
-    syncCostHint: '同期には年次報告 PDF のダウンロードとページごとの解析が必要で、通常 1〜3 分かかります。ページを閉じないでください。',
-    syncAndRetry: '年次報告を同期して再試行',
-    syncing: '年次報告を同期中…',
-    syncDone: '年次報告を同期しました。レポートを再生成します',
-    syncFailed: '年次報告の同期に失敗しました',
-    retry: '再試行',
-    launchFullReport: 'エージェントに完全レポートを作成させる',
-    skeletonNotice:
-      'このパネルは、スコアカーネルが算出したデータ層と定量化アンカーのみを表示します。7 つの定性ディメンション（堀／スタグフレーション耐性／ESG／経営陣／株主・資金面／バリュエーション／リスク）はモデルが採点するもので、ここでは結論を示しません。完全な分析が必要な場合は、セッションでエージェントに halo.analyze を実行させてください。',
-    scoreCard: 'コアスコア',
-    haloSix: 'HALO 6 ディメンション',
-    haloSixDetail: 'HALO 6 ディメンションの内訳',
-    growthLabel: '成長性',
-    growthDetail: '成長性のサブスコア',
-    notComputable: '算出不可',
-    growthMissing: '成長性は以下の入力が欠落のため加重から除外されました：{keys}',
-    dim: 'ディメンション',
-    raw: '元の値',
-    weight: 'ウェイト',
-    score: 'スコア',
-    basis: '算出根拠',
-    qualitativeDims: '定性ディメンション（採点待ち）',
-    qualitativeHint: '以下のディメンションはモデルが採点します。パネルは採点に必要な定量化アンカーのみを示し、結論は示しません。',
-    hasAnchor: 'アンカー充足',
-    noAnchor: 'アンカー不足',
-    pendingScore: '採点待ち',
-    anchors: '定量化アンカー',
-    noAnchors: '取得できたアンカー：{keys}',
-    facts: '年次報告ファクト',
-    value: '値',
-    page: 'ページ',
-    sourceText: '原文',
-    announcements: '公告',
-    rawMarkdown: 'スケルトン原文（採点待ちスロットを含む）',
-    rawMarkdownHint: 'ナレッジベースへアーカイブされるのはこの内容です。未入力のスロットは「採点待ち」と表示されます。',
-    assetHeavy: '重型資産',
-    assetMixed: '混合型',
-    assetLight: '軽資産',
-    dims: {
-      tangible: '有形資産密度',
-      fixedIntensity: '固定資産密度',
-      fixedShare: '固定資産構成比',
-      capitalLabor: '資本-労働比率',
-      capexIntensity: 'Capex 密度',
-      capexBurden: 'Capex 負担',
-    },
-    growthSubs: {
-      revenue: '売上成長',
-      profit: '利益成長',
-      quality: '成長の質',
-      sustainability: '成長の持続性',
-    },
-    entryHint: '巨潮情報網の年次報告ファクトに基づくスコアカーネルのデータ：HALO 6 ディメンション、成長性、各ディメンションの定量化アンカー。',
-    period: '報告期',
-    assetType: '資産タイプ',
-    llmNote: '7 つの定性ディメンション（堀／スタグフレーション耐性／ESG／経営陣／株主・資金面／バリュエーション／リスク）はモデルが採点し、その他の数値は採点カーネルが計算します。レポートの有効期間は 30 日です。',
-    pickKb: 'アーカイブ先',
-    kbPlaceholder: 'ナレッジベースを選択',
-    archiveOk: '下書きとしてアーカイブしました。解析完了後に検索できます',
-    archiveUpdated: '既存のアーカイブ文書を更新しました',
-    archiveFailed: 'アーカイブに失敗しました',
-    needKb: '先にナレッジベースを選択してください',
+  klineCompare: {
+    loading: '読み込み中 ({count})',
+    collapse: '折りたたむ',
+    expand: '展開する',
+    switchTo: '{name} ({thscode}) のチャートに切り替え'
+  },
+  lab: {
+    darkBase: 'Dark Base',
+    afternoonGreeting: 'Good afternoon, what would you like to research today?',
+    continueYesterday: 'Continue yesterday\'s work',
+    recentLoadFailed: 'Recent sessions failed to load',
+    noPreview: 'No message preview',
+    messagesLoadFailed: 'Failed to load session messages',
+    noMessages: 'This session has no messages yet.',
+    continueAsk: 'Continue asking…',
+    morningBrief: 'Research Morning Brief',
+    whatToResearch: 'What would you like to research today?',
+    pastIssues: 'Past Issues',
+    pastIssuesFailed: 'Failed to load past issues',
+    researchDispatch: 'Research Dispatch',
+    references: 'References',
+    noExcerpts: 'No excerpts',
+    todayHot: 'Today\'s Hot',
+    knowledgeBase: 'Knowledge Base',
+    weekendMarket: 'Weekend Market is Open',
+    vendorNotOpen: 'Vendor has not opened yet',
+    browseAround: 'Just browsing',
+    vendorPreparing: 'Vendor is preparing, coming soon…',
+    noOrders: 'No orders yet at this stall. Start one!',
+    print: 'Print',
+    sendEnter: 'Send (Enter)',
+    noPastIssues: 'No past research yet',
+    composerPlaceholder: 'Ask something…',
+    browseOrAsk: 'Browse around, or ask something…'
+  },
+  welcome: {
+    slogan: 'Let today\'s knowledge become tomorrow\'s wisdom',
+    todayChats: 'Today\'s Chats',
+    knowledgeBases: 'Knowledge Bases',
+    totalDocs: 'Total Documents',
+    insights: 'Insights',
+    startExploring: 'Start Exploring',
+    newChat: 'New Chat',
+    newChatDesc: 'Start a new knowledge exploration with AI',
+    browseKB: 'Browse Knowledge Base',
+    browseKBDesc: 'Manage and explore your knowledge assets',
+    agents: 'Agents',
+    agentsDesc: 'Customized AI assistants for specific needs'
+  },
+  mentionedStocks: {
+    title: 'Stocks Mentioned',
+    viewKline: 'ローソク足を見る',
+    viewTitle: '{name} ({thscode}) のチャートに切り替え',
+    viewing: '表示中',
+    viewingTitle: '現在表示中: {name} ({thscode})'
+  },
+  watchDetail: {
+    notSet: 'Not set',
+    cost: 'Cost',
+    stopLoss: 'Stop Loss',
+    costPlaceholder: '目標コスト価格',
+    stopPlaceholder: 'ストップロス価格'
+  },
+  stockCitation: {
+    noChangeData: 'No change data',
+    analyzing: 'Analyzing strategy indicators and quantitative structure...',
+    insufficientData: 'Insufficient data for strategy rating',
+    valuation: 'Valuation',
+    capitalFlow: 'Capital Flow',
+    volRatio: 'Volume Ratio',
+    amplitude: 'Amplitude',
+    engine: 'THS ZX Quantitative Engine',
+    amountWan: '{value}万',
+    amountYi: '{value}億',
+    barsAsOf: '{bars}本の足 · {asOf}時点',
+    barsInsufficient: 'ローソク足が24本未満({bars}本)',
+    continuousBoard: '{days}日連続ストップ高',
+    dragonCount: '龍虎ランキング{count}回',
+    hotRank: '注目度第{rank}位',
+    last30Days: '直近30日',
+    limitBreakCount: 'ストップ高崩れ{count}回',
+    limitUpCount: 'ストップ高{count}回',
+    limitUpTitle: '最新ストップ高: {date}、連続: {days}日',
+    loss: '赤字',
+    moreSectors: '他{count}セクター',
+    netAmountWan: '{direction}{value}万',
+    netAmountYi: '{direction}{value}億',
+    netBuy: '純買い',
+    netSell: '純売り',
+    noQuoteData: '相場データなし',
+    openWorkspace: 'ワークスペースを開く',
+    queryFailed: '照会に失敗しました',
+    queryFailedDetail: '照会失敗: {message}',
+    range20d: '20日',
+    range5d: '5日',
+    range60d: '60日',
+    sourcesUnavailable: '利用不可のデータソース: ',
+    yellowDegraded: '黄ライン劣化'
+  },
+  kline: {
+    picksBar: 'Watchlist ({count})',
+    picksHint: '[↑/↓] keys to switch stocks',
+    searchSwitch: 'Click to search and switch stock',
+    bbiTitle: 'Close price vs BBI bullish/bearish balance line',
+    period: 'Period',
+    adjust: 'Adjust',
+    boardNoAdjust: 'Board: no adjustment',
+    searchPlaceholder: 'Enter stock code/name/pinyin (e.g. 600519)',
+    searching: 'Searching...',
+    noMatch: 'No matching symbols found',
+    board: 'Board',
+    mainChart: 'Main:',
+    subChart: 'Sub:',
+    drawing: 'Draw:',
+    td9: 'TD9 Sequence',
+    patternBubbles: 'Pattern Bubbles',
+    patternOutline: 'Pattern Outline',
+    askAgent: 'Ask Agent:',
+    actionValuation: 'Analyze Fundamentals & Valuation',
+    actionStrategy: 'Calculate Defense & Entry Strategy',
+    actionReport: 'Latest Research & Core Logic',
+    actionHaloReport: 'HALO Annual Report',
+    actionHaloSix: 'HALO Six Dimensions & Growth',
+    actionHaloSeven: 'Score the Seven Qualitative Dimensions',
+    actionHaloGovernance: 'Governance Integrity Facts',
+    noData: 'No market data for {symbol}',
+    queryFailed: '{symbol} quote query failed',
+    volumeLabel: '出来高',
+    turnoverLabel: '売買代金',
+    patternLabel: 'チャートパターン',
+    patternAskSuffix: '、Agentに質問',
+    patternAskTitle: '現在のパターンについてAgentに質問：{patterns}',
+    zxBrickLabel: '知行レンガ',
+    zxBrickTitle: '同花順知行レンガ足チャート戦略',
+    dualLineTitle: '白線 DEMA10 ({white}) vs 黄線 LongBBI ({yellow})',
+    dualLineBelow: '黄線の下・弱気',
+    dualLineAbove: '両線上向き・強気',
+    dualLineRetrace: '押し目調整',
+    aboveBBI: 'BBI強気',
+    belowBBI: 'BBI弱気',
+    boardAdjustTitle: 'セクター指数には調整後データがありません',
+    td9Title: 'TDシーケンシャル9転換シグナル',
+    patternBubbleLabel: 'バブル',
+    patternBubbleBtnTitle: 'チャート上に天井・底パターンバブルを表示',
+    patternBubbleHint: 'バブルをクリックして詳細を表示またはAgentに質問',
+    patternOutlineLabel: 'アウトライン',
+    patternOutlineBtnTitle: 'チャート上にパターン構造アウトラインを描画',
+    patternOutlineHint: 'ネックラインとトレンドチャネルを表示',
+    boardNoPattern: 'セクターパターンなし',
+    boardNoPatternDetail: 'セクター指数はパターン認識を提供していません',
+    boardNoPatternOutlineDetail: 'セクター指数はパターン輪郭を提供していません',
+    noPatternDetected: 'パターンは検出されませんでした',
+    expandWorkspace: 'ワークスペースを展開',
+    collapseWorkspace: 'ワークスペースを折りたたむ',
+    requestRejectedHint: 'サーバーにリクエストが拒否されました：{message}',
+    fetchPathIssueHint: 'データ取得パスの異常：{message}',
+    noDataHint: '相場データがありません',
+    periodDay: '日足',
+    periodWeek: '週足',
+    periodMonth: '月足',
+    adjustNone: '補正なし',
+    adjustForward: '前補正',
+    adjustBackward: '後補正',
+    unitShou: '株(手)',
+    unitWanShou: '万株(手)',
+    unitYiShou: '億株(手)',
+    unitWan: '万',
+    unitYi: '億',
+    levelsLabel: 'キーレベル',
+    levelsTitle: '支持線と抵抗線',
+    groupCandle: 'ローソク足',
+    groupTactics: '戦略',
+    oscillation: 'もみ合い',
+    actionPatternDeep: 'パターン構造の詳細分析',
+    brickTitle: 'THS ZX Brick Chart - consecutive red/green brick strategy',
+    keyLevels: 'Key Levels',
+    requestRejected: 'Server explicitly rejected this request',
+    retryWontHelp: 'Retrying will not yield different results',
+    fetchPathIssue: 'This is a data fetch path issue'
   },
   imageAttr: {
     contain_data_visual: {
@@ -851,6 +940,10 @@ export default {
     guideStep1_notion: '同期したいページまたはデータベースをNotionで開きます',
     guideStep2_notion: '右上の「···」メニューをクリックし、「Connect to」または「Add connections」を選択します',
     guideStep3_notion: '作成したIntegrationアプリを検索して選択し、戻って「再試行」をクリックします',
+    noResourcesDesc_seafile: 'このトークンでアクセスできるライブラリがないか、すべて暗号化ライブラリです（暗号化ライブラリは同期できません）',
+    guideStep1_seafile: 'Seafileにサインインし、アカウントが暗号化されていないライブラリを1つ以上読めることを確認します',
+    guideStep2_seafile: '「設定 → Web APIトークン」でトークンを生成または再生成します',
+    guideStep3_seafile: 'ここに戻って新しいトークンを入力し、「再試行」をクリックします',
     permissionDocLink: 'FeishuのWiki権限ドキュメントを見る',
     syncScheduleLabel: '同期スケジュール',
     conflictLabel: '競合時の処理',
@@ -940,17 +1033,27 @@ export default {
     minutesAgo: '{n}分前',
     hoursAgo: '{n}時間前',
     daysAgo: '{n}日前',
+    resumeFailed: '再開に失敗しました',
     syncError: {
       dingtalk_document_failed: 'DingTalkドキュメントを読み取れません。アクセス権限を確認して同期を再試行してください。',
       dingtalk_resource_failed: 'DingTalkリソースを利用できません。アクセス権限と選択したリソースを確認して再試行してください。',
       deletion_lookup_failed: '削除前の項目の照会に失敗しました。サーバログを確認してください',
       deletion_failed: '削除に失敗しました。サーバログを確認してください',
-      ingest_failed: '取り込みに失敗しました。サーバログを確認してください'
+      ingest_failed: '取り込みに失敗しました。サーバログを確認してください',
+      seafile_permission_denied: 'Seafileファイルへのアクセスが拒否されました。トークン所有者のライブラリ権限を確認してください。',
+      seafile_not_found: 'Seafileファイルが存在しないか移動されました。次回の同期で再試行します。',
+      seafile_file_too_large: 'Seafileファイルがサイズ上限を超えています。MAX_FILE_SIZE_MBを引き上げるかファイルを小さくしてください。',
+      seafile_empty_file: 'Seafileファイルが空のためスキップしました。',
+      seafile_source_changed: '取得中にSeafileファイルが変更されました。次回の同期で再試行します。',
+      seafile_invalid_response: 'Seafileから解析できない応答が返されました。サーバのバージョンとリバースプロキシを確認してください。',
+      seafile_ssrf_blocked: 'SeafileのダウンロードURLがSSRFポリシーでブロックされました。fileserverのホストをSSRF_WHITELISTに追加してください。',
+      seafile_fetch_failed: 'Seafileからファイルを取得できませんでした。次回の同期で再試行します。'
     },
     resourceType: {
       wikiSpace: 'Wikiスペース',
       docCategory: 'ドキュメントタグ',
-      book: 'Yuqueナレッジベース'
+      book: 'Yuqueナレッジベース',
+      library: 'Seafileライブラリ'
     },
     scheduleHuman: {
       '30min': '30分ごと',
@@ -1011,7 +1114,8 @@ export default {
       dingtalk: 'DingTalkナレッジベースのオンラインドキュメントを同期',
       rss: 'RSS / Atomフィードから記事を同期します',
       ima: 'Tencent IMAのナレッジベースからドキュメント、ノート、ファイルを同期します（AIセッションと動画の解析は非対応）',
-      gitlab: 'GitLabプロジェクトからファイルを同期します'
+      gitlab: 'GitLabプロジェクトからファイルを同期します',
+      seafile: 'Seafileライブラリのフォルダとファイルを同期します'
     },
     connector: {
       feishu: 'Feishu',
@@ -1024,7 +1128,8 @@ export default {
       dingtalk: 'DingTalkドキュメント',
       rss: 'RSS / Atomフィード',
       ima: 'Tencent IMA',
-      gitlab: 'GitLab'
+      gitlab: 'GitLab',
+      seafile: 'Seafile'
     },
     logDetail: {
       startTime: '開始',
@@ -1061,6 +1166,13 @@ export default {
       overwrite: '上書き',
       skip: '既存をスキップ'
     },
+    seafile: {
+      baseUrl: 'Seafile URL',
+      apiToken: 'APIトークン',
+      apiTokenHint: 'Seafileの「設定 → Web APIトークン」で生成します。アカウントに選択したライブラリの読み取り権限があれば十分で、トークンはファイルのダウンロード要求には送信されません。',
+      singleLibraryOnly: '1つのデータソースは1つのライブラリのみ同期できます。別のライブラリを選ぶ前に現在の選択を解除してください。',
+      selectionRequired: 'ライブラリ、フォルダまたはファイルを1つ以上選択してください'
+    },
     gitlab: {
       baseUrl: 'GitLab URL',
       accessToken: 'パーソナルアクセストークン',
@@ -1085,8 +1197,6 @@ export default {
       incremental: '増分',
       full: '全量'
     }
-  ,
-    resumeFailed: '再開に失敗しました',
   },
   ollama: {
     unknown: '不明',
@@ -2713,6 +2823,7 @@ export default {
   },
   language: {
     zhCN: '简体中文',
+    zhTW: '繁体字中国語',
     enUS: 'English',
     ruRU: 'Русский',
     koKR: '한국어',
@@ -2730,31 +2841,6 @@ export default {
     selectModelPlaceholder: 'モデルを選択',
     searchPlaceholder: 'モデルを検索...',
     builtinTag: '組み込み',
-    // utils/reasoningEffort.ts の levelLabelKey()/levelDescriptionKey() が
-    // 動的に組み立てる key なので、静的キーのスキャンでは検出できない。
-    // REASONING_LEVELS と同期すること。
-    reasoning: {
-      levels: {
-        off: 'オフ',
-        auto: '自動',
-        minimal: '最小',
-        low: '低',
-        medium: '中',
-        high: '高',
-        xhigh: '非常に高',
-        max: '最大',
-      },
-      levelDescriptions: {
-        off: '推論せず直接回答します',
-        auto: 'モデルが強度を選びます',
-        minimal: '最小限の推論、速度を優先',
-        low: '軽い推論、速度と深さのバランス',
-        medium: '適度な推論、多くの質問に対応',
-        high: '複雑な推論のための深い思考',
-        xhigh: '非常に深い思考、時間がかかります',
-        max: 'このモデルが対応する最大の強度',
-      },
-    },
     editor: {
       maxOutputTokensLabel: '最大出力トークン',
       maxOutputTokensPlaceholder: '空欄でカタログ既定値',
@@ -2796,6 +2882,8 @@ export default {
       dimensionOverrideDesc: 'プロバイダのドキュメントでこのモデルがdimensionsパラメータに対応していると記載されている場合にのみ有効にしてください。デフォルトでは検出された実際の次元数のみを使用します。',
       supportsVisionLabel: '視覚・マルチモーダルに対応',
       supportsVisionDesc: 'モデルが画像やマルチモーダル入力を受け付けるかどうか',
+      embeddingImageInputLabel: '画像入力',
+      embeddingImageInputDesc: 'モデルが画像をテキストと同じベクトル空間に埋め込めるかどうか。カタログ内のモデルは自動判定され、カスタムモデルは手動で宣言します',
       contextWindowLabel: 'コンテキストウィンドウ',
       contextWindowPlaceholder: 'デフォルト値{value}',
       contextWindowDesc: '1回のリクエストでこのモデルが受け付けられるトークン数です。エージェントの履歴圧縮はこの上限を基準にします。空欄の場合はデフォルト値の200000（200K）が使われます。プロバイダの実際のウィンドウサイズを指定してください。大きすぎる値を指定すると圧縮が働かず、プロバイダにリクエストを拒否されます。',
@@ -2895,6 +2983,28 @@ export default {
         reasoning: '推論',
         vision: '画像',
         hint: 'ベンダーのカタログから選ぶか、カスタムのモデル名を入力できます。'
+      }
+    },
+    reasoning: {
+      levelDescriptions: {
+        off: '推論せず直接回答します',
+        auto: 'モデルが強度を選びます',
+        minimal: '最小限の推論、速度を優先',
+        low: '軽い推論、速度と深さのバランス',
+        medium: '適度な推論、多くの質問に対応',
+        high: '複雑な推論のための深い思考',
+        xhigh: '非常に深い思考、時間がかかります',
+        max: 'このモデルが対応する最大の強度'
+      },
+      levels: {
+        off: 'オフ',
+        auto: '自動',
+        minimal: '最小',
+        low: '低',
+        medium: '中',
+        high: '高',
+        xhigh: '非常に高',
+        max: '最大'
       }
     }
   },
@@ -3187,7 +3297,8 @@ export default {
           },
           registration_mode: {
             self_serve: 'セルフサービス（誰でも登録可能）',
-            invite_only: '招待のみ（公開登録は無効）'
+            invite_register: '招待リンクでのみ登録可能',
+            invite_only: '登録禁止（既存アカウントは招待を承諾可能）'
           }
         }
       },
@@ -3217,7 +3328,7 @@ export default {
           whitelist: 'SSRF保護の許可リストです。example.com / *.foo.com / 10.0.0.0/8 / 2001:db8::1のような項目を指定できます。保存後すぐに反映されます。SSRF_WHITELIST_EXTRA環境変数は引き続きデプロイ担当者が管理し、ここでは上書きされません。'
         },
         auth: {
-          registration_mode: 'セルフサービス登録のモードです。self_serveは誰でもアカウントを登録でき、invite_onlyは公開登録を無効にし、オーナー/管理者による招待のみを許可します。保存後すぐに反映されますが、self_serveはインターネットからのスパム登録を招くため慎重に利用してください。',
+          registration_mode: '登録モード。公開登録では誰でもアカウントを作成できます。招待登録には有効な招待リンクが必要です。登録禁止でも既存アカウントは招待を承諾できます。保存後すぐに反映されます。',
           default_tenant_mode: '公開登録後のワークスペース作成方式です。create_personalはオーナー権限のワークスペースを作成し、tenantlessはアカウントのみを作成して、ユーザが招待を承諾するかワークスペースを作成するまで待ちます。新規ユーザにのみ適用されます。',
           complex_password_enabled: '複雑なパスワードを必須にするかどうかです。有効にすると、パスワードに大文字・小文字・数字・特殊文字を含める必要があります。変更はすぐに反映され、新規登録ユーザおよび新たなパスワード変更・リセットにのみ適用されます。特殊文字は{specialChars}です'
         }
@@ -3248,7 +3359,7 @@ export default {
           whitelist: 'SSRF保護の許可リスト'
         },
         auth: {
-          registration_mode: 'セルフサービス登録モード',
+          registration_mode: '登録モード',
           default_tenant_mode: 'デフォルトのワークスペース作成方式',
           complex_password_enabled: '複雑なパスワードを必須にする'
         }
@@ -3791,6 +3902,7 @@ export default {
     attachmentUploadFailed: '添付ファイルのアップロードに失敗しました',
     attachmentParseFailed: '添付ファイルの解析に失敗しました',
     attachmentStillProcessing: '添付ファイル{name}は解析中です',
+    imageReadFailed: '画像の読み込みに失敗しました',
     klineStudio: {
       openInPanel: 'サイドパネルで開く',
       empty: '推送された銘柄はありません。',
@@ -3863,8 +3975,6 @@ export default {
       thisYear: '{month}/{day} {time}',
       otherYear: '{year}/{month}/{day} {time}'
     }
-  ,
-    imageReadFailed: '画像の読み込みに失敗しました',
   },
   knowledgeEditor: {
     titleCreate: 'ナレッジベースを作成',
@@ -3886,6 +3996,9 @@ export default {
         customInstructionsPlaceholder: '例: 銘板、型番、アラームコード、表の単位を優先する…',
         imageAttrsLabel: '画像属性の観察',
         imageAttrsDescription: 'オンにすると各画像を先に「属性観察＋説明」し、その属性で画像内テキストへの OCR 実行可否を決定します。オフは基本モード：全画像を1枚ずつ説明し全て OCR します',
+        imageVectorLabel: '画像ベクトル検索',
+        imageVectorDescription: 'オンにすると、画像の説明を生成した後に埋め込みモデルで画像そのものもエンコードし、説明に書かれていない内容でも画像を検索できるようにします。画像入力に対応した埋め込みモデルが必要で、画像ごとに埋め込み呼び出しが1回増え、ベクトル検索の候補範囲も広がります。以降に取り込み・再解析した文書にのみ適用され、スキャン PDF のページは対象外です',
+        imageVectorModelUnsupported: '現在の埋め込みモデルは画像入力を宣言していないため、画像ベクトルは生成も検索もされません',
         imageAttrsSchemaLabel: '観察可能な画像属性',
         imageAttrsSchemaDescription: 'モデルは以下の属性（バックエンドのレジストリで定義）を観察して OCR ポリシーを決めます',
         imageAttrsOcrConditions: '観察した属性条件に基づいて OCR を実行',
@@ -4242,13 +4355,6 @@ export default {
       editingBadge: '編集中',
       pageActions: 'ページ操作',
       viewTabs: 'ナレッジベースのビュー',
-      tabDocuments: 'ドキュメント',
-      tabDocumentsTip: 'このナレッジベースのドキュメントを確認・管理します',
-      tabWikiTip: 'ナレッジベースから生成された Wiki ページを閲覧します',
-      tabGraph: 'グラフ',
-      tabGraphTip: 'ドキュメントとページの関係グラフを表示します',
-      tabGallery: 'ギャラリー',
-      tabGalleryTip: 'このナレッジベースの画像アセットを表示します',
       searchPlaceholder: 'Wikiページを検索...',
       searchNoResults: '一致するページが見つかりません',
       viewModeToggle: 'ディレクトリ表示を切り替え',
@@ -4353,6 +4459,13 @@ export default {
       fixStartError: '修正アシスタントの起動に失敗しました',
       issueFixPromptSingle: 'ページ [[{slug}]] の問題（ID: {id}）を修正してください。',
       issueFixPromptAutoStart: 'ページ [[{slug}]] の次の問題を修正してください:',
+      tabDocuments: 'ドキュメント',
+      tabDocumentsTip: 'このナレッジベースのドキュメントを確認・管理します',
+      tabWikiTip: 'ナレッジベースから生成された Wiki ページを閲覧します',
+      tabGraph: 'グラフ',
+      tabGraphTip: 'ドキュメントとページの関係グラフを表示します',
+      tabGallery: 'ギャラリー',
+      tabGalleryTip: 'このナレッジベースの画像アセットを表示します',
       gallery: {
         attr: {
           builtin_caption: '説明',
@@ -4787,15 +4900,14 @@ export default {
     }
   },
   createChat: {
-    workbench: {
-      greeting: { morning: 'おはようございます', afternoon: 'こんにちは', evening: 'こんばんは', night: '夜遅いですね' },
-      greetingSub: '今日は何を調べますか？',
-      continueTitle: '昨日の作業を続ける',
-      untitledSession: '無題のセッション',
-      minutesAgo: '{n} 分前',
-      hoursAgo: '{n} 時間前',
-      yesterday: '昨日',
-      daysAgo: '{n} 日前'
+    title: 'こんにちは、WeKnoraです。あなたのナレッジを、すぐそばに',
+    newSessionTitle: '新しいセッション',
+    openProject: 'プロジェクトを選択',
+    clearProject: '解除',
+    pickFailed: '選択したパスを開けませんでした',
+    messages: {
+      createFailed: 'セッションの作成に失敗しました',
+      createError: 'セッションの作成に失敗しました。しばらくしてから再試行してください'
     },
     marketEntry: {
       sectionTitle: '市場',
@@ -4811,14 +4923,20 @@ export default {
         unavailable: '利用不可'
       }
     },
-    title: 'こんにちは、WeKnoraです。あなたのナレッジを、すぐそばに',
-    newSessionTitle: '新しいセッション',
-    openProject: 'プロジェクトを選択',
-    clearProject: '解除',
-    pickFailed: '選択したパスを開けませんでした',
-    messages: {
-      createFailed: 'セッションの作成に失敗しました',
-      createError: 'セッションの作成に失敗しました。しばらくしてから再試行してください'
+    workbench: {
+      greetingSub: '今日は何を調べますか？',
+      continueTitle: '昨日の作業を続ける',
+      untitledSession: '無題のセッション',
+      minutesAgo: '{n} 分前',
+      hoursAgo: '{n} 時間前',
+      yesterday: '昨日',
+      daysAgo: '{n} 日前',
+      greeting: {
+        morning: 'おはようございます',
+        afternoon: 'こんにちは',
+        evening: 'こんばんは',
+        night: '夜遅いですね'
+      }
     }
   },
   input: {
@@ -4853,6 +4971,16 @@ export default {
     modelLockedByAgent: '現在のエージェントによりモデル選択がロックされています',
     imageUploadDisabledByAgent: 'このエージェントでは画像アップロードが有効になっていません',
     goToAgentSettings: 'エージェント設定に移動',
+    fileUpload: {
+      label: 'ファイルをアップロード',
+      tooltip: 'ファイルをアップロード',
+      tooMany: 'ファイル数が上限を超えています',
+      tooLarge: 'ファイルサイズが上限を超えています'
+    },
+    imageUpload: {
+      label: '画像をアップロード',
+      tooltip: '分析用に画像をアップロード'
+    },
     messages: {
       enterContent: '先に内容を入力してください。',
       replying: '回答中です。しばらくしてから再試行してください。',
@@ -4877,21 +5005,9 @@ export default {
     webSearch: {
       toggleOn: 'Web検索を有効化',
       toggleOff: 'Web検索を無効化',
-      notConfigured: 'Web検索エンジンが未設定です'
-    ,
-      label: 'ウェブ検索',
-  }
-  ,
-    imageUpload: {
-      label: '画像をアップロード',
-      tooltip: '分析用に画像をアップロード',
-    },
-    fileUpload: {
-      label: 'ファイルをアップロード',
-      tooltip: 'ファイルをアップロード',
-      tooMany: 'ファイル数が上限を超えています',
-      tooLarge: 'ファイルサイズが上限を超えています',
-    },
+      notConfigured: 'Web検索エンジンが未設定です',
+      label: 'ウェブ検索'
+    }
   },
   manualEditor: {
     defaultTitlePrefix: '新規ドキュメント',
@@ -4997,9 +5113,8 @@ export default {
     }
   },
   file: {
-    upload: 'ファイルをアップロード'
-  ,
-    downloadFailed: 'ダウンロードに失敗しました。後でもう一度お試しください',
+    upload: 'ファイルをアップロード',
+    downloadFailed: 'ダウンロードに失敗しました。後でもう一度お試しください'
   },
   mentionDetail: {
     readOnlyFromAgent: 'この会話内でのみ読み取り専用。ナレッジベース一覧には表示されません',
@@ -5698,10 +5813,9 @@ export default {
       mineruLegacySectionHint: 'MinerU 4.0 ではこれらのリクエストパラメータが廃止されたため、4.0 以降のサーバーでは無視されます。VLM サーバーは MinerU 側で設定してください。',
       paddleocrVlEndpointPlaceholder: '例: http://your-paddleocr-vl:8080',
       paddleocrVlEndpointHint: 'PaddleOCR-VLパイプラインサービスのベースURLです。末尾に/layout-parsingを付ける必要はありません',
-      paddleocrVlCloudTokenPlaceholder: 'PaddleOCR-VL AI Studio Token'
-    ,
-      checking: '確認中...',
-  },
+      paddleocrVlCloudTokenPlaceholder: 'PaddleOCR-VL AI Studio Token',
+      checking: '確認中...'
+    },
     weknoraCloud: {
       title: 'WeKnora Cloud',
       description: 'WeKnora CloudのAPPIDとAPPSECRETを設定します。この認証情報はモデルサービスとドキュメント解析エンジンで使用されます。',
@@ -6782,6 +6896,7 @@ export default {
     channelConfluence: 'Confluence',
     channelYuque: 'Yuque',
     channelGitLab: 'GitLab',
+    channelSeafile: 'Seafile',
     channelIma: 'Tencent IMA',
     channelUpload: 'アップロード',
     channelManual: '手動作成',
@@ -6973,6 +7088,8 @@ export default {
     filesSkippedNoEngine: '利用可能な解析エンジンがないため、{count}件のファイルをスキップしました',
     deleteSuccess: 'ナレッジを削除しました。',
     chunkLoadFailed: 'チャンクの読み込みに失敗しました',
+    selectKnowledgeBase: 'ナレッジベースを選択してください',
+    tagDeleteDesc: 'タグ「{name}」を削除してもよろしいですか？このタグ下のすべてのFAQも削除されます',
     moveToFolder: {
       action: 'フォルダに移動',
       newFolderPlaceholder: '新しいフォルダ名',
@@ -6985,7 +7102,6 @@ export default {
     folderTree: {
       totalDocuments: '全 {count} 件',
       countHint: 'このフォルダ内 {direct} 件、サブフォルダを含めて {total} 件',
-      filteredCount: '{count} 件一致',
       title: 'フォルダ',
       rootRow: 'ルート',
       rootRowTip: 'ナレッジベースのルート。サブフォルダに属さないドキュメントはここに置かれます',
@@ -6999,7 +7115,8 @@ export default {
       renamePlaceholder: 'フォルダ名',
       renameSuccess: 'フォルダ名を変更しました',
       renameFailed: 'フォルダ名を変更できませんでした',
-      renameInvalid: 'フォルダを自身の配下に移動することはできません'
+      renameInvalid: 'フォルダを自身の配下に移動することはできません',
+      filteredCount: '{count} 件一致'
     },
     sort: {
       title: '並び替え',
@@ -7049,9 +7166,6 @@ export default {
       sharedAt: '共有日時',
       lastUpdated: '最終更新'
     }
-  ,
-    selectKnowledgeBase: 'ナレッジベースを選択してください',
-    tagDeleteDesc: 'タグ「{name}」を削除してもよろしいですか？このタグ下のすべてのFAQも削除されます',
   },
   resourceOrigin: {
     mine: '自分',
@@ -7377,66 +7491,6 @@ export default {
     apiChats: 'APIセッション',
     noSessions: '会話はまだありません'
   },
-  marketDashboard: {
-    title: '市場概観',
-    back: 'ワークベンチに戻る',
-    backToWorkbench: '戻る',
-    dataTime: 'データ時刻',
-    tickerLabel: '指数',
-    refresh: '更新',
-    refreshFailed: '行情の更新に失敗しました。もう一度お試しください。',
-    themeToDark: 'ダークモードに切替',
-    themeToLight: 'ライトモードに切替',
-    latestLabel: '最新',
-    closedLabel: '終値',
-    state: {
-      open: '取引中',
-      closed: '取引終了',
-      holiday: '非営業日'
-    },
-    holidayNote: '直近の取引日を表示',
-    chartLow: '安 {v}',
-    chartHigh: '高 {v}',
-    prevCloseTitle: '前終値 {v}',
-    chartLegend: '— 60日   ┆ 始値   ┆ 前終値（破線）   ● {point}',
-    sentiment: {
-      title: '市場のムード',
-      caption: '値上がり・値下がり · 全市場',
-      limitUp: '涨停',
-      limitDown: '跌停',
-      broken: '炸板',
-      brokenUnit: '· {rate}%',
-      maxStreak: '最大連騰',
-      streakUnit: '板',
-      trendLabel: '直近5日の涨停家数',
-      breadth: { up: '上昇', flat: '平坦', down: '下落' }
-    },
-    watchlist: {
-      title: 'ウォッチ',
-      count: '{n} 銘柄',
-      all: 'すべて →',
-      empty: 'まだ銘柄がありません。よく見るものを追加しましょう',
-      emptyCta: 'ウォッチページへ',
-      emptyChip: '+ {name}',
-      state: { observing: '監視中', triggered: 'トリガー', holding: '保有', dropped: '削除済み' }
-    },
-    dragonTiger: {
-      title: '売買代金情報',
-      caption: '純買い上位5 · 全市場',
-      full: '詳細を見る →',
-      net: '純買',
-      org: '機関',
-      empty: '本日はデータなし'
-    },
-    etf: {
-      title: '大型 ETF',
-      caption: 'インデックス型'
-    },
-    noData: 'データなし',
-    loading: '読み込み中…',
-    sourceUnavailable: '一部のデータソースが利用できません（{sources}）。該当パネルは空です',
-    indexUnavailable: 'この指数のローカル行情データがありません'
-  },
   watchlist: {
     title: '個別銘柄ウォッチ',
     subtitle: 'フォロー中の銘柄の最新価格と騰落率（ローカル相場DB・前復権）',
@@ -7534,18 +7588,6 @@ export default {
     triggeredToday: '本日トリガー',
     addToPool: 'ウォッチリストへ',
     inPool: '登録済み',
-    columns: {
-      code: 'コード',
-      name: '名称',
-      state: 'ステータス',
-      note: 'メモ',
-      price: '現在値',
-      change: '騰落',
-      turnover: '売買代金',
-      date: '直近取引日',
-      actions: '操作'
-    }
-  ,
     backtestBadgeText: 'バックテスト勝率 {winRate}% ({wins}/{total}勝、平均最大上昇率+{maxGain}%)',
     backtestBadgeTitle: '過去の買いシグナルに基づく客観的なバックテスト統計',
     commonPresets: 'よく使われるプリセット',
@@ -7570,6 +7612,86 @@ export default {
     todayAlerts: '本日のアラート',
     totalTracked: '追跡総数',
     watchPool: '重点観察',
+    columns: {
+      code: 'コード',
+      name: '名称',
+      state: 'ステータス',
+      note: 'メモ',
+      price: '現在値',
+      change: '騰落',
+      turnover: '売買代金',
+      date: '直近取引日',
+      actions: '操作'
+    }
+  },
+  marketDashboard: {
+    title: '市場概観',
+    back: 'ワークベンチに戻る',
+    dataTime: 'データ時刻',
+    tickerLabel: '指数',
+    refresh: '更新',
+    themeToDark: 'ダークモードに切替',
+    themeToLight: 'ライトモードに切替',
+    latestLabel: '最新',
+    closedLabel: '終値',
+    holidayNote: '直近の取引日を表示',
+    chartLow: '安 {v}',
+    chartHigh: '高 {v}',
+    prevCloseTitle: '前終値 {v}',
+    chartLegend: '— 60日   ┆ 始値   ┆ 前終値（破線）   ● {point}',
+    noData: 'データなし',
+    sourceUnavailable: '一部のデータソースが利用できません（{sources}）。該当パネルは空です',
+    indexUnavailable: 'この指数のローカル行情データがありません',
+    backToWorkbench: '戻る',
+    refreshFailed: '行情の更新に失敗しました。もう一度お試しください。',
+    loading: '読み込み中…',
+    etf: {
+      title: '大型 ETF',
+      caption: 'インデックス型'
+    },
+    dragonTiger: {
+      title: '売買代金情報',
+      caption: '純買い上位5 · 全市場',
+      net: '純買',
+      org: '機関',
+      empty: '本日はデータなし',
+      full: '詳細を見る →'
+    },
+    watchlist: {
+      title: 'ウォッチ',
+      count: '{n} 銘柄',
+      all: 'すべて →',
+      empty: 'まだ銘柄がありません。よく見るものを追加しましょう',
+      emptyCta: 'ウォッチページへ',
+      emptyChip: '+ {name}',
+      state: {
+        observing: '監視中',
+        triggered: 'トリガー',
+        holding: '保有',
+        dropped: '削除済み'
+      }
+    },
+    sentiment: {
+      title: '市場のムード',
+      caption: '値上がり・値下がり · 全市場',
+      limitUp: '涨停',
+      limitDown: '跌停',
+      broken: '炸板',
+      brokenUnit: '· {rate}%',
+      maxStreak: '最大連騰',
+      streakUnit: '板',
+      trendLabel: '直近5日の涨停家数',
+      breadth: {
+        up: '上昇',
+        flat: '平坦',
+        down: '下落'
+      }
+    },
+    state: {
+      open: '取引中',
+      closed: '取引終了',
+      holiday: '非営業日'
+    }
   },
   resourceSort: {
     title: '並び替え',
@@ -7884,197 +8006,115 @@ export default {
       explicit: '各ワークスペースのモデル設定で指定した値が常に優先され、保存済みモデルは書き換えられません。'
     }
   },
-  kline: {
-    picksBar: 'Watchlist ({count})',
-    picksHint: '[↑/↓] keys to switch stocks',
-    searchSwitch: 'Click to search and switch stock',
-    brickTitle: 'THS ZX Brick Chart - consecutive red/green brick strategy',
-    bbiTitle: 'Close price vs BBI bullish/bearish balance line',
-    period: 'Period',
-    adjust: 'Adjust',
-    boardNoAdjust: 'Board: no adjustment',
-    searchPlaceholder: 'Enter stock code/name/pinyin (e.g. 600519)',
-    searching: 'Searching...',
-    noMatch: 'No matching symbols found',
-    board: 'Board',
-    mainChart: 'Main:',
-    subChart: 'Sub:',
-    drawing: 'Draw:',
-    td9: 'TD9 Sequence',
-    patternBubbles: 'Pattern Bubbles',
-    patternOutline: 'Pattern Outline',
-    keyLevels: 'Key Levels',
-    askAgent: 'Ask Agent:',
-    actionValuation: 'Analyze Fundamentals & Valuation',
-    actionStrategy: 'Calculate Defense & Entry Strategy',
-    actionReport: 'Latest Research & Core Logic',
-    // HALO: the full report is rendered in the workbench panel (computed by
-    // Python); these are the agent-facing asks.
-    actionHaloReport: 'HALO Annual Report',
-    actionHaloSix: 'HALO Six Dimensions & Growth',
-    actionHaloSeven: 'Score the Seven Qualitative Dimensions',
-    actionHaloGovernance: 'Governance Integrity Facts',
-    noData: 'No market data for {symbol}',
-    queryFailed: '{symbol} quote query failed',
-    requestRejected: 'Server explicitly rejected this request',
-    retryWontHelp: 'Retrying will not yield different results',
-    fetchPathIssue: 'This is a data fetch path issue',
-  
-    volumeLabel: '出来高',
-    turnoverLabel: '売買代金',
-    patternLabel: 'チャートパターン',
-    patternAskSuffix: '、Agentに質問',
-    patternAskTitle: '現在のパターンについてAgentに質問：{patterns}',
-    zxBrickLabel: '知行レンガ',
-    zxBrickTitle: '同花順知行レンガ足チャート戦略',
-    dualLineTitle: '白線 DEMA10 ({white}) vs 黄線 LongBBI ({yellow})',
-    dualLineBelow: '黄線の下・弱気',
-    dualLineAbove: '両線上向き・強気',
-    dualLineRetrace: '押し目調整',
-    aboveBBI: 'BBI強気',
-    belowBBI: 'BBI弱気',
-    boardAdjustTitle: 'セクター指数には調整後データがありません',
-    td9Title: 'TDシーケンシャル9転換シグナル',
-    patternBubbleLabel: 'バブル',
-    patternBubbleBtnTitle: 'チャート上に天井・底パターンバブルを表示',
-    patternBubbleHint: 'バブルをクリックして詳細を表示またはAgentに質問',
-    patternOutlineLabel: 'アウトライン',
-    patternOutlineBtnTitle: 'チャート上にパターン構造アウトラインを描画',
-    patternOutlineHint: 'ネックラインとトレンドチャネルを表示',
-    boardNoPattern: 'セクターパターンなし',
-    boardNoPatternDetail: 'セクター指数はパターン認識を提供していません',
-    boardNoPatternOutlineDetail: 'セクター指数はパターン輪郭を提供していません',
-    noPatternDetected: 'パターンは検出されませんでした',
-    expandWorkspace: 'ワークスペースを展開',
-    collapseWorkspace: 'ワークスペースを折りたたむ',
-    requestRejectedHint: 'サーバーにリクエストが拒否されました：{message}',
-    fetchPathIssueHint: 'データ取得パスの異常：{message}',
-    noDataHint: '相場データがありません',
-    periodDay: '日足',
-    periodWeek: '週足',
-    periodMonth: '月足',
-    adjustNone: '補正なし',
-    adjustForward: '前補正',
-    adjustBackward: '後補正',
-    unitShou: '株(手)',
-    unitWanShou: '万株(手)',
-    unitYiShou: '億株(手)',
-    unitWan: '万',
-    unitYi: '億',
-    levelsLabel: 'キーレベル',
-    levelsTitle: '支持線と抵抗線',
-    groupCandle: 'ローソク足',
-    groupTactics: '戦略',
-    oscillation: 'もみ合い',
-    actionPatternDeep: 'パターン構造の詳細分析',
+  halo: {
+    title: 'HALO 年次報告分析',
+    open: 'HALO レポート',
+    refresh: '再生成',
+    archive: 'ナレッジベースにアーカイブ',
+    archiving: 'アーカイブ中…',
+    loading: 'レポートを生成しています…',
+    loadFailed: 'レポートの読み込みに失敗しました',
+    noDataTitle: 'この銘柄の年次報告ファクトはまだ同期されていません',
+    noDataHint: '下のボタンで巨潮情報網の年次報告を同期すると、ファクトが登録された時点でこのパネルが自動で再取得します。',
+    syncCostHint: '同期には年次報告 PDF のダウンロードとページごとの解析が必要で、通常 1〜3 分かかります。ページを閉じないでください。',
+    syncAndRetry: '年次報告を同期して再試行',
+    syncing: '年次報告を同期中…',
+    syncDone: '年次報告を同期しました。レポートを再生成します',
+    syncFailed: '年次報告の同期に失敗しました',
+    retry: '再試行',
+    launchFullReport: 'エージェントに完全レポートを作成させる',
+    skeletonNotice: 'このパネルは、スコアカーネルが算出したデータ層と定量化アンカーのみを表示します。7 つの定性ディメンション（堀／スタグフレーション耐性／ESG／経営陣／株主・資金面／バリュエーション／リスク）はモデルが採点するもので、ここでは結論を示しません。完全な分析が必要な場合は、セッションでエージェントに halo.analyze を実行させてください。',
+    scoreCard: 'コアスコア',
+    haloSix: 'HALO 6 ディメンション',
+    haloSixDetail: 'HALO 6 ディメンションの内訳',
+    growthLabel: '成長性',
+    growthDetail: '成長性のサブスコア',
+    notComputable: '算出不可',
+    growthMissing: '成長性は以下の入力が欠落のため加重から除外されました：{keys}',
+    dim: 'ディメンション',
+    raw: '元の値',
+    weight: 'ウェイト',
+    score: 'スコア',
+    basis: '算出根拠',
+    qualitativeDims: '定性ディメンション（採点待ち）',
+    qualitativeHint: '以下のディメンションはモデルが採点します。パネルは採点に必要な定量化アンカーのみを示し、結論は示しません。',
+    hasAnchor: 'アンカー充足',
+    noAnchor: 'アンカー不足',
+    pendingScore: '採点待ち',
+    anchors: '定量化アンカー',
+    noAnchors: '取得できたアンカー：{keys}',
+    facts: '年次報告ファクト',
+    value: '値',
+    page: 'ページ',
+    sourceText: '原文',
+    announcements: '公告',
+    rawMarkdown: 'スケルトン原文（採点待ちスロットを含む）',
+    rawMarkdownHint: 'ナレッジベースへアーカイブされるのはこの内容です。未入力のスロットは「採点待ち」と表示されます。',
+    assetHeavy: '重型資産',
+    assetMixed: '混合型',
+    assetLight: '軽資産',
+    entryHint: '巨潮情報網の年次報告ファクトに基づくスコアカーネルのデータ：HALO 6 ディメンション、成長性、各ディメンションの定量化アンカー。',
+    period: '報告期',
+    assetType: '資産タイプ',
+    pickKb: 'アーカイブ先',
+    kbPlaceholder: 'ナレッジベースを選択',
+    archiveOk: '下書きとしてアーカイブしました。解析完了後に検索できます',
+    archiveUpdated: '既存のアーカイブ文書を更新しました',
+    archiveFailed: 'アーカイブに失敗しました',
+    needKb: '先にナレッジベースを選択してください',
+    close: '閉じる',
+    llmNote: '7 つの定性ディメンション（堀／スタグフレーション耐性／ESG／経営陣／株主・資金面／バリュエーション／リスク）はモデルが採点し、その他の数値は採点カーネルが計算します。レポートの有効期間は 30 日です。',
+    growthSubs: {
+      revenue: '売上成長',
+      profit: '利益成長',
+      quality: '成長の質',
+      sustainability: '成長の持続性'
+    },
+    dims: {
+      tangible: '有形資産密度',
+      fixedIntensity: '固定資産密度',
+      fixedShare: '固定資産構成比',
+      capitalLabor: '資本-労働比率',
+      capexIntensity: 'Capex 密度',
+      capexBurden: 'Capex 負担'
+    }
   },
-  stockCitation: {
-    noChangeData: 'No change data',
-    analyzing: 'Analyzing strategy indicators and quantitative structure...',
-    insufficientData: 'Insufficient data for strategy rating',
-    valuation: 'Valuation',
-    capitalFlow: 'Capital Flow',
-    volRatio: 'Volume Ratio',
-    amplitude: 'Amplitude',
-    engine: 'THS ZX Quantitative Engine',
-  
-    amountWan: '{value}万',
-    amountYi: '{value}億',
-    barsAsOf: '{bars}本の足 · {asOf}時点',
-    barsInsufficient: 'ローソク足が24本未満({bars}本)',
-    continuousBoard: '{days}日連続ストップ高',
-    dragonCount: '龍虎ランキング{count}回',
-    hotRank: '注目度第{rank}位',
-    last30Days: '直近30日',
-    limitBreakCount: 'ストップ高崩れ{count}回',
-    limitUpCount: 'ストップ高{count}回',
-    limitUpTitle: '最新ストップ高: {date}、連続: {days}日',
-    loss: '赤字',
-    moreSectors: '他{count}セクター',
-    netAmountWan: '{direction}{value}万',
-    netAmountYi: '{direction}{value}億',
-    netBuy: '純買い',
-    netSell: '純売り',
-    noQuoteData: '相場データなし',
-    openWorkspace: 'ワークスペースを開く',
-    queryFailed: '照会に失敗しました',
-    queryFailedDetail: '照会失敗: {message}',
-    range20d: '20日',
-    range5d: '5日',
-    range60d: '60日',
-    sourcesUnavailable: '利用不可のデータソース: ',
-    yellowDegraded: '黄ライン劣化',
-  },
-  watchDetail: {
-    notSet: 'Not set',
-    cost: 'Cost',
-    stopLoss: 'Stop Loss',
-  
-    costPlaceholder: '目標コスト価格',
-    stopPlaceholder: 'ストップロス価格',
-  },
-  mentionedStocks: {
-    title: 'Stocks Mentioned',
-  
-    viewKline: 'ローソク足を見る',
-    viewTitle: '{name} ({thscode}) のチャートに切り替え',
-    viewing: '表示中',
-    viewingTitle: '現在表示中: {name} ({thscode})',
-  },
-  welcome: {
-    slogan: 'Let today\'s knowledge become tomorrow\'s wisdom',
-    todayChats: 'Today\'s Chats',
-    knowledgeBases: 'Knowledge Bases',
-    totalDocs: 'Total Documents',
-    insights: 'Insights',
-    startExploring: 'Start Exploring',
-    newChat: 'New Chat',
-    newChatDesc: 'Start a new knowledge exploration with AI',
-    browseKB: 'Browse Knowledge Base',
-    browseKBDesc: 'Manage and explore your knowledge assets',
-    agents: 'Agents',
-    agentsDesc: 'Customized AI assistants for specific needs',
-  },
-  lab: {
-    darkBase: 'Dark Base',
-    afternoonGreeting: 'Good afternoon, what would you like to research today?',
-    continueYesterday: 'Continue yesterday\'s work',
-    recentLoadFailed: 'Recent sessions failed to load',
-    noPreview: 'No message preview',
-    messagesLoadFailed: 'Failed to load session messages',
-    noMessages: 'This session has no messages yet.',
-    continueAsk: 'Continue asking…',
-    morningBrief: 'Research Morning Brief',
-    whatToResearch: 'What would you like to research today?',
-    pastIssues: 'Past Issues',
-    pastIssuesFailed: 'Failed to load past issues',
-    noPastIssues: 'No past research yet',
-    researchDispatch: 'Research Dispatch',
-    references: 'References',
-    noExcerpts: 'No excerpts',
-    todayHot: 'Today\'s Hot',
-    knowledgeBase: 'Knowledge Base',
-    weekendMarket: 'Weekend Market is Open',
-    vendorNotOpen: 'Vendor has not opened yet',
-    browseAround: 'Just browsing',
-    vendorPreparing: 'Vendor is preparing, coming soon…',
-    noOrders: 'No orders yet at this stall. Start one!',
-    composerPlaceholder: 'Ask something…',
-    print: 'Print',
-    sendEnter: 'Send (Enter)',
-    browseOrAsk: 'Browse around, or ask something…',
-  },
-
-  klineCompare: {
-    loading: '読み込み中 ({count})',
-    collapse: '折りたたむ',
-    expand: '展開する',
-    switchTo: '{name} ({thscode}) のチャートに切り替え',
-  },
-  samples: {
-    markdown: 'Markdown ドキュメント',
-    faq: 'FAQ',
-    chapter: '複数章のドキュメント',
-    plain: 'プレーンテキスト段落',
-  },
+  wechat: {
+    openOriginal: '元の記事を開く ↗',
+    send: '質問',
+    clear: 'クリア',
+    loading: '読み込み中…',
+    pickHintClosed: 'リストは折りたたまれています。右上の「リストを表示」から記事を選んでください',
+    pickHint: '左から記事を選択してください',
+    radar: {
+      openExternal: '別ウィンドウで開く',
+      reload: '再読み込み',
+      offlineHint: '公式アカウントサービスに接続できません (http://127.0.0.1:5030/biz)',
+      retry: '再試行'
+    },
+    tabs: {
+      radar: '動的レーダー',
+      study: '精読・質疑'
+    },
+    chat: {
+      empty: 'この記事について質問するか、「ナレッジベース全体」に切り替えて横断検索。',
+      placeholder: 'この記事について質問（Enter で送信）'
+    },
+    scope: {
+      doc: 'この記事のみ',
+      kb: 'ナレッジベース全体'
+    },
+    item: {
+      indexing: '索引中'
+    },
+    list: {
+      show: 'リストを表示',
+      hide: 'リストを隠す',
+      loading: '記事を読み込み中…',
+      empty: 'このナレッジベースには WeChat 記事がありません'
+    },
+    vault: {
+      off: 'vault が未設定のため画像が表示されない場合があります'
+    }
+  }
 }

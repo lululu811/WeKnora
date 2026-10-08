@@ -1321,8 +1321,8 @@ onUnmounted(() => {
   position: absolute;
   pointer-events: none;
   border-radius: var(--app-radius-xs);
-  background: color-mix(in srgb, var(--td-success-color) 22%, transparent);
-  outline: 1px solid color-mix(in srgb, var(--td-success-color) 50%, transparent);
+  background: var(--app-source-highlight-soft-bg);
+  outline: 1px solid var(--app-source-highlight-border);
 }
 
 .preview-image {
@@ -1414,7 +1414,7 @@ onUnmounted(() => {
     max-width: 480px;
     padding: 10px 12px;
     border-radius: @border-radius;
-    background: color-mix(in srgb, var(--td-success-color) 10%, transparent);
+    background: var(--app-source-highlight-soft-bg);
     color: @text-primary;
     &__time {
       font-size: var(--app-text-sm);
@@ -1683,23 +1683,24 @@ html[theme-mode="dark"] {
 /* Citation highlights live outside the scoped block: they apply to DOM that
    third-party renderers (docx-preview, pptx-preview, SheetJS) create. */
 ::highlight(source-locate) {
-  background-color: color-mix(in srgb, var(--app-source-highlight) 60%, transparent);
+  background-color: var(--app-source-highlight-bg);
 }
 
 mark.source-locate-mark {
-  background-color: color-mix(in srgb, var(--app-source-highlight) 60%, transparent);
+  background-color: var(--app-source-highlight-bg);
   color: inherit;
+  border-radius: var(--app-radius-xs);
 }
 
 .source-locate-block {
-  background-color: color-mix(in srgb, var(--app-source-highlight) 22%, transparent) !important;
-  outline: 1px solid var(--app-source-highlight);
+  background-color: var(--app-source-highlight-soft-bg) !important;
+  outline: 1px solid var(--app-source-highlight-border);
   outline-offset: 2px;
   border-radius: var(--app-radius-xs);
 }
 
 tr.source-locate-block > td {
-  background-color: color-mix(in srgb, var(--app-source-highlight) 45%, transparent) !important;
+  background-color: var(--app-source-highlight-soft-bg) !important;
 }
 
 /* TODO 2.2: 14 处色值未收敛（图表/状态/语义不明，保留原值）：000000, ff7b72, d2a8ff, 79c0ff, a5d6ff, ffa657, 8b949e, 7ee787, 1f6feb, f2cc60, aff5b4, 033a16, ffdcd7, 67060c */
