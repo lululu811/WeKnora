@@ -1,4 +1,54 @@
 export default {
+  watchPulse: {
+    title: '오늘 움직이는 종목',
+    recalc: '다시 계산',
+    retry: '다시 시도',
+    watchlistError: '관심 목록을 불러오지 못했습니다',
+    pulseError: '거래량과 가격 변동을 불러오지 못했습니다',
+    overflowHint: '막대가 표시 상한에 도달했습니다. 실제 배율은 더 큽니다',
+    tickFib: '0.618',
+    tickPivot: '중립 1.0',
+    tickFibHigh: '1.382',
+    cal: {
+      title: '앞으로 며칠',
+      today: '오늘',
+      tomorrow: '내일',
+      inDays: '+{days}일',
+      daysAgo: '{days}일 전',
+      more: '외 {n}건',
+      total: '예정 {n}건',
+      empty: '앞으로 며칠 일정 없음',
+      failed: '일정을 불러오지 못했습니다. 본문 표시에는 영향이 없습니다'
+    },
+    state: {
+      up: '거래량 증가',
+      down: '거래량 감소',
+      normal: '정상'
+    },
+    normal: {
+      title: '거래량 정상 ({n}종목)'
+    },
+    noItems: {
+      title: '이번 회차 데이터 없음',
+      desc: '관심 종목의 최근 거래일 일봉 데이터가 없습니다.'
+    },
+    allNormal: {
+      title: '{n}종목 거래량 정상',
+      desc: '오늘 뚜렷한 거래량 증감은 없습니다.'
+    },
+    empty: {
+      title: '관심 종목이 없습니다',
+      desc: '먼저 관심 종목 페이지에서 종목을 추가하면 여기서 거래량 변화를 볼 수 있습니다.',
+      cta: '관심 종목 추가하러 가기'
+    },
+    missing: {
+      title: '{n}종목 제외'
+    },
+    meta: {
+      quote: '시세 {date} · 이번 {included}/{total}종목, 거래량 증가 {volumeUp}, 감소 {volumeDown}. 종가 기준',
+      coverage: '일봉 커버리지: {date} 기준 {included}종목'
+    }
+  },
   samples: {
     markdown: 'Markdown 문서',
     faq: 'FAQ',
@@ -7461,6 +7511,7 @@ export default {
     }
   },
   menu: {
+    watchPulse: '움직이는 종목',
     sessionInProgress: '대화 진행 중',
     knowledgeBase: '지식베이스',
     agents: '에이전트',
@@ -7647,7 +7698,11 @@ export default {
     loading: '불러오는 중…',
     etf: {
       title: '대형 ETF',
-      caption: '지수형'
+      caption: '시그널 {signal}/{total} · 발행주식수 {date} 기준 (분기)',
+      captionFallback: '발행주식수 미동기화 · 가격만',
+      unsynced: '미동기화',
+      signal: '이상징후',
+      holdings: '중앙회진 공시 보유: 데이터 연동 예정'
     },
     dragonTiger: {
       title: '상향종목',

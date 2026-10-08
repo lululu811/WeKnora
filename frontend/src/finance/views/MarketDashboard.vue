@@ -278,23 +278,34 @@
         <p v-else-if="!loading" class="md-tile-empty">{{ $t('marketDashboard.dragonTiger.empty') }}</p>
       </section>
 
-      <!-- ── 权重 ETF ── -->
+      <!-- ── 权重 ETF · 大资金动向 ── -->
       <section class="md-tile md-etf" style="--d: 540ms">
         <div class="md-tile__head">
           <span class="md-tile__title">{{ $t('marketDashboard.etf.title') }}</span>
-          <span class="md-tile__caption">{{ $t('marketDashboard.etf.caption') }}</span>
+          <span class="md-tile__caption">{{ etfCaption }}</span>
         </div>
-        <div v-if="etfs.length" class="md-etf-rows">
-          <div v-for="e in etfs" :key="e.thscode" class="md-etf-row">
+        <div v-if="etfRows.length" class="md-etf-rows">
+          <div v-for="r in etfRows" :key="r.thscode" class="md-etf-row">
             <span class="md-etf-row__name">
-              {{ e.name }}
-              <span class="md-etf-row__code md-num">{{ e.thscode }}</span>
+              {{ r.name }}
+              <span class="md-etf-row__code md-num">{{ r.thscode }}</span>
             </span>
-            <span class="md-etf-row__price md-num" :class="trendClass(e.change_pct)">{{ fmtPrice(e.last) }}</span>
-            <span class="md-pill md-num" :class="trendClass(e.change_pct)">{{ fmtPct(e.change_pct) }}</span>
+            <span class="md-etf-row__price md-num" :class="trendClass(r.change_pct)">{{ fmtPrice(r.price) }}</span>
+            <span class="md-pill md-num" :class="trendClass(r.change_pct)">{{ fmtPct(r.change_pct) }}</span>
+            <!-- 份额列是这张卡的主角：季频口径，红=净流入（与价格红涨同一套语义） -->
+            <span class="md-etf-row__share md-num" :class="r.share_class">{{ r.share_text }}</span>
+            <span
+              class="md-etf-row__mult md-num"
+              :class="{ 'md-etf-row__mult--hot': r.multiple_hot }"
+            >{{ r.multiple_text }}</span>
+            <span v-if="r.signal" class="md-etf-row__signal">
+              <span class="md-etf-row__dot" />{{ $t('marketDashboard.etf.signal') }}
+            </span>
           </div>
         </div>
         <p v-else-if="!loading" class="md-tile-empty">{{ $t('marketDashboard.noData') }}</p>
+        <!-- 预留披露持仓（B 线）：数据通了再换成真持仓，这里只占位不误导 -->
+        <p class="md-tile__caption md-etf__foot">{{ $t('marketDashboard.etf.holdings') }}</p>
       </section>
     </main>
   </div>
@@ -312,6 +323,7 @@ import {
   type MarketIndex,
   type MarketSentiment,
 } from '@/finance/api/market'
+import { getEtfFlow, type EtfFlowResponse } from '@/finance/api/pulse'
 import { fetchQuotes, listWatchlist, type Quote, type WatchState } from '@/finance/api/watchlist'
 import { useTheme } from '@/composables/useTheme'
 import {
@@ -416,6 +428,90 @@ const indices = computed<MarketIndex[]>(() => snapshot.value?.indices ?? [])
 const tickers = computed<MarketIndex[]>(() => snapshot.value?.tickers ?? [])
 const etfs = computed<MarketEtf[]>(() => snapshot.value?.etfs ?? [])
 const dragonRows = computed<DragonTigerRow[]>(() => dragon.value?.data ?? [])
+
+// ── 权重 ETF · 大资金动向 ────────────────────────────────────────────────
+//
+// 回答的是「国家队是不是在进出宽基 ETF、动的哪只、力度多大」。份额变动才是
+// 「进出」的证据 —— 价格涨跌只是结果。这里还有一条口径陷阱：份额来自季报，
+// 是**季频**的，所以 caption 必须写清观测日，否则读者会把「+57.81%」读成今天。
+
+/** etf-flow 读数。null = 没拿到（首屏未返回 / 请求失败）→ 下面自动回退。 */
+const etfFlow = ref<EtfFlowResponse | null>(null)
+
+/** 成交放大高亮阈值。取自后端 signal 的量能口径，前端只做展示，不在这里复算结论。 */
+const ETF_HOT_MULTIPLE = 1.382
+
+interface EtfRow {
+  thscode: string
+  name: string
+  price: number | null
+  change_pct: number | null
+  /** 份额变动（%），季频。null = 没有上一观测点。 */
+  share_change_pct: number | null
+  /** 文本与配色在 computed 里定好，模板只做渲染，不再判断口径。 */
+  share_text: string
+  share_class: string
+  multiple_text: string
+  multiple_hot: boolean
+  signal: boolean
+}
+
+const etfRows = computed<EtfRow[]>(() => {
+  const items = etfFlow.value?.items ?? []
+  if (items.length) {
+    // etf-flow 契约里没有涨跌字段 —— 用快照里同代码的 change_pct 补齐，
+    // 补不到就只显示价格（fmtPct(null) 给破折号），不硬凑一个数出来。
+    const byCode = new Map(etfs.value.map((e) => [e.thscode, e]))
+    return items.map((it) => {
+      const snap = byCode.get(it.thscode)
+      return {
+        thscode: it.thscode,
+        name: it.name,
+        price: it.close ?? snap?.last ?? null,
+        change_pct: snap?.change_pct ?? null,
+        share_change_pct: it.share_change_pct,
+        // 份额为 null 显示「—」，**绝不显示 0%** —— 0% 是"这个季度没动"这个结论，
+        // 而 null 是"没有上一观测点可比"，两件事不能混。
+        share_text: fmtPct(it.share_change_pct),
+        share_class: trendClass(it.share_change_pct),
+        multiple_text: fmtMultiple(it.turnover_multiple),
+        multiple_hot:
+          it.turnover_multiple != null && it.turnover_multiple >= ETF_HOT_MULTIPLE,
+        signal: it.signal,
+      }
+    })
+  }
+  // 回退：etf-flow 拿不到 → 退回旧版纯价格行（快照），份额列写「未同步」。
+  // 静默发生，不弹错误、不影响其他卡片：一张辅助卡不该打断「扫一眼」。
+  return etfs.value.map((e) => ({
+    thscode: e.thscode,
+    name: e.name,
+    price: e.last,
+    change_pct: e.change_pct,
+    share_change_pct: null,
+    share_text: t('marketDashboard.etf.unsynced'),
+    share_class: 'md-etf-row__share--off',
+    multiple_text: DASH,
+    multiple_hot: false,
+    signal: false,
+  }))
+})
+
+/** 有份额数据才承诺日期，否则这张卡就只剩价格，不给读者一个空的观测日。 */
+const etfCaption = computed(() => {
+  const f = etfFlow.value
+  const items = f?.items ?? []
+  if (!items.length) return t('marketDashboard.etf.captionFallback')
+  const total = f?.counts?.total ?? items.length
+  // 日期取**份额观测日**（item.trade_date，季频口径），不是响应级的行情日——
+  // 行情日是今天，份额最新观测可能是一个季度前，混用会把季频伪装成日频。
+  const shareDate = items.map((i) => i.trade_date).filter(Boolean).sort().pop() ?? DASH
+  return t('marketDashboard.etf.caption', {
+    signal: items.filter((i) => i.signal).length,
+    total,
+    date: shareDate,
+  })
+})
 
 const EMPTY_SENTIMENT: MarketSentiment = {
   trade_date: null,
@@ -549,10 +645,16 @@ async function loadWatchlist() {
 async function load(isRefresh = false) {
   if (isRefresh) refreshing.value = true
   else loading.value = true
-  // 三路数据各自降级：任一路失败只让对应格子空着
-  const [snap, dt] = await Promise.allSettled([getMarketSnapshot(60), getDragonTiger(5)])
+  // 四路数据各自降级：任一路失败只让对应格子空着。
+  // etf-flow 失败时 etfFlow 保持 null，etfRows 自动退回快照的纯价格行。
+  const [snap, dt, flow] = await Promise.allSettled([
+    getMarketSnapshot(60),
+    getDragonTiger(5),
+    getEtfFlow(),
+  ])
   if (snap.status === 'fulfilled') snapshot.value = snap.value
   if (dt.status === 'fulfilled') dragon.value = dt.value
+  if (flow.status === 'fulfilled') etfFlow.value = flow.value
   await loadWatchlist()
   loading.value = false
   refreshing.value = false
@@ -614,6 +716,12 @@ function fmtPct(v: number | null): string {
 function fmtYi(v: number | null): string {
   const s = toYi(v)
   return s == null ? DASH : `${s} 亿`
+}
+
+/** 成交放大倍数（如 1.12×）。null 给破折号，理由同 fmtCount。 */
+function fmtMultiple(v: number | null): string {
+  if (v == null || !Number.isFinite(v)) return DASH
+  return `${v.toFixed(2)}×`
 }
 
 function watchStateLabel(s: WatchState): string {
@@ -733,6 +841,7 @@ function watchStateLabel(s: WatchState): string {
   }
 
   &.is-open .md-status-chip__dot {
+
     background: var(--td-brand-color);
     animation: mdPulse 2s ease-out infinite;
   }
@@ -869,7 +978,6 @@ function watchStateLabel(s: WatchState): string {
   gap: 12px;
   min-height: 0;
 }
-
 .md-index-panel__row { display: flex; align-items: baseline; gap: 8px; }
 
 .md-index-panel__name {
@@ -1105,6 +1213,8 @@ function watchStateLabel(s: WatchState): string {
   justify-content: flex-start;
   overflow-y: auto;
   overflow-x: hidden;
+  /* 滚动条占位：8 行超出出现滚动条时不压住最右侧的信号列 */
+  scrollbar-gutter: stable;
 }
 
 .md-wl-row {
@@ -1220,15 +1330,17 @@ function watchStateLabel(s: WatchState): string {
 
 .md-lhb-row__org { font-size: var(--app-text-4xs); color: var(--td-text-color-placeholder); }
 
-/* ── ETF ── */
+/* ── ETF · 大资金动向 ── */
 .md-etf { grid-column: span 3; }
 
+/* 名称列 minmax(0,1fr) + ellipsis：最长名「沪深300ETF华泰柏瑞」不折行、不撑破栅格。
+   新增三列后 gap 由 10 收到 6 —— 列变多了，间距不收就没有留给名称的宽度。 */
 .md-etf-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) auto auto auto auto auto;
   align-items: center;
-  gap: 10px;
-  padding: 6.5px 2px;
+  gap: 6px;
+  padding: 5px 2px;
   border-top: 1px solid var(--td-component-stroke);
 
   &:first-child { border-top: 0; }
@@ -1243,6 +1355,49 @@ function watchStateLabel(s: WatchState): string {
 }
 
 .md-etf-row__price { font-size: var(--app-text-sm); text-align: right; }
+
+/* 份额列：季频口径。红 = 净流入，沿用本卡 --md-up / --md-down，不另造涨跌色。 */
+.md-etf-row__share { font-size: var(--app-text-2xs); text-align: right; }
+
+/* 回退态（etf-flow 未同步）：写「未同步」而不是「—」，两者的意思不同 */
+.md-etf-row__share--off {
+  color: var(--td-text-color-placeholder);
+  font-size: var(--app-text-4xs);
+}
+
+.md-etf-row__mult {
+  font-size: var(--app-text-2xs);
+  color: var(--td-text-color-secondary);
+  text-align: right;
+}
+
+/* 放大倍数 ≥1.382 才抬色 —— 倍数本身不是结论，只是"今天这只比平时活跃" */
+.md-etf-row__mult--hot { color: var(--td-brand-color); font-weight: 600; }
+
+.md-etf-row__signal {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: var(--app-text-4xs);
+  color: var(--td-brand-color);
+  white-space: nowrap;
+}
+
+/* 信号圆点。复用 .md-dot 的画法，尺寸小一档 —— 8 行里不能喧宾夺主。 */
+.md-etf-row__dot {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--td-brand-color);
+}
+
+/* 底部预留行（汇金披露持仓，B 线）。样式沿用 caption，只多一条分隔线。 */
+.md-etf__foot {
+  margin: 0;
+  padding-top: 6px;
+  border-top: 1px solid var(--td-component-stroke);
+}
 
 /* 刷新时全屏数字起伏一次 */
 .is-flashing :deep(.md-num) { animation: mdNumFlash 0.45s ease-out; }
@@ -1265,7 +1420,8 @@ function watchStateLabel(s: WatchState): string {
   /* 第 7 行在小视口隐藏，留安全边距 */
   .md-wl-row:nth-child(7) { display: none; }
   .md-lhb-row { padding: 5px 2px; }
-  .md-etf-row { padding: 4px 2px; }
+  /* ETF 从 4 行涨到 8 行：小视口再收一档，否则得靠滚动才看得到第 5 只以后 */
+  .md-etf-row { padding: 3px 2px; }
   .md-index-panel__chart { margin: 4px 0 6px; }
   .md-lu5 { margin-bottom: 6px; }
 }

@@ -1,4 +1,54 @@
 export default {
+  watchPulse: {
+    title: '今天谁在动',
+    recalc: '重算',
+    retry: '重试',
+    watchlistError: '自选清单读取失败',
+    pulseError: '量价异动读取失败',
+    overflowHint: '条形已达显示上限，真实倍数更高',
+    tickFib: '0.618',
+    tickPivot: '中枢 1.0',
+    tickFibHigh: '1.382',
+    cal: {
+      title: '后面几天',
+      today: '今天',
+      tomorrow: '明天',
+      inDays: '+{days} 天',
+      daysAgo: '{days} 天前',
+      more: '另有 {n} 条',
+      total: '待发生共 {n} 条',
+      empty: '这几天暂无事件',
+      failed: '日历读取失败，主面板不受影响'
+    },
+    state: {
+      up: '放量',
+      down: '缩量',
+      normal: '正常'
+    },
+    normal: {
+      title: '量能正常（{n} 只）'
+    },
+    noItems: {
+      title: '本次没有读数',
+      desc: '自选里的标的在最近交易日都没有可用的日线数据。'
+    },
+    allNormal: {
+      title: '{n} 只量能正常',
+      desc: '今天没有明显放量或缩量的标的。'
+    },
+    empty: {
+      title: '还没有自选股',
+      desc: '先去自选股页添加常看的标的，这里就会显示哪只在放量。',
+      cta: '去添加自选股'
+    },
+    missing: {
+      title: '未纳入 {n} 只'
+    },
+    meta: {
+      quote: '行情 {date} · 本次纳入 {included}/{total} 只，放量 {volumeUp}，缩量 {volumeDown}。收盘口径',
+      coverage: '日线覆盖：{date} 有 {included} 只'
+    }
+  },
   samples: {
     markdown: 'Markdown 文档',
     faq: '问答对 FAQ',
@@ -7461,6 +7511,7 @@ export default {
     }
   },
   menu: {
+    watchPulse: '谁在动',
     sessionInProgress: '会话进行中',
     knowledgeBase: '知识库',
     agents: '智能体',
@@ -7647,7 +7698,11 @@ export default {
     loading: '加载中…',
     etf: {
       title: '权重 ETF',
-      caption: '宽基'
+      caption: '信号 {signal}/{total} · 份额 {date}（季频）',
+      captionFallback: '份额未同步 · 仅价格',
+      unsynced: '未同步',
+      signal: '异动',
+      holdings: '汇金披露持仓：数据接入中'
     },
     dragonTiger: {
       title: '龙虎榜',

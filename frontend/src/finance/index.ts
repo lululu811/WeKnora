@@ -51,6 +51,22 @@ registerModule({
   routeComponent: () => import('@/finance/views/Watchlist.vue'),
 });
 
+// 「今天谁在动」量价异动。挂在 watchlist 之后 —— 它读的就是 watchlist 那一份
+// 自选清单（Go /api/v1/watchlist），菜单上紧挨着才说得通：先在那儿选股，
+// 再到这儿看哪只在动。注册顺序即插入顺序，必须在上面的 watchlist 之后调用，
+// 否则 menu store 按 insertAfter 找 anchor 时 watchlist 还没进数组，会退到
+// 默认位置（settings 前），两者就隔开了。
+// 图标复用内置表里的 'watchlist'，避免为一个图标去改通用菜单组件。
+registerModule({
+  id: 'watch-pulse',
+  path: 'watch-pulse',
+  titleKey: 'menu.watchPulse',
+  icon: 'watchlist',
+  insertAfter: 'watchlist',
+  routeName: 'watch-pulse',
+  routeComponent: () => import('@/finance/views/WatchPulse.vue'),
+});
+
 // ─────────────────── 反代路由清单 ───────────────────
 // 导出给 vite.config.ts 用的反代路径常量数组。vite 端已经从该数组动态构造
 // proxy 规则，nginx 端仍靠正则 + 手动同步（见 nginx.conf 注释）。

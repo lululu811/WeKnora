@@ -41,6 +41,9 @@ export const FINANCE_PROXY_ROUTES = [
   '/api/market/snapshot',
   // 大盘预览：龙虎榜净买入榜
   '/api/market/dragon-tiger',
+  // 「今天谁在动」：量价异动 /pulse + 财经日历 /calendar
+  // 前缀级白名单（见文件头与 FINANCE_PROXY_ROUTES_REGEX 的说明）。
+  '/api/finance',
 ] as const;
 
 export type FinanceProxyRoute = (typeof FINANCE_PROXY_ROUTES)[number];
@@ -57,6 +60,11 @@ export type FinanceProxyRoute = (typeof FINANCE_PROXY_ROUTES)[number];
  * 下的新端点（包括可能出现的写端点）一并直通到 python-service。
  * 反代白名单要显式枚举，漏一条是"页面少一块数据"（还能发现），
  * 多一条是"把不该公开的端点暴露出去"（发现不了）。
+ *
+ * `finance` 是前缀级的一条（`/api/finance/pulse`、`/api/finance/calendar`），
+ * 与 `FINANCE_PROXY_ROUTES` 里的 `/api/finance` 一一对应：`(/.*)?$` 让子路径
+ * 一并命中。它目前只挂只读端点，若将来挂上写端点，应把这里也降级成
+ * `(pulse|calendar)` 这样的显式枚举。
  */
 export const FINANCE_PROXY_ROUTES_REGEX =
-  '^/api/(kline|annotate|indicators|symbols|stock-profile|quotes|chart-pattern|market/(snapshot|dragon-tiger))(/.*)?$';
+  '^/api/(kline|annotate|indicators|symbols|stock-profile|quotes|chart-pattern|market/(snapshot|dragon-tiger)|finance)(/.*)?$';

@@ -1,4 +1,54 @@
 export default {
+  watchPulse: {
+    title: '今日動いている銘柄',
+    recalc: '再計算',
+    retry: '再試行',
+    watchlistError: 'ウォッチリストの読み込みに失敗しました',
+    pulseError: '出来高と価格の変化を読み込めませんでした',
+    overflowHint: 'バーが表示上限に達しています。実際の倍率はこれ以上です',
+    tickFib: '0.618',
+    tickPivot: '中枢 1.0',
+    tickFibHigh: '1.382',
+    cal: {
+      title: '今後の日程',
+      today: '今日',
+      tomorrow: '明日',
+      inDays: '+{days}日',
+      daysAgo: '{days}日前',
+      more: '他 {n} 件',
+      total: '予定 {n} 件',
+      empty: '今後の予定はありません',
+      failed: 'カレンダーを読み込めませんでした（主表示に影響はありません）'
+    },
+    state: {
+      up: '増量',
+      down: '減量',
+      normal: '正常'
+    },
+    normal: {
+      title: '出来高が正常（{n} 銘柄）'
+    },
+    noItems: {
+      title: '今回のデータなし',
+      desc: 'ウォッチ銘柄に直近取引日の日線データがありません。'
+    },
+    allNormal: {
+      title: '{n} 銘柄は出来高が正常',
+      desc: '今日、目立った出来高の増減はありません。'
+    },
+    empty: {
+      title: 'ウォッチ銘柄がありません',
+      desc: '先にウォッチリストページで銘柄を追加すると、こちらで出来高の変化を確認できます。',
+      cta: 'ウォッチリストへ'
+    },
+    missing: {
+      title: '{n} 銘柄は対象外'
+    },
+    meta: {
+      quote: '相場 {date} · 今回 {included}/{total} 銘柄を算出、増量 {volumeUp}、減量 {volumeDown}。終値ベース',
+      coverage: '日線カバレッジ：{date} に {included} 銘柄'
+    }
+  },
   samples: {
     markdown: 'Markdown ドキュメント',
     faq: 'FAQ',
@@ -7461,6 +7511,7 @@ export default {
     }
   },
   menu: {
+    watchPulse: '動いている銘柄',
     sessionInProgress: '会話中',
     knowledgeBase: 'ナレッジベース',
     agents: 'エージェント',
@@ -7647,7 +7698,11 @@ export default {
     loading: '読み込み中…',
     etf: {
       title: '大型 ETF',
-      caption: 'インデックス型'
+      caption: 'シグナル {signal}/{total} · 口数 {date} 時点（四半期）',
+      captionFallback: '口数未同期 · 価格のみ',
+      unsynced: '未同期',
+      signal: '異変',
+      holdings: '中央匯金の開示保有：データ準備中'
     },
     dragonTiger: {
       title: '売買代金情報',

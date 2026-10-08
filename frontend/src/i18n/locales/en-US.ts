@@ -482,8 +482,12 @@ export default {
       full: 'Full list →'
     },
     etf: {
-      title: 'Broad ETFs',
-      caption: 'Broad-based'
+      title: 'Broad ETFs · Fund Flows',
+      caption: 'Signals {signal}/{total} · shares as of {date} (quarterly)',
+      captionFallback: 'Shares not synced · price only',
+      unsynced: 'Not synced',
+      signal: 'Alert',
+      holdings: 'Disclosed Huijin holdings: data incoming'
     },
     noData: 'No data',
     sourceUnavailable: 'Some data sources are unavailable ({sources}); those panels are empty',
@@ -626,6 +630,7 @@ export default {
     watchPool: 'Watch Pool'
   },
   menu: {
+    watchPulse: 'Who moved',
     sessionInProgress: 'Conversation in progress',
     knowledgeBase: 'Knowledge Base',
     agents: 'Agents',
@@ -8110,6 +8115,56 @@ export default {
     collapse: 'Click to collapse',
     expand: 'Click to expand',
     switchTo: 'Switch chart to {name} ({thscode})'
+  },
+  watchPulse: {
+    title: 'Who is Moving Today',
+    recalc: 'Recalculate',
+    retry: 'Retry',
+    watchlistError: 'Failed to load your watchlist',
+    pulseError: 'Failed to load volume and price activity',
+    overflowHint: 'Bar is at the display cap, the real multiple is higher',
+    meta: {
+      quote: 'Quotes {date} · {included}/{total} included, {volumeUp} volume up, {volumeDown} volume down. Close basis',
+      coverage: 'Daily coverage: {included} symbols on {date}'
+    },
+    missing: {
+      title: '{n} not included'
+    },
+    empty: {
+      title: 'No watchlist items yet',
+      desc: 'Add the symbols you follow on the watchlist page, then come back here to see which ones are expanding in volume.',
+      cta: 'Add to watchlist'
+    },
+    allNormal: {
+      title: '{n} with normal volume',
+      desc: 'Nothing shows notable volume expansion or contraction today.'
+    },
+    noItems: {
+      title: 'No readings this round',
+      desc: 'None of your symbols has usable daily data for the latest trading day.'
+    },
+    normal: {
+      title: 'Normal volume ({n})'
+    },
+    state: {
+      up: 'Volume up',
+      down: 'Volume down',
+      normal: 'Normal'
+    },
+    tickFib: '0.618',
+    tickPivot: 'Pivot 1.0',
+    tickFibHigh: '1.382',
+    cal: {
+      title: 'Coming days',
+      today: 'Today',
+      tomorrow: 'Tomorrow',
+      inDays: '+{days}d',
+      daysAgo: '{days}d ago',
+      more: '{n} more',
+      total: '{n} events pending',
+      empty: 'No events in the coming days',
+      failed: 'Calendar unavailable, the main panel is unaffected'
+    }
   },
   samples: {
     markdown: 'Markdown Document',
