@@ -1114,6 +1114,9 @@ services:
       - HALO_DB_PATH=${HALO_DB_PATH:-/data/halo/halo.sqlite}
       - HALO_CACHE_DIR=${HALO_CACHE_DIR:-/data/halo/halo-pdfs}
       - HALO_SHADOW_DIR=${HALO_SHADOW_DIR:-/data/halo/halo-shadow}
+      # 「量价异动面板」的财经日历 / ETF 份额 / 披露持仓 SQLite。/data/hithink 是
+      # 只读挂载写不了，落 halo-data 卷（与 halo.sqlite 同卷，都是自产小库）。
+      - FINANCE_PANEL_DB=${FINANCE_PANEL_DB:-/data/halo/finance_panel.sqlite}
       # 二级缓存接 compose 里的 redis 服务；留空则不启用 Redis
       - REDIS_HOST=${REDIS_HOST:-redis}
       - REDIS_PORT=${REDIS_PORT:-6379}

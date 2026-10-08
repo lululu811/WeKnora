@@ -2987,3 +2987,334 @@ async def market_dragon_tiger(
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", "50052")))
+
+
+# ===== 自选股「量价异动面板」 =====
+#
+# 三块能力：量价异动（/finance/pulse）+ 财经日历抓取与读取。
+# 规则计算全在 finance_panel/pulse.py 这个纯函数里，端点只负责取数与序列化；
+# 缺失一律进 missing 数组，绝不用 0 顶替（与 /api/quotes 同一约定）。
+
+
+class PulseRequest(BaseModel):
+    """量价异动查询请求体。
+
+    `codes` 同时接受 "301190" 与 "301190.SZ" 两种写法 —— 归一化在 SQL 里
+    用 v_symbol 的 ticker 映射做，不在 Python 侧硬编码推导。
+    """
+
+    codes: List[str] = Field(..., max_items=500, description="股票代码列表，最多 500")
+    date: Optional[str] = Field(None, description="交易日 YYYY-MM-DD，缺省取库内最新交易日")
+    window: int = Field(5, ge=2, le=250, description="中枢窗口（交易日），默认 5——与目标产品逐点对账得出（近 5 日均量）")
+    low: float = Field(0.618, gt=0, le=10, description="缩量阈值")
+    high: float = Field(1.382, gt=0, le=50, description="放量阈值")
+
+    @field_validator("date")
+    @classmethod
+    def _check_date(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        v = v.strip()
+        if not re.match(r"^\d{4}-\d{2}-\d{2}$", v):
+            raise ValueError("date 必须是 YYYY-MM-DD")
+        return v
+
+
+@app.post("/api/finance/pulse")
+async def finance_pulse(request: PulseRequest) -> Dict[str, Any]:
+    """自选股量价异动 —— 当日成交量相对中枢的倍数 + 涨跌幅四象限。
+
+    **口径**：
+    * 中枢 = 当日之前 `window` 个交易日成交量的算术均值（不含当日），取自
+      `v_daily` 的原始成交量；
+    * 倍数 = 当日成交量 / 中枢，`< low` 缩量、`> high` 放量；
+    * 涨跌幅 = `v_daily_qfq` 前复权收盘价之比 —— **除权日原始价是断崖，
+      用原始 close 会读出 -50% 这种假暴跌**，这是必须用 qfq 的原因。
+
+    **缺失 ≠ 0**：窗口不足、中枢为 0、收盘价缺失的标的进 `missing` 并附
+    `reason`，不会以 multiple=0 混进 `items`（0 倍数在这里是除零的伪装）。
+
+    `items` 按 `abs(multiple - 1)` 降序 —— 离常态越远越靠前，前端不用再排。
+
+    DuckDB 全程只读，本接口不写入任何行情库。
+    """
+    from datasources import registry
+    from finance_panel import service as pulse_service
+
+    src = registry.get("market")
+    if src is None:
+        raise fail(503, "market 数据源未就绪")
+
+    try:
+        return await pulse_service.compute_pulses(
+            src,
+            request.codes,
+            target_date=request.date,
+            window=request.window,
+            low=request.low,
+            high=request.high,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("量价异动查询失败: %s", exc)
+        raise fail(503, f"计算量价异动失败: {exc}") from exc
+
+
+@app.post("/api/finance/calendar/sync")
+async def finance_calendar_sync(
+    past_days: int = Query(3, ge=0, le=30, description="回看天数"),
+    future_days: int = Query(14, ge=1, le=90, description="前瞻天数"),
+) -> Dict[str, Any]:
+    """抓取东方财富财经日历并落库（默认过去 3 天 ~ 未来 14 天）。
+
+    抓取限速 ≥1 秒/次、带重试 —— 东财高频请求会返回空 result。
+
+    **抓取失败返回 `{ok: false, reason}`，不是 5xx**：日历是面板辅助块，
+    抓不到只影响"数据有多新"，不该让整个同步任务报成失败；GET 仍会返回
+    库里已有数据。
+    """
+    from finance_panel import calendar as cal
+    from finance_panel import store as cal_store
+
+    try:
+        events = cal.fetch_calendar(past_days=past_days, future_days=future_days)
+    except Exception as exc:  # noqa: BLE001 —— 抓取失败不抛给调用方
+        logger.warning("财经日历抓取失败: %s", exc)
+        return {"ok": False, "reason": f"东财抓取失败: {exc}", "fetched": 0}
+
+    if not events:
+        # 空结果既可能是"这段区间真的没有事件"，也可能是东财限速/改版。
+        # 两种都不该被静默当成成功，显式回 ok=false 让调用方决定是否重试。
+        return {
+            "ok": False,
+            "reason": "东财返回空数据（可能是限速或接口变更），未覆盖本地日历",
+            "fetched": 0,
+        }
+
+    try:
+        written = cal_store.upsert_events(events, source="eastmoney")
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("财经日历落库失败: %s", exc)
+        return {"ok": False, "reason": f"落库失败: {exc}", "fetched": 0}
+
+    return {"ok": True, "fetched": written}
+
+
+@app.get("/api/finance/calendar")
+async def finance_calendar_get(
+    days: int = Query(7, ge=1, le=90, description="从今天起往后看几天"),
+) -> Dict[str, Any]:
+    """读本地财经日历，按日期升序。
+
+    **只读本地 SQLite，不发任何外网请求** —— 东财被 WAF 拦掉时这个接口
+    照样返回库里已有数据（`ok=true`，`stale` 标记最后同步时间）。
+    """
+    from finance_panel import store as cal_store
+
+    today = datetime.date.today()
+    end = today + datetime.timedelta(days=days)
+    # 从今天往前留 3 天：当天可能有盘前补录/改期的事件。
+    start = today - datetime.timedelta(days=3)
+
+    try:
+        events = cal_store.query_events(
+            start_date=start.isoformat(), end_date=end.isoformat()
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("财经日历读取失败: %s", exc)
+        return {"ok": False, "reason": f"读取本地日历失败: {exc}", "events": []}
+
+    return {"ok": True, "count": len(events), "events": events}
+
+
+# ===== ETF 大资金追踪 =====
+#
+# 两条数据线，各自独立：
+#   A. 份额变动（/api/finance/etf-flow/*）—— 高频代理指标，东财抓、SQLite 落库；
+#   B. 披露持有人（/api/finance/etf-holdings/*）—— 低频权威披露，巨潮 PDF 规则抽取。
+#
+# 与 finance_panel 既有能力一致的约定：
+# * sync 类端点**失败也回固定 shape**（`ok=false` + reason），不是 5xx —— 抓不到只
+#   影响"数据有多新"，不该把同步任务报成失败；
+# * GET 类端点**只读本地**，不发外网请求；
+# * 缺失一律 null + reason，**绝不用 0 顶替**（0 份额 = "没数据"的伪装）。
+
+
+@app.post("/api/finance/etf-flow/sync")
+async def finance_etf_flow_sync() -> Dict[str, Any]:
+    """对追踪池内 ETF 增量抓取份额（东财 F10 规模变动页），落 finance_panel.sqlite。
+
+    **增量**：按库内每只 ETF 的最新份额日期续抓，不重复下历史。
+
+    **口径**：东财该接口是**季频报告期**份额（03-31/06-30/09-30/12-31），
+    不是日频。落库时 `granularity=quarterly` 如实标注，分析层据此说明
+    `share_change_pct` 实为"相对上一报告期"。这是实测结论 —— datacenter-web
+    的 ETF 份额 reportName 未能探测到（详见 finance_panel/etf_shares.py 头注释）。
+
+    失败返回 `{ok: false, reason}`，不是 5xx。
+    """
+    from finance_panel import etf_shares as shares
+    from finance_panel import store as panel_store
+
+    codes = shares.pool_codes()
+    if not codes:
+        return {"ok": False, "per_etf": {}, "reason": "ETF 追踪池为空（检查 etf_pool.yaml）"}
+
+    try:
+        last_dates = panel_store.latest_share_dates(codes)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("读取份额增量起点失败: %s", exc)
+        last_dates = {c: None for c in codes}
+
+    try:
+        synced = shares.sync_pool(codes, last_dates=last_dates)
+    except Exception as exc:  # noqa: BLE001 —— 抓取失败不抛给调用方
+        logger.warning("ETF 份额抓取失败: %s", exc)
+        return {"ok": False, "per_etf": {}, "reason": f"东财抓取失败: {exc}"}
+
+    per_etf: Dict[str, Any] = {}
+    written = 0
+    for code, info in (synced.get("per_etf") or {}).items():
+        rows = info.get("rows") or []
+        if rows:
+            for r in rows:
+                r["thscode"] = code
+            try:
+                n = panel_store.upsert_shares(rows)
+                written += n
+                per_etf[code] = {"fetched": n}
+            except Exception as exc:  # noqa: BLE001
+                per_etf[code] = {"fetched": 0, "reason": f"落库失败: {exc}"}
+        else:
+            per_etf[code] = {"fetched": 0, "reason": info.get("reason") or "无新数据"}
+
+    return {
+        "ok": bool(written),
+        "per_etf": per_etf,
+        "fetched": written,
+        "reason": None if written else "无新增份额数据（库内已最新，或东财返回空）",
+    }
+
+
+@app.get("/api/finance/etf-flow")
+async def finance_etf_flow_get(
+    date: Optional[str] = Query(None, description="行情交易日 YYYY-MM-DD，缺省取库内最新"),
+    window: int = Query(5, ge=2, le=60, description="累计变动窗口（份额观测点数）"),
+) -> Dict[str, Any]:
+    """池内 ETF 资金流向：最新份额 + 变动% + 近窗口累计变动% + 成交额 + 信号。
+
+    **口径提醒**：`share_change_pct` 是"相对上一**观测点**"而非日度 —— 现有份额源
+    是季频（`granularity=quarterly`）。字段里同时给出 `granularity` 与
+    `change_basis`，不靠字段名暗示精度。
+
+    **信号**：`|share_change_pct| > 2%` 或成交额放大倍率 `> 1.382`。
+    任一指标缺失时该指标不参与判定，另一个仍可触发；两者都缺 → signal=false。
+
+    `items` 按 `abs(share_change_pct)` 降序，**null 排末尾**（缺失不当 0）。
+    """
+    from datasources import registry
+    from finance_panel import etf_flow as flow
+    from finance_panel import etf_shares as shares
+
+    src = registry.get("fund")
+    if src is None:
+        raise fail(503, "fund 数据源未就绪")
+
+    pool = shares.load_pool()
+    try:
+        return await flow.compute_flows(src, pool, window=window, target_date=date)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("ETF 资金流向查询失败: %s", exc)
+        raise fail(503, f"计算 ETF 资金流向失败: {exc}") from exc
+
+
+@app.post("/api/finance/etf-holdings/sync")
+async def finance_etf_holdings_sync() -> Dict[str, Any]:
+    """抓池内 ETF 的定期报告公告（巨潮，限速由 halo CninfoSource 内置），抽取前十名持有人。
+
+    **增量**：只处理库内没有的报告期 —— 定期报告一年四期，全量重抓会打到巨潮限流
+    且绝大多数时候是同一份 PDF 重下。
+
+    **PDF 走 pypdf 文本层 + 锚点规则抽取**，不使用 LLM 读数。对不上份额总量的行标
+    `disputed` 并**保留原始值**，绝不改写。
+
+    无新公告也返回固定 shape `{ok, per_etf, message}`，不是 5xx。
+    """
+    from etfholdings import sync as holdings_sync
+    from finance_panel import etf_shares as shares
+    from finance_panel import store as panel_store
+
+    pool = shares.load_pool()
+    if not pool:
+        return {"ok": False, "per_etf": {}, "message": "ETF 追踪池为空（检查 etf_pool.yaml）"}
+
+    codes = [p["code"] for p in pool]
+    try:
+        known = panel_store.known_report_periods(codes)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("读取已有报告期失败: %s", exc)
+        known = {c: [] for c in codes}
+
+    try:
+        synced = holdings_sync.sync_pool(pool, known)
+    except Exception as exc:  # noqa: BLE001 —— 同步失败不抛给调用方
+        logger.warning("ETF 持有人同步失败: %s", exc)
+        return {"ok": False, "per_etf": {}, "message": f"巨潮同步失败: {exc}"}
+
+    written = 0
+    if synced.get("rows"):
+        try:
+            written = panel_store.upsert_holdings(synced["rows"])
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("持有人落库失败: %s", exc)
+            return {
+                "ok": False,
+                "per_etf": synced.get("per_etf", {}),
+                "message": f"落库失败: {exc}",
+            }
+
+    per_etf: Dict[str, Any] = {}
+    for code, info in (synced.get("per_etf") or {}).items():
+        per_etf[code] = {"fetched": info.get("fetched", 0), "reason": info.get("reason")}
+
+    return {
+        "ok": written > 0,
+        "per_etf": per_etf,
+        "written": written,
+        "message": (
+            f"新增 {written} 条持有人记录" if written
+            else synced.get("message") or "无新增披露记录"
+        ),
+    }
+
+
+@app.get("/api/finance/etf-holdings")
+async def finance_etf_holdings_get(
+    thscode: str = Query(..., description="ETF 代码，6 位裸码或带后缀，如 510300"),
+) -> Dict[str, Any]:
+    """读某只 ETF 的披露持有人，按报告期倒序、同期按占比降序。
+
+    **只读本地 SQLite，不发外网请求**。无数据返回 `{ok: true, items: [], message}`
+    而不是 KeyError —— 空结果是最常见的正常路径（该基金还没披露定期报告）。
+
+    `status` 三态：verified（占比与份额总量对得上 ±5%）/ disputed（对不上，
+    保留原始值）/ pending（缺交叉数据）。
+    """
+    from finance_panel import store as panel_store
+
+    # 代码归一：接受 "510300" 与 "510300.SH" 两种写法。
+    code = thscode.strip()
+    bare = code.split(".")[0]
+
+    try:
+        items = panel_store.query_holdings(bare)
+        if not items:
+            items = panel_store.query_holdings(code)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("读取披露持有人失败: %s", exc)
+        return {"ok": False, "items": [], "message": f"读取本地披露数据失败: {exc}"}
+
+    return {
+        "ok": True,
+        "items": items,
+        "message": None if items else "该 ETF 尚无已抽取的披露持有人记录（先跑 sync）",
+    }
