@@ -61,6 +61,12 @@ POST /query/
 - **行数硬上限** `max_rows`（默认 100000）。`indicators.duckdb` 有 12GB，
   一条 `SELECT *` 就能把进程撑爆。
 - **`WEKNORA_PY_SERVICE_API_KEY`** 设置后需 `Authorization: Bearer <key>`。
+- **读到写到一半的库文件 = 503，不是 400**。宿主机 ETL（`indicators_sync.py` /
+  `daily_sync`）写库时，容器里的长驻连接可能在某次 checkpoint 中间被换掉，读到
+  写到一半的元数据块（`Serialization Error: Failed to deserialize: field id
+  mismatch, expected: N, got: M`）。`datasources/duckdb_source.py` 会**换一条连接
+  重试**（最多 `CORRUPTION_RETRIES`，只对这类错误，笔误不动连接）；仍失败才把
+  503 交出去，并在消息里说明是 ETL 写盘中间态 —— 重试即可，不要去改 SQL。
 
 ### `zettaranc` 三兄弟
 

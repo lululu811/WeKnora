@@ -28,6 +28,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator
 
 from datasources.cache import stable_hash
+from datasources.duckdb_source import DuckDBCorruptReadError
 
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO").upper(),
@@ -756,6 +757,11 @@ async def query_duckdb(
 
     try:
         rows = await source.execute(bounded, request.params or None)
+    except DuckDBCorruptReadError as exc:
+        # 读到写到一半的库文件 = 服务端状态问题（宿主机 ETL 正在写这个库），
+        # 不是调用方 SQL 的问题 —— 4xx 会把调用方（含模型）引向改 SQL 的错方向。
+        logger.warning("底层库正在被写入 db=%s: %s", request.db, exc)
+        raise fail(503, str(exc)) from exc
     except Exception as exc:
         logger.warning("查询失败 db=%s: %s", request.db, exc)
         raise fail(400, f"查询失败：{exc}") from exc

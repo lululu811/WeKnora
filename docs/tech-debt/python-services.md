@@ -78,6 +78,31 @@
 
 ---
 
+### [S1] 宿主机 ETL 写 `.duckdb` 的同时容器内服务在读它：bind mount 不传递文件锁，读到写到一半的元数据
+
+- **位置**：`python-service/datasources/duckdb_source.py`（`maybe_reopen` / `_swap_connection` / `_reopen_broken`）、`~/.hithink-finance/scripts/indicators_sync.sh` → `/Users/chenlei/007_DB/a-stock/scripts/indicators_sync.py`（宿主机常驻写入）、`docker-compose.yml:1090`（`${HITHINK_DB_DIR}:/data/hithink:ro`）
+- **证据**（2026-10-08 实测，`indicators_sync.py` PID 15568 持有写连接 3 小时以上）：
+  1. **锁不跨挂载点**。宿主机上再开一条只读连接会被 DuckDB 挡住：
+     ```
+     IO Error: Could not set lock on file ".../indicators.duckdb": Conflicting lock is held in ... (PID 15568)
+     ```
+     同一个文件在容器里 `duckdb.connect(path, read_only=True)` **静默成功** —— 因为 Docker Desktop 的 bind mount 不传递 POSIX 锁，DuckDB 的"单写者"前提在这条路径上不成立。
+  2. **服务读到写到一半的元数据**。`/query/` 打 `indicators` 的数据查询全量 400：
+     ```
+     查询失败：Serialization Error: Failed to deserialize: field id mismatch, expected: 102, got: 65535
+     ```
+     同一时刻容器里新起的进程、以及另一个新起的 uvicorn 进程查同一个文件**都正常**。
+  3. **旧连接换不掉，是因为同一进程内实例被复用**。`duckdb.connect(path)` 对同一路径返回**同一份 DatabaseInstance**，只要该路径上还有一条连接开着。实测：保持一条只读连接常开，宿主把表从 3 行重写成 200 万行，同进程里新开的连接仍然读到 **3 行**；把该路径的连接全部关掉后再开，才读到 200 万行。（此前的 `_reopen_broken` 是"先开新、成功后再关旧"，所以每次重试都接进那份坏实例 —— 40 次重试 40 次失败，直到进程重启。）
+  4. **`os.stat` 在容器里不可靠**：同一容器内 `stat` 报的 mtime 比宿主滞后 31 分钟，于是"文件变了就重开"的探测在 bind mount 上基本不触发，坏连接会一直坏到进程重启。
+- **影响**：`indicators` 上任何触到数据块的查询（选股、单票指标、形态）全部失败，且**不会自愈**，必须重启 python-service；反过来，只读快照被钉住时它还会**静默返回陈旧数据**（实测读到冻结的 600 万行快照），对研究栈来说是比报错更糟的失败模式。ETL 每跑一次就复发一次。
+- **修复**：
+  1. 已做（`duckdb_source.py`）：坏连接必须**先关旧再开新**（丢掉实例才能丢缓存），配 3 次递增退避重试（0.5/1.0/1.5s，仍在 Go 侧 10s 超时内），仍失败才抛 `DuckDBCorruptReadError`，`/query/` 映射成 503（服务端状态，不要引导调用方改 SQL）。回归测试见 `tests/unit/test_duckdb_corrupt_read.py`。
+  2. **未做（真正的根治）**：不要让另一个进程在服务读的同时改写同一个库。二选一 —— ETL 产出**新文件再 rename**（读者要么继续读旧 inode、要么读到完整新文件，不存在中间态），或者让 ETL 与服务处在同一个锁可见域（同容器/同宿主）。
+  3. 不要再依赖 `os.stat` 判断"库有没有被重算过"：bind mount 上它的语义不成立；要探测新鲜度得读文件头（前 4KB）而不是看属性。
+- **工作量**：S（服务侧已改完），根治需要动 ETL 的落盘方式（M）
+
+---
+
 ### [S2] `zettaranc` 风险筛选复刻 `period` 陷阱，实测取到 4 年前的资产负债表
 
 - **位置**：`python-service/zettaranc/filters.py:124-143`（`build_risk_filter_sql`）、`python-service/zettaranc/filters.py:146-160`（`build_profit_filter_sql`）；正确写法见 `python-service/halo/reconcile.py:203-233`
