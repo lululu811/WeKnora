@@ -564,22 +564,13 @@ triggers:
 # ---------------------------------------------------------------------------
 views:
   main_presets:
+    # 唯一的主图模式。历史上的「战法+MA / 传统MA / BOLL」三个模式已移除
+    # （2026-10-09）：主图固定为战法核心线 + 唐奇安通道，不再提供模式切换，
+    # 工具栏的主图按钮组因此只剩这一个入口。
     - id: zettaranc
       label: 双线+BBI
       hint: 战法核心主图：快线 DEMA10 + 大哥线 LongBBI(14/28/57/114) + BBI牵牛绳(3/6/12/24)，常驻叠加唐奇安通道(20)。双线判断多空节奏，牵牛绳是多空分界，唐奇安标出 20 日高低点
       indicators: [Z_MAIN, Z_DONCHIAN]
-    - id: all
-      label: 战法+MA
-      hint: 战法核心线 + 传统 MA5/10/20 + 唐奇安通道(20)。给短期均线做参考，适合看价格与短期成本的相对位置
-      indicators: [MA, Z_MAIN, Z_DONCHIAN]
-    - id: ma
-      label: 传统MA
-      hint: 传统均线 MA5/10/20/60/120/250 + 唐奇安通道(20)，不叠加战法线。最基础的看图方式
-      indicators: [MA, Z_SIGNALS, Z_DONCHIAN]
-    - id: boll
-      label: BOLL
-      hint: 布林带 BOLL(20,2) + 战法信号层 + 唐奇安通道(20)。价格触上轨偏强、触下轨偏弱，带宽收窄常预示变盘
-      indicators: [BOLL, Z_SIGNALS, Z_DONCHIAN]
   sub_presets:
     - id: MACD_VOL_KDJ_BRICK
       label: 经典四合一 (默认)

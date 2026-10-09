@@ -657,36 +657,6 @@ INDICATOR_META: Dict[str, Any] = {
         "Z_MAIN",
         "Z_DONCHIAN"
       ]
-    },
-    {
-      "id": "all",
-      "label": "战法+MA",
-      "hint": "战法核心线 + 传统 MA5/10/20 + 唐奇安通道(20)。给短期均线做参考，适合看价格与短期成本的相对位置",
-      "indicators": [
-        "MA",
-        "Z_MAIN",
-        "Z_DONCHIAN"
-      ]
-    },
-    {
-      "id": "ma",
-      "label": "传统MA",
-      "hint": "传统均线 MA5/10/20/60/120/250 + 唐奇安通道(20)，不叠加战法线。最基础的看图方式",
-      "indicators": [
-        "MA",
-        "Z_SIGNALS",
-        "Z_DONCHIAN"
-      ]
-    },
-    {
-      "id": "boll",
-      "label": "BOLL",
-      "hint": "布林带 BOLL(20,2) + 战法信号层 + 唐奇安通道(20)。价格触上轨偏强、触下轨偏弱，带宽收窄常预示变盘",
-      "indicators": [
-        "BOLL",
-        "Z_SIGNALS",
-        "Z_DONCHIAN"
-      ]
     }
   ],
   "subPresets": [

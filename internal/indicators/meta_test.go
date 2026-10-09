@@ -268,8 +268,8 @@ func TestDuckDBColumnsMatchTheColumnNamesOnDisk(t *testing.T) {
 
 func TestViewPresets(t *testing.T) {
 	reg, _ := loadRepoRegistry(t)
-	if len(reg.MainPresets()) != 4 {
-		t.Errorf("main_presets = %d, want 4", len(reg.MainPresets()))
+	if len(reg.MainPresets()) != 1 {
+		t.Errorf("main_presets = %d, want 1（2026-10-09 起主图只保留「双线+BBI」）", len(reg.MainPresets()))
 	}
 	if len(reg.SubPresets()) != 6 {
 		t.Errorf("sub_presets = %d, want 6", len(reg.SubPresets()))
@@ -282,8 +282,8 @@ func TestViewPresets(t *testing.T) {
 	if len(first.Indicators) != 2 || first.Indicators[0] != "Z_MAIN" || first.Indicators[1] != "Z_DONCHIAN" {
 		t.Errorf("zettaranc 模式 = %v, want [Z_MAIN Z_DONCHIAN]", first.Indicators)
 	}
-	// 唐奇安通道是「默认不需要选择」的常驻叠加层：必须在**每一个**主图模式里，
-	// 否则切到传统MA/BOLL 它就消失，用户又得去别处把它找回来。
+	// 唐奇安通道是「默认不需要选择」的常驻叠加层：主图模式即使将来再增删，
+	// 它也必须出现在**每一个**模式里，否则用户又要去别处把它找回来。
 	for _, v := range reg.MainPresets() {
 		found := false
 		for _, id := range v.Indicators {
