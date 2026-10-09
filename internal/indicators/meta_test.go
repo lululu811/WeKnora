@@ -34,17 +34,18 @@ func TestLoadRepoRegistry(t *testing.T) {
 // in the frontend (or dropping one) must fail here.
 func mustList() []string {
 	return []string{
-		"Z_MAIN",    // composite
-		"Z_SIGNALS", // overlay
-		"ZG_WHITE",  //
-		"DG_YELLOW", //
-		"Z_BBI",     //
-		"Z_VOL",     //
-		"Z_MACD",    //
-		"Z_KDJ",     //
-		"ZX_BRICK",  //
-		"Z_BRICK",   // legacy alias of ZX_BRICK
-		"Z_PCT_RET", //
+		"Z_MAIN",     // composite
+		"Z_SIGNALS",  // overlay
+		"ZG_WHITE",   //
+		"DG_YELLOW",  //
+		"Z_BBI",      //
+		"Z_DONCHIAN", // 唐奇安通道：常驻全部主图模式的默认叠加层
+		"Z_VOL",      //
+		"Z_MACD",     //
+		"Z_KDJ",      //
+		"ZX_BRICK",   //
+		"Z_BRICK",    // legacy alias of ZX_BRICK
+		"Z_PCT_RET",  //
 	}
 }
 
@@ -139,6 +140,7 @@ func TestPeriodsAreTheOnesTheStackAlreadyUses(t *testing.T) {
 		{"ZG_WHITE", []int{10}},
 		{"DG_YELLOW", []int{14, 28, 57, 114}},
 		{"Z_BBI", []int{3, 6, 12, 24}},
+		{"Z_DONCHIAN", []int{20}},
 		{"Z_VOL", []int{5, 10}},
 		{"Z_MACD", []int{12, 26, 9}},
 		{"Z_KDJ", []int{9, 3, 3}},
@@ -184,6 +186,10 @@ func TestSeriesParamsArePinned(t *testing.T) {
 		{"ZG_WHITE", map[string][]int{"zg_white": {10}}},
 		{"DG_YELLOW", map[string][]int{"dg_yellow": {14, 28, 57, 114}}},
 		{"Z_BBI", map[string][]int{"bbi": {3, 6, 12, 24}}},
+		{"Z_DONCHIAN", map[string][]int{
+			"donchian_upper": {20},
+			"donchian_lower": {20},
+		}},
 		{"Z_MACD", map[string][]int{
 			// key 是 series 名（画布上的线），不是 DuckDB 列 alias ——
 			// hist 那条线的 key 叫 macd，alias 才叫 macd_hist。
@@ -273,8 +279,22 @@ func TestViewPresets(t *testing.T) {
 		t.Errorf("默认主图模式 = %q, want %q", reg.MainPresets()[0].ID, "zettaranc")
 	}
 	first := reg.MainPresets()[0]
-	if len(first.Indicators) != 1 || first.Indicators[0] != "Z_MAIN" {
-		t.Errorf("zettaranc 模式 = %v, want [Z_MAIN]", first.Indicators)
+	if len(first.Indicators) != 2 || first.Indicators[0] != "Z_MAIN" || first.Indicators[1] != "Z_DONCHIAN" {
+		t.Errorf("zettaranc 模式 = %v, want [Z_MAIN Z_DONCHIAN]", first.Indicators)
+	}
+	// 唐奇安通道是「默认不需要选择」的常驻叠加层：必须在**每一个**主图模式里，
+	// 否则切到传统MA/BOLL 它就消失，用户又得去别处把它找回来。
+	for _, v := range reg.MainPresets() {
+		found := false
+		for _, id := range v.Indicators {
+			if id == "Z_DONCHIAN" {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("主图模式 %s 缺少 Z_DONCHIAN（唐奇安通道应常驻所有主图模式）", v.ID)
+		}
 	}
 	// 默认副图
 	if reg.SubPresets()[0].ID != "MACD_VOL_KDJ_BRICK" {

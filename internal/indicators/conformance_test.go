@@ -344,6 +344,31 @@ func refPctRet(closes []float64, n int) []*float64 {
 	return out
 }
 
+// refDonchian is the spec Donchian channel: the N-bar highest high and lowest
+// low over a window that **includes the current bar** (HHV(HIGH,N) / LLV(LOW,N)),
+// null until the window is full. The screener's volatility_donchian_20_* columns
+// use the same convention; they are not compared here (the workbench computes in
+// the browser), but the period and window semantics must stay identical, or
+// "唐奇安突破" would mean two different things on the chart and in the scan.
+func refDonchian(bars []Bar, n int) (upper, lower []*float64) {
+	m := len(bars)
+	upper = make([]*float64, m)
+	lower = make([]*float64, m)
+	for i := 0; i < m; i++ {
+		if i < n-1 {
+			continue
+		}
+		hh, ll := math.Inf(-1), math.Inf(1)
+		for x := i - n + 1; x <= i; x++ {
+			hh = math.Max(hh, bars[x].High)
+			ll = math.Min(ll, bars[x].Low)
+		}
+		ru, rl := round2(hh), round2(ll)
+		upper[i], lower[i] = &ru, &rl
+	}
+	return upper, lower
+}
+
 // refVolumeMA is the rolling mean of volume, null until the window is full.
 func refVolumeMA(vols []float64, n int) []*float64 {
 	out := make([]*float64, len(vols))
@@ -685,6 +710,7 @@ func TestCrossStackConformance(t *testing.T) {
 		params("Z_MACD", "short"), params("Z_MACD", "long"), params("Z_MACD", "signal"))
 	kdjK, kdjD, kdjJ := refKDJ(bars,
 		params("Z_KDJ", "n"), params("Z_KDJ", "k_smooth"), params("Z_KDJ", "d_smooth"))
+	donchianUpper, donchianLower := refDonchian(bars, params("Z_DONCHIAN", "period"))
 
 	want := map[string]map[string][]*float64{
 		"ZG_WHITE":  {"zg_white": refDEMA(closes, seriesParams("ZG_WHITE", 0)[0])},
@@ -696,6 +722,12 @@ func TestCrossStackConformance(t *testing.T) {
 		},
 		"Z_MACD": {"dif": macdDif, "dea": macdDea, "macd": macdHist},
 		"Z_KDJ":  {"k": kdjK, "d": kdjD, "j": kdjJ},
+		// Z_DONCHIAN — 唐奇安通道(20)。上下轨是主图叠加的默认常驻指标，
+		// Go 参照与前端 oracle 逐点对照（窗口含当根、前 19 根为 null）。
+		"Z_DONCHIAN": {
+			"donchian_upper": donchianUpper,
+			"donchian_lower": donchianLower,
+		},
 		// Z_RSL → Z_PCT_RET（2026-10-01）。此前 id 叫 RSL 却画的是百分比
 		// 涨跌幅，而 DuckDB 的 zettaranc_rsl_rank_* 才是真正的相对强弱排名
 		// ——同名不同义。改名后 series key 也随之改为 pct_ret_short/long。

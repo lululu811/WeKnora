@@ -300,6 +300,49 @@ export const INDICATOR_META: IndicatorRegistryMeta = {
       }
     },
     {
+      id: "Z_DONCHIAN",
+      shortName: "唐奇安通道",
+      kind: "composite",
+      panel: "main",
+      formulaVersion: "v1",
+      precision: 2,
+      defaultEnabled: true,
+      summary: "唐奇安通道(20)：20 日最高价上轨 + 20 日最低价下轨。收盘站上上轨偏多、跌破下轨偏空",
+      params: [
+        {
+          name: "period",
+          value: 20
+        }
+      ],
+      series: [
+        {
+          key: "donchian_upper",
+          label: "上轨(20)",
+          formula: "DONCHIAN_UPPER",
+          type: "line",
+          precision: 2,
+          color: "auxSky",
+          lineWidth: 1.2,
+          params: [20]
+        },
+        {
+          key: "donchian_lower",
+          label: "下轨(20)",
+          formula: "DONCHIAN_LOWER",
+          type: "line",
+          precision: 2,
+          color: "auxSky",
+          lineWidth: 1.2,
+          params: [20]
+        }
+      ],
+      storage: {
+        backend: "frontend",
+        duckdbView: "",
+        columns: []
+      }
+    },
+    {
       id: "Z_VOL",
       shortName: "成交量",
       kind: "subchart",
@@ -597,36 +640,40 @@ export const INDICATOR_META: IndicatorRegistryMeta = {
     {
       id: "zettaranc",
       label: "双线+BBI",
-      hint: "战法核心主图：快线 DEMA10 + 大哥线 LongBBI(14/28/57/114) + BBI牵牛绳(3/6/12/24)。双线判断多空节奏，牵牛绳是多空分界",
+      hint: "战法核心主图：快线 DEMA10 + 大哥线 LongBBI(14/28/57/114) + BBI牵牛绳(3/6/12/24)，常驻叠加唐奇安通道(20)。双线判断多空节奏，牵牛绳是多空分界，唐奇安标出 20 日高低点",
       indicators: [
-        "Z_MAIN"
+        "Z_MAIN",
+        "Z_DONCHIAN"
       ]
     },
     {
       id: "all",
       label: "战法+MA",
-      hint: "战法核心线 + 传统 MA5/10/20。给短期均线做参考，适合看价格与短期成本的相对位置",
+      hint: "战法核心线 + 传统 MA5/10/20 + 唐奇安通道(20)。给短期均线做参考，适合看价格与短期成本的相对位置",
       indicators: [
         "MA",
-        "Z_MAIN"
+        "Z_MAIN",
+        "Z_DONCHIAN"
       ]
     },
     {
       id: "ma",
       label: "传统MA",
-      hint: "纯传统均线 MA5/10/20/60/120/250，不叠加战法线。最基础的看图方式",
+      hint: "传统均线 MA5/10/20/60/120/250 + 唐奇安通道(20)，不叠加战法线。最基础的看图方式",
       indicators: [
         "MA",
-        "Z_SIGNALS"
+        "Z_SIGNALS",
+        "Z_DONCHIAN"
       ]
     },
     {
       id: "boll",
       label: "BOLL",
-      hint: "布林带 BOLL(20,2) + 战法信号层。价格触上轨偏强、触下轨偏弱，带宽收窄常预示变盘",
+      hint: "布林带 BOLL(20,2) + 战法信号层 + 唐奇安通道(20)。价格触上轨偏强、触下轨偏弱，带宽收窄常预示变盘",
       indicators: [
         "BOLL",
-        "Z_SIGNALS"
+        "Z_SIGNALS",
+        "Z_DONCHIAN"
       ]
     }
   ],
@@ -691,12 +738,13 @@ export const INDICATORS_BY_ID: Record<string, IndicatorMeta> = {
   ZG_WHITE: INDICATOR_META.indicators[2],
   DG_YELLOW: INDICATOR_META.indicators[3],
   Z_BBI: INDICATOR_META.indicators[4],
-  Z_VOL: INDICATOR_META.indicators[5],
-  Z_MACD: INDICATOR_META.indicators[6],
-  Z_KDJ: INDICATOR_META.indicators[7],
-  ZX_BRICK: INDICATOR_META.indicators[8],
-  Z_BRICK: INDICATOR_META.indicators[9],
-  Z_PCT_RET: INDICATOR_META.indicators[10],
+  Z_DONCHIAN: INDICATOR_META.indicators[5],
+  Z_VOL: INDICATOR_META.indicators[6],
+  Z_MACD: INDICATOR_META.indicators[7],
+  Z_KDJ: INDICATOR_META.indicators[8],
+  ZX_BRICK: INDICATOR_META.indicators[9],
+  Z_BRICK: INDICATOR_META.indicators[10],
+  Z_PCT_RET: INDICATOR_META.indicators[11],
 };
 
 /** All registered indicators, in config/indicators.yaml declaration order. */

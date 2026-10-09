@@ -15,6 +15,9 @@
  * 3. ZG_WHITE (白线): 10日 DEMA，主图叠加
  * 4. DG_YELLOW (黄线): 多空线 14/28/57/114，主图叠加
  * 5. Z_BBI (牵牛绳): 多空平衡均线 (3, 6, 12, 24)，主图叠加
+ * 5b. Z_DONCHIAN (唐奇安通道): 20 日最高价上轨 + 20 日最低价下轨，主图叠加
+ *     —— 默认常驻全部主图模式（indicators.yaml 的 views.main_presets），
+ *     不是可选指标，工具栏没有它的按钮。
  * 6. Z_VOL (经典同花顺成交量): 红绿量柱 + MA5 (黄) + MA10 (蓝) 均量线
  * 7. Z_MACD (同花顺风 MACD): DIFF + DEA + 柱状图 + [金叉]/[死叉] 实时胶囊徽章
  * 8. Z_KDJ (同花顺风 KDJ): K/D/J 三线走势 + [金叉]/[死叉] 实时胶囊徽章
@@ -221,6 +224,38 @@ export function calcKDJ(dataList: KLineData[], n?: number) {
       k: Number(k.toFixed(2)),
       d: Number(d.toFixed(2)),
       j: Number(jVal.toFixed(2)),
+    });
+  }
+  return result;
+}
+
+// 8. 唐奇安通道 (Donchian Channel) —— 20 日最高价上轨 + 20 日最低价下轨
+//
+// 窗口**含当根**：上轨 = HHV(HIGH, N)、下轨 = LLV(LOW, N)，与通达信及库侧
+// volatility_donchian_20_* 同口径。窗口未满时返回 null（与 calcSMA 一致），
+// 不做"从第一根就出值"的降级 —— 那会让前 19 根的通道看起来像有效信号。
+// 跨栈对照见 conformance_test.go 的 refDonchian（Go 参照实现）。
+export function calcDonchian(
+  dataList: KLineData[],
+  period: number,
+): Array<{ upper: number | null; lower: number | null }> {
+  const result: Array<{ upper: number | null; lower: number | null }> = [];
+  for (let i = 0; i < dataList.length; i++) {
+    if (i < period - 1) {
+      result.push({ upper: null, lower: null });
+      continue;
+    }
+    let high = -Infinity;
+    let low = Infinity;
+    for (let j = i - period + 1; j <= i; j++) {
+      const h = dataList[j]?.high;
+      const l = dataList[j]?.low;
+      if (typeof h === 'number' && Number.isFinite(h)) high = Math.max(high, h);
+      if (typeof l === 'number' && Number.isFinite(l)) low = Math.min(low, l);
+    }
+    result.push({
+      upper: Number.isFinite(high) ? Number(high.toFixed(2)) : null,
+      lower: Number.isFinite(low) ? Number(low.toFixed(2)) : null,
     });
   }
   return result;
@@ -563,6 +598,29 @@ export function registerZettarancIndicators() {
       calc: (dataList: any) => {
         const bbi = calcBBI(dataList);
         return dataList.map((_: any, i: number) => ({ [zBbi.series[0].key]: bbi[i] }));
+      },
+    } as any);
+
+    // 3-b. Z_DONCHIAN —— 唐奇安通道(20)：上轨 HHV(HIGH,20) + 下轨 LLV(LOW,20)。
+    //      常驻全部主图模式（YAML 的 views.main_presets 每个都引用它），
+    //      没有工具栏按钮 —— 用户不需要选择，打开就在。
+    const zDonchian = indicatorMeta('Z_DONCHIAN');
+    const donchianPeriod = zDonchian.series[0].params[0];
+    const [donchianUpperKey, donchianLowerKey] = zDonchian.series.map((s) => s.key);
+    registerIndicator({
+      name: zDonchian.id,
+      shortName: zDonchian.shortName,
+      series: seriesOf(zDonchian.panel),
+      calcParams: zDonchian.calcParams ?? [],
+      precision: zDonchian.precision,
+      figures: figuresFrom('Z_DONCHIAN'),
+      styles: { lines: lineStyles('Z_DONCHIAN') },
+      calc: (dataList: any) => {
+        const channel = calcDonchian(dataList, donchianPeriod);
+        return dataList.map((_: any, i: number) => ({
+          [donchianUpperKey]: channel[i].upper,
+          [donchianLowerKey]: channel[i].lower,
+        }));
       },
     } as any);
 

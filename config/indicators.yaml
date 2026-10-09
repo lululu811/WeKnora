@@ -189,6 +189,43 @@ indicators:
         - alias: ztr_bbi
           column: zettaranc_bbi
 
+  - id: Z_DONCHIAN
+    short_name: 唐奇安通道
+    # composite 而不是 line：上下轨是两条**互相独立**的公式（HHV(HIGH,20) /
+    # LLV(LOW,20)），一起叠在主图上 —— 与 Z_MAIN 同一种结构。
+    kind: composite
+    panel: main
+    formula_version: v1
+    precision: 2
+    # 默认常驻：它出现在 views.main_presets 的**全部**模式里（见文件末尾），
+    # 不需要用户选择，也不新增工具栏按钮。
+    default_enabled: true
+    summary: 唐奇安通道(20)：20 日最高价上轨 + 20 日最低价下轨。收盘站上上轨偏多、跌破下轨偏空
+    params:
+      - { name: period, value: 20 }
+    series:
+      - key: donchian_upper
+        label: 上轨(20)
+        formula: DONCHIAN_UPPER
+        precision: 2
+        color: auxSky
+        line_width: 1.2
+        params: [20]
+      - key: donchian_lower
+        label: 下轨(20)
+        formula: DONCHIAN_LOWER
+        precision: 2
+        color: auxSky
+        line_width: 1.2
+        params: [20]
+    storage:
+      # 与库侧 volatility_donchian_20_upper/lower 同口径（窗口含当根），但工作台
+      # 不读那些列：通道在浏览器里现算（与其余工作台指标一致），口径一致由
+      # conformance_test.go 的 refDonchian 逐点对照保证，而不是靠预计算列。
+      backend: frontend
+      duckdb_view: ""
+      columns: []
+
   # ---------------------------------------------------------------- 副图 ----
   - id: Z_VOL
     short_name: 成交量
@@ -529,20 +566,20 @@ views:
   main_presets:
     - id: zettaranc
       label: 双线+BBI
-      hint: 战法核心主图：快线 DEMA10 + 大哥线 LongBBI(14/28/57/114) + BBI牵牛绳(3/6/12/24)。双线判断多空节奏，牵牛绳是多空分界
-      indicators: [Z_MAIN]
+      hint: 战法核心主图：快线 DEMA10 + 大哥线 LongBBI(14/28/57/114) + BBI牵牛绳(3/6/12/24)，常驻叠加唐奇安通道(20)。双线判断多空节奏，牵牛绳是多空分界，唐奇安标出 20 日高低点
+      indicators: [Z_MAIN, Z_DONCHIAN]
     - id: all
       label: 战法+MA
-      hint: 战法核心线 + 传统 MA5/10/20。给短期均线做参考，适合看价格与短期成本的相对位置
-      indicators: [MA, Z_MAIN]
+      hint: 战法核心线 + 传统 MA5/10/20 + 唐奇安通道(20)。给短期均线做参考，适合看价格与短期成本的相对位置
+      indicators: [MA, Z_MAIN, Z_DONCHIAN]
     - id: ma
       label: 传统MA
-      hint: 纯传统均线 MA5/10/20/60/120/250，不叠加战法线。最基础的看图方式
-      indicators: [MA, Z_SIGNALS]
+      hint: 传统均线 MA5/10/20/60/120/250 + 唐奇安通道(20)，不叠加战法线。最基础的看图方式
+      indicators: [MA, Z_SIGNALS, Z_DONCHIAN]
     - id: boll
       label: BOLL
-      hint: 布林带 BOLL(20,2) + 战法信号层。价格触上轨偏强、触下轨偏弱，带宽收窄常预示变盘
-      indicators: [BOLL, Z_SIGNALS]
+      hint: 布林带 BOLL(20,2) + 战法信号层 + 唐奇安通道(20)。价格触上轨偏强、触下轨偏弱，带宽收窄常预示变盘
+      indicators: [BOLL, Z_SIGNALS, Z_DONCHIAN]
   sub_presets:
     - id: MACD_VOL_KDJ_BRICK
       label: 经典四合一 (默认)

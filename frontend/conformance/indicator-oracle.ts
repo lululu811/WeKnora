@@ -21,6 +21,7 @@ import {
   calcBBI,
   calcSMA,
   calcKDJ,
+  calcDonchian,
   calcMACD,
   calcPctRet,
   calcVOL,
@@ -128,6 +129,15 @@ async function run() {
       { key: 'j', values: kdj.map((v) => v.j) },
     ];
   })();
+
+  // Z_DONCHIAN — 唐奇安通道(20)：上轨 HHV(HIGH,20) + 下轨 LLV(LOW,20)。
+  // 窗口含当根；前 19 根为 null（Go 侧 refDonchian 用同一约定）。
+  const donchianSeries = indicatorMeta('Z_DONCHIAN').series;
+  const donchian = calcDonchian(bars, seriesParams('Z_DONCHIAN', 0)[0]);
+  result.indicators.Z_DONCHIAN = [
+    { key: donchianSeries[0].key, values: donchian.map((v) => v.upper) },
+    { key: donchianSeries[1].key, values: donchian.map((v) => v.lower) },
+  ];
 
   // Z_PCT_RET — 3 日 / 21 日两个周期的**涨跌幅**（2026-10-01 由 Z_RSL 改名）。
   const [retShort, retLong] = params('Z_PCT_RET');
