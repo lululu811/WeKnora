@@ -379,6 +379,35 @@ indicators:
       duckdb_view: ""
       columns: []
 
+  - id: Z_CMF
+    short_name: 资金流
+    kind: subchart
+    panel: sub
+    formula_version: v1
+    precision: 3
+    default_enabled: false
+    summary: 蔡金资金流 CMF(20)：量加权的多空力度，>0 资金流入、<0 资金流出
+    params:
+      - { name: period, value: 20 }
+    series:
+      - key: cmf
+        label: CMF(20)
+        formula: CMF
+        type: line
+        precision: 3
+        color: purple
+        line_width: 1.5
+        params: [20]
+    storage:
+      # 口径与库侧 volume_cmf_20 基本一致（MFM×VOL 的 20 日滚动和 ÷ VOL 的
+      # 20 日滚动和）。唯一已知微差是**平盘 bar**（一字板 H==L）：这里取
+      # MFM=0（StockCharts 通行口径，图上无断点），库侧 pandas-ta 在含平盘的
+      # 窗口可能给 NaN。工作台不读库列，图表口径由 conformance_test.go 的
+      # refCMF 逐点对照保证；微差不影响 agent/信号层读取的那一列。
+      backend: frontend
+      duckdb_view: ""
+      columns: []
+
   - id: ZX_BRICK
     short_name: ZX砖型图
     kind: subchart
@@ -580,14 +609,18 @@ views:
       label: 成交量
       hint: 成交量柱 + MA5/MA10 均量线。放量上涨代表资金进场，缩量回调代表抛压不重。
       indicators: [Z_VOL]
-    - id: Z_MACD
-      label: MACD
-      hint: MACD (12,26,9)。DIF 上穿 DEA 为金叉、下穿为死叉，柱状体表示动能变化速度。
-      indicators: [Z_MACD]
-    - id: Z_KDJ
-      label: KDJ
-      hint: KDJ 随机指标 (9,3,3)。K/D 在 20 以下为超卖区、80 以上为超买区，金叉死叉会打标记。
-      indicators: [Z_KDJ]
+    - id: DMI
+      label: DMI
+      hint: DMI(14,6)：PDI/MDI/ADX/ADXR 四线。ADX 上 25 说明趋势成立，PDI 上穿 MDI 为多头占优、下穿为空头占优；双线只回答方向，它回答力度。
+      indicators: [DMI]
+    - id: RSI
+      label: RSI
+      hint: RSI(6/12/24)：RSI6 低于 20 为超卖、高于 80 为超买。信号层「RSI6超卖/超买」看的就是这条线。
+      indicators: [RSI]
+    - id: Z_CMF
+      label: 资金流
+      hint: CMF(20) 蔡金资金流：量加权的多空力度，>0 资金流入、<0 流出，零轴即多空分界。信号层「CMF资金流入/流出」就是它。
+      indicators: [Z_CMF]
     - id: ZX_BRICK
       label: ZX砖型图
       hint: 仅砖型图，不带成交量。适合专注看多空节奏；减号标记回调、止字标记止跌。

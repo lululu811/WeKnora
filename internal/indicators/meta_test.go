@@ -43,6 +43,7 @@ func mustList() []string {
 		"Z_VOL",      //
 		"Z_MACD",     //
 		"Z_KDJ",      //
+		"Z_CMF",      // 蔡金资金流：副图「资金流」模式
 		"ZX_BRICK",   //
 		"Z_BRICK",    // legacy alias of ZX_BRICK
 		"Z_PCT_RET",  //
@@ -104,7 +105,7 @@ func TestCompositeAndPanels(t *testing.T) {
 		}
 	}
 
-	for _, id := range []string{"Z_VOL", "Z_MACD", "Z_KDJ", "ZX_BRICK", "Z_BRICK", "Z_PCT_RET"} {
+	for _, id := range []string{"Z_VOL", "Z_MACD", "Z_KDJ", "Z_CMF", "ZX_BRICK", "Z_BRICK", "Z_PCT_RET"} {
 		ind := reg.Get(id)
 		if ind == nil {
 			t.Fatalf("找不到 %s", id)
@@ -144,6 +145,7 @@ func TestPeriodsAreTheOnesTheStackAlreadyUses(t *testing.T) {
 		{"Z_VOL", []int{5, 10}},
 		{"Z_MACD", []int{12, 26, 9}},
 		{"Z_KDJ", []int{9, 3, 3}},
+		{"Z_CMF", []int{20}},
 		{"Z_PCT_RET", []int{3, 21}},
 		{"ZX_BRICK", []int{4}},
 		{"Z_BRICK", []int{4}},
@@ -202,6 +204,7 @@ func TestSeriesParamsArePinned(t *testing.T) {
 			"d": {9, 3, 3},
 			"j": {9, 3, 3},
 		}},
+		{"Z_CMF", map[string][]int{"cmf": {20}}},
 		{"Z_PCT_RET", map[string][]int{
 			"pct_ret_short": {3},
 			"pct_ret_long":  {21},
@@ -271,8 +274,8 @@ func TestViewPresets(t *testing.T) {
 	if len(reg.MainPresets()) != 1 {
 		t.Errorf("main_presets = %d, want 1（2026-10-09 起主图只保留「双线+BBI」）", len(reg.MainPresets()))
 	}
-	if len(reg.SubPresets()) != 6 {
-		t.Errorf("sub_presets = %d, want 6", len(reg.SubPresets()))
+	if len(reg.SubPresets()) != 7 {
+		t.Errorf("sub_presets = %d, want 7（2026-10-09 起：四合一/成交量/DMI/RSI/资金流/砖型图/涨跌幅）", len(reg.SubPresets()))
 	}
 	// 第一个主图模式必须是 Z_MAIN —— 它是默认模式。
 	if reg.MainPresets()[0].ID != "zettaranc" {

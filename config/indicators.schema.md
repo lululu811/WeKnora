@@ -55,7 +55,7 @@ separate, much larger project and is explicitly out of scope.
 |---|---|---|---|
 | `key` | string | yes | Field name emitted by the frontend `calc()` and consumed by klinecharts `figures`. |
 | `label` | string | yes | Tooltip label. |
-| `formula` | enum | yes | `DEMA` `LONGBBI` `BBI` `SMA` `EMA` `MACD_DIF` `MACD_DEA` `MACD_HIST` `KDJ_K` `KDJ_D` `KDJ_J` `PCT_RET` `VOLUME` `ZX_BRICK` `DONCHIAN_UPPER` `DONCHIAN_LOWER`. |
+| `formula` | enum | yes | `DEMA` `LONGBBI` `BBI` `SMA` `EMA` `MACD_DIF` `MACD_DEA` `MACD_HIST` `KDJ_K` `KDJ_D` `KDJ_J` `PCT_RET` `VOLUME` `ZX_BRICK` `DONCHIAN_UPPER` `DONCHIAN_LOWER` `CMF`. |
 | `type` | enum | no | `line` (default) or `bar`. |
 | `base_value` | number | no | Zero line for bars. Omit for lines. |
 | `precision` | int | yes | Per-series override; falls back to the indicator's `precision` when omitted. |

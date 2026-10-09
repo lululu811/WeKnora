@@ -148,6 +148,35 @@ func round2(v float64) float64 {
 	return out
 }
 
+// round3 is round2 at three decimals. Only CMF (precision 3) needs it, but it
+// has to reproduce the *same* ECMA-262 toFixed semantics — an intuitive
+// math.Round(v*1000)/1000 would reintroduce exactly the tie-break bug that
+// round2's comment documents.
+func round3(v float64) float64 {
+	r := new(big.Rat).SetFloat64(v)
+	r.Mul(r, big.NewRat(1000, 1))
+
+	neg := r.Sign() < 0
+	num := new(big.Int).Set(r.Num())
+	if neg {
+		num.Neg(num)
+	}
+	den := r.Denom()
+
+	q, rem := new(big.Int).QuoRem(num, den, new(big.Int))
+	twice := new(big.Int).Abs(rem)
+	twice.Lsh(twice, 1)
+	if twice.Cmp(den) >= 0 {
+		q.Add(q, big.NewInt(1))
+	}
+	if neg {
+		q.Neg(q)
+	}
+
+	out, _ := new(big.Rat).SetFrac(q, big.NewInt(1000)).Float64()
+	return out
+}
+
 // refEMA is the spec EMA: seed with the first close, k = 2/(n+1), recurse.
 // The recursion runs at full precision; only the emitted value is rounded.
 // intermediateRounded reproduces the stacks that feed the *rounded* output of
@@ -367,6 +396,39 @@ func refDonchian(bars []Bar, n int) (upper, lower []*float64) {
 		upper[i], lower[i] = &ru, &rl
 	}
 	return upper, lower
+}
+
+// refCMF is the spec Chaikin Money Flow: the n-bar sum of MFV divided by the
+// n-bar sum of volume, where MFM = ((C-L)-(H-C))/(H-L) and MFV = MFM*VOL.
+// Flat bars (H==L) take MFM=0 — the StockCharts convention — instead of 0/0.
+// Null until the window is full, or when the window's volume sums to zero;
+// matches calcCMF in indicators.ts including the missing-data guard.
+func refCMF(bars []Bar, n int) []*float64 {
+	m := len(bars)
+	out := make([]*float64, m)
+	mfv := make([]float64, m)
+	vols := make([]float64, m)
+	var sumMFV, sumVol float64
+	for i := 0; i < m; i++ {
+		b := bars[i]
+		mfm := 0.0
+		if rng := b.High - b.Low; rng > 0 {
+			mfm = ((b.Close - b.Low) - (b.High - b.Close)) / rng
+		}
+		mfv[i] = mfm * b.Volume
+		vols[i] = b.Volume
+		sumMFV += mfv[i]
+		sumVol += vols[i]
+		if i >= n {
+			sumMFV -= mfv[i-n]
+			sumVol -= vols[i-n]
+		}
+		if i >= n-1 && sumVol > 0 {
+			v := round3(sumMFV / sumVol)
+			out[i] = &v
+		}
+	}
+	return out
 }
 
 // refVolumeMA is the rolling mean of volume, null until the window is full.
@@ -711,6 +773,7 @@ func TestCrossStackConformance(t *testing.T) {
 	kdjK, kdjD, kdjJ := refKDJ(bars,
 		params("Z_KDJ", "n"), params("Z_KDJ", "k_smooth"), params("Z_KDJ", "d_smooth"))
 	donchianUpper, donchianLower := refDonchian(bars, params("Z_DONCHIAN", "period"))
+	cmf := refCMF(bars, params("Z_CMF", "period"))
 
 	want := map[string]map[string][]*float64{
 		"ZG_WHITE":  {"zg_white": refDEMA(closes, seriesParams("ZG_WHITE", 0)[0])},
@@ -728,6 +791,9 @@ func TestCrossStackConformance(t *testing.T) {
 			"donchian_upper": donchianUpper,
 			"donchian_lower": donchianLower,
 		},
+		// Z_CMF — 蔡金资金流(20)。副图「资金流」模式；Go 参照与前端 oracle
+		// 逐点对照（平盘 bar 取 MFM=0，窗口未满为 null）。
+		"Z_CMF": {"cmf": cmf},
 		// Z_RSL → Z_PCT_RET（2026-10-01）。此前 id 叫 RSL 却画的是百分比
 		// 涨跌幅，而 DuckDB 的 zettaranc_rsl_rank_* 才是真正的相对强弱排名
 		// ——同名不同义。改名后 series key 也随之改为 pct_ret_short/long。

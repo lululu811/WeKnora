@@ -22,6 +22,7 @@ import {
   calcSMA,
   calcKDJ,
   calcDonchian,
+  calcCMF,
   calcMACD,
   calcPctRet,
   calcVOL,
@@ -129,6 +130,11 @@ async function run() {
       { key: 'j', values: kdj.map((v) => v.j) },
     ];
   })();
+
+  // Z_CMF — 蔡金资金流(20)：MFM×VOL 的 20 日滚动和 ÷ VOL 的 20 日滚动和。
+  // 平盘 bar（H==L）取 MFM=0（StockCharts 口径），与 Go 侧 refCMF 一致。
+  const cmf = calcCMF(bars, seriesParams('Z_CMF', 0)[0]);
+  result.indicators.Z_CMF = [{ key: indicatorMeta('Z_CMF').series[0].key, values: cmf }];
 
   // Z_DONCHIAN — 唐奇安通道(20)：上轨 HHV(HIGH,20) + 下轨 LLV(LOW,20)。
   // 窗口含当根；前 19 根为 null（Go 侧 refDonchian 用同一约定）。

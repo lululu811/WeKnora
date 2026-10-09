@@ -522,6 +522,39 @@ export const INDICATOR_META: IndicatorRegistryMeta = {
       }
     },
     {
+      id: "Z_CMF",
+      shortName: "资金流",
+      kind: "subchart",
+      panel: "sub",
+      formulaVersion: "v1",
+      precision: 3,
+      defaultEnabled: false,
+      summary: "蔡金资金流 CMF(20)：量加权的多空力度，>0 资金流入、<0 资金流出",
+      params: [
+        {
+          name: "period",
+          value: 20
+        }
+      ],
+      series: [
+        {
+          key: "cmf",
+          label: "CMF(20)",
+          formula: "CMF",
+          type: "line",
+          precision: 3,
+          color: "purple",
+          lineWidth: 1.5,
+          params: [20]
+        }
+      ],
+      storage: {
+        backend: "frontend",
+        duckdbView: "",
+        columns: []
+      }
+    },
+    {
       id: "ZX_BRICK",
       shortName: "ZX砖型图",
       kind: "subchart",
@@ -668,19 +701,27 @@ export const INDICATOR_META: IndicatorRegistryMeta = {
       ]
     },
     {
-      id: "Z_MACD",
-      label: "MACD",
-      hint: "MACD (12,26,9)。DIF 上穿 DEA 为金叉、下穿为死叉，柱状体表示动能变化速度。",
+      id: "DMI",
+      label: "DMI",
+      hint: "DMI(14,6)：PDI/MDI/ADX/ADXR 四线。ADX 上 25 说明趋势成立，PDI 上穿 MDI 为多头占优、下穿为空头占优；双线只回答方向，它回答力度。",
       indicators: [
-        "Z_MACD"
+        "DMI"
       ]
     },
     {
-      id: "Z_KDJ",
-      label: "KDJ",
-      hint: "KDJ 随机指标 (9,3,3)。K/D 在 20 以下为超卖区、80 以上为超买区，金叉死叉会打标记。",
+      id: "RSI",
+      label: "RSI",
+      hint: "RSI(6/12/24)：RSI6 低于 20 为超卖、高于 80 为超买。信号层「RSI6超卖/超买」看的就是这条线。",
       indicators: [
-        "Z_KDJ"
+        "RSI"
+      ]
+    },
+    {
+      id: "Z_CMF",
+      label: "资金流",
+      hint: "CMF(20) 蔡金资金流：量加权的多空力度，>0 资金流入、<0 流出，零轴即多空分界。信号层「CMF资金流入/流出」就是它。",
+      indicators: [
+        "Z_CMF"
       ]
     },
     {
@@ -712,9 +753,10 @@ export const INDICATORS_BY_ID: Record<string, IndicatorMeta> = {
   Z_VOL: INDICATOR_META.indicators[6],
   Z_MACD: INDICATOR_META.indicators[7],
   Z_KDJ: INDICATOR_META.indicators[8],
-  ZX_BRICK: INDICATOR_META.indicators[9],
-  Z_BRICK: INDICATOR_META.indicators[10],
-  Z_PCT_RET: INDICATOR_META.indicators[11],
+  Z_CMF: INDICATOR_META.indicators[9],
+  ZX_BRICK: INDICATOR_META.indicators[10],
+  Z_BRICK: INDICATOR_META.indicators[11],
+  Z_PCT_RET: INDICATOR_META.indicators[12],
 };
 
 /** All registered indicators, in config/indicators.yaml declaration order. */

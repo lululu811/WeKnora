@@ -25,6 +25,7 @@
  * 10. Z_PCT_RET (区间涨跌幅): 3 日与 21 日**百分比涨跌幅**，副图曲线
  *     （2026-10-01 由 Z_RSL 改名 —— 它算的是涨跌幅；真正的 RSL 百分位排名
  *      在 DuckDB 的 zettaranc_rsl_rank_15 / _rank_105，两者不是同一个东西）
+ * 11. Z_CMF (资金流): 蔡金资金流 CMF(20)，副图单线 + 零轴虚线
  *
  * **四块砖不在这个文件里。** 它不画在 K 线上，是个四项多空状态评分。
  * 2026-10-01 从此处删除（calcFourBricksDetails 当时零调用方，是死代码），
@@ -257,6 +258,59 @@ export function calcDonchian(
       upper: Number.isFinite(high) ? Number(high.toFixed(2)) : null,
       lower: Number.isFinite(low) ? Number(low.toFixed(2)) : null,
     });
+  }
+  return result;
+}
+
+// 9. 蔡金资金流 CMF (Chaikin Money Flow) —— 量加权的多空力度
+//
+// MFM = ((CLOSE - LOW) - (HIGH - CLOSE)) / (HIGH - LOW)，MFV = MFM * VOLUME，
+// CMF = ΣMFV(20) / ΣVOL(20)。平盘 bar（HIGH == LOW，一字板）取 MFM = 0
+// （StockCharts 通行口径），而不是让 0/0 变成 NaN —— 图上不留洞。
+// 窗口未满、窗口内有缺数据、或 VOL 窗口和为 0 时返回 null（缺失不当 0 用）。
+// 跨栈对照见 conformance_test.go 的 refCMF（Go 参照实现）。
+export function calcCMF(dataList: KLineData[], period: number): Array<number | null> {
+  const result: Array<number | null> = [];
+  const mfv: number[] = [];
+  const vols: number[] = [];
+  const valid: boolean[] = [];
+  let sumMfv = 0;
+  let sumVol = 0;
+  let validCount = 0;
+  for (let i = 0; i < dataList.length; i++) {
+    const bar = dataList[i];
+    const high = bar?.high;
+    const low = bar?.low;
+    const close = bar?.close;
+    const volume = bar?.volume;
+    const isOk =
+      typeof high === 'number' && Number.isFinite(high) &&
+      typeof low === 'number' && Number.isFinite(low) &&
+      typeof close === 'number' && Number.isFinite(close) &&
+      typeof volume === 'number' && Number.isFinite(volume);
+    if (isOk) {
+      const range = high - low;
+      const mfm = range > 0 ? ((close - low) - (high - close)) / range : 0;
+      mfv.push(mfm * volume);
+      vols.push(volume);
+      sumMfv += mfm * volume;
+      sumVol += volume;
+      validCount += 1;
+    } else {
+      mfv.push(0);
+      vols.push(0);
+    }
+    valid.push(isOk);
+    if (i >= period) {
+      sumMfv -= mfv[i - period];
+      sumVol -= vols[i - period];
+      if (valid[i - period]) validCount -= 1;
+    }
+    if (i >= period - 1 && validCount === period && sumVol > 0) {
+      result.push(Number((sumMfv / sumVol).toFixed(3)));
+    } else {
+      result.push(null);
+    }
   }
   return result;
 }
@@ -673,6 +727,40 @@ export function registerZettarancIndicators() {
         return calcKDJ(dataList, n);
       },
       draw: crossBadgeOverlay((d) => calcKDJ(d).map((m) => ({ fast: m.k, slow: m.d }))),
+    } as any);
+
+    // 6-b. Z_CMF —— 副图：蔡金资金流 CMF(20)，单线 + 零轴虚线。
+    //      CMF 的意义就在正负（资金流入/流出），自动缩放若没有零轴，读数会飘。
+    const zCmf = indicatorMeta('Z_CMF');
+    const cmfPeriod = zCmf.series[0].params[0];
+    registerIndicator({
+      name: zCmf.id,
+      shortName: zCmf.shortName,
+      series: seriesOf(zCmf.panel),
+      calcParams: zCmf.calcParams ?? [],
+      precision: zCmf.precision,
+      figures: figuresFrom('Z_CMF'),
+      styles: { lines: lineStyles('Z_CMF') },
+      calc: (dataList: any) => {
+        const cmf = calcCMF(dataList, cmfPeriod);
+        return dataList.map((_: any, i: number) => ({ [zCmf.series[0].key]: cmf[i] }));
+      },
+      draw: ({ ctx, bounding, yAxis }: any) => {
+        // 只补一条零轴虚线，线本身仍走默认折线绘制（return false 不拦截）。
+        const yZero = Math.round(yAxis.convertToPixel(0));
+        if (yZero >= 0 && yZero <= bounding.height) {
+          ctx.save();
+          ctx.beginPath();
+          ctx.strokeStyle = 'rgba(148, 163, 184, 0.2)';
+          ctx.lineWidth = 1;
+          ctx.setLineDash([3, 3]);
+          ctx.moveTo(0, yZero);
+          ctx.lineTo(bounding.width, yZero);
+          ctx.stroke();
+          ctx.restore();
+        }
+        return false;
+      },
     } as any);
 
     // 7. 砖型图。ZX_BRICK 是当前 id，Z_BRICK 是旧 id 的兼容别名。
