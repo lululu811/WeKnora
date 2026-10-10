@@ -28,9 +28,12 @@ export interface ArticleRow {
 /**
  * 拉出可读的文章：已索引（enable_status=enabled）且属于手工类型。
  *
- * 走 knowledge_channel=wechat 过滤，把工作台和知识库页里的其它内容隔开。
- * 兜底不过滤：早期入库的条目可能没打 channel，宁可多列出来也不要让用户
- * 以为文章丢了。
+ * 注意：服务端 knowledge 列表接口**没有 channel 过滤参数**
+ * （internal/handler/knowledge.go 的 KnowledgeListFilter 只有
+ * tag_ids/keyword/file_type/parse_status/source/sort；channel 仅存在于
+ * 写入侧的 manual/文件上传请求体）。所以这里实际按 file_type=manual
+ * 过滤——同库内其它 manual 条目（manual-knowledge-editor 等）也会混进来，
+ * 这是已知兜底行为：宁可多列，不让用户以为文章丢了。
  */
 export async function listWechatArticles(kbId: string, page = 1, pageSize = 50): Promise<ArticleRow[]> {
   // file_type=manual 让服务端就把非手工条目滤掉；sort_by 是后端白名单枚举，

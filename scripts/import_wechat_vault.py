@@ -16,16 +16,28 @@
   代理只在条目自己目录内解析。这样 vault 重新导出后路径变了也不会失效，
   也不会产生 819MB 的第二份副本。
 
+准入规则（默认开启，--filter off 关闭，2026-10-11 起）：
+  默认拒绝。账号分两层放行：ADMIT_ACCOUNTS（权威金融源）无条件收；
+  CONDITION_ACCOUNTS（研报/产业/个人复盘混合源）要求标题命中
+  MARKET_TITLE_RE 的市场语义。两张表之外的账号一律不收——新号先出现、
+  由人决定升格，好过默认全收把噪音喂给 retrieval 和 agent。
+
 用法：
   export WEKNORA_EMAIL=… WEKNORA_PASSWORD=…
   python3 scripts/import_wechat_vault.py --kb-id <id> --dry-run
   python3 scripts/import_wechat_vault.py --kb-id <id> --limit 20
   python3 scripts/import_wechat_vault.py --kb-id <id> --concurrency 4
+  python3 scripts/import_wechat_vault.py --kb-id <id> --filter off   # 旧行为：不过滤
+
+定时批量（launchd）：
+  scripts/install_wechat_import_agent.sh --kb-id <id>
 """
 
 from __future__ import annotations
 
 import argparse
+from collections import Counter
+from collections.abc import Callable
 import concurrent.futures as futures
 import json
 import os
@@ -73,6 +85,96 @@ class Article:
     images: int = 0
 
 
+# ---- 入库准入规则：默认拒绝，显式放行 ----
+#
+# 前提（2026-10-11 定）：收错一篇的代价是 agent 引用一篇骗人的文档
+# （internal/handler/halo.go:178-182 同款教义），漏收一篇还能手动补，
+# 所以新账号默认不收。两层放行：
+#   ADMIT_ACCOUNTS     权威金融源，无条件收；
+#   CONDITION_ACCOUNTS  研报/产业/个人复盘混合源，标题命中市场语义才收。
+# 表外账号一律拒——包括未来新出现的号，由人决定何时升格。
+
+ADMIT_ACCOUNTS: frozenset[str] = frozenset(
+    {
+        # 监管媒体 / 持牌机构研究
+        "中国证券报", "中国基金报", "券商中国", "上海证券报", "证券时报",
+        "第一财经公司与行业", "产联社CLS", "华尔街见闻", "财联社",
+        "图解金融", "国家数据局",
+        # 券商 / 期货研究
+        "中信证券", "中信建投证券", "中金点睛", "华泰睿思", "广发证券",
+        "中国银河策略", "广发金融工程研究", "国泰君安期货投研", "正信期货",
+        "财信证券",
+    }
+)
+
+CONDITION_ACCOUNTS: frozenset[str] = frozenset(
+    {
+        # 研报 / 产业 / 策略（标题需命中市场语义）
+        "电眼看研报", "口罩哥研报60秒", "Quant攻城小队", "ETF进化论",
+        "TMT研究院", "产业投研院", "九思行研", "Kevin策略研究", "TOP行业报告",
+        "远川投资评论", "付鹏的财经世界", "饭统戴老板", "厉害财经", "盘前纪要",
+        "优享智库", "看懂产业链", "半导体投研笔记", "沧海一土狗",
+        "大宗商品价值投资俱乐部",
+        # 个人复盘 / 游资情绪（同上：标题说话，账号不判决）
+        "越甲策市", "养心解盘", "只做主线核心的柚子", "大奇自修", "冷眼局中人",
+        "知行小菜鸟", "小陈无所事事的一天", "常言万语",
+    }
+)
+
+# 市场语义命题词。宁缺毋滥：只放得进行情/策略/交易语境的词，
+# 不放"数据""观察""解读"这类放之四海而皆准的灌水词。
+MARKET_TITLE_RE = re.compile(
+    r"涨停|跌停|大涨|大跌|暴涨|暴跌|反弹|反转|突破|新高|新低|牛市|熊市|震荡市|"
+    r"普涨|普跌|缩量|放量|赚钱效应|亏钱效应|打板|龙头|补涨|卡位|接力|分歧|"
+    r"情绪周期|地天板|"
+    r"大盘|指数|沪指|深成指|创业板|科创板|北交所|北向资金|南向资金|外资|"
+    r"主力资金|游资|机构调研|散户|基金|券商|ETF|转债|可转债|融资融券|"
+    r"股指期货|期权|期指|"
+    r"板块|题材|概念股|主线|轮动|高低切|产业链|景气度|供需|涨价|库存|排产|"
+    r"招标|中标|订单|产能|扩产|投产|减产|国产替代|"
+    r"持仓|仓位|加仓|减仓|抄底|逃顶|割肉|解套|买点|卖点|止损|止盈|低吸|"
+    r"高抛|埋伏|扫货|出货|建仓|清仓|空仓|满仓|"
+    r"估值|PE|PB|股息率|分红|财报|业绩|预告|快报|一季报|中报|三季报|年报|"
+    r"季报|回购|增持|减持|举牌|定增|IPO|新股|打新|破发|退市|停牌|复牌|"
+    r"解禁|股权质押|强赎|下修|套利|"
+    r"政策|央行|降准|降息|LPR|MLF|逆回购|国常会|政治局|美联储|加息|关税|"
+    r"汇率|人民币|黄金|原油|铜|锂|稀土|大宗商品|PMI|CPI|PPI|社融|M2|GDP|"
+    r"社零|固定资产投资|"
+    r"A股|港股|美股|外盘|隔夜|收盘|开盘|盘中|盘前|盘后|盘面|复盘|"
+    r"战法|策略|研报|点评|前瞻|纵览|解析|梳理|速评|看多|看空|做多|做空|"
+    # 交易行话：P 层个人复盘号的标题全是这些，缺了它们等于把实盘情报全拒了；
+    # 行话本身够专，不会放进"周末爬山"这种生活标题。
+    r"图形|信号|节奏|兑现|高位|滞涨|筹码|回撤|年化|夏普|Alpha|暴露|"
+    r"退潮|冰点|高潮|主升|反包|洗盘|诱多|诱空|弱转强|强转弱|承接|压制|"
+    r"箱体|区间|均线|趋势线|连板|首板|换手率|封单|龙虎榜|短线|超短|中线|"
+    r"长线|蓝筹|白马|高标|补跌|右侧|左侧|仓位管理|风险偏好|波动率|因子|"
+    r"多因子|选股|量化|回测|实盘|模拟盘|交易笔记|交易计划|看盘|盯盘|"
+    r"集合竞价|成交额|成交量|天量|地量|"
+    # 行业板块名词：产业/研报类 CONDITION 账号的标题主语
+    r"新能源|光伏|储能|半导体|芯片|算力|机器人|军工|医药|白酒|银行|地产|"
+    r"煤炭|钢铁|有色|化工|养殖|游戏|影视|旅游|零售|电商|物流|建筑|"
+    r"电力|电网|运营商|汽车|手机|消费电子|"
+    r"美债|国债|收益率|利率|债市|信用债|第一股|个股|妖股|跑赢|跑输|重估|"
+    # 日报/夜报类：标题形如「每日夜报·金融炼药师｜2026-09-24」，命题词只在
+    # 正文里；这类是稳定日更的金融Digest，漏收代价恒定，直接放行。
+    r"夜报|早报|晨报|晚报|日报|午评|收评|盘前必读"
+)
+
+
+def admit(art: "Article") -> tuple[bool, str]:
+    """准入判决。返回 (是否放行, 拒绝原因)。
+
+    规则见模块 docstring：账号分层 × 标题命题。未知账号默认拒绝。
+    """
+    if art.account in ADMIT_ACCOUNTS:
+        return True, ""
+    if art.account in CONDITION_ACCOUNTS:
+        if MARKET_TITLE_RE.search(art.title):
+            return True, ""
+        return False, "标题无市场语义"
+    return False, "账号未放行"
+
+
 @dataclass
 class Summary:
     total: int = 0
@@ -91,13 +193,23 @@ class Summary:
             self.errors.extend(other.errors)
 
 
-def collect(vault_root: Path, subtree: str, limit: int | None = None) -> list[Article]:
-    """扫描 vault 子树，返回可导入的文章列表（按发布时间倒序，最新的先导）。"""
+def collect(
+    vault_root: Path,
+    subtree: str,
+    limit: int | None = None,
+    admit_fn: "Callable[[Article], tuple[bool, str]] | None" = None,
+) -> tuple[list[Article], list[tuple[str, str]]]:
+    """扫描 vault 子树，返回可导入的文章列表（按发布时间倒序，最新的先导）。
+
+    admit_fn 非空时逐篇过准入规则，返回的第二项是被拒文章的
+    (account, 拒绝原因) 清单，供 main() 打印统计。
+    """
     base = vault_root / subtree
     if not base.is_dir():
         sys.exit(f"vault 子目录不存在: {base}")
 
     articles: list[Article] = []
+    rejects: list[tuple[str, str]] = []
     # 导出器产出的形状是 <公众号>/<标题>/<标题>.md + 同级 images/
     for md in base.rglob("*.md"):
         if md.name.upper() == "README.MD":
@@ -117,21 +229,35 @@ def collect(vault_root: Path, subtree: str, limit: int | None = None) -> list[Ar
         acc_m = ACCOUNT_RE.search(text)
         pub_m = PUBLISHED_RE.search(text)
 
-        articles.append(
-            Article(
-                path=md,
-                vault_path=str(md.relative_to(vault_root)),
-                title=title,
-                source=url_m.group(1),
-                account=(acc_m.group(1) if acc_m else ""),
-                published=(pub_m.group(1) if pub_m else ""),
-                size=len(text.encode("utf-8")),
-                images=text.count("!["),
-            )
+        art = Article(
+            path=md,
+            vault_path=str(md.relative_to(vault_root)),
+            title=title,
+            source=url_m.group(1),
+            account=(acc_m.group(1) if acc_m else ""),
+            published=(pub_m.group(1) if pub_m else ""),
+            size=len(text.encode("utf-8")),
+            images=text.count("!["),
         )
+        if admit_fn is not None:
+            ok, reason = admit_fn(art)
+            if not ok:
+                rejects.append((art.account, reason))
+                continue
+        articles.append(art)
 
     articles.sort(key=lambda a: a.published, reverse=True)
-    return articles[:limit] if limit else articles
+    return articles[:limit] if limit else articles, rejects
+
+
+def _pagination_done(items_count: int, fetched: int, total: int, page_size: int = 100) -> bool:
+    """列表分页的停止条件：末页不满页，或已取条数达到 total。
+
+    曾经在这里写错过一次：用 `fetched + page_size >= total` 提前 break，
+    total=830 时第 9 页（30 条）被跳过，最老的条目永远进不了去重集合，
+    每轮导入都把它们当新文章重复入库。停止条件必须拿"已取条数"和 total 比。
+    """
+    return items_count < page_size or fetched >= total
 
 
 class WeKnora:
@@ -170,8 +296,15 @@ class WeKnora:
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            d = json.loads(resp.read())
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                d = json.loads(resp.read())
+        except urllib.error.HTTPError as e:
+            # launchd 里跑的时候日志只会留 traceback；坏凭据要一句人话。
+            if e.code in (401, 403):
+                sys.exit(f"登录失败（HTTP {e.code}）：WEKNORA_EMAIL/PASSWORD 不对，"
+                         f"或该用户无权访问 --kb-id 指定的知识库")
+            raise
         token = d.get("token")
         if not token:
             sys.exit("登录失败：响应里没有 token")
@@ -200,8 +333,9 @@ class WeKnora:
                 if s and s != "manual":
                     out.add(s)
             total = d.get("total") or 0
+            fetched = min(page * 100, total)
             page += 1
-            if page * 100 >= total:
+            if _pagination_done(len(items), fetched, total):
                 break
         return out
 
@@ -233,10 +367,23 @@ def main() -> int:
     ap.add_argument("--limit", type=int, default=None, help="只导入最新的 N 篇（试跑用）")
     ap.add_argument("--concurrency", type=int, default=4, help="并发导入数")
     ap.add_argument("--dry-run", action="store_true", help="只扫描并打印，不入库")
+    ap.add_argument(
+        "--filter",
+        choices=["rule", "off"],
+        default="rule",
+        help="入库准入规则：rule=账号分层+标题命题（默认）；off=不过滤（旧行为）",
+    )
     args = ap.parse_args()
 
-    articles = collect(args.vault_root, args.subtree, args.limit)
-    print(f"扫描到 {len(articles)} 篇（{args.vault_root / args.subtree}）")
+    admit_fn = admit if args.filter == "rule" else None
+    articles, rejects = collect(args.vault_root, args.subtree, args.limit, admit_fn)
+    scanned = len(articles) + len(rejects)
+    print(f"扫描到 {scanned} 篇（{args.vault_root / args.subtree}）")
+    if rejects:
+        by_reason = Counter(f"{account or '未知账号'}/{reason}" for account, reason in rejects)
+        print(f"准入过滤：放行 {len(articles)} / 拒绝 {len(rejects)}（--filter off 关闭）")
+        for key, cnt in sorted(by_reason.items(), key=lambda kv: -kv[1]):
+            print(f"    {key}: {cnt}")
     if not articles:
         return 1
 
@@ -253,6 +400,10 @@ def main() -> int:
         for a in articles[:5]:
             print(f"  · [{a.account}] {a.title[:44]}  ({a.published}, {a.images} 图)")
             print(f"    vault_path={a.vault_path}")
+        if rejects:
+            print("\n被拒样本（前 10 条，确认规则无误再导）：")
+            for account, reason in rejects[:10]:
+                print(f"  ✗ [{account or '?'}] {reason}")
         print(f"\n--dry-run：未入库。用 --kb-id <id> --limit N 试跑真实导入。")
         return 0
 
