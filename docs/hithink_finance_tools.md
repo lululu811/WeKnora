@@ -113,60 +113,72 @@ db="special"
 
 ## Zettaranc 专属 Tools（zettaranc.*）
 
-这些 tools 调用 Python CLI 进行复杂计算，延迟较高（500ms-2s）。
+这些 tools 调用 python-service 的 `/zettaranc/*` 端点，延迟较高（500ms-2s）。
 
-### zettaranc.analyze
+### 单票技术分析：四个原子工具（`hithink.finance.analysis.*`）
 
-使用 Z哥交易体系对单只股票进行全面分析。
+单票的趋势 / 量价 / 形态 / 支撑阻力**不再有复合入口**。此前的 `zettaranc.analyze`
+一次调用返回四段，已删除，改由四个独立原子工具各自回答一段（本地 DuckDB 计算，
+不经 python-service）：
 
-**参数：**
-- `thscode`: 同花顺股票代码
-- `days`: 分析天数（默认 120）
+| 维度 | 工具 |
+|---|---|
+| 趋势与均线 | `hithink.finance.analysis.trend` |
+| 量价与威科夫 | `hithink.finance.analysis.volume` |
+| 形态识别 | `hithink.finance.analysis.pattern` |
+| 支撑阻力 | `hithink.finance.analysis.levels` |
 
-**返回：**
-- 技术指标：KDJ、MACD、RSI、BBI、白线黄线等
-- 波浪分析：三波理论阶段判断
-- 麒麟会：阶段和置信度
-- 战法信号：30+ 种战法（超卖组合/B2、少妇战法、四块砖等）
-- 综合诊断：买卖点判断
-
-**示例：**
-- 分析茅台：`thscode="600519.SH"`
-- 分析宁德时代（120 天）：`thscode="300750.SZ", days=120`
+需要多维结论时由模型分别调用再汇总 —— 这是刻意的：单点问题只付一段的代价，
+多维问题才付多维的代价。
 
 ### zettaranc.backtest
 
-使用 Z哥交易体系进行策略回测。
+**【未实现，调用会直接失败】** 真实回测（逐日重放信号、持仓与撮合、绩效统计）尚未落地。
 
-**参数：**
-- `strategy`: 策略名称（shaofu, multi, b1, b2, sb1）
-- `thscode`: 同花顺股票代码
-- `days`: 回测天数（默认 250）
+这个工具过去会拿**选股结果**冒充回测结果，现已停止该行为：`Execute` 一律返回
+`Success:false` 并附替代方案，参数 schema 里每个字段都标着「当前不支持，调用一律失败」。
+它也**不在任何 agent 的 `allowed_tools` 里**（`config/builtin_agents.yaml` 与
+`agent_service.go` 的注册 switch 都没有它），所以模型连它的 schema 都看不到 ——
+一条"不要调它"的 prompt 提醒反而会白占上下文。实现文件留在仓库里，真回测落地后
+加回白名单一行即可。
 
-**返回：**
-- 收益率、夏普比率、最大回撤
-- 胜率、盈亏比
-- 交易记录
-- 资金曲线
+替代路径：
 
-**示例：**
-- 少妇战法回测茅台：`strategy="shaofu", thscode="600519.SH", days=250`
+| 想做的事 | 用哪个 |
+|---|---|
+| 从全市场按战法挑票 | `zettaranc.screener` |
+| 单只票的趋势 / 量价 / 形态 / 支撑阻力 | `hithink.finance.analysis.trend` / `.volume` / `.pattern` / `.levels` |
+| 取历史 OHLCV 自行核算收益 | `hithink.finance.market.price.historical` |
 
 ### zettaranc.screener
 
-使用 Z哥交易体系进行智能选股。
+使用 Z哥交易体系进行全市场智能选股。一条 SQL 取回全市场指标 + 价量后在本地判定，
+不逐只扫描。
 
 **参数：**
-- `strategy`: 选股策略（oversold_combo, B2, SB1, shaofu, limit_up, anomaly）
+
+- `strategy`: 选股策略名，共 **20 个**，按方向分三类：看涨（超卖共振、买点类）、
+  看跌规避（超买 / 死叉 / 空头排列，比选新票更常用）、方向无关（波动率异动）。
+  **本文档不维护这份清单**：唯一真相源是 python-service 的 `STRATEGY_RULES`，
+  Go 侧 `zettaranc.ScreenerStrategies()`（`internal/agent/tools/zettaranc/strategies.go`）
+  是给模型的 enum 提示，`strategies_test.go` 会在两边漂移时报错 —— 抄第三份到文档里
+  只会多一处会漂的地方。
 - `limit`: 返回数量（默认 20，最大 100）
+- 可选筛选（第二道关）：`sector` 板块限定；`max_debt_ratio` / `min_current_ratio` /
+  `max_receivable_ratio` 财务风险代理（出处 `financials.v_balance_sheet`）；
+  `require_profit` 最新期归母净利润为正；`exclude_st` 排除 ST/*ST。
+  **商誉、股权质押、减持、审计意见、监管处罚本地无数据源**，所以没有对应参数 ——
+  回答"有没有暴雷风险"时必须说明这一层没覆盖。
 
 **返回：**
 - 按评分排序的候选股票列表
 - 每只股票的匹配理由
 - 技术指标快照
+- 可信度信息：`scanned` / `scanned_from_universe` / `truncated` / `risk_filter` / `warnings`
 
 **示例：**
 - 超卖组合选股：`strategy="oversold_combo", limit=20`
+- 半导体板块内排除 ST：`strategy="vol_breakout", sector="半导体", exclude_st=true`
 
 ## 配置
 
@@ -213,14 +225,21 @@ db="special"
 
 1. 在对应的子目录（market/financial/indicator 等）创建新的 Go 文件
 2. 实现 `types.Tool` 接口
-3. 在 `finanserv/register.go` 中注册
+3. 在 `internal/application/service/agent_service.go` 的注册 switch 里加分支，
+   并把工具名写进 `config/builtin_agents.yaml` 的 `allowed_tools` —— 两处都要：
+   白名单决定注册遍历范围，不在名单里的工具既进不了模型的 tool schema，调用也只会
+   得到 "tool not found"。
 
 ### 添加新的 Zettaranc Tool
 
 1. 在 `zettaranc/` 目录创建新的 Go 文件
 2. 实现 `types.Tool` 接口
-3. 使用 `CLIClient` 调用 Python CLI
-4. 在 `zettarancserv/register.go` 中注册
+3. 通过 `HTTPClient`（`http_client.go`）调用 python-service 的对应端点
+4. 在 `internal/application/service/agent_service.go` 的注册 switch 里加分支，
+   并把工具名写进 `config/builtin_agents.yaml` 的 `allowed_tools` —— 两处都要：
+   白名单决定注册遍历范围，不在名单里的工具既进不了模型的 tool schema，调用也只会
+   得到 "tool not found"。`internal/agent/tools/zettaranc/whitelist_test.go` 会
+   在两边不一致时变红。
 
 ### 测试
 
@@ -228,8 +247,6 @@ db="special"
 # 编译
 go build ./internal/agent/tools/hithink_finance/...
 go build ./internal/agent/tools/zettaranc/...
-go build ./internal/agent/tools/finanserv/...
-go build ./internal/agent/tools/zettarancserv/...
 
 # 运行 WeKnora
 make build

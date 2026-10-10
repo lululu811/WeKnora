@@ -2502,6 +2502,9 @@ const allTools = computed(() => [
   // 数据分析
   { value: 'data_analysis', label: t('agentEditor.tools.dataAnalysis'), description: t('agentEditor.tools.dataAnalysisDesc'), group: 'data' },
   { value: 'data_schema', label: t('agentEditor.tools.dataSchema'), description: t('agentEditor.tools.dataSchemaDesc'), group: 'data' },
+  // 终端与代码工具
+  { value: 'shell_exec', label: t('agentEditor.tools.shellExec'), description: t('agentEditor.tools.shellExecDesc'), group: 'code', danger: true },
+  { value: 'edit_sandbox_file', label: t('agentEditor.tools.editSandboxFile'), description: t('agentEditor.tools.editSandboxFileDesc'), group: 'code' },
 ]);
 
 // 工具分组元信息
@@ -2512,6 +2515,7 @@ const toolGroups = computed(() => [
   { key: 'wiki_edit', label: t('agentEditor.tools.groupWikiEdit') },
   { key: 'wiki_issue', label: t('agentEditor.tools.groupWikiIssue') },
   { key: 'data', label: t('agentEditor.tools.groupData') },
+  { key: 'code', label: t('agentEditor.tools.groupCode') },
 ]);
 
 // 知识库分组：我的 vs 共享的

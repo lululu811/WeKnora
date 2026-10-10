@@ -4,10 +4,15 @@
 FROM python:3.10.18-bookworm AS builder
 
 ARG APT_MIRROR=""
+
+# Configure mirror first if provided, then install ca-certificates
 RUN if [ -n "$APT_MIRROR" ]; then \
         sed -i "s@http://deb.debian.org@${APT_MIRROR}@g" /etc/apt/sources.list.d/debian.sources && \
         sed -i "s@http://security.debian.org@${APT_MIRROR}@g" /etc/apt/sources.list.d/debian.sources; \
-    fi
+    fi && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -82,10 +87,15 @@ RUN chmod +x docreader/scripts/generate_proto.sh && \
 FROM python:3.10.18-bookworm AS runner
 
 ARG APT_MIRROR=""
+
+# Configure mirror first if provided, then install ca-certificates
 RUN if [ -n "$APT_MIRROR" ]; then \
         sed -i "s@http://deb.debian.org@${APT_MIRROR}@g" /etc/apt/sources.list.d/debian.sources && \
         sed -i "s@http://security.debian.org@${APT_MIRROR}@g" /etc/apt/sources.list.d/debian.sources; \
-    fi
+    fi && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 

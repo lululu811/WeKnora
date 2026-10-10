@@ -203,14 +203,18 @@ func TestCreateAgentEngineOpensSandboxToolsOnlyForInstallMode(t *testing.T) {
 		engine, err := svc.CreateAgentEngine(ctx, &types.AgentConfig{
 			SandboxConfigID: "cfg-remote",
 			SkillsEnabled:   false,
-			AllowedTools:    []string{tools.ToolShellExec, tools.ToolThinking},
+			// No shell_exec in AllowedTools on purpose: this case pins that
+			// skills-off alone does not grant a shell. The case where an agent
+			// does declare it is covered by
+			// TestRegisterSandboxShellIfAllowedByAllowedTools.
+			AllowedTools: []string{tools.ToolThinking},
 		}, chatModel, nil, nil, "sess-1", "msg-1")
 
 		require.NoError(t, err)
 		_, err = engine.Execute(ctx, "sess-1", "msg-1", "hello", nil)
 		require.NoError(t, err)
 		require.False(t, toolOffered(chatModel.lastToolNames, tools.ToolShellExec),
-			"shell_exec follows SkillsEnabled; an agent with skills off gets no shell")
+			"an agent with skills off and no shell_exec in AllowedTools gets no shell")
 		require.True(t, toolOffered(chatModel.lastToolNames, tools.ToolListSandboxFiles))
 		require.True(t, toolOffered(chatModel.lastToolNames, tools.ToolReadFile))
 		require.True(t, toolOffered(chatModel.lastToolNames, tools.ToolWriteSandboxFile))
@@ -610,6 +614,78 @@ func TestRegisterSandboxShellIfAllowedHostIgnoresSkillsGate(t *testing.T) {
 
 	require.True(t, toolRegistered(registry, tools.ToolShellExec),
 		"the host backend is the Lite feature and must not wait on SkillsEnabled")
+}
+
+func TestRegisterSandboxShellIfAllowedByAllowedTools(t *testing.T) {
+	registry := tools.NewToolRegistry()
+	svc := &agentService{
+		sandboxResolver: stubSandboxResolver{
+			mgr: &capableManager{
+				typ:   sandbox.SandboxTypeDocker,
+				shell: &stubShellExecutor{},
+			},
+		},
+	}
+	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(7))
+
+	// Without AllowedTools and without SkillsEnabled -> not registered
+	svc.registerSandboxShellIfAllowed(ctx, registry, "sess-1", &types.AgentConfig{
+		SkillsEnabled: false,
+		AllowedTools:  []string{},
+	})
+	require.False(t, toolRegistered(registry, tools.ToolShellExec))
+
+	// With AllowedTools containing ToolShellExec -> registered even with SkillsEnabled=false
+	registryWithTool := tools.NewToolRegistry()
+	svc.registerSandboxShellIfAllowed(ctx, registryWithTool, "sess-1", &types.AgentConfig{
+		SkillsEnabled: false,
+		AllowedTools:  []string{tools.ToolShellExec},
+	})
+	require.True(t, toolRegistered(registryWithTool, tools.ToolShellExec))
+}
+
+// A workspace with script execution switched off has no sandbox to run in, but
+// an agent that explicitly declares shell_exec still gets a shell: scoped to a
+// per-session directory under the OS temp root instead of the host filesystem.
+func TestRegisterSandboxShellIfAllowedFallsBackToLocalShellWithoutSandbox(t *testing.T) {
+	registry := tools.NewToolRegistry()
+	svc := &agentService{
+		sandboxResolver: stubSandboxResolver{
+			mgr: &capableManager{typ: sandbox.SandboxTypeDisabled},
+		},
+	}
+	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(7))
+
+	svc.registerSandboxShellIfAllowed(ctx, registry, "sess-1", &types.AgentConfig{
+		SandboxConfigID: "cfg-remote",
+		SkillsEnabled:   false,
+		AllowedTools:    []string{tools.ToolShellExec},
+	})
+
+	require.True(t, toolRegistered(registry, tools.ToolShellExec),
+		"script execution off is not the same as no shell: an explicit entitlement still gets one")
+}
+
+// An unresolved sandbox is not an invitation to run on the host. The failure
+// mode has to be "no shell", not "a shell somewhere unexpected": a resolver
+// error says nothing about which machine this run belongs to.
+func TestRegisterSandboxShellIfAllowedFailsClosedWhenResolutionErrors(t *testing.T) {
+	registry := tools.NewToolRegistry()
+	svc := &agentService{
+		sandboxResolver: stubSandboxResolver{err: errors.New("resolver down")},
+	}
+	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(7))
+
+	svc.registerSandboxShellIfAllowed(ctx, registry, "sess-1", &types.AgentConfig{
+		// A named config id is what sends this through the resolver: without one
+		// the service short-circuits to a disabled manager and never fails.
+		SandboxConfigID: "cfg-remote",
+		SkillsEnabled:   false,
+		AllowedTools:    []string{tools.ToolShellExec},
+	})
+
+	require.False(t, toolRegistered(registry, tools.ToolShellExec),
+		"a sandbox that cannot be resolved must not degrade into a host shell")
 }
 
 type hostLayoutManager struct {

@@ -40,8 +40,18 @@ import (
 // default URL (self-hosted runtimes) or a templated one (Azure), which the
 // SSRF guard rejects before any request is built. Those cases are re-pointed
 // at 127.0.0.1 by reachableBaseURL.
+//
+// The second entry is for machines whose resolver lies: behind a fake-IP/TUN
+// resolver (Surge, clash, some corporate resolvers) every public name answers
+// from 198.18.0.0/15 — RFC 2544 benchmarking space — and the guard correctly
+// refuses it, so the cases that build a client from a real catalog host
+// (dashscope.aliyuncs.com, api.deepseek.com, ...) failed on the local DNS
+// rather than on the wire format they assert. None of them sends a request:
+// the host is not what this package tests. Whitelisting the range keeps those
+// cases running where the resolver rewrites names, and is inert on a machine
+// whose DNS answers normally.
 func TestMain(m *testing.M) {
-	secutils.SetSSRFWhitelistFromRaw("127.0.0.1")
+	secutils.SetSSRFWhitelistFromRaw("127.0.0.1,198.18.0.0/15")
 	defer secutils.ResetSSRFWhitelistForTest()
 	os.Exit(m.Run())
 }

@@ -75,10 +75,14 @@ func TestSkillPythonVerifier(t *testing.T) {
 	}, {
 		name: "a requirement the venv does not carry",
 		files: map[string]string{
-			"requirements.txt": "# pinned\npandas==3.0.1\n-r other.txt\n",
+			// A name no interpreter can carry, not a real one: the harness runs
+			// the checker against whatever python3 is on PATH, so `pandas`
+			// asserted "not installed" only on machines whose system Python
+			// lacks pandas — the same check would pass a dev box that has it.
+			"requirements.txt": "# pinned\ntotally_absent_package==3.0.1\n-r other.txt\n",
 			"scripts/run.py":   "x = 1\n",
 		},
-		wantProblem: "requirements.txt declares pandas but it is not installed",
+		wantProblem: "requirements.txt declares totally_absent_package but it is not installed",
 		wantExit:    2,
 	}, {
 		// pip skips a line whose marker is false here, so refusing the install

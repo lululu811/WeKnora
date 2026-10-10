@@ -194,7 +194,8 @@ var capabilityRegisteredTools = map[string]string{
 	tools.ToolEditSandboxFile: "registerSandboxFileTools (agent_service.go): sandbox-only patcher; " +
 		"absent from AvailableToolDefinitions (definitions.go)",
 	tools.ToolShellExec: "registerSandboxShellTool via registerSandboxShellIfAllowed (agent_service.go): " +
-		"remote shell follows SkillsEnabled or install mode (definitions.go)",
+		"remote shell follows SkillsEnabled, install mode or an explicit shell_exec entry in AllowedTools; " +
+		"a workspace with script execution off gets a session-scoped local shell under the same entitlement (definitions.go)",
 	tools.ToolWriteSkillFile: "registerSkillFileTools (agent_service.go): install-mode only; " +
 		"absent from AvailableToolDefinitions (definitions.go)",
 	tools.ToolEditSkillFile: "registerSkillFileTools (agent_service.go): install-mode only; " +

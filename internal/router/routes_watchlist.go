@@ -84,6 +84,9 @@ func RegisterStockWatchDiaryRoutes(
 	watch.GET("/:thscode/diaries", g.Viewer(), h.ListStockWatchDiaries)
 	watch.POST("/:thscode/diaries/accept", g.Viewer(), h.AcceptStockWatchDiary)
 	watch.POST("/:thscode/diaries/ignore", g.Viewer(), h.IgnoreStockWatchDiary)
+	// Ranking is a static segment on GET, same as "/events" on the watch group.
+	// "ranking" can never collide with a thscode (six digits + dot).
+	watch.GET("/ranking", g.Viewer(), h.ListStockWatchRanking)
 }
 
 // RegisterStockWatchReasonRoutes wires the note-distillation endpoint.

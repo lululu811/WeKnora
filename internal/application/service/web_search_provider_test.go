@@ -97,3 +97,27 @@ func TestValidateProviderParametersSerply(t *testing.T) {
 		t.Fatal("blank Serply API key was accepted")
 	}
 }
+
+func TestValidateProviderParametersMiniMax(t *testing.T) {
+	valid := types.WebSearchProviderParameters{
+		APIKey:      "minimax-test",
+		ExtraConfig: map[string]string{"region": "cn"},
+	}
+	if err := validateProviderParameters(types.WebSearchProviderTypeMiniMax, valid); err != nil {
+		t.Fatalf("valid MiniMax parameters rejected: %v", err)
+	}
+	if !isValidProviderType(types.WebSearchProviderTypeMiniMax) {
+		t.Fatal("MiniMax provider type is not accepted")
+	}
+
+	invalid := valid
+	invalid.ExtraConfig = map[string]string{"region": "unknown"}
+	if err := validateProviderParameters(types.WebSearchProviderTypeMiniMax, invalid); err == nil {
+		t.Fatal("invalid MiniMax region was accepted")
+	}
+
+	blank := types.WebSearchProviderParameters{APIKey: "   "}
+	if err := validateProviderParameters(types.WebSearchProviderTypeMiniMax, blank); err == nil {
+		t.Fatal("blank MiniMax API key was accepted")
+	}
+}

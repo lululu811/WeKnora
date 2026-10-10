@@ -577,3 +577,65 @@ export function calcStockHoldingScore(dataList: KLineData[]): StockScoreResult |
     zxBrickItem: brickItem,
   };
 }
+export interface FourBricksState {
+  score: number;
+  text: string;
+  bull1: boolean;
+  bull2: boolean;
+  bull3: boolean;
+  bull4: boolean;
+}
+
+/**
+ * 严格对齐 python-service/zettaranc/four_bricks.py 的四块砖量化合成状态
+ * 1. 短线砖: close >= MA5
+ * 2. 趋势砖: EMA10 >= EMA14
+ * 3. 多空砖: close >= BBI
+ * 4. 阴阳砖: close >= open
+ */
+export function calcFourBricks(dataList: KLineData[]): FourBricksState | null {
+  if (!dataList || dataList.length < 5) return null;
+  const lastIdx = dataList.length - 1;
+  const lastBar = dataList[lastIdx];
+  if (!lastBar || typeof lastBar.close !== 'number') return null;
+
+  const close = lastBar.close;
+  const open = typeof lastBar.open === 'number' ? lastBar.open : close;
+
+  // 1. 短线砖: close >= MA5
+  const ma5List = calcSMA(dataList, 5);
+  const ma5 = ma5List[lastIdx];
+  const bull1 = ma5 !== null ? close >= ma5 : true;
+
+  // 2. 趋势砖: EMA10 >= EMA14
+  const ema10List = calcEMA(dataList, 10);
+  const ema14List = calcEMA(dataList, 14);
+  const e10 = ema10List[lastIdx];
+  const e14 = ema14List[lastIdx];
+  const bull2 = (e10 !== null && e14 !== null) ? e10 >= e14 : true;
+
+  // 3. 多空砖: close >= BBI
+  const bbiList = calcBBI(dataList);
+  const bbi = bbiList[lastIdx];
+  const bull3 = bbi !== null ? close >= bbi : true;
+
+  // 4. 阴阳砖: close >= open
+  const bull4 = close >= open;
+
+  const score = (bull1 ? 1 : -1) + (bull2 ? 1 : -1) + (bull3 ? 1 : -1) + (bull4 ? 1 : -1);
+
+  let text = `多空博弈(${score >= 0 ? '+' : ''}${score})`;
+  if (score === 4) text = '四砖全红(+4)';
+  else if (score >= 2) text = `多头共振(+${score})`;
+  else if (score === -4) text = '四砖翻绿(-4)';
+  else if (score <= -2) text = `空头承压(${score})`;
+
+  return {
+    score,
+    text,
+    bull1,
+    bull2,
+    bull3,
+    bull4,
+  };
+}

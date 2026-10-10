@@ -345,7 +345,7 @@ func TestWriteSandboxFileRegistryHintsWhenPathMissing(t *testing.T) {
 func TestSandboxCapabilityToolsAreNotToolListCheckboxes(t *testing.T) {
 	for _, name := range []string{
 		ToolListSandboxFiles, LegacyToolReadSandboxFile,
-		ToolWriteSandboxFile, ToolEditSandboxFile, ToolShellExec,
+		ToolWriteSandboxFile,
 		LegacyToolReadSkill, LegacyToolExecuteSkillScript,
 	} {
 		require.NotContains(t, DefaultAllowedTools(), name)

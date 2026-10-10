@@ -29,7 +29,7 @@ func (t *BacktestTool) Description() string {
 
 替代方案：
 - 要"从全市场挑出符合某战法的票" → zettaranc.screener
-- 要"看某只票的趋势/量价/形态/支撑阻力" → zettaranc.analyze
+- 要"看某只票的趋势/量价/形态/支撑阻力" → hithink.finance.analysis.trend / volume / pattern / levels
 - 要"取历史 OHLCV 自行核算收益" → hithink.finance.market.price.historical`
 }
 
@@ -73,7 +73,7 @@ func (t *BacktestTool) Execute(ctx context.Context, args json.RawMessage) (*type
 		Error: "zettaranc.backtest 尚未实现真实回测，已停止返回替代数据。\n" +
 			"当前可用替代：\n" +
 			"  · zettaranc.screener —— 全市场按策略选候选股（真实指标 + 价量）\n" +
-			"  · zettaranc.analyze —— 单只标的的趋势/量价/形态/支撑阻力分析\n" +
+			"  · hithink.finance.analysis.trend / volume / pattern / levels —— 单只标的的趋势/量价/形态/支撑阻力，按维度分别调用\n" +
 			"  · hithink.finance.market.price.historical —— 取历史 OHLCV 自行核算收益",
 	}, nil
 }

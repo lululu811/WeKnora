@@ -66,6 +66,9 @@ type StockWatchConditionJob struct {
 	// there is no second thing to keep in sync.
 	diary func(ctx context.Context) error
 
+	// grading is nil when the grading feature is not wired. Runs after diary.
+	grading func(ctx context.Context) error
+
 	cron    *cron.Cron
 	mu      sync.Mutex
 	started bool
@@ -90,6 +93,26 @@ func (j *StockWatchConditionJob) WithDiary(
 	}
 	j.diary = func(ctx context.Context) error {
 		return RunDiaries(ctx, svc, repo, j.notifications, j.quotes)
+	}
+	return j
+}
+
+// WithGrading attaches the daily scoring/grading step to this job's run.
+//
+// Runs after diary: the diary writes verdicts and readings, then grading reads
+// those rows back, scores Q1-Q18, and writes final_score + rank onto the same
+// rows. The two steps never write the same column, so they cannot clobber
+// each other even on a same-day rerun.
+//
+// Same mutator pattern as WithDiary for the same dig-cycle reason.
+func (j *StockWatchConditionJob) WithGrading(
+	svc *StockWatchGradingService, repo interfaces.StockWatchDiaryRepository,
+) *StockWatchConditionJob {
+	if j == nil {
+		return nil
+	}
+	j.grading = func(ctx context.Context) error {
+		return RunGrading(ctx, svc, repo, j.quotes)
 	}
 	return j
 }
@@ -188,7 +211,19 @@ func (j *StockWatchConditionJob) RunOnce(ctx context.Context) error {
 	if err := j.runDiaryOnce(ctx); err != nil {
 		logger.Warnf(ctx, "[WatchlistDiary] daily run failed: %v", err)
 	}
+	if err := j.runGradingOnce(ctx); err != nil {
+		logger.Warnf(ctx, "[WatchlistGrading] daily run failed: %v", err)
+	}
 	return runErr
+}
+
+// runGradingOnce is the optional grading step, isolated so its nil check lives
+// in one place rather than at three call sites.
+func (j *StockWatchConditionJob) runGradingOnce(ctx context.Context) error {
+	if j.grading == nil {
+		return nil
+	}
+	return j.grading(ctx)
 }
 
 // runDiaryOnce is the optional diary step, isolated so its nil check lives in

@@ -203,6 +203,68 @@ func (h *StockWatchDiaryHandler) IgnoreStockWatchDiary(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true})
 }
 
+// ListStockWatchRanking godoc
+// @Summary      Top N ranked diaries for a trading day
+// @Description  Returns the highest-scored diaries for the given trade_date, ordered by final_score DESC
+// @Tags         User
+// @Param        trade_date  query  string  false  "Trading day YYYY-MM-DD (defaults to today)"
+// @Param        limit       query  int     false  "Max rows (default 50, max 200)"
+// @Success      200         {object}  map[string]interface{}
+// @Router       /watchlist/ranking [get]
+func (h *StockWatchDiaryHandler) ListStockWatchRanking(c *gin.Context) {
+	ctx := c.Request.Context()
+	userID, tenantID, ok := watchContext(c)
+	if !ok {
+		return
+	}
+	tradeDate := rankingTradeDate(c)
+	limit := rankingLimit(c)
+	list, err := h.diaries.TopRanked(ctx, userID, tenantID, tradeDate, limit)
+	if err != nil {
+		logger.ErrorWithFields(ctx, err, nil)
+		c.Error(apperrors.NewInternalServerError(err.Error()))
+		return
+	}
+	tradeDateStr := ""
+	if !tradeDate.IsZero() {
+		tradeDateStr = tradeDate.String()
+	} else if len(list) > 0 {
+		tradeDateStr = list[0].TradeDate.String()
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": list, "trade_date": tradeDateStr})
+}
+
+// rankingTradeDate parses the optional trade_date query parameter.
+// When omitted, it returns a zero DateOnly so that downstream service/repository
+// falls back to the most recent trading day that actually has scored diaries.
+func rankingTradeDate(c *gin.Context) types.DateOnly {
+	raw := c.Query("trade_date")
+	if raw == "" {
+		return types.DateOnly{}
+	}
+	d, err := types.ParseDateOnly(raw)
+	if err != nil {
+		return types.DateOnly{}
+	}
+	return d
+}
+
+// rankingLimit reads the optional limit query parameter.
+func rankingLimit(c *gin.Context) int {
+	raw := c.Query("limit")
+	if raw == "" {
+		return 50
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n <= 0 {
+		return 50
+	}
+	if n > 200 {
+		return 200
+	}
+	return n
+}
+
 // adoptionNote is the note snapshot written onto the state_changed event when
 // a verdict is adopted.
 //

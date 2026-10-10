@@ -117,3 +117,27 @@ func TestGetWebSearchProviderTypesIncludesSerply(t *testing.T) {
 		t.Fatalf("unexpected Serply metadata: %+v", serply)
 	}
 }
+
+func TestGetWebSearchProviderTypesIncludesMiniMax(t *testing.T) {
+	var minimax *WebSearchProviderTypeInfo
+	providerTypes := GetWebSearchProviderTypes()
+	for i := range providerTypes {
+		if providerTypes[i].ID == string(WebSearchProviderTypeMiniMax) {
+			minimax = &providerTypes[i]
+			break
+		}
+	}
+	if minimax == nil {
+		t.Fatal("MiniMax provider type not found")
+	}
+	if !minimax.RequiresAPIKey || !minimax.SupportsProxy || minimax.RequiresEngineID || minimax.RequiresBaseURL {
+		t.Fatalf("unexpected MiniMax metadata: %+v", minimax)
+	}
+	if len(minimax.ConfigFields) != 1 {
+		t.Fatalf("len(ConfigFields) = %d, want 1", len(minimax.ConfigFields))
+	}
+	region := minimax.ConfigFields[0]
+	if region.Key != "region" || region.Default != "cn" || len(region.Options) != 2 {
+		t.Fatalf("unexpected region config metadata: %+v", region)
+	}
+}

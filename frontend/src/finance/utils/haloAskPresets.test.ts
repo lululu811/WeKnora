@@ -11,7 +11,7 @@ import {
 // 给 Z哥（白名单里没有 halo.*）显示 HALO 问法，等于给用户一个必定失败的动作。
 test('haloAskAvailable 只认白名单里的 halo.analyze', () => {
   assert.equal(haloAskAvailable([HALO_ANALYZE_TOOL, 'halo.verify']), true)
-  assert.equal(haloAskAvailable(['hithink.finance.query.sql', 'zettaranc.analyze']), false)
+  assert.equal(haloAskAvailable(['hithink.finance.query.sql', 'zettaranc.screener']), false)
   assert.equal(haloAskAvailable([]), false)
   assert.equal(haloAskAvailable(undefined), false)
   assert.equal(haloAskAvailable(null), false)

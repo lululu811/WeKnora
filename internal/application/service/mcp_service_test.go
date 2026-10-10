@@ -7,6 +7,7 @@ import (
 
 	"github.com/Tencent/WeKnora/internal/mcp"
 	"github.com/Tencent/WeKnora/internal/types"
+	"github.com/Tencent/WeKnora/internal/utils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -183,8 +184,16 @@ func TestUpdateMCPService_AppliesNonScalarUpdateWithoutName(t *testing.T) {
 	ctx := context.Background()
 	svc, repo := newTestService()
 	id := seedService(t, repo, "stored-api", "stored-token")
-	// Use resolvable example.com paths: subdomains like before.example.com fail
-	// SSRF DNS checks because they do not resolve to a public IP.
+	// Whitelist the fixture host for the duration of this test. UpdateMCPService
+	// runs the outbound URL guard, and that guard resolves hostnames: on a
+	// machine behind a fake-IP resolver every name answers inside
+	// 198.18.0.0/15, which the guard refuses as a restricted range, so the test
+	// failed on the local DNS setup rather than on the code under test. A
+	// whitelisted host skips the resolution check (utils.ValidateURLForSSRF),
+	// which is the same lever an operator has for a self-hosted endpoint.
+	utils.SetSSRFWhitelistFromRaw("example.com")
+	t.Cleanup(func() { utils.SetSSRFWhitelistFromRaw("") })
+
 	beforeURL := "https://example.com/before"
 	repo.store[id].Description = "before"
 	repo.store[id].URL = &beforeURL

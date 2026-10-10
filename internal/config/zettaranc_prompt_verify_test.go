@@ -66,9 +66,9 @@ func TestZettarancPromptToolRoutingIsDocumented(t *testing.T) {
 	// The prompt must tell the model which layer of the tool surface to reach
 	// for, and must not advertise a knowledge-base tool that does not exist.
 	for _, want := range []string{
-		"zettaranc.analyze",
 		"zettaranc.screener",
 		"hithink.finance.index.sector.membership",
+		"hithink.finance.analysis.trend",
 		"hithink.finance.analysis.levels",
 		"不是工具",
 	} {
@@ -86,6 +86,13 @@ func TestZettarancPromptToolRoutingIsDocumented(t *testing.T) {
 	require.NotContains(t, content, "zettaranc.backtest",
 		"prompt must not reference zettaranc.backtest: it is no longer granted, "+
 			"so the name cannot appear in any tool schema and warning about it is dead weight")
+
+	// 同一条理由，对象换成 zettaranc.analyze：复合分析工具已按「原子工具优先」
+	// 拆掉（单票分析只剩 hithink.finance.analysis.trend / volume / pattern /
+	// levels 四个原子工具），名字一旦留在 prompt 里，模型会去调一个不存在的工具。
+	require.NotContains(t, content, "zettaranc.analyze",
+		"prompt must not reference zettaranc.analyze: the composite tool was removed "+
+			"in favour of the four atomic hithink.finance.analysis.* tools")
 }
 
 // TestZettarancPromptSignalCountMatchesImplementation pins the signal count the
@@ -127,12 +134,12 @@ func TestZettarancPromptSignalCountMatchesImplementation(t *testing.T) {
 const declaredSignalCountForPrompt = 71
 
 // TestZettarancPromptDoesNotPromiseMissingAnalyseSections guards the zettaranc
-// prompt against advertising analysis sections zettaranc.analyze never returns.
+// prompt against advertising analysis outputs no granted tool returns.
 //
-// python-service /zettaranc/analyze 的返回只有 trend / volume / chart_pattern
-// / levels 四段（main.py:1136-1176）。prompt 此前写「一次调用即返回：…砖型图、
-// 三波理论阶段、麒麟会、30+ 战法信号、综合评分」，这些**一项都不存在**，
-// 每一项都会让模型向用户承诺一个拿不到的读数。
+// 单票分析现在只有四个原子工具（hithink.finance.analysis.trend / volume /
+// pattern / levels）——复合入口 zettaranc.analyze 已随「原子工具优先」改造删除。
+// prompt 此前写「一次调用即返回：…砖型图、三波理论阶段、麒麟会、30+ 战法信号、
+// 综合评分」，这些**一项都不存在**，每一项都会让模型向用户承诺一个拿不到的读数。
 func TestZettarancPromptDoesNotPromiseMissingAnalyseSections(t *testing.T) {
 	pt, err := loadPromptTemplates("../../config")
 	require.NoError(t, err)
@@ -145,26 +152,20 @@ func TestZettarancPromptDoesNotPromiseMissingAnalyseSections(t *testing.T) {
 	}
 	require.NotEmpty(t, content)
 
-	// 只查「声称 analyze 会返回评分」的那一句，不全篇禁词。
-	//
-	// prompt 里另有一处"60+ 技术指标、30+ 战法识别"（:245/:249/:270），那是
-	// **agent 自身能力**的描述——它确实能通过 screener/scan 做到，与 analyze
-	// 的返回无关。全篇禁词会把正确的自我描述也砍掉。
-	analyzeLine := ""
-	for _, line := range strings.Split(content, "\n") {
-		if strings.Contains(line, "zettaranc.analyze") && strings.Contains(line, "评分") {
-			analyzeLine = line
-		}
-	}
-	require.NotContains(t, analyzeLine, "综合评分（",
-		"prompt must not claim zettaranc.analyze returns a composite score: the "+
-			"endpoint returns only trend/volume/chart_pattern/levels and has no score field")
 	require.NotContains(t, content, "一次调用即返回：KDJ",
-		"prompt must not claim a single analyze call returns indicator values, "+
-			"brick/brick-chart or 战法信号: analyze has no such section")
+		"prompt must not claim a single call returns indicator values, "+
+			"brick/brick-chart or 战法信号: no granted analysis tool has such a section")
 	// 三波理论/麒麟会/四块砖确实无本地实现，但**允许** prompt 提到它们 ——
 	// 它需要告诉模型"用户问起这些就说算不出来，请去看工作台"（见同文件
 	// 「本地算不出来的东西」一节）。
-	require.Contains(t, content, "zettaranc.analyze",
-		"prompt must still route to zettaranc.analyze for single-stock questions")
+	require.NotContains(t, content, "zettaranc.analyze",
+		"prompt must not route single-stock questions to zettaranc.analyze: the "+
+			"composite tool is gone, so the name reaches no tool schema")
+	for _, want := range []string{
+		"hithink.finance.analysis.trend",
+		"hithink.finance.analysis.levels",
+	} {
+		require.Contains(t, content, want,
+			"prompt must route single-stock analysis to the atomic tool %s", want)
+	}
 }

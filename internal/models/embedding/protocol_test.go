@@ -14,6 +14,7 @@ import (
 	"github.com/Tencent/WeKnora/internal/models/api"
 	"github.com/Tencent/WeKnora/internal/models/limiter"
 	"github.com/Tencent/WeKnora/internal/types"
+	"github.com/Tencent/WeKnora/internal/utils"
 	"github.com/panjf2000/ants/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -55,6 +56,14 @@ func TestUnreachableUpstreamIsAnErrorForEveryProtocol(t *testing.T) {
 // A signing vendor without its identity pair would send unsigned requests
 // and fail at the far end with a less useful error.
 func TestSignedVendorNeedsItsIdentityPair(t *testing.T) {
+	// The base host is whitelisted because the SSRF guard resolves it, and on a
+	// machine behind a fake-IP resolver every public name answers from
+	// 198.18.0.0/15 (RFC 2544 benchmarking space), which the guard refuses —
+	// the identity-pair error under test would never be reached. The vendor
+	// check is what this test asserts, not the URL policy.
+	utils.SetSSRFWhitelistFromRaw("weknora.weixin.qq.com")
+	t.Cleanup(func() { utils.SetSSRFWhitelistFromRaw("") })
+
 	_, err := newEmbedder(Config{
 		Source: types.ModelSourceRemote, Provider: "weknoracloud",
 		BaseURL: "https://weknora.weixin.qq.com", ModelName: "m", AppSecret: "s",

@@ -7,20 +7,34 @@
         <span>{{ t('kline.picksBar', { count: workspace.picks.value.length }) }}</span>
       </div>
       <div class="picks-bar__list" role="tablist">
-        <button
+        <div
           v-for="(pick, idx) in workspace.picks.value"
           :key="`${pick.ticker}-${pick.exchange}-${idx}`"
-          type="button"
-          class="picks-bar__tab"
-          :class="{ 'is-active': workspace.activeIndex.value === idx }"
-          role="tab"
-          :aria-selected="workspace.activeIndex.value === idx"
-          @click="workspace.setActiveIndex(idx)"
+          class="picks-bar__tab-wrap"
         >
-          <span class="tab__code">{{ pick.ticker }}</span>
-          <span class="tab__name" v-if="pick.name">{{ pick.name }}</span>
-          <span class="tab__tag" v-if="pick.pattern">{{ pick.pattern }}</span>
-        </button>
+          <button
+            type="button"
+            class="picks-bar__tab"
+            :class="{ 'is-active': workspace.activeIndex.value === idx }"
+            role="tab"
+            :aria-selected="workspace.activeIndex.value === idx"
+            @click="workspace.setActiveIndex(idx)"
+          >
+            <span class="tab__code">{{ pick.ticker }}</span>
+            <span class="tab__name" v-if="pick.name">{{ pick.name }}</span>
+            <span class="tab__tag" v-if="pick.pattern">{{ pick.pattern }}</span>
+          </button>
+          <button
+            v-if="workspace.picks.value.length > 1"
+            type="button"
+            class="tab__close"
+            :title="t('watchlist.remove')"
+            :aria-label="t('watchlist.remove')"
+            @click.stop="workspace.removePick(idx)"
+          >
+            ×
+          </button>
+        </div>
       </div>
       <div class="picks-bar__hint">{{ t('kline.picksHint') }}</div>
     </div>
@@ -78,6 +92,22 @@
           :title="t('kline.bbiTitle')"
         >
           {{ latestQuote.aboveBbi ? t('kline.aboveBBI') : t('kline.belowBBI') }}
+        </span>
+
+        <!-- 四块砖多空共振状态 (短线/趋势/多空/阴阳) -->
+        <span
+          v-if="latestQuote.fourBricks"
+          class="status-pill four-bricks-pill"
+          :class="latestQuote.fourBricks.score > 0 ? 'is-bull' : latestQuote.fourBricks.score < 0 ? 'is-bear' : 'is-neutral'"
+          :title="`四块砖：短线(${latestQuote.fourBricks.bull1 ? '红' : '绿'}) · 趋势(${latestQuote.fourBricks.bull2 ? '红' : '绿'}) · 多空(${latestQuote.fourBricks.bull3 ? '红' : '绿'}) · 阴阳(${latestQuote.fourBricks.bull4 ? '红' : '绿'})`"
+        >
+          <span class="bricks-dots">
+            <i :class="latestQuote.fourBricks.bull1 ? 'b-up' : 'b-down'" />
+            <i :class="latestQuote.fourBricks.bull2 ? 'b-up' : 'b-down'" />
+            <i :class="latestQuote.fourBricks.bull3 ? 'b-up' : 'b-down'" />
+            <i :class="latestQuote.fourBricks.bull4 ? 'b-up' : 'b-down'" />
+          </span>
+          {{ latestQuote.fourBricks.text }}
         </span>
 
         <!-- 当前光标命中的形态反哺提问 -->
@@ -215,129 +245,32 @@
 
       <div class="toolbar__divider" />
 
-      <!-- 同花顺专业特性开关：神奇九转 & 形态气泡 -->
-      <div class="toolbar__group">
+      <!-- 图层开关：把特性开关收进下拉菜单，避免 19 个按钮平铺导致横向滚动。
+           原来 4 个独立按钮（九转、气泡、轮廓、关键位）+ 画线 5 个 = 9 个，
+           收进两个下拉菜单后工具栏从 19 个降到 12 个元素，多数屏幕不用滚动了。 -->
+      <t-dropdown :options="layerOptions" trigger="click" placement="bottom-left" attach="body">
         <button
           type="button"
-          class="toolbar__btn feature-btn"
-          :class="{ 'is-active': isTD9Enabled }"
-          :title="t('kline.td9Title')"
-          @click="toggleTD9"
+          class="toolbar__btn toolbar__dropdown-btn"
+          :class="{ 'has-active': hasActiveLayers }"
         >
-          {{ t('kline.td9') }}
+          <t-icon name="layers" size="14px" />
+          {{ t('kline.layers') }}
+          <t-icon name="chevron-down" size="12px" class="dropdown-caret" />
         </button>
-        <LayerFilterDropdown
-          :selection="bubbleSelection"
-          @toggle="(v) => (bubbleSelection = toggleOption(bubbleSelection, v))"
-          @set-all="(all) => (bubbleSelection = all ? selectAllOptions() : clearAllOptions(bubbleOptions))"
-          v-model:enabled="isPatternsEnabled"
-          :open="openLayerPanel === 'bubbles'"
-          @update:open="(v) => (openLayerPanel = v ? 'bubbles' : null)"
-          :title="t('kline.patternBubbles')"
-          :options="bubbleOptions"
-          :empty-text="isBoard ? t('kline.boardNoPattern') : t('kline.noPatternDetected')"
-          :hint="t('kline.patternBubbleHint')"
-        >
-          <button
-            type="button"
-            class="toolbar__btn feature-btn"
-            :class="{ 'is-active': isPatternsEnabled && bubbleOnCount > 0 }"
-            :disabled="isBoard"
-            :title="isBoard
-              ? t('kline.boardNoPatternDetail')
-              : t('kline.patternBubbleBtnTitle')"
-          >
-            {{ t('kline.patternBubbleLabel') }}<span class="feature-count">({{ bubbleOnCount }}/{{ bubbleOptions.length }})</span>
-          </button>
-        </LayerFilterDropdown>
-        <LayerFilterDropdown
-          :selection="outlineSelection"
-          @toggle="(v) => (outlineSelection = toggleOption(outlineSelection, v))"
-          @set-all="(all) => (outlineSelection = all ? selectAllOptions() : clearAllOptions(outlineOptions))"
-          v-model:enabled="isChartPatternsEnabled"
-          :open="openLayerPanel === 'outline'"
-          @update:open="(v) => (openLayerPanel = v ? 'outline' : null)"
-          :title="t('kline.patternOutline')"
-          :options="outlineOptions"
-          :empty-text="isBoard ? t('kline.boardNoPattern') : t('kline.noPatternDetected')"
-          :hint="t('kline.patternOutlineHint')"
-        >
-          <button
-            type="button"
-            class="toolbar__btn feature-btn"
-            :class="{ 'is-active': isChartPatternsEnabled && outlineOnCount > 0 }"
-            :disabled="isBoard"
-            :title="isBoard
-              ? t('kline.boardNoPatternOutlineDetail')
-              : t('kline.patternOutlineBtnTitle')"
-          >
-            {{ t('kline.patternOutlineLabel') }}<span class="feature-count">({{ outlineOnCount }}/{{ outlineOptions.length }})</span>
-          </button>
-        </LayerFilterDropdown>
-        <!-- 只有一句说明，不隐藏按钮：用户需要知道"这个功能存在，但对板块当前不可用"，
-             而不是让它凭空消失（消失会被当成 bug 或被误读成"识别失败"）。 -->
-        <span v-if="isBoard" class="feature-note">{{ t('kline.boardNoPattern') }}</span>
-        <button
-          type="button"
-          class="toolbar__btn feature-btn"
-          :class="{ 'is-active': isLevelsEnabled }"
-          :title="t('kline.levelsTitle')"
-          @click="toggleLevels"
-        >
-          {{ t('kline.levelsLabel') }}
-        </button>
-      </div>
+      </t-dropdown>
 
-      <div class="toolbar__divider" />
-
-      <!-- 交易员画线工具箱 -->
-      <div class="toolbar__group drawing-group">
-        <span class="group__label">{{ t('kline.drawing') }}</span>
+      <t-dropdown :options="drawingOptions" trigger="click" placement="bottom-left" attach="body">
         <button
           type="button"
-          class="toolbar__btn"
-          :class="{ 'is-active': activeDrawTool === 'segment' }"
-          :title="t('watchlist.drawTrend')"
-          @click="startDrawing('segment')"
+          class="toolbar__btn toolbar__dropdown-btn"
+          :class="{ 'has-active': activeDrawTool }"
         >
-          {{ t('watchlist.drawTrend') }}
+          <t-icon name="edit" size="14px" />
+          {{ t('kline.drawing') }}
+          <t-icon name="chevron-down" size="12px" class="dropdown-caret" />
         </button>
-        <button
-          type="button"
-          class="toolbar__btn"
-          :class="{ 'is-active': activeDrawTool === 'horizontalStraightLine' }"
-          :title="t('watchlist.drawHorizontal')"
-          @click="startDrawing('horizontalStraightLine')"
-        >
-          {{ t('watchlist.drawHorizontal') }}
-        </button>
-        <button
-          type="button"
-          class="toolbar__btn"
-          :class="{ 'is-active': activeDrawTool === 'priceChannelLine' }"
-          :title="t('watchlist.drawChannel')"
-          @click="startDrawing('priceChannelLine')"
-        >
-          {{ t('watchlist.drawChannel') }}
-        </button>
-        <button
-          type="button"
-          class="toolbar__btn"
-          :class="{ 'is-active': activeDrawTool === 'fibonacciLine' }"
-          :title="t('watchlist.drawFibo')"
-          @click="startDrawing('fibonacciLine')"
-        >
-          {{ t('watchlist.drawFibo') }}
-        </button>
-        <button
-          type="button"
-          class="toolbar__btn drawing-clear-btn"
-          :title="t('watchlist.drawClear')"
-          @click="clearUserDrawings"
-        >
-          {{ t('watchlist.drawClear') }}
-        </button>
-      </div>
+      </t-dropdown>
 
       <div class="toolbar__spacer" />
 
@@ -493,7 +426,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, shallowRef, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
+import { ref, shallowRef, computed, watch, onMounted, onUnmounted, nextTick, h } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { Chart } from 'klinecharts';
 import { useAgentWorkspace } from '@/finance/composables/useAgentWorkspace';
@@ -530,7 +463,7 @@ import { clearAllOptions, collapseByValue, enabledCount, isOptionEnabled, loadSe
 import { fetchChartPatterns, resolvePatternGeometry, resolveCandleMarks, patternsAtBar, samePatternSet, type DrawableCandle, type DrawablePattern } from './chart-patterns';
 import { computeLevels, pickChartLevels } from './levels';
 import { ActionType, type Coordinate } from 'klinecharts';
-import { calcDEMA, calcLongBBI, calcBBI, calcZXBrick } from './stock-score';
+import { calcDEMA, calcLongBBI, calcBBI, calcZXBrick, calcFourBricks, type FourBricksState } from './stock-score';
 import type { Period, SymbolInfo, KLineData } from './types';
 
 const { t } = useI18n();
@@ -609,6 +542,7 @@ interface LatestQuoteInfo {
   aboveYellow: boolean;
   whiteVal: number;
   yellowVal: number;
+  fourBricks?: FourBricksState | null;
 }
 
 const latestQuote = ref<LatestQuoteInfo | null>(null);
@@ -671,6 +605,91 @@ const outlineOptions = computed<LayerOption[]>(() =>
 
 const bubbleOnCount = computed(() => enabledCount(bubbleOptions.value, bubbleSelection.value));
 const outlineOnCount = computed(() => enabledCount(outlineOptions.value, outlineSelection.value));
+
+// 图层下拉菜单选项
+const hasActiveLayers = computed(() => isTD9Enabled.value || isPatternsEnabled.value || isChartPatternsEnabled.value || isLevelsEnabled.value);
+
+const layerOptions = computed(() => [
+  {
+    content: h('div', { class: 'layer-menu' }, [
+      h('div', { class: 'layer-menu__item' }, [
+        h('span', { class: 'layer-menu__label' }, t('kline.td9')),
+        h('t-switch', {
+          modelValue: isTD9Enabled.value,
+          size: 'small',
+          onChange: (val: boolean) => { isTD9Enabled.value = val; toggleTD9(); },
+        }),
+      ]),
+      h('div', { class: 'layer-menu__item' }, [
+        h('span', { class: 'layer-menu__label' }, `${t('kline.patternBubbleLabel')} (${bubbleOnCount.value}/${bubbleOptions.value.length})`),
+        h('t-switch', {
+          modelValue: isPatternsEnabled.value,
+          size: 'small',
+          onChange: (val: boolean) => { isPatternsEnabled.value = val; },
+        }),
+      ]),
+      h('div', { class: 'layer-menu__item' }, [
+        h('span', { class: 'layer-menu__label' }, `${t('kline.patternOutlineLabel')} (${outlineOnCount.value}/${outlineOptions.value.length})`),
+        h('t-switch', {
+          modelValue: isChartPatternsEnabled.value,
+          size: 'small',
+          onChange: (val: boolean) => { isChartPatternsEnabled.value = val; },
+        }),
+      ]),
+      h('div', { class: 'layer-menu__item' }, [
+        h('span', { class: 'layer-menu__label' }, t('kline.levelsLabel')),
+        h('t-switch', {
+          modelValue: isLevelsEnabled.value,
+          size: 'small',
+          onChange: (val: boolean) => { isLevelsEnabled.value = val; toggleLevels(); },
+        }),
+      ]),
+    ]),
+  },
+]);
+
+// 画线下拉菜单选项
+const drawingOptions = computed(() => [
+  {
+    content: h('div', { class: 'layer-menu' }, [
+      h('div', {
+        class: 'layer-menu__item',
+        onClick: () => startDrawing('segment'),
+      }, [
+        h('span', { class: 'layer-menu__label' }, t('watchlist.drawTrend')),
+        activeDrawTool.value === 'segment' ? h('t-icon', { name: 'check', size: '14px' }) : null,
+      ]),
+      h('div', {
+        class: 'layer-menu__item',
+        onClick: () => startDrawing('horizontalStraightLine'),
+      }, [
+        h('span', { class: 'layer-menu__label' }, t('watchlist.drawHorizontal')),
+        activeDrawTool.value === 'horizontalStraightLine' ? h('t-icon', { name: 'check', size: '14px' }) : null,
+      ]),
+      h('div', {
+        class: 'layer-menu__item',
+        onClick: () => startDrawing('priceChannelLine'),
+      }, [
+        h('span', { class: 'layer-menu__label' }, t('watchlist.drawChannel')),
+        activeDrawTool.value === 'priceChannelLine' ? h('t-icon', { name: 'check', size: '14px' }) : null,
+      ]),
+      h('div', {
+        class: 'layer-menu__item',
+        onClick: () => startDrawing('fibonacciLine'),
+      }, [
+        h('span', { class: 'layer-menu__label' }, t('watchlist.drawFibo')),
+        activeDrawTool.value === 'fibonacciLine' ? h('t-icon', { name: 'check', size: '14px' }) : null,
+      ]),
+      h('div', {
+        class: 'layer-menu__item layer-menu__item--danger',
+        onClick: clearUserDrawings,
+      }, [
+        h('span', { class: 'layer-menu__label' }, t('watchlist.drawClear')),
+        h('t-icon', { name: 'delete', size: '14px' }),
+      ]),
+    ]),
+  },
+]);
 
 /** 把勾选结果推给绘制层。两个图层各写各的键，互不覆盖。 */
 const syncBubbleTypes = (sel: LayerSelection) => {
@@ -860,7 +879,7 @@ const handleDataLoaded = (dataList: KLineData[]) => {
   const longBbi = calcLongBBI(dataList, [14, 28, 57, 114]);
   const bbiList = calcBBI(dataList);
   const zxBricks = calcZXBrick(dataList);
-
+  const fourBricks = calcFourBricks(dataList);
   const whiteVal = dema10[lastIdx] ?? close;
   const yellowVal = longBbi[lastIdx] ?? close;
   const bbiVal = bbiList[lastIdx] ?? close;
@@ -888,6 +907,7 @@ const handleDataLoaded = (dataList: KLineData[]) => {
     aboveYellow,
     whiteVal,
     yellowVal,
+    fourBricks,
   };
 
   // 数据到位后重画水平位。关键位是从这批 K 线算出来的，必须在数据进来之后
@@ -1059,6 +1079,9 @@ const handleKeyDown = (e: KeyboardEvent) => {
     periodIdx.value = 1;
   } else if (e.key === '3') {
     periodIdx.value = 2;
+  } else if (e.key === '/' || (e.key.toLowerCase() === 'k' && (e.metaKey || e.ctrlKey))) {
+    e.preventDefault();
+    showSearchModal.value = true;
   }
 };
 
@@ -1070,7 +1093,8 @@ const handleKeyDown = (e: KeyboardEvent) => {
 // 工具——这 20 个金融工具在 UI 上没有勾选框，agent 只能靠工具描述知道它们存在。
 const handleActionAsk = (type: 'valuation' | 'strategy' | 'report') => {
   const code = `${currentTicker.value}.${currentExchange.value}`;
-  const name = workspace.activePick.value?.name ? `(${workspace.activePick.value.name})` : '';
+  const stockName = currentStockName.value || workspace.activePick.value?.name || '';
+  const name = stockName ? `(${stockName})` : '';
   // 数据还没加载出来时 latestQuote 是 null，此时只给代码，不编造形态结论。
   const q = latestQuote.value;
 
@@ -1458,6 +1482,23 @@ onUnmounted(() => {
 
 <style lang="less" scoped>
 .kline-workspace {
+  /*
+   * A 股红涨绿跌。
+   *
+   * 之前这里是裸的 `#ef4444` / `#10b981`（Tailwind 色阶），与
+   * WatchDetailPanel 和 MarketDashboard 的 `#dc2626` / `#047857`
+   * 不同色相 —— 三个页面并排时颜色会跳。统一到同一对值 + 走变量，
+   * 深色模式下整体提亮（此前这个文件的涨跌色没有任何深色适配）。
+   * 深色选择器与本文件既有的双机制一致：`:root[theme-mode="dark"]` + `.is-dark`。
+   */
+  --wl-up: #dc2626;
+  --wl-down: #047857;
+
+  &.is-dark {
+    --wl-up: #f87171;
+    --wl-down: #34d399;
+  }
+
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -1565,12 +1606,22 @@ onUnmounted(() => {
     }
   }
 
+  .picks-bar__tab-wrap {
+    display: inline-flex;
+    align-items: center;
+    position: relative;
+
+    &:hover .tab__close {
+      opacity: 0.8;
+    }
+  }
+
   .picks-bar__tab {
     display: inline-flex;
     align-items: center;
     gap: 4px;
     /* 与 .toolbar__btn 同一套 token，两者并排时不该有尺寸差。 */
-    padding: 4px 10px;
+    padding: 4px 18px 4px 10px;
     border-radius: var(--app-radius-sm);
     border: 1px solid var(--td-component-stroke);
     background: transparent;
@@ -1604,6 +1655,37 @@ onUnmounted(() => {
       padding: 0 4px;
       border-radius: var(--app-radius-xs);
       background: rgba(255, 255, 255, 0.2);
+    }
+  }
+  .tab__close {
+    position: absolute;
+    right: 4px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 14px;
+    height: 14px;
+    line-height: 12px;
+    text-align: center;
+    border-radius: 50%;
+    border: none;
+    background: transparent;
+    color: currentColor;
+    opacity: 0;
+    font-size: 13px;
+    cursor: pointer;
+    padding: 0;
+    transition: all var(--app-motion-fast) ease;
+
+    &:hover {
+      opacity: 1 !important;
+      background: rgba(0, 0, 0, 0.15);
+    }
+
+    .picks-bar__tab.is-active + & {
+      color: #ffffff;
+      &:hover {
+        background: rgba(255, 255, 255, 0.3);
+      }
     }
   }
 
@@ -1751,10 +1833,10 @@ onUnmounted(() => {
     font-family: monospace;
 
     &.is-up {
-      color: #ef4444;
+      color: var(--wl-up);
     }
     &.is-down {
-      color: #10b981;
+      color: var(--wl-down);
     }
   }
 
@@ -1767,11 +1849,11 @@ onUnmounted(() => {
 
     &.is-up {
       background: rgba(239, 68, 68, 0.18);
-      color: #ef4444;
+      color: var(--wl-up);
     }
     &.is-down {
       background: rgba(16, 185, 129, 0.18);
-      color: #10b981;
+      color: var(--wl-down);
     }
   }
 
@@ -1797,12 +1879,12 @@ onUnmounted(() => {
 
     &.is-bull {
       background: rgba(239, 68, 68, 0.14);
-      color: #ef4444;
+      color: var(--wl-up);
       border-color: rgba(239, 68, 68, 0.3);
     }
     &.is-bear {
       background: rgba(16, 185, 129, 0.14);
-      color: #10b981;
+      color: var(--wl-down);
       border-color: rgba(16, 185, 129, 0.3);
     }
     &.is-neutral {
@@ -1818,6 +1900,25 @@ onUnmounted(() => {
       &:hover {
         background: rgba(235, 94, 40, 0.25);
         border-color: rgba(235, 94, 40, 0.8);
+      }
+    }
+
+    &.four-bricks-pill {
+      .bricks-dots {
+        display: inline-flex;
+        align-items: center;
+        gap: 2px;
+        margin-right: 2px;
+
+        i {
+          display: inline-block;
+          width: 5px;
+          height: 7px;
+          border-radius: 1px;
+
+          &.b-up { background: var(--wl-up); }
+          &.b-down { background: var(--wl-down); }
+        }
       }
     }
   }
@@ -2077,6 +2178,23 @@ onUnmounted(() => {
     flex: 1;
   }
 
+  // 下拉菜单按钮：与 toolbar__btn 同一套 token，多一个 caret 图标。
+  .toolbar__dropdown-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+
+    .dropdown-caret {
+      opacity: 0.6;
+    }
+
+    &.has-active {
+      background: rgba(59, 130, 246, 0.12);
+      border-color: rgba(59, 130, 246, 0.4);
+      color: #3b82f6;
+    }
+  }
+
   .toolbar__icon-btn {
     display: inline-flex;
     align-items: center;
@@ -2325,6 +2443,41 @@ onUnmounted(() => {
         color: var(--td-text-color-secondary);
       }
     }
+  }
+}
+</style>
+
+<!-- 图层下拉菜单：TDesign dropdown 渲染到 body，scoped 样式不生效，用全局样式。 -->
+<style lang="less">
+.layer-menu {
+  padding: 6px 0;
+  min-width: 180px;
+
+  &__item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 8px 14px;
+    cursor: pointer;
+    transition: background var(--app-motion-fast) ease;
+
+    &:hover {
+      background: rgba(0, 82, 217, 0.08);
+    }
+
+    &--danger {
+      color: var(--td-error-color);
+      &:hover {
+        background: rgba(239, 68, 68, 0.1);
+      }
+    }
+  }
+
+  &__label {
+    font-size: var(--app-text-sm);
+    color: var(--td-text-color-primary);
+    white-space: nowrap;
   }
 }
 </style>

@@ -119,6 +119,7 @@ import { projectDirBasename, shouldRenderHostProjectSettings, withOptionalProjec
 import { getSuggestedQuestions } from "@/api/agent/index";
 import type { SuggestedQuestion } from "@/api/agent/index";
 import { questionOriginFromSuggestion, type SendMessageOptions } from '@/utils/questionOrigin';
+import { parseLaunchAgentId } from '@/utils/launchAgent';
 import { useMenuStore } from '@/stores/menu';
 import { useSettingsStore } from '@/stores/settings';
 import { useUIStore } from '@/stores/ui';
@@ -311,6 +312,22 @@ watch(
     { deep: true },
 );
 
+/**
+ * 把落点指定的 agent 应用到输入态。必须在**路由守卫跑完之后**执行：会话页的
+ * onBeforeRouteLeave 会 restoreDefaultsIfSnapshotted()，把整个 settings 换成进入
+ * 会话前的快照 —— 在跳转前 selectAgent() 会连同 agent 一起被丢掉，然后新会话就按
+ * 「全局默认」（默认 builtin-quick-answer）发出去。
+ *
+ * 这是「带 prompt 开新对话」这条通道的接盘处（约定的键名与校验见
+ * utils/launchAgent.ts）：K 线面板的 HALO 报告按钮、自选页工作台底部的问法都从
+ * 这里进来。少了这一步，用户看到的是「检索材料里没有年报数据」—— 快速问答没有
+ * 工具，halo.analyze 这类工具名连 schema 都进不去。
+ */
+const applyLaunchAgent = () => {
+    const agentId = parseLaunchAgentId(route.query as Record<string, unknown>);
+    if (agentId) settingsStore.selectAgentForLaunch(agentId);
+};
+
 onMounted(() => {
     fetchSuggestedQuestions();
     loadRecentSessions();
@@ -319,6 +336,7 @@ onMounted(() => {
     requestAnimationFrame(() => {
         if (workbenchRef.value) rise(workbenchRef.value.querySelectorAll('[data-rise]'));
     });
+    applyLaunchAgent();
     const queryQ = route.query.q;
     if (typeof queryQ === 'string' && queryQ.trim()) {
         inputFieldRef.value?.triggerSend(queryQ.trim());
@@ -329,6 +347,7 @@ watch(
     () => route.query.q,
     (newQ) => {
         if (typeof newQ === 'string' && newQ.trim()) {
+            applyLaunchAgent();
             inputFieldRef.value?.triggerSend(newQ.trim());
         }
     },
@@ -420,25 +439,31 @@ async function openProjectDir() {
     flex: 1;
     display: flex;
     justify-content: center;
-    align-items: center;
+    align-items: flex-start;
     overflow-y: auto;
+    width: 100%;
+    box-sizing: border-box;
 }
 
 /* 骨架：composer 居中偏上 1/3 处是主角，卡片沉在它下面 */
 .workbench {
     display: flex;
     flex-flow: column;
-    align-items: center;
+    align-items: stretch;
     width: 100%;
     max-width: 960px;
+    margin: 0 auto;
     gap: var(--app-space-6);
-    /* 1/3 处：整体重心偏上，桌面留白在下方 */
+    /* 整体重心偏上，桌面留白在下方 */
     padding: var(--app-space-10) var(--app-space-6) var(--app-space-10);
     box-sizing: border-box;
 
     :deep(.answers-input) {
-        position: static;
-        transform: translateX(0);
+        position: static !important;
+        transform: none !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        align-items: stretch !important;
     }
 }
 
@@ -472,11 +497,19 @@ async function openProjectDir() {
     align-items: stretch;
     gap: var(--app-space-2);
     width: 100%;
+    box-sizing: border-box;
 }
 
 .create-chat-composer__stage {
     position: relative;
     width: 100%;
+    box-sizing: border-box;
+
+    :deep(.rich-input-container) {
+        box-sizing: border-box !important;
+        width: 100% !important;
+        max-width: 100% !important;
+    }
 }
 
 /* 主视觉：聚焦时一圈极淡的珊瑚暖光从输入框下缘晕开（像台灯亮了） */
@@ -504,6 +537,11 @@ async function openProjectDir() {
 }
 
 /* 继续昨天的工作：桌上摊着的便签 */
+.workbench-recents {
+    width: 100%;
+    box-sizing: border-box;
+}
+
 .workbench-section-title {
     margin: 0 0 var(--app-space-3);
     font-size: var(--app-text-2xs);
@@ -515,8 +553,12 @@ async function openProjectDir() {
 
 .workbench-recents__grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    /* 260px 下限 → 在 912px 内容宽里正好落 3 列（3×260 + 2×16 = 812 ≤ 912，
+       第 4 列要到 1088 才排得下）。*/
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
     gap: var(--app-space-4);
+    width: 100%;
+    box-sizing: border-box;
 }
 
 .recent-card {
@@ -525,6 +567,8 @@ async function openProjectDir() {
     align-items: flex-start;
     gap: var(--app-space-1);
     min-width: 0;
+    width: 100%;
+    box-sizing: border-box;
     padding: var(--app-space-4) var(--app-space-5);
     border: 1px solid var(--td-component-border);
     border-radius: var(--app-radius-md);
@@ -564,9 +608,16 @@ async function openProjectDir() {
 .recent-card__preview {
     max-width: 100%;
     overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    /* 卡片降到 ~293px 宽后单行截断只剩半句话，改双行 clamp。
+       原来这里是 white-space:nowrap，正是它把 grid 的 max-content 顶高、
+       挤出 2 列窄轨的元凶之一。 */
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow-wrap: anywhere;
     font-size: var(--app-text-xs);
+    line-height: 1.5;
     color: var(--td-text-color-secondary);
 }
 
@@ -612,6 +663,10 @@ async function openProjectDir() {
     align-items: center;
     gap: var(--app-space-5);
     width: 100%;
+    /* 必须显式声明：项目没有全局 * { box-sizing: border-box }，缺这一行时
+       width:100% + padding 0 18px 会让这张卡比 .workbench 内容宽出 38px
+       （912 → 950），右边缘对不齐下方输入框。 */
+    box-sizing: border-box;
     padding: 14px 18px;
     border: 1px solid var(--td-component-border);
     border-radius: var(--app-radius-xl);
@@ -759,9 +814,11 @@ async function openProjectDir() {
 @import '../../components/css/suggested-questions.less';
 
 .suggested-questions-container {
-    max-width: 960px;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
     margin: 0;
-    padding: 0 16px;
+    padding: 0;
 }
 
 .suggested-questions-grid {

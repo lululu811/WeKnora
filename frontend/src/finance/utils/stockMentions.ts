@@ -36,6 +36,23 @@ export const KNOWN_STOCK_NAMES: Readonly<Record<string, string>> = {
   '002475': '立讯精密',
   '002415': '海康威视',
 }
+/** 运行期动态缓存的代码与名称对应表（从自选池、搜索、行情快照中扩充） */
+const dynamicStockNames = new Map<string, string>()
+
+export function registerStockName(tickerOrThscode: string, name: string): void {
+  if (!tickerOrThscode || !name || tickerOrThscode === name) return
+  const cleanTicker = tickerOrThscode.split('.')[0].trim()
+  const cleanName = name.trim()
+  if (/^\d{6}$/.test(cleanTicker) && cleanName && !KNOWN_STOCK_NAMES[cleanTicker]) {
+    dynamicStockNames.set(cleanTicker, cleanName)
+  }
+}
+
+export function getStockName(tickerOrThscode: string): string {
+  const cleanTicker = tickerOrThscode.split('.')[0].trim()
+  return KNOWN_STOCK_NAMES[cleanTicker] || dynamicStockNames.get(cleanTicker) || ''
+}
+
 
 export interface MentionedStock {
   ticker: string;
@@ -159,7 +176,7 @@ export function extractStockMentions(text: string): StockMention[] {
       index,
       ticker,
       exchange,
-      name: name || KNOWN_STOCK_NAMES[ticker] || ticker,
+      name: name || getStockName(ticker) || ticker,
       thscode: `${ticker}.${exchange}`,
       fromTextName,
     })
@@ -190,6 +207,13 @@ export function extractStockMentions(text: string): StockMention[] {
 
   // --- 3. 已知名称直接出现 ---
   for (const [name, ticker] of Object.entries(KNOWN_TICKER_BY_NAME)) {
+    const at = text.indexOf(name)
+    if (at < 0) continue
+    const exchange = inferAShareExchange(ticker)
+    if (!exchange) continue
+    push(at, ticker, exchange, name)
+  }
+  for (const [ticker, name] of dynamicStockNames.entries()) {
     const at = text.indexOf(name)
     if (at < 0) continue
     const exchange = inferAShareExchange(ticker)

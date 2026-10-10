@@ -46,12 +46,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { MessagePlugin } from 'tdesign-vue-next';
 import { useAgentWorkspace } from '@/finance/composables/useAgentWorkspace';
-import { extractMentionedStocks, extractTrackingReason, type MentionedStock } from '@/finance/utils/stockMentions';
-import { addWatchItem, distillWatchReason } from '@/finance/api/watchlist';
+import { extractMentionedStocks, extractTrackingReason, registerStockName, type MentionedStock } from '@/finance/utils/stockMentions';
+import { addWatchItem, distillWatchReason, fetchQuotes } from '@/finance/api/watchlist';
 
 const props = defineProps<{
   session: any;
@@ -79,9 +79,89 @@ const rawContent = computed(() => {
   return s.answer || s.message || s.content || '';
 });
 
+/**
+ * 本轮提及的票。
+ *
+ * `extractMentionedStocks` 是**同步纯函数**，名称只能从它的本地表里查
+ * （15 条手写 + 运行期 `registerStockName` 攒下来的）。而 `registerStockName`
+ * 只有自选股页面在调 —— 聊天里模型提及的票大多没进过池子，于是查不到名称，
+ * 列表里就成了「002261 002261.SZ」这种代码顶替名称的样子。
+ *
+ * 所以这里在渲染前把缺名称的批量补齐：
+ *   1. 一次性 `fetchQuotes`（接受数组，不是一只一只查）
+ *   2. 查到后 `registerStockName` 写回模块级缓存 —— 同一页再算一次就是同步命中
+ *   3. 失败就算了，保持代码顶替，**不能因为取不到名称就不显示这只票**
+ */
+const resolvedNames = ref<Record<string, string>>({});
+
+/**
+ * 补齐名称。
+ *
+ * 注意这个组件在聊天记录里是**每条消息挂一个**（v-for），所以：
+ *   - 「已补过」必须是**模块级**的，不能是组件内 ref —— 否则同一只票在两条
+ *     消息里出现会被查两次，而 `registerStockName` 写的却是共享缓存，两边分裂
+ *   - 在途请求也要共享，否则并发挂载时会打出好几个相同请求
+ */
+const nameBackfilled = new Set<string>();
+const nameInFlight = new Set<string>();
+
+async function backfillMissingNames(stocks: MentionedStock[]): Promise<void> {
+  // name 就是 ticker 顶替的（stockMentions 里 `name || getStockName() || ticker`）
+  const todo = stocks
+    .filter((s) => s.name === s.ticker.split('.')[0])
+    .map((s) => s.thscode)
+    .filter((c) => !nameBackfilled.has(c) && !nameInFlight.has(c));
+  if (todo.length === 0) return;
+  todo.forEach((c) => nameInFlight.add(c));
+
+  try {
+    const res = await fetchQuotes(todo);
+    // res.data 是 **Record<thscode, Quote>**（按代码索引的字典），不是数组 ——
+    // 写成 for...of 会拿到 key 字符串，补全静默不生效。
+    const quotes = res.data ?? {};
+    const next = { ...resolvedNames.value };
+    for (const q of Object.values(quotes)) {
+      if (q?.thscode && q?.name) {
+        next[q.thscode] = q.name;
+        // 写回模块级缓存，同页内其他调用方也一起受益
+        registerStockName(q.thscode, q.name);
+        nameBackfilled.add(q.thscode);
+      }
+    }
+    resolvedNames.value = next;
+  } catch {
+    // 取不到名称不是错误：代码顶替是可读的降级，不是空状态。
+    // 不写 nameBackfilled，允许下次正文变化时重试。
+  } finally {
+    todo.forEach((c) => nameInFlight.delete(c));
+  }
+}
+
 const mentionedStocks = computed<MentionedStock[]>(() => {
-  return extractMentionedStocks(rawContent.value);
+  const list = extractMentionedStocks(rawContent.value);
+  const fix = resolvedNames.value;
+  if (Object.keys(fix).length === 0) return list;
+  return list.map((s) => {
+    const name = fix[s.thscode];
+    return name ? { ...s, name } : s;
+  });
 });
+
+/**
+ * 补齐触发。
+ *
+ * **必须 immediate** —— 这个组件挂在聊天记录里，页面打开时 session 往往已经
+ * 渲染完，正文不会��再变化，普通 watch 一次都不会触发（首版就是这么写的，
+ * 结果 23 只票全是代码）。immediate 让挂载时立刻补一次。
+ *
+ * immediate 会让首屏多一个请求，但：
+ *   - 它是异步的，不阻塞渲染（列表先用代码顶替渲染出来，拿到名字后自动替换）
+ *   - 同一批代码只发一次（backfillMissingNames 内部按 resolvedNames 去重）
+ */
+watch(rawContent, () => {
+  const list = extractMentionedStocks(rawContent.value);
+  if (list.length) void backfillMissingNames(list);
+}, { immediate: true });
 
 const handleClickStock = (stock: MentionedStock) => {
   emit('select-stock', stock, mentionedStocks.value);
@@ -205,23 +285,32 @@ const handleAddToPool = async (stock: MentionedStock) => {
   }
 }
 
+/*
+ * 两列等宽网格，不用 flex-wrap。
+ *
+ * 之前是 `flex-wrap`，它按内容宽度自然换行：每行能塞几个塞几个，chip 宽度又随
+ * 名称字数变化，于是右边一列参差不齐（截图里「聚飞光电」和「盈趣科技」错位）。
+ * 固定两列 + `1fr` 后每行的基线对齐，两列宽度一致，奇数个时最后一只自然落在左列。
+ */
 .stocks-bar__list {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px 10px;
   flex: 1;
 }
 
 /* chip 与「进池」紧挨着成组：它们说的是同一只票，拆成两个独立间距会让
    「进池」看起来像在说别的标的。 */
 .stocks-bar__item {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
+  min-width: 0;
 }
 
 .stock-chip__pool {
+  flex: 0 0 auto;
   padding: 4px 8px;
   border: 1px solid var(--td-component-stroke);
   border-radius: var(--app-radius-sm);
@@ -245,9 +334,16 @@ const handleAddToPool = async (stock: MentionedStock) => {
 }
 
 .stock-chip {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 6px;
+  /*
+   * 在两列 grid 里吃掉剩余宽度，让「名称+代码+看K线」这一组和右侧的「进池」
+   * 各自靠边 —— 对齐的落点是「进池」的左边缘，两列等宽才看得出齐。
+   * min-width:0 必需：否则长名称会把 grid 列撑破，白白加的列宽就废了。
+   */
+  flex: 1;
+  min-width: 0;
   padding: 4px 10px;
   border-radius: var(--app-radius-sm);
   border: 1px solid var(--td-component-stroke);
@@ -259,9 +355,15 @@ const handleAddToPool = async (stock: MentionedStock) => {
   transition: all var(--app-motion-fast) ease;
 
   :root[theme-mode="dark"] & {
-    background: #1e293b;
-    border-color: #334155;
-    color: #f8fafc;
+    /*
+     * 之前这里是 Tailwind slate 色（#1e293b / #334155 / #f8fafc）——
+     * 冷蓝灰，而本项目的深色主题是暖棕（--td-gray-color-11: #2B2320），
+     * 深色模式下两者并置会明显跳色。同一块的上方浅色态用的就是
+     * TDesign 变量，深色态却另写了一套色，改成同一套。
+     */
+    background: var(--td-bg-color-secondarycontainer);
+    border-color: var(--td-component-border);
+    color: var(--td-text-color-primary);
   }
 
   &:hover {
@@ -298,22 +400,55 @@ const handleAddToPool = async (stock: MentionedStock) => {
     }
   }
 
+  /*
+   * 名称吃掉剩余宽度，代码与「看K线」固定。窄列里名称过长时省略而不是撑破
+   * 容器 —— 完整名称在 title 里，鼠标悬停能看。
+   */
   .stock-chip__name {
     font-weight: 600;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
+  /* 代码固定宽度：两列对齐时它是主要的参照物，被名称挤压会整行错位 */
   .stock-chip__code {
+    flex: 0 0 auto;
     font-family: monospace;
     font-size: var(--app-text-xs);
     color: var(--td-text-color-secondary);
   }
 
   .stock-chip__action {
+    flex: 0 0 auto;
     font-size: var(--app-text-xs);
     color: var(--td-brand-color);
     opacity: 0.85;
     margin-left: 2px;
     font-weight: 500;
+  }
+}
+
+/*
+ * 容器够宽时两列，窄了退成一列。
+ *
+ * 用 `@container` 而不是媒体查询：这个条挂在聊天主区里，宽度由聊天区决定，
+ * 不是由视口决定 —— 侧栏展开与否都会改变它，用视口宽度判断会判错。
+ *
+ * container 挂在**父级** .stocks-bar__inner 上：元素不能查询自己的尺寸
+ * （container-type 加在 .stocks-bar__list 自己身上会让它的 @container 永远
+ * 匹配不到）。
+ */
+.stocks-bar__inner {
+  container-type: inline-size;
+  container-name: stockbar;
+}
+
+@container stockbar (max-width: 460px) {
+  .stocks-bar__list {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 </style>

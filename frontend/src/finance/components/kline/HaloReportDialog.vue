@@ -286,6 +286,9 @@ import {
 } from '@/finance/api/halo'
 import { listKnowledgeBases } from '@/api/knowledge-base'
 import { hasHaloSlots, maskHaloSlots } from '@/finance/utils/haloPlaceholders'
+import { buildHaloLaunch } from '@/finance/utils/haloLaunch'
+import { knownAgentIds, useCurrentWorkbenchComponents } from '@/composables/useWorkbench'
+import { useSettingsStore } from '@/stores/settings'
 import { createChatMarkdownRenderer, renderChatMarkdown } from '@/utils/chatMarkdownRenderer'
 import { sanitizeMarkdownHTML, safeMarkdownToHTML } from '@/utils/security'
 
@@ -317,6 +320,9 @@ const visible = defineModel<boolean>('visible', { required: true })
 
 const { t } = useI18n()
 const router = useRouter()
+const settings = useSettingsStore()
+/** 当前选中 agent 的白名单：决定这一跳是沿用当前 agent 还是改绑 builtin-halo。 */
+const { agentTools } = useCurrentWorkbenchComponents()
 
 /**
  * 一键开出会话，让 agent 跑 halo.analyze 出完整报告。
@@ -329,21 +335,31 @@ const router = useRouter()
  * 再说出「halo.analyze」这个内部工具名。既然面板手里已经有标的、报告期
  * 和全部量化锚点，就该由它把这一步接上，而不是把话留给用户。
  *
- * 落点是 /platform/creatChat?q=... —— 与 Watchlist.vue 里
+ * **落点必须带 agent**。只带 `?q=` 时，新会话沿用全局默认（builtin-quick-answer），
+ * 而快速问答走 RAG 管线、没有工具 —— halo.analyze 连 tool schema 都进不去，
+ * 模型只能拿检索结果硬答一句「检索材料里没有该年报数据」。这条捷径的落点由
+ * haloLaunch 算出（当前 agent 能跑就沿用，否则改绑 builtin-halo），
+ * 由 creatChat 在路由守卫之后应用。
+ *
+ * 落点是 /platform/creatChat?q=...&agent=... —— 与 Watchlist.vue 里
  * `agentWorkspace.sendToChatCallback` 用的是同一条既有通道，没有另造一条。
  */
 function launchFullReport() {
-  const subject = props.name ? `${props.name} (${props.thscode})` : props.thscode
-  const period = report.value?.period
-  visible.value = false
-  void router.push({
-    path: '/platform/creatChat',
-    query: {
-      q: `请对 ${subject}${period ? ` 的 ${period} 年报` : ''} 执行 halo.analyze，生成完整分析报告。` +
-         `我已经看过面板里的六维与成长性评分，这一步要的是护城河/滞胀防御/ESG/管理层/` +
-         `股东资金面/估值/风险这七个定性维度的判分与结论。`,
-    },
+  const launch = buildHaloLaunch({
+    thscode: props.thscode,
+    name: props.name,
+    period: report.value?.period,
+    currentAgentId: settings.selectedAgentId,
+    currentTools: agentTools.value,
+    knownAgentIds: knownAgentIds(),
   })
+  // 本部署里没有能跑 HALO 的 agent：跳过去只会得到和今天一样的失败，不如直说。
+  if (!launch) {
+    MessagePlugin.warning(t('halo.launchNoAgent'))
+    return
+  }
+  visible.value = false
+  void router.push(launch)
 }
 
 const markdownRenderer = createChatMarkdownRenderer()

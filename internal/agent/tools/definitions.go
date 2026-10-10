@@ -100,6 +100,16 @@ func AvailableToolDefinitions() []AvailableTool {
 		{Name: ToolDatabaseQuery, Label: "查询数据库", Description: "查询数据库中的信息"},
 		{Name: ToolDataAnalysis, Label: "数据分析", Description: "理解数据文件并进行数据分析"},
 		{Name: ToolDataSchema, Label: "查看数据元信息", Description: "获取表格文件的元信息"},
+		{
+			Name:        ToolShellExec,
+			Label:       "命令行终端 (Bash)",
+			Description: "在受控环境中执行终端命令行指令与脚本运行（仅在需要验证数据、运行程序或计算时克制调用，禁止无端滥用）",
+		},
+		{
+			Name:        ToolEditSandboxFile,
+			Label:       "工作区文件编辑",
+			Description: "精准局部修改会话工作区内的代码或文本文件",
+		},
 		{Name: ToolWikiReadPage, Label: "读取Wiki页面", Description: "读取指定的Wiki页面内容"},
 		{Name: ToolWikiSearch, Label: "搜索Wiki", Description: "在Wiki中搜索页面"},
 		{Name: ToolWikiFlagIssue, Label: "标记Wiki问题", Description: "标记页面中存在的事实错误或合并冲突问题"},

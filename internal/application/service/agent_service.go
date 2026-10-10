@@ -6,6 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/Tencent/WeKnora/internal/agent"
@@ -551,9 +554,16 @@ func (s *agentService) validInstallDir(config *types.AgentConfig) (string, bool)
 }
 
 // registerSandboxShellIfAllowed registers shell_exec when this run is
-// entitled to a sandbox shell: SkillsEnabled, or the built-in skill
-// installer. It does not require a ready skill to already exist, so a
-// fresh sandbox still has a way to inspect its environment.
+// entitled to a shell: SkillsEnabled, the built-in skill installer, or an
+// agent that declares shell_exec in its own AllowedTools. It does not require
+// a ready skill to already exist, so a fresh sandbox still has a way to
+// inspect its environment.
+//
+// Entitlement decides which executor the tool gets, and the order matters:
+// a resolved sandbox (remote or host) is always preferred, and only a
+// workspace with script execution switched off falls back to a local executor
+// rooted in a per-session temp directory. A sandbox that fails to resolve
+// registers nothing at all — see the fail-closed branch below.
 func (s *agentService) registerSandboxShellIfAllowed(
 	ctx context.Context,
 	toolRegistry *tools.ToolRegistry,
@@ -565,20 +575,40 @@ func (s *agentService) registerSandboxShellIfAllowed(
 	}
 	sandboxMgr, err := s.resolveWorkspaceSandbox(ctx, sessionID, config)
 	if err != nil {
+		// Fail closed. An unresolved backend says nothing about which machine
+		// this run belongs to, so it is not a licence to fall back to the host.
 		logger.Warnf(ctx, "Failed to resolve sandbox for shell_exec: %v", err)
 		return
 	}
-	if sandboxMgr == nil {
+
+	if sandboxMgr != nil && sandboxMgr.GetType() != sandbox.SandboxTypeDisabled {
+		// Remote backends keep the skills entitlement: a shell there only exists
+		// to serve skill scripts, unless the agent declares shell_exec in its own
+		// AllowedTools — that is how a general-purpose agent opts in without
+		// turning skills on for the whole tenant. The host backend IS the
+		// feature, so gating it on skills would leave Lite with a sandbox nobody
+		// can reach.
+		if sandboxMgr.GetType() != sandbox.SandboxTypeHost &&
+			!config.SkillsEnabled && !config.SkillInstallMode() &&
+			!slices.Contains(config.AllowedTools, tools.ToolShellExec) {
+			return
+		}
+		s.registerSandboxShellTool(ctx, toolRegistry, sandboxMgr, config)
 		return
 	}
-	// Remote backends keep the skills entitlement: a shell there only exists
-	// to serve skill scripts. The host backend IS the feature, so gating it on
-	// skills would leave Lite with a sandbox nobody can reach.
-	if sandboxMgr.GetType() != sandbox.SandboxTypeHost &&
-		!config.SkillsEnabled && !config.SkillInstallMode() {
-		return
+
+	// No usable sandbox (script execution off for this workspace). An agent that
+	// explicitly declares shell_exec still gets a shell, scoped to a per-session
+	// directory under the OS temp root rather than the host filesystem.
+	if slices.Contains(config.AllowedTools, tools.ToolShellExec) {
+		workDir := filepath.Join(os.TempDir(), "weknora_sessions", sessionID)
+		executor := tools.NewLocalShellExecutor(workDir)
+		resolver := s.userEnvResolver(ctx, config)
+		toolRegistry.RegisterTool(
+			tools.NewShellExecTool(executor, resolver).WithEnvCapture(s.skillEnvCapture(config)),
+		)
+		logger.Infof(ctx, "Registered local shell_exec tool for session: %s", sessionID)
 	}
-	s.registerSandboxShellTool(ctx, toolRegistry, sandboxMgr, config)
 }
 
 // resolveOpts is every resolve option this run is entitled to. Only the
@@ -1417,14 +1447,12 @@ func (s *agentService) registerTools(
 		//
 		// backtest.go and NewBacktestTool are kept: they are a documented stub, and
 		// real backtesting will re-add one line here when it lands.
-		case "zettaranc.analyze", "zettaranc.screener", "zettaranc.four_bricks":
+		case "zettaranc.screener", "zettaranc.four_bricks":
 			// Lazy-initialize the HTTP client on first use
 			if s.zettarancHTTPClient == nil {
 				s.zettarancHTTPClient = zettaranc.NewHTTPClient("")
 			}
 			switch toolName {
-			case "zettaranc.analyze":
-				toolToRegister = zettaranc.NewAnalyzeTool(s.zettarancHTTPClient)
 			case "zettaranc.screener":
 				toolToRegister = zettaranc.NewScreenerTool(s.zettarancHTTPClient)
 			case "zettaranc.four_bricks":

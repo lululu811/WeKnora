@@ -485,6 +485,34 @@ export const useSettingsStore = defineStore("settings", {
       localStorage.setItem("WeKnora_settings", JSON.stringify(this.settings));
     },
     
+    /**
+     * 落点显式指定的 agent：选它，并保证请求真的走 agent 管线。
+     *
+     * 与 selectAgent() 的区别在于 isAgentEnabled 的兜底。selectAgent() 只对两个内置
+     * 常量自动切换，其它 agent（包括 builtin-halo 这类 agent_type=custom 的内置）
+     * 一律留原值；而这里的调用方已经确定「要跑这个 agent 的工具」，留原值就会带着
+     * agent_id 走 knowledge-chat（RAG）分支 —— 工具连 tool schema 都进不去，模型只能
+     * 拿检索结果硬答。K 线面板的「让 agent 生成完整报告」踩的正是这个坑。
+     *
+     * 注意调用点必须落在路由守卫之后：会话页的 onBeforeRouteLeave 会
+     * restoreDefaultsIfSnapshotted()，把整个 settings 换成进入会话前的快照，
+     * 在此之前写进去的选择会被原样丢掉。
+     */
+    selectAgentForLaunch(agentId: string) {
+      const wantsAgentStream = agentId !== BUILTIN_QUICK_ANSWER_ID;
+      // 已经是对的就不动：selectAgent() 会清空 KB / 文件 / @ 选择，重复调用会把
+      // 用户当前的输入态洗掉，而落点的 q 变化可能触发多次。
+      if (this.settings.selectedAgentId === agentId && this.settings.isAgentEnabled === wantsAgentStream) {
+        return;
+      }
+      this.selectAgent(agentId);
+      this.settings.isAgentEnabled = wantsAgentStream;
+      // selectAgent() 已经写过一次 localStorage，但它写的是切换 isAgentEnabled
+      // **之前**的状态；自定义 agent 的 isAgentEnabled 不参与 reconcileBuiltinAgentMode
+      // 的纠偏，不补这一笔，刷新页面后就会出现「选中 builtin-halo 却关着 agent 模式」。
+      localStorage.setItem("WeKnora_settings", JSON.stringify(this.settings));
+    },
+
     // 获取选中的智能体ID
     getSelectedAgentId(): string {
       return this.settings.selectedAgentId || BUILTIN_QUICK_ANSWER_ID;

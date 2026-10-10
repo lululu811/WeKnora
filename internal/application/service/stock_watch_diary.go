@@ -519,6 +519,34 @@ func (s *StockWatchDiaryService) Get(
 	return s.repo.Get(ctx, userID, tenantID, thscode, tradeDate)
 }
 
+// TopRanked returns the top N scored diaries for a given trading day,
+// enriched with stock names from the user's watch list.
+func (s *StockWatchDiaryService) TopRanked(
+	ctx context.Context, userID string, tenantID uint64, tradeDate types.DateOnly, limit int,
+) ([]*types.StockWatchDiary, error) {
+	list, err := s.repo.TopRanked(ctx, userID, tenantID, tradeDate, limit)
+	if err != nil {
+		return nil, err
+	}
+	if len(list) > 0 && s.watches != nil {
+		watched, err := s.watches.List(ctx, userID, tenantID)
+		if err == nil {
+			names := make(map[string]string, len(watched))
+			for _, w := range watched {
+				if w != nil {
+					names[w.THSCode] = w.Name
+				}
+			}
+			for _, d := range list {
+				if d != nil && d.Name == "" {
+					d.Name = names[d.THSCode]
+				}
+			}
+		}
+	}
+	return list, nil
+}
+
 // RecordVerdictIgnored writes the event that says the user saw a verdict and
 // declined it.
 //

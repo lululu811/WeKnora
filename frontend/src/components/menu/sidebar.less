@@ -595,33 +595,94 @@
     font-family: var(--app-font-family);
     font-size: var(--app-text-xs);
     font-weight: 600;
-    color: var(--td-text-color-disabled);
-    padding-top: 4px;
-    padding-bottom: 1px;
-    margin-top: 0;
-    line-height: 16px;
+    color: var(--td-text-color-secondary);
+    padding: 6px 8px;
+    margin: 4px 6px 2px 6px;
+    line-height: 18px;
     user-select: none;
+    border-radius: var(--app-radius-md);
+    transition: background-color var(--app-motion-fast) ease, color var(--app-motion-fast) ease;
+
+    &.timeline_header--collapsible {
+        cursor: pointer;
+
+        &:hover {
+            background-color: var(--td-bg-color-secondarycontainer-hover);
+
+            .timeline_header-arrow,
+            .timeline_header-label {
+                color: var(--td-text-color-primary);
+            }
+
+            .timeline_header-count {
+                color: var(--td-text-color-primary);
+            }
+        }
+
+        &:focus-visible {
+            outline: 2px solid var(--td-brand-color);
+            outline-offset: 1px;
+        }
+    }
+}
+
+.aside_box .timeline_header__body {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    width: 100%;
+    min-width: 0;
+}
+
+.aside_box .timeline_header-arrow {
+    flex: 0 0 auto;
+    color: var(--td-text-color-secondary);
+    transition: transform var(--app-motion-fast) ease, color var(--app-motion-fast) ease;
+
+    &.timeline_header-arrow--collapsed {
+        transform: rotate(-90deg);
+    }
 }
 
 .aside_box .timeline_header-label {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
     white-space: nowrap;
+    transition: color var(--app-motion-fast) ease;
 }
 
-// 稳定筛选控件：常驻挂载并绝对定位于列表右上角，切换来源重载时不跳动
+.aside_box .timeline_header-count {
+    flex: 0 0 auto;
+    margin-left: auto;
+    padding: 0 5px;
+    font-family: var(--app-font-family-mono);
+    font-size: var(--app-text-2xs);
+    font-variant-numeric: tabular-nums;
+    color: var(--td-text-color-placeholder);
+    background: var(--td-bg-color-container-select);
+    border-radius: var(--app-radius-sm);
+    line-height: 16px;
+    transition: color var(--app-motion-fast) ease;
+}
+
+// 稳定筛选与折叠控件：独立功能行，避免绝对定位覆盖分组标题
 .aside_box .session-list-scope-header {
-    position: absolute;
-    top: 4px;
-    right: 10px;
-    z-index: 2;
+    position: relative;
+    z-index: 1;
     display: flex;
+    align-items: center;
     justify-content: flex-end;
-    max-width: calc(100% - var(--sidebar-inset-x) - 10px);
+    padding: 4px 10px 4px 10px;
+    width: 100%;
+    box-sizing: border-box;
 
     :deep(.session-source-filter--inline) {
         flex: 0 1 auto;
         min-width: 0;
         max-width: 100%;
-        opacity: 0;
+        opacity: 0.8;
         transition: opacity var(--app-motion-fast) ease;
     }
 }
@@ -631,6 +692,36 @@
 .aside_box .session-list-scope-header:focus-within :deep(.session-source-filter--inline),
 .aside_box .session-list-scope-header :deep(.session-source-filter--inline.session-source-filter--emphasized) {
     opacity: 1;
+}
+
+// 全部分组折叠/展开切换按钮
+.aside_box .session-list-collapse-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    width: 20px;
+    height: 20px;
+    margin-right: 2px;
+    padding: 0;
+    border: 0;
+    border-radius: var(--app-radius-sm);
+    background: transparent;
+    color: var(--td-text-color-placeholder);
+    cursor: pointer;
+    opacity: 0.6;
+    transition: background var(--app-motion-instant), color var(--app-motion-instant), opacity var(--app-motion-instant);
+
+    &:hover {
+        background: var(--td-bg-color-secondarycontainer-hover);
+        color: var(--td-text-color-primary);
+        opacity: 1;
+    }
+
+    &:focus-visible {
+        outline: 2px solid var(--td-brand-color);
+        outline-offset: 1px;
+    }
 }
 
 .aside_box .submenu_item_p {

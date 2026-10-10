@@ -4,6 +4,8 @@ import (
 	"errors"
 	"net"
 	"testing"
+
+	"github.com/Tencent/WeKnora/internal/ipclass"
 )
 
 // denyPrivate is the secure default policy.
@@ -114,8 +116,20 @@ func TestPolicyAllowsPublicLiteralAddresses(t *testing.T) {
 
 func TestPolicyAllowsPublicHostname(t *testing.T) {
 	const host = "api.e2b.dev"
-	if _, err := net.LookupIP(host); err != nil {
+	addrs, err := net.LookupIP(host)
+	if err != nil {
 		t.Skipf("no DNS available in this environment: %v", err)
+	}
+	// A hostname is only a usable fixture where DNS actually answers with a
+	// public address. Environments behind a fake-IP resolver (every hostname
+	// answers inside 198.18.0.0/15, the benchmarking range) cannot exercise
+	// this path at all — the guard is right to refuse those answers, so there
+	// is nothing to assert here rather than a property to fail on.
+	for _, ip := range addrs {
+		if class, reason := ipclass.Classify(ip); class != ipclass.Public && class != ipclass.Documentation {
+			t.Skipf("DNS for %q answers %s (%s): this environment resolves no hostname to a public address",
+				host, ip, reason)
+		}
 	}
 	if err := denyPrivate.Validate("https://" + host); err != nil {
 		t.Fatalf("denyPrivate.Validate(%q) = %v, want nil", host, err)

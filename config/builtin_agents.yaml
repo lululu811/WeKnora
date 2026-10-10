@@ -357,7 +357,6 @@ builtin_agents:
         #
         # 实现文件仍留在仓库里（backtest.go + agent_service.go 的构造分支），
         # 真实回测落地后加回这一行即可，无需重写工具本身。
-        - "zettaranc.analyze"
         - "zettaranc.screener"
         - "zettaranc.four_bricks"
 

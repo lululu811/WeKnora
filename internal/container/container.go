@@ -97,6 +97,7 @@ import (
 	"github.com/Tencent/WeKnora/internal/models/limiter" // register built-in vendors
 	"github.com/Tencent/WeKnora/internal/models/utils/ollama"
 	"github.com/Tencent/WeKnora/internal/quoteclient"
+	"github.com/Tencent/WeKnora/internal/industry"
 	"github.com/Tencent/WeKnora/internal/router"
 	"github.com/Tencent/WeKnora/internal/sandbox"
 	"github.com/Tencent/WeKnora/internal/storageallowlist"
@@ -295,6 +296,7 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(service.NewStockWatchService))
 	must(container.Provide(service.NewStockWatchConditionService))
 	must(container.Provide(service.NewStockWatchDiaryService))
+	must(container.Provide(service.NewStockWatchGradingService))
 	must(container.Provide(service.NewWikiPageService))
 	must(container.Provide(service.NewWikiIngestService, dig.Name("wikiIngest")))
 	must(container.Provide(service.NewWikiLintService))
@@ -508,6 +510,10 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	// the job declares rather than to their concrete types.
 	must(container.Provide(quoteclient.NewClient, dig.As(new(service.QuoteFetcher))))
 	must(container.Provide(alertnotify.NewFeishuNotifier, dig.As(new(service.AlertNotifier))))
+	// Industry fetcher for the grading job's industry-based grouping.
+	// nil-tolerant: the grading service accepts a nil Fetcher and falls back
+	// to fixed-size chunks when the python-service endpoint is unreachable.
+	must(container.Provide(industry.NewClient, dig.As(new(industry.Fetcher))))
 	must(container.Provide(service.NewStockWatchConditionJob))
 	// The diary is attached to the existing 08:30 job by MUTATION inside an
 	// Invoke, not by a provider that takes the job and returns the job: that
@@ -522,6 +528,17 @@ func BuildContainer(container *dig.Container) *dig.Container {
 		diaryRepo interfaces.StockWatchDiaryRepository,
 	) {
 		job.WithDiary(diaries, diaryRepo)
+	}))
+	// The grading step is attached the same way as diary: mutation in an
+	// Invoke, not a provider, to avoid a dig dependency cycle. It runs after
+	// diary inside the same 08:30 cron, so both see the same quote batch and
+	// the same trading day.
+	must(container.Invoke(func(
+		job *service.StockWatchConditionJob,
+		grading *service.StockWatchGradingService,
+		diaryRepo interfaces.StockWatchDiaryRepository,
+	) {
+		job.WithGrading(grading, diaryRepo)
 	}))
 	must(container.Invoke(startStockWatchConditionJob))
 	logger.Debugf(ctx, "[Container] Stock watch condition notifier registered")
@@ -1888,6 +1905,7 @@ func registerWebSearchProviders(registry *infra_web_search.Registry) {
 	registry.Register("bocha", infra_web_search.NewBochaProvider)
 	registry.Register("brave", infra_web_search.NewBraveProvider)
 	registry.Register("serply", infra_web_search.NewSerplyProvider)
+	registry.Register("minimax", infra_web_search.NewMiniMaxProvider)
 }
 
 // registerIMService registers adapter factories, loads enabled channels, and

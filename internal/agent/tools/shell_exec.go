@@ -135,6 +135,7 @@ var shellExecTool = BaseTool{
 // layouts rewrite the same copy through shellExecDescription.
 const legacyShellExecDescription = `Execute a command in the current session's isolated sandbox as root.
 The sandbox belongs to this session alone; nothing here runs on the host.
+- Discipline: call shell_exec only when execution is genuinely needed.
 - CWD defaults to /workspace on every call; cd does not persist.
   work_dir selects any directory inside the session sandbox; missing directories are created as the same user.
 - Use ls/find to discover files, grep/awk to search, and cat/head/tail/sed to inspect text. Read known paths directly; no mandatory discovery call.
@@ -152,7 +153,7 @@ The sandbox belongs to this session alone; nothing here runs on the host.
   If .venv is absent, create it with python3 -m venv --without-pip "${WEKNORA_SKILL_DIR:?}/.venv".
   Without uv, run the venv Python with -m ensurepip --upgrade before -m pip install.
   Changes live and die with this session.
-- Non-zero exit_code is a command result: inspect stderr before deciding whether a corrected call is useful. Transport failures/timeouts are tool failures. Changing tools does not change permissions; do not repeat a denied operation through another tool.
+- Non-zero exit_code is a command result: inspect stderr before deciding whether a corrected call is useful. Transport failures/timeouts are tool failures. A denied operation stays denied through another tool.
 - stdout/stderr have independent byte limits, preserving head and tail when truncated. Full output is not automatically saved; redirect verbose commands to a workspace log when it must be retained. Binary bytes are suppressed.
 - Use ![description](sandbox:<file name>) with exact links from Output files, never stdout or temporary paths.`
 
@@ -175,7 +176,8 @@ const hostShellExecDescription = "Execute a command in %s. The process is OS-san
 	"- Non-zero exit_code is a command result: inspect stderr before deciding whether a corrected call is useful. " +
 	"Do not bypass permission or policy denials through another tool.\n" +
 	"- stdout/stderr have independent byte limits. " +
-	"Redirect verbose commands to a workspace log when output must be kept."
+	"Redirect verbose commands to a workspace log when output must be kept.\n" +
+	"- Discipline: Call shell_exec only when real command execution is essential. Answer directly for general knowledge or conceptual questions."
 
 // ShellExecInput defines the input parameters for shell_exec.
 type ShellExecInput struct {

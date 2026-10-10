@@ -97,6 +97,16 @@ export function listWatchlist() {
   return get<{ success: boolean; data: WatchItem[] }>('/api/v1/watchlist')
 }
 
+/** 行业分类。与后端 industry.Client 对应，端点是 python-service 的 /watchlist/industry-map。 */
+export interface IndustryInfo {
+  level1: string  // 一级行业，如 "电子"
+  level2: string  // 二级行业，如 "半导体"
+}
+
+export function fetchIndustryMap(thscodes: string[]) {
+  return post<{ code: number; data: Record<string, IndustryInfo> }>('/api/market/industry-map', { thscodes })
+}
+
 export function addWatchItem(payload: {
   thscode: string;
   name?: string;
@@ -321,6 +331,12 @@ export interface WatchDiary {
   body: string
   /** 写这篇日记的模型 id。模型被换掉时，这栏能解释风格为什么变了。 */
   model_id: string
+  /** 评分任务评出的 0-100 综合分；未评分为 null */
+  final_score?: number | null
+  /** 当日总排名；未排为 null */
+  rank?: number | null
+  /** 18 维问答得分与理由 JSON */
+  scores?: string
   created_at: string
 }
 
@@ -376,5 +392,38 @@ export function ignoreDiary(thscode: string, tradeDate: string) {
   return post<{ success: boolean }>(
     `/api/v1/watchlist/${encodeURIComponent(thscode)}/diaries/ignore`,
     { trade_date: tradeDate },
+  )
+}
+
+// ===== 评分排行 =====
+
+/** 评分排行的一行（来自 grading job 的 final_score + rank）。 */
+export interface RankedDiary {
+  thscode: string
+  name?: string
+  trade_date: string
+  verdict: string
+  confidence: number
+  reasons: string
+  body: string
+  final_score: number | null
+  rank: number | null
+  scores: string  // JSON of {scores: {q1..q18}, reasons: {q1..q18}}
+  readings: string
+}
+
+/**
+ * 取某交易日评分 Top N。
+ *
+ * 后端按 final_score DESC 排序，只返回已评分的行（final_score IS NOT NULL）。
+ * 前端用于"今日 Top50"面板。
+ */
+export function listRanking(params: { trade_date?: string; limit?: number } = {}) {
+  const query = new URLSearchParams()
+  if (params.trade_date) query.set('trade_date', params.trade_date)
+  if (params.limit) query.set('limit', String(params.limit))
+  const qs = query.toString()
+  return get<{ success: boolean; data: RankedDiary[]; trade_date: string }>(
+    `/api/v1/watchlist/ranking${qs ? '?' + qs : ''}`,
   )
 }

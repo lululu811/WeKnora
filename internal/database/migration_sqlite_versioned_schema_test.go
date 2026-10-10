@@ -76,6 +76,7 @@ var versionedSQLiteColumns = map[string][]string{
 	"stock_watches":      {"state", "note"},      // 000035
 	"stock_watch_events": {"eval_date"},          // 000037
 	"mcp_services":       {"usage_instructions"}, // 000041
+	"stock_watch_diaries": {"final_score", "rank", "scores"}, // 000042
 }
 
 // expectedSQLiteMigrationVersion is the version every SQLite migration run must
@@ -93,7 +94,7 @@ var versionedSQLiteColumns = map[string][]string{
 // migrations directory. The constant stays a constant (readable, greppable,
 // and still the thing the assertions below compare against); what changes is
 // that drifting from disk now fails loudly and names the number to write.
-const expectedSQLiteMigrationVersion = 41
+const expectedSQLiteMigrationVersion = 42
 
 func TestSQLiteMigrationsCreateVersionedSchema(t *testing.T) {
 	repoRoot := sqliteRepoRoot(t)

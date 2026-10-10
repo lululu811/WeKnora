@@ -39,6 +39,8 @@ func EmptyTestResultsError(providerType string, provider any) error {
 		return fmt.Errorf(
 			"exa returned 0 results; verify the API key, account quota, network connectivity, and proxy settings",
 		)
+	case types.WebSearchProviderTypeMiniMax:
+		return fmt.Errorf("minimax returned 0 results; verify the API key, account balance, and network connectivity")
 	default:
 		return fmt.Errorf("search returned 0 results, please verify your API key and configuration")
 	}

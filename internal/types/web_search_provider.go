@@ -30,6 +30,7 @@ const (
 	WebSearchProviderTypeMetaso     WebSearchProviderType = "metaso"
 	WebSearchProviderTypeBocha      WebSearchProviderType = "bocha"
 	WebSearchProviderTypeSerply     WebSearchProviderType = "serply"
+	WebSearchProviderTypeMiniMax    WebSearchProviderType = "minimax"
 )
 
 // WebSearchProviderEntity represents a configured web search provider instance for a workspace.
@@ -370,6 +371,30 @@ func GetWebSearchProviderTypes() []WebSearchProviderTypeInfo {
 					Options: []WebSearchProviderConfigFieldOption{
 						{Label: "Enabled", Value: "true"},
 						{Label: "Disabled", Value: "false"},
+					},
+				},
+			},
+		},
+		{
+			ID:             "minimax",
+			Name:           "MiniMax",
+			RequiresAPIKey: true,
+			SupportsProxy:  true,
+			Description:    "MiniMax Web Search API (supports regional endpoints)",
+			DocsURL:        "https://platform.minimaxi.com/",
+			ConfigFields: []WebSearchProviderConfigField{
+				{
+					Key:            "region",
+					Label:          "Region",
+					LabelKey:       "webSearchSettings.configFields.region",
+					Type:           "select",
+					Required:       true,
+					Default:        "cn",
+					Description:    "Select MiniMax API service region (China / Global).",
+					DescriptionKey: "webSearchSettings.configFields.regionDesc",
+					Options: []WebSearchProviderConfigFieldOption{
+						{Label: "China (api.minimaxi.com)", LabelKey: "webSearchSettings.configFields.regionCN", Value: "cn"},
+						{Label: "Global (api.minimax.io)", LabelKey: "webSearchSettings.configFields.regionGlobal", Value: "global"},
 					},
 				},
 			},

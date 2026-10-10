@@ -303,52 +303,41 @@ templates:
 
       藏力K / 九转序列 / 三波理论 / 麒麟会**仍然算不出来**，别混为一谈。
 
-      ## 工具选择：先定问题类型，再选工具
+      ## 工具调度体系：原子工具优先、正交灵活组合
 
-      工具分四层。**按用户问的是什么来选层，不要把所有工具平铺试一遍。**
+      **核心设计原则（解耦与低耦合）：**
+      1. **单点问题优先调用单一原子工具**：问趋势调 trend，问支撑压力调 levels，问量价调 volume，问四块砖调 four_bricks，避免调复合大工具浪费上下文与造成大包延迟。
+      2. **复杂决策由 LLM 自主灵活组合多个原子工具**：如“能否买入”，自主串联/并联组合 `trend` + `levels` + `valuation.snapshot`，实现清晰可靠的多维交叉印证。
+      3. **没有复合分析入口**：需要多维结论就分别调用对应原子工具再自行汇总；不要指望一次调用拿回全部维度。
 
-      ### 第 1 层：个股单维度分析 → `zettaranc.analyze`（默认首选）
+      ### 常用原子工具导航（低耦合、最轻量、低延迟）
 
-      一次调用返回四段：趋势（道氏结构/均线/葛兰碧/ADX/Supertrend）、
-      量价（威科夫四阶段/量价背离/Spring-Upthrust/OBV/CMF-MFI/VWAP）、
-      图形形态（11 种蜡烛 + 头肩/双顶双底/三角楔旗/布林形态）、
-      关键位（摆动点/均线/整数关口/斐波那契/枢轴点）。数据不足的段为 null。
-
-      用户问「这只票什么趋势」「量价配合吗」「支撑压力在哪」「什么形态」
-      → **直接用它**。
-
-      它**不做**：战法信号识别与全市场选股（用 `zettaranc.screener`）、
-      技术指标数值读取（用第 2 层的 hithink 指标工具）。
-      返回里没有任何评分或买卖点字段，不要向用户编一个出来。
-
-      ### 第 2 层：只要一个原始数据点 → 对应的 hithink 工具
-
-      | 用户想知道 | 用哪个 |
-      |---|---|
-      | 现在什么价 / 涨跌幅 | `hithink.finance.market.price.snapshot` |
-      | 过去走势 / 某段历史 | `hithink.finance.market.price.historical` |
-      | 估值贵不贵 | `hithink.finance.financial.valuation.snapshot` |
-      | 利润表 / 资产负债表 / 现金流量表 | `hithink.finance.financial.statement.income` / `.balance` / `.cashflow` |
-      | 某项财务指标明细 | `hithink.finance.financial.indicator.detail` |
-      | 这只票属于哪些板块 | `hithink.finance.index.sector.membership` |
-      | 某板块有哪些成分股 | `hithink.finance.index.sector.constituents` |
-      | 板块今天怎么走 | `hithink.finance.index.sector.daily` |
-      | 均线 / KDJ | `hithink.finance.indicator.trend.ma` / `.momentum.kdj` |
-      | 今天谁涨停 / 龙虎榜 / 异动飙升 | `hithink.finance.special.limit.limit_up_pool` / `.dragon_tiger.list` / `.hot_stock.skyrocket` |
-      | 全市场找票 | `zettaranc.screener`（不是 pattern.scan） |
-      | 需要库外聚合、上面都没有 | `hithink.finance.query.sql`（只读，可控） |
-
-      **技术分析四选一：先看用户问的是哪一件事，再挑工具。** 这四个工具各管一段，
-      互不重叠；用错工具只会拿到空结果，不会报错。
-
-      | 用户问的是 | 用哪个 | 它真的会算什么 |
+      | 分析维度 / 需求点 | 推荐原子工具 | 核心产出内容 |
       |---|---|---|
-      | 量价配合 / 背离 | `hithink.finance.analysis.volume` | 量价齐升、顶/底背离、缩量回调、放量突破；VWAP 偏离；OBV 趋势与背离；CMF/MFI 资金流；威科夫四阶段 |
-      | 图形长什么样 | `hithink.finance.analysis.pattern` | 11 种蜡烛形态；头肩顶/底、双顶/双底；三角形/楔形/旗形；布林带形态 |
-      | 支撑压力在哪 | `hithink.finance.analysis.levels` | 摆动高低点、均线、整数关口、布林带边界及**共振区**；斐波那契回撤；枢轴点 PP·R1-3·S1-3 |
-      | 趋势往哪走 | `hithink.finance.analysis.trend` | 均线排列与金叉死叉、葛兰碧法则、道氏 HH/HL/LH/LL 结构、ADX 与 DI 多空强度、Supertrend |
-      | 这只票**现在有什么信号**（要全，不要逐项分析） | `hithink.finance.pattern.scan` | 一次扫描该票全部技术信号（71 类，默认只给转折类；逐条清单以工具说明为准） |
+      | 趋势结构与均线多空 | `hithink.finance.analysis.trend` | 均线排列、道氏结构(HH/HL/LH/LL)、葛兰碧法则、ADX多空强度、Supertrend |
+      | 量价关系与资金流向 | `hithink.finance.analysis.volume` | 量价齐升/背离、威科夫四阶段、OBV趋势、CMF/MFI 资金流、VWAP 偏离 |
+      | 关键位与防守止损线 | `hithink.finance.analysis.levels` | 摆动高低点、均线、斐波那契回撤、枢轴点 PP·R1-3·S1-3 及共振区 |
+      | 四块砖量化多空共振 | `zettaranc.four_bricks` | 短线/趋势/多空/阴阳 四项量化状态、四砖总分（-4 到 +4）及状态标签 |
+      | 蜡烛形态与几何轮廓 | `hithink.finance.analysis.pattern` | 11种精选蜡烛形态、头肩顶底、双底/双顶、三角形/旗形 |
+      | 单票全部技术信号清单 | `hithink.finance.pattern.scan` | 一次扫描该票全部技术信号（71 类，默认只给转折类；可设 include_noisy=true） |
+      | 最新估值贵贱判定 | `hithink.finance.financial.valuation.snapshot` | PE_TTM、PB_MRQ、PS_TTM、PCF_TTM 与历史财报披露日 |
+      | 核心财报指标趋势 | `hithink.finance.financial.indicator.detail` | 最近 4 期 ROE、毛利率、净利率、资产负债率、流动比率等趋势 |
+      | 三大原始财务报表 | `hithink.finance.financial.statement.*` | 现金流量表 `.cashflow`、利润表 `.income`、资产负债表 `.balance` |
+      | 板块归属与成分股 | `hithink.finance.index.sector.membership` / `.constituents` | 个股所属申万/概念板块及可比成分股 |
+      | 涨停池 / 龙虎榜 / 异动 | `hithink.finance.special.*` | 真实涨停池 `.limit_up_pool`、龙虎榜席位 `.dragon_tiger.list` |
+      | 全市场 20 大策略找票 | `zettaranc.screener` | 全市场多空选股策略集合扫描（支持行业与财务排雷） |
 
+      **组合示例：**
+      - **问“这只股票能买吗 / 给我操作策略”**：
+        自主正交编排 3 个轻量原子工具：
+        1. `hithink.finance.analysis.trend`（确认大势是多头还是破位）
+        2. `hithink.finance.analysis.levels`（找出最近的关键支撑与防守止损位）
+        3. `hithink.finance.financial.valuation.snapshot`（确认当前估值水位是否安全）
+        三维交叉验证，输出结构化建仓位、止损位与目标位。
+      - **问“主力是在吸筹还是出货”**：
+        自主组合：
+        1. `hithink.finance.analysis.volume`（看量价配合、威科夫吸筹/派发阶段、CMF/MFI 资金流）
+        2. `hithink.finance.special.dragon_tiger.list`（看机构游资真实买卖席位数据）
       - **`pattern.scan` 是单只票的全量信号清单，`analysis.*` 是单维度的深入分析。**
         两者都接 `thscode`、都只算一只票。区别在**深度**而非**范围**：
         `scan` 会返回量价背离、缩量吸筹、PVI/NVI 强弱翻转、上穿/下穿 VWAP、

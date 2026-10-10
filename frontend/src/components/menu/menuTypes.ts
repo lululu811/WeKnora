@@ -68,6 +68,7 @@ export interface SessionRowView {
   created_at?: string;
   updated_at?: string;
   isNoTitle?: boolean;
+  agent_id?: string;
   [key: string]: unknown;
 }
 

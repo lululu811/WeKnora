@@ -102,6 +102,71 @@ class TestMarketSnapshot:
         assert snapshot["unavailable"] == [], f"数据源缺失: {snapshot['unavailable']}"
 
 
+class TestMarketStateInSnapshot:
+    """snapshot 的 `market_state` 块（zettaranc.market_state 的输出）。"""
+
+    def test_block_present(self, snapshot):
+        assert "market_state" in snapshot, "snapshot 缺 market_state 块"
+
+    def test_no_error(self, snapshot):
+        """宽度缓存缺失不应让整块报错 —— 降级为中性分即可。"""
+        ms = snapshot["market_state"]
+        assert "error" not in ms, f"market_state 计算失败: {ms.get('error')}"
+
+    def test_composite_in_range(self, snapshot):
+        c = snapshot["market_state"]["composite"]
+        assert 0.0 <= c <= 100.0, f"composite 越界: {c}"
+
+    def test_regime_known_value(self, snapshot):
+        assert snapshot["market_state"]["regime"] in {"strong", "neutral", "weak"}
+
+    def test_marked_not_tradable(self, snapshot):
+        """
+        回测判定 composite 逐年 IC 反号，不能作方向信号。
+        这个标记必须出现在 API 响应里，前端才能看到。
+        """
+        ms = snapshot["market_state"]
+        assert ms["tradable"] is False
+        assert "方向信号" in ms["tradable_note"]
+
+    def test_exposure_hint_present(self, snapshot):
+        hint = snapshot["market_state"]["exposure_hint"]
+        for k in ("neutral", "follow", "contrarian"):
+            assert hint[k] in (0.0, 0.5, 1.0)
+
+    def test_all_dimensions_have_weight(self, snapshot):
+        dims = snapshot["market_state"]["dimensions"]
+        assert set(dims) == {"trend", "breadth", "volume", "volatility", "short_term_heat"}
+        for d in dims.values():
+            assert "weight" in d
+            assert 0.0 <= d["score"] <= 100.0
+
+    def test_weights_sum_to_one(self, snapshot):
+        dims = snapshot["market_state"]["dimensions"]
+        assert sum(d["weight"] for d in dims.values()) == pytest.approx(1.0, abs=1e-6)
+
+    def test_short_term_signal_is_inverted(self, snapshot):
+        """heat_score 高=冷、低=热，且必须同时给出 raw_heat 便于核对方向。"""
+        sig = snapshot["market_state"]["short_term_signal"]
+        assert sig["regime"] in {"cold", "hot", "neutral"}
+        assert sig["confidence"] == "weak"
+        assert "raw_heat" in sig
+        assert sig["heat_score"] + sig["raw_heat"] * 100 == pytest.approx(100.0, abs=0.01)
+
+    def test_as_of_present(self, snapshot):
+        assert snapshot["market_state"].get("as_of"), "缺 as_of 日期"
+
+    def test_breadth_freshness_present(self, snapshot):
+        """
+        宽度缓存是静态文件、没有定时任务重建，不报新鲜度就会静默用过期数据算分数。
+        """
+        f = snapshot["market_state"]["breadth_freshness"]
+        assert f["source"], "缺 source"
+        assert "stale" in f
+        assert f["note"], "必须给出可读的 note（落后多少天 / 怎么修）"
+        assert "days_behind_today" in f, "缺绝对新鲜度（同步任务挂掉时要能报）"
+
+
 class TestDragonTiger:
 
     def test_returns_five_rows(self, dragon):

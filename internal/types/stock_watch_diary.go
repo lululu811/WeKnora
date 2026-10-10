@@ -27,6 +27,8 @@ type StockWatchDiary struct {
 	// column:thscode for the same reason as on StockWatch and
 	// StockWatchCondition: GORM folds THSCode into ths_code otherwise.
 	THSCode string `json:"thscode" gorm:"column:thscode;type:varchar(16)"`
+	// Name is populated dynamically for UI display and is not a column in stock_watch_diaries.
+	Name string `json:"name,omitempty" gorm:"-"`
 	// TradeDate is the trading day this diary is ABOUT, not the day it was
 	// written. The job runs at 08:30 on D+1 and reports D's close, so a
 	// wall-clock date here would label a suspended symbol's stale reading as
@@ -58,7 +60,20 @@ type StockWatchDiary struct {
 	// model was shown. Persisted so a diary stays falsifiable: without it,
 	// re-reading "close 46.94" months later cannot be checked against what
 	// the model actually saw.
-	Readings  string    `json:"readings" gorm:"type:text;not null;default:''"`
+	Readings string `json:"readings" gorm:"type:text;not null;default:''"`
+	// FinalScore is the grading job's 0-100 aggregate across Q1-Q18.
+	// NULL until the grading job has run for this trading day; a diary written
+	// by the observation job alone carries no score. The grading job is a
+	// separate step that runs after the diary job, so the two writes never
+	// race on the same row.
+	FinalScore *float64 `json:"final_score" gorm:"type:numeric(5,2)"`
+	// Rank is the position within the same trade_date across all scopes.
+	// 1 is the best score. NULL until ranked.
+	Rank *int `json:"rank" gorm:"type:integer"`
+	// Scores is the JSON of the 18 individual question scores and per-question
+	// reasons. Kept as text rather than 18 columns so the schema stays flat
+	// and the detail drawer can iterate the JSON directly.
+	Scores    string    `json:"scores" gorm:"type:text;not null;default:''"`
 	CreatedAt time.Time `json:"created_at" gorm:"autoCreateTime"`
 	// UpdatedAt changes only when a same-day rerun overwrites the row.
 	UpdatedAt time.Time `json:"updated_at" gorm:"autoUpdateTime"`

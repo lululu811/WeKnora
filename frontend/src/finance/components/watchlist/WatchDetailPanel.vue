@@ -36,6 +36,18 @@
             </span>
             <span v-else class="wl-targets-item__empty"> {{ t('watchDetail.notSet') }} </span>
           </div>
+          <div class="wl-targets-item" v-if="tradeTarget?.shares">
+            <span class="wl-targets-item__k">{{ t('watchlist.targetShares') }}:</span>
+            <span class="wl-targets-item__v">
+              {{ tradeTarget.shares.toLocaleString() }} 股 (市值 ¥{{ targetMarketValueText }})
+            </span>
+          </div>
+          <div class="wl-targets-item" v-if="tradeTarget?.shares && tradeTarget?.cost && quote?.close">
+            <span class="wl-targets-item__k">{{ t('watchlist.targetPnlAmount') }}:</span>
+            <span class="wl-targets-item__v" :class="costPnlClass">
+              ¥{{ targetPnlAmountText }}
+            </span>
+          </div>
         </div>
         <t-button size="small" variant="text" theme="primary" class="wl-targets-card__edit-btn" @click="startEditTarget">
           <template #icon><t-icon name="edit" /></template>
@@ -63,6 +75,17 @@
             :step="0.1"
             size="small"
             :placeholder="t('watchDetail.stopPlaceholder')"
+            class="wl-targets-form__input"
+          />
+        </div>
+        <div class="wl-targets-form__row">
+          <span class="wl-targets-form__lbl"> {{ t('watchlist.targetShares') }}: </span>
+          <t-input-number
+            v-model="editShares"
+            :min="0"
+            :step="100"
+            size="small"
+            :placeholder="t('watchlist.sharesPlaceholder')"
             class="wl-targets-form__input"
           />
         </div>
@@ -104,6 +127,35 @@
           {{ t('watchlist.fullWorkspace') }}
         </t-button>
       </div>
+      <!-- 多周期大势共振矩阵 -->
+      <div v-if="resonanceResult" class="wl-resonance-card" :class="resonanceResult.themeClass">
+        <div class="wl-resonance-card__head">
+          <span class="wl-resonance-card__title">
+            <t-icon name="chart-bubble" size="14px" />
+            {{ t('watchlist.resonanceTitle') }}
+          </span>
+          <span class="wl-resonance-card__badge">{{ resonanceResult.label }}</span>
+        </div>
+        <div class="wl-resonance-card__matrix">
+          <div class="matrix-item" :class="resonanceResult.monthly ? 'is-bull' : 'is-bear'">
+            <span class="matrix-dot" />
+            <span class="matrix-lbl">{{ t('watchlist.resonanceMonth') }}</span>
+            <span class="matrix-status">{{ resonanceResult.monthly ? t('watchlist.trendBull') : t('watchlist.trendBear') }}</span>
+          </div>
+          <div class="matrix-item" :class="resonanceResult.weekly ? 'is-bull' : 'is-bear'">
+            <span class="matrix-dot" />
+            <span class="matrix-lbl">{{ t('watchlist.resonanceWeek') }}</span>
+            <span class="matrix-status">{{ resonanceResult.weekly ? t('watchlist.trendBull') : t('watchlist.trendBear') }}</span>
+          </div>
+          <div class="matrix-item" :class="resonanceResult.daily ? 'is-bull' : 'is-bear'">
+            <span class="matrix-dot" />
+            <span class="matrix-lbl">{{ t('watchlist.resonanceDay') }}</span>
+            <span class="matrix-status">{{ resonanceResult.daily ? t('watchlist.trendBull') : t('watchlist.trendBear') }}</span>
+          </div>
+        </div>
+        <p class="wl-resonance-card__desc">{{ resonanceResult.desc }}</p>
+      </div>
+
       <WatchKLineChart
         :thscode="thscode"
         :name="displayName"
@@ -141,6 +193,52 @@
             <span v-if="diaryOutcomes[d.trade_date]" class="wl-diary__track-badge" :class="'is-' + diaryOutcomes[d.trade_date].status">
               {{ diaryOutcomes[d.trade_date].label }}
             </span>
+          </div>
+          <!-- AI 18维评分卡 -->
+          <div v-if="d.final_score != null" class="wl-scorecard">
+            <div class="wl-scorecard__summary" @click="toggleScorecard(d.trade_date)">
+              <div class="wl-scorecard__left">
+                <span class="wl-scorecard__badge">
+                  <span class="wl-scorecard__val">{{ d.final_score.toFixed(1) }}</span>
+                  <span class="wl-scorecard__lbl">{{ t('watchlist.scoreFinal') }}</span>
+                </span>
+                <span v-if="d.rank" class="wl-scorecard__rank">#{{ d.rank }}</span>
+                <div class="wl-scorecard__dim-chips" v-if="parseDiaryDims(d)">
+                  <span class="wl-dim-chip" :title="`技术面均分: ${parseDiaryDims(d)!.tech.toFixed(0)}`">
+                    技术 {{ parseDiaryDims(d)!.tech.toFixed(0) }}
+                  </span>
+                  <span class="wl-dim-chip" :title="`资金面均分: ${parseDiaryDims(d)!.fund.toFixed(0)}`">
+                    资金 {{ parseDiaryDims(d)!.fund.toFixed(0) }}
+                  </span>
+                  <span class="wl-dim-chip" :title="`基本面均分: ${parseDiaryDims(d)!.base.toFixed(0)}`">
+                    基本面 {{ parseDiaryDims(d)!.base.toFixed(0) }}
+                  </span>
+                  <span class="wl-dim-chip" :title="`宏观质地均分: ${parseDiaryDims(d)!.macro.toFixed(0)}`">
+                    宏观 {{ parseDiaryDims(d)!.macro.toFixed(0) }}
+                  </span>
+                </div>
+              </div>
+              <button type="button" class="wl-scorecard__toggle-btn" :title="t('watchlist.toggleDimensions')">
+                <span>{{ expandedScorecards.has(d.trade_date) ? t('watchlist.collapseDimensions') : t('watchlist.expandDimensions') }}</span>
+                <t-icon :name="expandedScorecards.has(d.trade_date) ? 'chevron-up' : 'chevron-down'" size="12px" />
+              </button>
+            </div>
+
+            <!-- 展开的 18 题问答得分细目 -->
+            <div v-if="expandedScorecards.has(d.trade_date) && parseScoresJson(d.scores).length" class="wl-scorecard__details">
+              <div
+                v-for="item in parseScoresJson(d.scores)"
+                :key="item.key"
+                class="wl-scorecard__q-row"
+              >
+                <div class="wl-scorecard__q-head">
+                  <span class="q-tag">{{ item.category }}</span>
+                  <span class="q-name">{{ item.name }}</span>
+                  <span class="q-score" :class="qScoreClass(item.score)">{{ item.score }}分</span>
+                </div>
+                <div v-if="item.reason" class="wl-scorecard__q-reason">{{ item.reason }}</div>
+              </div>
+            </div>
           </div>
           <p class="wl-diary__body">{{ d.body }}</p>
           <p v-if="d.model_id" class="wl-diary__model">{{ t('watchlist.diaryBy', { model: d.model_id }) }}</p>
@@ -243,17 +341,20 @@ const tradeTarget = ref<TradeTarget | null>(null)
 const editingTarget = ref(false)
 const editCost = ref<number | undefined>(undefined)
 const editStop = ref<number | undefined>(undefined)
+const editShares = ref<number | undefined>(undefined)
 
 function refreshTradeTarget() {
   tradeTarget.value = getTradeTarget(props.thscode)
   editCost.value = tradeTarget.value?.cost
   editStop.value = tradeTarget.value?.stopLoss
+  editShares.value = tradeTarget.value?.shares
   editingTarget.value = false
 }
 
 function startEditTarget() {
   editCost.value = tradeTarget.value?.cost
   editStop.value = tradeTarget.value?.stopLoss
+  editShares.value = tradeTarget.value?.shares
   editingTarget.value = true
 }
 
@@ -261,6 +362,7 @@ function handleSaveTarget() {
   const tVal: TradeTarget = {
     cost: editCost.value && editCost.value > 0 ? editCost.value : undefined,
     stopLoss: editStop.value && editStop.value > 0 ? editStop.value : undefined,
+    shares: editShares.value && editShares.value > 0 ? Math.floor(editShares.value) : undefined,
   }
   saveTradeTarget(props.thscode, tVal)
   tradeTarget.value = tVal
@@ -273,6 +375,7 @@ function handleClearTarget() {
   tradeTarget.value = null
   editCost.value = undefined
   editStop.value = undefined
+  editShares.value = undefined
   editingTarget.value = false
   MessagePlugin.success(t('watchlist.targetCleared'))
 }
@@ -299,6 +402,80 @@ const currentBars = ref<KLineData[]>([])
 function onBarsLoaded(bars: KLineData[]) {
   currentBars.value = bars
 }
+const targetMarketValueText = computed(() => {
+  if (!tradeTarget.value?.shares || !props.quote?.close) return '—'
+  return (tradeTarget.value.shares * props.quote.close).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+})
+
+const targetPnlAmountText = computed(() => {
+  if (!tradeTarget.value?.shares || !tradeTarget.value?.cost || !props.quote?.close) return '—'
+  const diff = (props.quote.close - tradeTarget.value.cost) * tradeTarget.value.shares
+  return `${diff >= 0 ? '+' : ''}${diff.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+})
+
+const resonanceResult = computed(() => {
+  const bars = currentBars.value
+  if (!bars || bars.length < 20) return null
+  const closes = bars.map(b => b.close).filter((c): c is number => typeof c === 'number' && Number.isFinite(c))
+  if (closes.length < 20) return null
+  const latestClose = closes[closes.length - 1]
+
+  const avg = (n: number) => {
+    const slice = closes.slice(-n)
+    return slice.reduce((a, b) => a + b, 0) / slice.length
+  }
+
+  // 1. 日线 MA20
+  const ma20 = avg(20)
+  const daily = latestClose >= ma20
+
+  // 2. 周线 MA5 ≈ 25 根日线均价 (5 周)
+  const ma25 = closes.length >= 25 ? avg(25) : ma20
+  const weekly = latestClose >= ma25
+
+  // 3. 月线 MA5 ≈ 100 根日线均价 (5 个月)
+  const ma100 = closes.length >= 100 ? avg(100) : (closes.length >= 60 ? avg(60) : ma25)
+  const monthly = latestClose >= ma100
+
+  if (monthly && weekly && daily) {
+    return {
+      daily, weekly, monthly,
+      label: '三红共振 · 强顺势',
+      themeClass: 'is-bull-all',
+      desc: '日、周、月三级别均线呈多头共振，大势与短线均处于主升浪区间。',
+    }
+  }
+  if (monthly && weekly && !daily) {
+    return {
+      daily, weekly, monthly,
+      label: '大顺小逆 · 回踩买点',
+      themeClass: 'is-bull-pullback',
+      desc: '月线与周线趋势保持向上，日线出现短期技术回踩，回抽均线观察试仓机会。',
+    }
+  }
+  if (!monthly && !weekly && daily) {
+    return {
+      daily, weekly, monthly,
+      label: '超跌反弹 · 逆势防守',
+      themeClass: 'is-bear-bounce',
+      desc: '中长级别仍受均线压制，日线出现短期超跌反弹脉冲，注意高抛止盈防守。',
+    }
+  }
+  if (!monthly && !weekly && !daily) {
+    return {
+      daily, weekly, monthly,
+      label: '三绿空头 · 破位规避',
+      themeClass: 'is-bear-all',
+      desc: '日、周、月三级别均线破位下行，空头排列，建议严控仓位、谨慎观望。',
+    }
+  }
+  return {
+    daily, weekly, monthly,
+    label: daily ? '短线转多 · 观察持续' : '中短分歧 · 震荡整理',
+    themeClass: daily ? 'is-mixed-up' : 'is-mixed-down',
+    desc: '多空均线出现交叉分歧，处于震荡筑底或整理蓄势阶段。',
+  }
+})
 
 const backtestData = computed(() => computeDiaryOutcomes(diaries.value, currentBars.value))
 const diaryOutcomes = computed(() => backtestData.value.outcomes)
@@ -436,6 +613,101 @@ watch(() => props.thscode, () => {
   loadDiaries()
   refreshTradeTarget()
 })
+const expandedScorecards = ref<Set<string>>(new Set())
+function toggleScorecard(tradeDate: string) {
+  if (expandedScorecards.value.has(tradeDate)) {
+    expandedScorecards.value.delete(tradeDate)
+  } else {
+    expandedScorecards.value.add(tradeDate)
+  }
+}
+
+interface ParsedQItem {
+  key: string
+  category: string
+  name: string
+  score: number
+  reason: string
+}
+
+const Q_CONFIG: Record<string, { category: string; name: string }> = {
+  q1: { category: '技术', name: '趋势强度' },
+  q2: { category: '技术', name: '短期动量' },
+  q3: { category: '技术', name: '量能配合' },
+  q4: { category: '技术', name: '技术形态' },
+  q5: { category: '技术', name: '趋势稳定' },
+  q6: { category: '技术', name: '量价协调' },
+  q7: { category: '技术', name: '均线支撑' },
+  q8: { category: '技术', name: '技术综合' },
+  q9: { category: '资金', name: '资金方向' },
+  q10: { category: '资金', name: '量价关系' },
+  q11: { category: '资金', name: '交易活跃' },
+  q12: { category: '资金', name: '资金综合' },
+  q13: { category: '基本面', name: '入池理由' },
+  q14: { category: '基本面', name: '公司质地' },
+  q15: { category: '基本面', name: '观察变化' },
+  q16: { category: '宏观', name: '行业风险' },
+  q17: { category: '宏观', name: '护城河' },
+  q18: { category: '宏观', name: '估值水平' },
+}
+
+function parseDiaryDims(d: WatchDiary): { tech: number; fund: number; base: number; macro: number } | null {
+  if (!d.scores) return null
+  try {
+    const parsed = typeof d.scores === 'string' ? JSON.parse(d.scores) : d.scores
+    const s = parsed?.scores || parsed
+    if (!s || typeof s !== 'object') return null
+    const avg = (keys: string[]) => {
+      let sum = 0, count = 0
+      for (const k of keys) {
+        if (typeof s[k] === 'number') { sum += s[k]; count++ }
+      }
+      return count > 0 ? sum / count : 0
+    }
+    return {
+      tech: avg(['q1', 'q2', 'q3', 'q4', 'q5', 'q6', 'q7', 'q8']),
+      fund: avg(['q9', 'q10', 'q11', 'q12']),
+      base: avg(['q13', 'q14', 'q15']),
+      macro: avg(['q16', 'q17', 'q18']),
+    }
+  } catch {
+    return null
+  }
+}
+
+function parseScoresJson(raw: string | undefined): ParsedQItem[] {
+  if (!raw) return []
+  try {
+    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw
+    const s = parsed?.scores || parsed
+    const r = parsed?.reasons || {}
+    if (!s || typeof s !== 'object') return []
+    const out: ParsedQItem[] = []
+    for (let i = 1; i <= 18; i++) {
+      const k = `q${i}`
+      if (s[k] !== undefined) {
+        const conf = Q_CONFIG[k] || { category: '其他', name: k.toUpperCase() }
+        out.push({
+          key: k,
+          category: conf.category,
+          name: conf.name,
+          score: Number(s[k]) || 0,
+          reason: typeof r[k] === 'string' ? r[k] : '',
+        })
+      }
+    }
+    return out
+  } catch {
+    return []
+  }
+}
+
+function qScoreClass(score: number): string {
+  if (score >= 70) return 'is-high'
+  if (score <= 45) return 'is-low'
+  return 'is-mid'
+}
+
 </script>
 
 <style lang="less" scoped>
@@ -444,7 +716,7 @@ watch(() => props.thscode, () => {
   flex-direction: column;
   gap: 12px;
   flex: none;
-  border-left: 1px solid var(--td-component-stroke-color);
+  border-left: 1px solid var(--td-component-stroke);
   padding-left: 12px;
   overflow-y: auto;
   min-width: 360px;
@@ -470,9 +742,30 @@ watch(() => props.thscode, () => {
 .wl-detail__price { font-size: var(--app-text-2xl); font-weight: 600; }
 .wl-detail__date { margin-left: auto; opacity: 0.6; font-size: var(--app-text-sm); }
 
-/* A 股红涨绿跌，与表格里同一对色值（见 Watchlist.vue 的 --wl-up/--wl-down）。 */
-.is-up { color: var(--wl-up, #dc2626); }
-.is-down { color: var(--wl-down, #047857); }
+/*
+ * A 股红涨绿跌。
+ *
+ * 之前这里是 `var(--wl-up)` —— 但 `--wl-up` **谁都没定义过**
+ * （注释说"见 Watchlist.vue 的 --wl-up/--wl-down"，而那个文件里并没有），
+ * 所以永远走 fallback 硬编码。后果有两个：
+ *   1. 深色模式下暗红 #dc2626 配深背景基本看不见（这个面板深色适配原本是 0 处）
+ *   2. 想改涨跌色要改 6 个 var() 里的 6 个字面量
+ *
+ * 现在在根类上定义变量，深色模式整体提亮一档。
+ * 浅色与 MarketDashboard.vue 的 --md-up/--md-down 取同一对值，两处一致。
+ */
+.wl-detail {
+  --wl-up: #dc2626;
+  --wl-down: #047857;
+}
+
+:global(:root[theme-mode='dark']) .wl-detail {
+  --wl-up: #f87171;
+  --wl-down: #34d399;
+}
+
+.is-up { color: var(--wl-up); }
+.is-down { color: var(--wl-down); }
 
 .wl-detail__section { display: flex; flex-direction: column; gap: 6px; }
 .wl-detail__section-head {
@@ -503,7 +796,7 @@ watch(() => props.thscode, () => {
 
 .wl-diary { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
 .wl-diary__item {
-  border: 1px solid var(--td-component-stroke-color);
+  border: 1px solid var(--td-component-stroke);
   border-radius: var(--app-radius-sm); padding: 8px 10px;
 }
 .wl-diary__head { display: flex; align-items: center; gap: 8px; font-size: var(--app-text-sm); }
@@ -516,8 +809,8 @@ watch(() => props.thscode, () => {
 }
 /* 建议买入偏红、建议移除偏绿，与 A 股涨跌色相反是有意的：
    这里说的是「该做什么」而不是「今天涨没涨」。 */
-.wl-diary__verdict.is-buy, .wl-diary__verdict.is-keep { color: #dc2626; }
-.wl-diary__verdict.is-sell, .wl-diary__verdict.is-exit { color: #047857; }
+.wl-diary__verdict.is-buy, .wl-diary__verdict.is-keep { color: var(--wl-up); }
+.wl-diary__verdict.is-sell, .wl-diary__verdict.is-exit { color: var(--wl-down); }
 .wl-diary__verdict.is-tighten { color: #b45309; }
 .wl-diary__verdict.is-hold, .wl-diary__verdict.is-none { color: #475569; }
 
@@ -636,6 +929,240 @@ watch(() => props.thscode, () => {
   &.is-neutral {
     background: var(--td-bg-color-component);
     color: var(--td-text-color-secondary);
+  }
+}
+.wl-scorecard {
+  margin: 6px 0;
+  border: 1px solid var(--td-component-stroke);
+  border-radius: var(--app-radius-sm, 6px);
+  background: var(--td-bg-color-secondarycontainer, #f9f9f9);
+  padding: 8px 10px;
+
+  &__summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  &__left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  &__badge {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--td-brand-color) 12%, transparent);
+    color: var(--td-brand-color);
+  }
+
+  &__val {
+    font-size: 14px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+
+  &__lbl {
+    font-size: 11px;
+    opacity: 0.85;
+  }
+
+  &__rank {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--td-text-color-secondary, #666);
+    background: var(--td-bg-color-container, #fff);
+    border: 1px solid var(--td-component-stroke);
+    padding: 1px 6px;
+    border-radius: 3px;
+  }
+
+  &__dim-chips {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+
+  &__toggle-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    font-size: 11px;
+    color: var(--td-brand-color);
+    padding: 2px 4px;
+
+    &:hover {
+      text-decoration: underline;
+    }
+  }
+
+  &__details {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px dashed var(--td-component-stroke);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  &__q-row {
+    font-size: 12px;
+    padding: 4px 6px;
+    background: var(--td-bg-color-container, #fff);
+    border-radius: 4px;
+    border: 1px solid var(--td-border-level-1-color, #f0f0f0);
+  }
+
+  &__q-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+
+    .q-tag {
+      font-size: 10px;
+      padding: 1px 4px;
+      border-radius: 2px;
+      background: var(--td-bg-color-secondarycontainer, #f3f3f3);
+      color: var(--td-text-color-secondary, #666);
+    }
+
+    .q-name {
+      font-weight: 500;
+      color: var(--td-text-color-primary, #333);
+    }
+
+    .q-score {
+      margin-left: auto;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+
+      &.is-high { color: var(--wl-up); }
+      &.is-low { color: var(--wl-down); }
+      &.is-mid { color: var(--td-brand-color); }
+    }
+  }
+
+  &__q-reason {
+    margin-top: 2px;
+    color: var(--td-text-color-secondary, #666);
+    font-size: 11px;
+    line-height: 1.4;
+  }
+}
+
+.wl-dim-chip {
+  font-size: 11px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: var(--td-bg-color-container, #fff);
+  border: 1px solid var(--td-component-stroke);
+  color: var(--td-text-color-secondary, #666);
+}
+.wl-resonance-card {
+  padding: 8px 10px;
+  border-radius: var(--app-radius-sm);
+  background: var(--td-bg-color-secondarycontainer);
+  border: 1px solid var(--td-component-stroke);
+  margin-bottom: 6px;
+
+  &__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+  }
+
+  &__title {
+    font-size: var(--app-text-xs);
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--td-text-color-secondary);
+  }
+
+  &__badge {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 3px;
+  }
+
+  &.is-bull-all .wl-resonance-card__badge {
+    background: rgba(220, 38, 38, 0.12);
+    color: var(--wl-up);
+  }
+  &.is-bull-pullback .wl-resonance-card__badge {
+    background: rgba(0, 82, 217, 0.12);
+    color: var(--td-brand-color);
+  }
+  &.is-bear-bounce .wl-resonance-card__badge {
+    background: rgba(237, 123, 47, 0.12);
+    color: #ed7b2f;
+  }
+  &.is-bear-all .wl-resonance-card__badge {
+    background: rgba(4, 120, 87, 0.12);
+    color: var(--wl-down);
+  }
+  &.is-mixed-up .wl-resonance-card__badge {
+    background: rgba(0, 82, 217, 0.08);
+    color: var(--td-brand-color);
+  }
+  &.is-mixed-down .wl-resonance-card__badge {
+    background: rgba(100, 116, 139, 0.12);
+    color: var(--td-text-color-secondary);
+  }
+
+  &__matrix {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+    margin-bottom: 6px;
+  }
+
+  .matrix-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 6px;
+    border-radius: 4px;
+    background: var(--td-bg-color-container);
+    border: 1px solid var(--td-border-level-1-color);
+    font-size: 11px;
+
+    .matrix-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+    }
+
+    &.is-bull {
+      .matrix-dot { background: var(--wl-up); }
+      .matrix-status { color: var(--wl-up); font-weight: 600; margin-left: auto; }
+    }
+    &.is-bear {
+      .matrix-dot { background: var(--wl-down); }
+      .matrix-status { color: var(--wl-down); font-weight: 600; margin-left: auto; }
+    }
+  }
+
+  &__desc {
+    margin: 0;
+    font-size: 11px;
+    color: var(--td-text-color-secondary);
+    line-height: 1.4;
   }
 }
 </style>

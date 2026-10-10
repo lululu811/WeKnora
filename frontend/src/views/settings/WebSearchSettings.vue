@@ -830,6 +830,9 @@ onMounted(async () => {
 .provider-card--zhipu .provider-card__badge {
   .provider-card-badge-color(#2563eb);
 }
+.provider-card--minimax .provider-card__badge {
+  .provider-card-badge-color(#e84335);
+}
 
 .provider-card__body {
   .provider-card-body();
@@ -1080,6 +1083,10 @@ onMounted(async () => {
 .websearch-drawer--zhipu .setting-drawer__header-icon {
   background: rgba(37, 99, 235, 0.12);
   color: #2563EB;
+}
+.websearch-drawer--minimax .setting-drawer__header-icon {
+  background: rgba(232, 67, 53, 0.12);
+  color: #E84335;
 }
 
 /* TODO 2.2: 9 处色值未收敛（图表/状态/语义不明，保留原值）：0052d9, de5833, 0089ff, 4285f4, 6235bb, 2932e1, 215689, 149e82, 2563eb */

@@ -177,3 +177,81 @@ func (r *stockWatchDiaryRepository) UpsertMany(
 		return nil
 	})
 }
+
+// ListByTradeDate returns every diary for one (user, tenant, trade_date).
+// The grading job uses this to load the observation job's output.
+func (r *stockWatchDiaryRepository) ListByTradeDate(
+	ctx context.Context, userID string, tenantID uint64, tradeDate types.DateOnly,
+) ([]*types.StockWatchDiary, error) {
+	var list []*types.StockWatchDiary
+	err := r.db.WithContext(ctx).
+		Where("user_id = ? AND tenant_id = ? AND trade_date = ?",
+			userID, tenantID, tradeDate).
+		Order("thscode ASC").
+		Find(&list).Error
+	return list, err
+}
+
+// UpdateScores writes final_score, rank and scores onto existing diary rows.
+// UPDATE only, not UPSERT: the rows must already exist. A missing row is
+// skipped silently — the grading job cannot score a diary that was never
+// written, and erroring on one missing row would roll back the scores for
+// every other symbol in the batch.
+func (r *stockWatchDiaryRepository) UpdateScores(
+	ctx context.Context, diaries []*types.StockWatchDiary,
+) error {
+	if len(diaries) == 0 {
+		return nil
+	}
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		for _, d := range diaries {
+			if d == nil || d.FinalScore == nil {
+				continue
+			}
+			res := tx.Model(&types.StockWatchDiary{}).
+				Where("user_id = ? AND tenant_id = ? AND thscode = ? AND trade_date = ?",
+					d.UserID, d.TenantID, d.THSCode, d.TradeDate).
+				Updates(map[string]any{
+					"final_score": d.FinalScore,
+					"rank":        d.Rank,
+					"scores":      d.Scores,
+				})
+			if res.Error != nil {
+				return res.Error
+			}
+		}
+		return nil
+	})
+}
+
+// TopRanked returns the top N scored diaries for one (user, tenant, trade_date).
+// If tradeDate is zero, it finds the latest trade_date that has scored diaries.
+// Only rows with a non-null final_score are included, ordered by score DESC.
+func (r *stockWatchDiaryRepository) TopRanked(
+	ctx context.Context, userID string, tenantID uint64,
+	tradeDate types.DateOnly, limit int,
+) ([]*types.StockWatchDiary, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	if tradeDate.IsZero() {
+		var latest types.DateOnly
+		err := r.db.WithContext(ctx).
+			Model(&types.StockWatchDiary{}).
+			Where("user_id = ? AND tenant_id = ? AND final_score IS NOT NULL", userID, tenantID).
+			Select("MAX(trade_date)").
+			Scan(&latest).Error
+		if err != nil || latest.IsZero() {
+			return nil, err
+		}
+		tradeDate = latest
+	}
+	var list []*types.StockWatchDiary
+	err := r.db.WithContext(ctx).
+		Where("user_id = ? AND tenant_id = ? AND trade_date = ? AND final_score IS NOT NULL",
+			userID, tenantID, tradeDate).
+		Order("final_score DESC").
+		Limit(limit).
+		Find(&list).Error
+	return list, err
+}

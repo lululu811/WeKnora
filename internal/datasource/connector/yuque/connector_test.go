@@ -13,11 +13,13 @@ import (
 	secutils "github.com/Tencent/WeKnora/internal/utils"
 )
 
-// TestMain whitelists loopback for the httptest servers and the default base
-// host so parseYuqueConfig does not resolve www.yuque.com over live DNS during
-// a unit test. Production keeps the default strict SSRF policy.
+// TestMain whitelists loopback for the httptest servers and the two base hosts
+// so parseYuqueConfig does not resolve www.yuque.com / company.yuque.com over
+// live DNS during a unit test — a fake-IP resolver answers them from
+// 198.18.0.0/15, which the guard refuses. Production keeps the default strict
+// SSRF policy.
 func TestMain(m *testing.M) {
-	_ = os.Setenv("SSRF_WHITELIST", "127.0.0.1,localhost,www.yuque.com")
+	_ = os.Setenv("SSRF_WHITELIST", "127.0.0.1,localhost,www.yuque.com,company.yuque.com")
 	secutils.ResetSSRFWhitelistForTest()
 	os.Exit(m.Run())
 }

@@ -141,6 +141,7 @@ import {
     readStoredGroupMode,
     resolveSessionOrigin,
     type DateBucketKey,
+    type SessionGroupMode,
 } from './sessionGrouping';
 import { listAgents } from '@/api/agent';
 import {
@@ -398,6 +399,8 @@ async function loadAgentLabels() {
 }
 void loadAgentLabels();
 
+const groupMode = ref<SessionGroupMode>(readStoredGroupMode());
+
 const filteredGroupedSessions = computed(() => {
     const bucket = activeBucket.value;
     if (!bucket?.items.length) return [];
@@ -407,7 +410,7 @@ const filteredGroupedSessions = computed(() => {
         title: item.title || '',
     }));
     // 分组模式存 localStorage，缺省按智能体（金融工作站的默认检索维度）。
-    const mode = readStoredGroupMode();
+    const mode = groupMode.value;
     if (mode === 'agent') {
         return groupSessionsByAgent(
             items,
@@ -698,6 +701,7 @@ const menuChildToSessionRow = (item: Record<string, unknown>): SessionForGroupin
         description: typeof item.description === 'string' ? item.description : '',
         user_id: typeof item.user_id === 'string' ? item.user_id : '',
         parent_session_id: typeof item.parent_session_id === 'string' ? item.parent_session_id : '',
+        agent_id: typeof item.agent_id === 'string' ? item.agent_id : '',
     };
 };
 

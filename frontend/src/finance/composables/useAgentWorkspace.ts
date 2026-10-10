@@ -1,5 +1,7 @@
 import { ref, computed, inject, provide, type InjectionKey, type Ref, type ComputedRef } from 'vue';
 import type { WorkspaceType, PickItem } from '@/components/workspace/types';
+// 纯函数、无依赖：静态引入不会牵动 router / store 的求值顺序（见 sendToChat 里的说明）。
+import { withLaunchAgent } from '@/utils/launchAgent';
 
 export const WORKSPACE_MIN_WIDTH = 450;
 export const WORKSPACE_MAX_WIDTH = 1400;
@@ -28,6 +30,7 @@ export interface AgentWorkspaceContext {
   setActiveIndex: (idx: number) => void;
   setActiveThscode: (thscode: string) => void;
   addOrSwitchPick: (pick: PickItem) => void;
+  removePick: (idx: number) => void;
   nextStock: () => void;
   prevStock: () => void;
   sendToChatCallback: Ref<((text: string) => void) | null>;
@@ -146,6 +149,14 @@ export function createAgentWorkspaceContext(): AgentWorkspaceContext {
     isOpen.value = true;
   };
 
+  const removePick = (idx: number) => {
+    if (idx < 0 || idx >= picks.value.length) return;
+    picks.value.splice(idx, 1);
+    if (activeIndex.value >= picks.value.length) {
+      activeIndex.value = Math.max(0, picks.value.length - 1);
+    }
+  };
+
   const nextStock = () => {
     if (picks.value.length > 1) {
       activeIndex.value = (activeIndex.value + 1) % picks.value.length;
@@ -168,11 +179,16 @@ export function createAgentWorkspaceContext(): AgentWorkspaceContext {
       // registerModule() 执行**之前**求值（ES module 依赖先于模块体），其顶部的
       // getRegisteredModules() 快照拿到空表，watchlist 路由被永久丢弃 ——
       // 表现为 /platform/watchlist 全白、Watchlist 代码块从不被请求。
-      void import('@/router').then(({ default: router }) =>
-        router.push({
-          path: '/platform/creatChat',
-          query: { q: text },
-        }),
+      // 同理，settings store 也走惰性引入，模块顶层只留类型与纯函数。
+      void Promise.all([import('@/router'), import('@/stores/settings')]).then(
+        ([{ default: router }, { useSettingsStore }]) =>
+          router.push({
+            path: '/platform/creatChat',
+            // 把当前 agent 一起带走：新会话默认会退回 settings 里的全局默认
+            // （builtin-quick-answer，RAG 管线、没有工具），像 HALO 六维那样点名
+            // 要工具的问法就没人接得住了。约定见 utils/launchAgent.ts。
+            query: withLaunchAgent({ q: text }, useSettingsStore().selectedAgentId),
+          }),
       );
     }
   };
@@ -204,6 +220,7 @@ export function createAgentWorkspaceContext(): AgentWorkspaceContext {
     setActiveIndex,
     setActiveThscode,
     addOrSwitchPick,
+    removePick,
     nextStock,
     prevStock,
     sendToChatCallback,

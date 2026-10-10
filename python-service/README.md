@@ -39,6 +39,14 @@ pytest tests -q                              # 30 unit + 59 e2e
 | `/zettaranc/scan` | POST | 技术信号扫描 |
 | `/zettaranc/health` | GET | 真去查一次 indicators，不是硬编码 healthy |
 
+> **`/zettaranc/analyze` 不再由 agent 工具调用。** 2026-10-05 起主服务器的
+> `zettaranc.analyze` 复合工具已删除：单票分析改由四个原子工具
+> `hithink.finance.analysis.trend` / `.volume` / `.pattern` / `.levels` 各回答一段，
+> 由模型自行组合，因此本端点在仓库内已无调用方。它作为**服务 API 保留** ——
+> 外部调用方与前端不受影响。若要把综合分析重新暴露给 agent，请连同
+> `internal/config/zettaranc_prompt_verify_test.go` 的守卫与
+> `config/builtin_agents.yaml` 的白名单一起改，只加回工具会让两边漂移。
+
 ### `/query/`
 
 ```jsonc
@@ -91,6 +99,76 @@ POST /query/
 指标缺失一律保留成 `None`，**不用 0 冒充**。SQL 里的 `COALESCE(col, 0)`
 会把"没算出来"变成 `RSI6 = 0 → RSI6超卖`，于是完全没有指标数据的标的
 被报成"偏多"。
+
+---
+
+### 大盘侧：`/api/market/snapshot` 的 `market_state` 块
+
+`zettaranc/market_state.py` 算五维打分（趋势 / 宽度 / 量能 / 波动 / 短期热度），
+结果挂在 `/api/market/snapshot` 的 `market_state` 字段上。
+
+**⚠️ 返回值里 `tradable` 恒为 `false`，不要把它当买/卖方向信号。**
+
+回测证据（`scripts/backtest_market_state.py`，基准沪深300，1103 个交易日）：
+
+| 策略 | 总收益 | 最大回撤 |
+|---|---|---|
+| 基准满仓 | +1.13% | -29.73% |
+| 高分满仓（既定方向） | -7.77% | -20.79% |
+
+`composite` 的**逐年 IC 反号 4 次**（2022 -0.52 / 2023 +0.07 / 2024 -0.22 /
+2025 +0.33 / 2026 -0.15），是随机游走而非"某几年特殊"，因此没有可用的
+regime 过滤条件。方向不可预测这件事，后端在返回值里明说，前端能直接看到。
+
+`exposure_hint` 是**仓位暴露参考**（0 / 0.5 / 1.0），不是方向建议：
+
+| | 基准满仓 | 方向自适应 |
+|---|---|---|
+| 总收益 | +1.13% | +9.47% |
+| 最大回撤 | -29.73% | -16.96% |
+
+但逐年看它在 2024 年把 +12.82% 的涨幅压到 +0.01% —— **收益来自降暴露，
+不是方向判得准**。`exposure_hint.note` 字段里写死了这个代价。
+
+`short_term_signal` 是唯一跨窗口方向稳定的维度（20/40/60/120 日 IC 全为正），
+但 60 日 IC 仅 +0.123，`confidence` 恒为 `weak`。
+
+**注意 `heat_score` 是反向分**：高 = 冷、低 = 热，与 `raw_heat` 方向相反。
+（曾把 score 直接当热度解读，指数跌 5.5% 的冷市被报成"偏热、回落风险大"。）
+
+宽度指标来自本地缓存 `data/market_breadth.csv`（2320 个交易日，2017-03 起），
+由 `scripts/build_breadth_cache.py` 生成。
+
+**⚠️ 这个缓存没有任何定时任务会重建它。** 数据同步后宽度指标不会自动跟新，
+而 composite 里宽度+量能占 0.25 权重。所以响应里带 `breadth_freshness`：
+
+```jsonc
+"breadth_freshness": {
+  "last_date": "2026-09-30",
+  "lag_trading_days": 0,     // 缓存落后指数数据的天数
+  "days_behind_today": 6,    // 缓存最后一天距今的天数
+  "stale": false,
+  "note": "宽度缓存到 2026-09-30（落后 0 天，正常）；缓存最后一天距今 6 天（阈值 12 天）"
+}
+```
+
+两层检查各有必要：只看"缓存 vs 指数"时，**两者同步滞后查不出来**（实测
+2026-10-06 时 index 库和缓存都停在 09-30，lag=0 判为新鲜，实际已落后 6 天）。
+阈值 12 个自然日覆盖 A 股长假（春节/国庆最长 9 天不开盘）。
+
+过期时前端会显示黄色警示条。修复：
+
+```bash
+uv run --with duckdb python scripts/build_breadth_cache.py   # 约 60s，2000 万行窗口函数
+```
+
+回测与诊断脚本（都不写库，只读）：
+
+```bash
+uv run --with duckdb python scripts/backtest_market_state.py  # 主回测 + 分维度IC归因
+uv run --with duckdb python scripts/backtest_adaptive.py      # 方向自适应
+uv run --with duckdb python scripts/diagnose_regime_shift.py  # 逐年IC稳定性诊断
+```
 
 ---
 

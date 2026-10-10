@@ -54,6 +54,9 @@ export const TOOL_CAPABILITY_REQUIREMENTS: Record<string, ToolRequirement> = {
   thinking: {},
   todo_write: {},
 
+  shell_exec: {},
+  edit_sandbox_file: {},
+
   // ---- RAG / chunk retrieval (need at least one chunk-indexed KB) ----
   // We use vector|keyword as the canonical "has RAG chunks" signal. FAQ KBs
   // also expose chunks, but the current UX message bucket is "RAG KB"; once

@@ -6,7 +6,10 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  flex-wrap: wrap;
+  /* 不换行：这里原来是 wrap，而行内所有控件都是 flex-shrink:0，余量为 0，
+     于是窄一点就把模型选择器/发送键甩到第二行。改为 nowrap 后模型名自己
+     截断（见 .model-display），行恒定一行。 */
+  flex-wrap: nowrap;
   z-index: 10;
   pointer-events: auto;
   padding-top: 8px;
@@ -22,8 +25,10 @@
   align-items: center;
   gap: 8px;
   flex: 1;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   min-width: 0;
+  /* 极窄视口下的泄压阀：宁可裁掉最左侧的图标，也别让控制栏溢出卡片边框 */
+  overflow: hidden;
 }
 
 
@@ -507,7 +512,11 @@
   display: flex;
   align-items: center;
   margin-left: auto;
-  flex-shrink: 0;
+  /* 可收缩：控制栏改成 nowrap 后，宽度压力由模型名（.model-selector-name
+     自带 ellipsis）吸收，而不是把整行挤到第二行。 */
+  flex-shrink: 1;
+  min-width: 0;
+  max-width: 100%;
 
   &.agent-controlled .model-selector-trigger {
     cursor: not-allowed;

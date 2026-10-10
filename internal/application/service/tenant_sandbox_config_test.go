@@ -27,7 +27,7 @@ import (
 func testGlobalSandboxConfig() *sandbox.Config {
 	cfg := sandbox.DefaultConfig()
 	cfg.Type = sandbox.SandboxTypeE2B
-	cfg.E2BAPIURL = "https://api.e2b.app"
+	cfg.E2BAPIURL = testE2BAPIURL
 	cfg.E2BSandboxDomain = "e2b.app"
 	cfg.E2BAPIKey = "global-key"
 	cfg.E2BTemplate = "global-template"
@@ -59,6 +59,18 @@ func TestSandboxConfigHasSecretsIncludesInjectedHeaders(t *testing.T) {
 	require.False(t, sandboxConfigHasSecrets(cfg))
 }
 
+// testE2BAPIURL is the control-plane URL every fixture points at.
+//
+// A literal TEST-NET-3 address, not a real hostname: these tests exercise the
+// provisioning path, which runs the outbound URL guard, and a hostname makes
+// that guard depend on the machine's DNS. Behind a fake-IP resolver every name
+// answers inside 198.18.0.0/15, so `api.e2b.app` was refused as a restricted
+// range and six provisioning tests failed for reasons unrelated to the code
+// under test. TEST-NET is never routed and the sandbox guard accepts
+// documentation ranges on purpose (url_guard.go checkIP), which is what makes
+// this stand-in both hermetic and honest.
+const testE2BAPIURL = "https://203.0.113.10"
+
 func e2bCfg(key, url, domain, template string, ttl int) *types.TenantSandboxConfig {
 	return &types.TenantSandboxConfig{
 		SandboxType: "e2b",
@@ -88,19 +100,19 @@ func TestSandboxIdentityChanged(t *testing.T) {
 		// leak bills forever.
 		{
 			name: "api key rotation changes identity",
-			old:  e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300),
-			new:  e2bCfg("key-b", "https://api.e2b.app", "e2b.app", "t1", 300),
+			old:  e2bCfg("key-a", testE2BAPIURL, "e2b.app", "t1", 300),
+			new:  e2bCfg("key-b", testE2BAPIURL, "e2b.app", "t1", 300),
 			want: true,
 		},
 		{
 			name: "endpoint change changes identity",
-			old:  e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300),
+			old:  e2bCfg("key-a", testE2BAPIURL, "e2b.app", "t1", 300),
 			new:  e2bCfg("key-a", "https://self.hosted", "e2b.app", "t1", 300),
 			want: true,
 		},
 		{
 			name: "provider switch changes identity",
-			old:  e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300),
+			old:  e2bCfg("key-a", testE2BAPIURL, "e2b.app", "t1", 300),
 			new:  cubeCfg("key-a", "https://cube.example.com", "https://proxy.example.com", "cube.app"),
 			want: true,
 		},
@@ -109,8 +121,8 @@ func TestSandboxIdentityChanged(t *testing.T) {
 		// session on this config fails at once.
 		{
 			name: "e2b sandbox domain change strands live sessions",
-			old:  e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300),
-			new:  e2bCfg("key-a", "https://api.e2b.app", "e2b.dev", "t1", 300),
+			old:  e2bCfg("key-a", testE2BAPIURL, "e2b.app", "t1", 300),
+			new:  e2bCfg("key-a", testE2BAPIURL, "e2b.dev", "t1", 300),
 			want: true,
 		},
 		{
@@ -129,14 +141,14 @@ func TestSandboxIdentityChanged(t *testing.T) {
 		// them would be pure friction.
 		{
 			name: "template change only affects future sandboxes",
-			old:  e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300),
-			new:  e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t2", 300),
+			old:  e2bCfg("key-a", testE2BAPIURL, "e2b.app", "t1", 300),
+			new:  e2bCfg("key-a", testE2BAPIURL, "e2b.app", "t2", 300),
 			want: false,
 		},
 		{
 			name: "ttl change is not an identity change",
-			old:  e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300),
-			new:  e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 900),
+			old:  e2bCfg("key-a", testE2BAPIURL, "e2b.app", "t1", 300),
+			new:  e2bCfg("key-a", testE2BAPIURL, "e2b.app", "t1", 900),
 			want: false,
 		},
 		{
@@ -151,9 +163,9 @@ func TestSandboxIdentityChanged(t *testing.T) {
 		},
 		{
 			name: "private endpoint policy changes transport identity",
-			old:  e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300),
+			old:  e2bCfg("key-a", testE2BAPIURL, "e2b.app", "t1", 300),
 			new: func() *types.TenantSandboxConfig {
-				cfg := e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300)
+				cfg := e2bCfg("key-a", testE2BAPIURL, "e2b.app", "t1", 300)
 				cfg.AllowPrivateEndpoints = true
 				return cfg
 			}(),
@@ -167,7 +179,7 @@ func TestSandboxIdentityChanged(t *testing.T) {
 				SandboxType: "e2b",
 				E2B:         &types.E2BSandboxConfig{APIKey: "key-a"},
 			},
-			new:  e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 0),
+			new:  e2bCfg("key-a", testE2BAPIURL, "e2b.app", "t1", 0),
 			want: true,
 		},
 		{
@@ -189,7 +201,7 @@ func TestSandboxIdentityChanged(t *testing.T) {
 		{
 			name: "no previous config means nothing to strand",
 			old:  nil,
-			new:  e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300),
+			new:  e2bCfg("key-a", testE2BAPIURL, "e2b.app", "t1", 300),
 			want: false,
 		},
 	}
@@ -205,8 +217,8 @@ func TestSandboxIdentityChanged(t *testing.T) {
 // save and make the config permanently uneditable. This pins the required
 // ordering: merge first, judge second.
 func TestSandboxIdentityChangedAfterMaskMerge(t *testing.T) {
-	stored := e2bCfg("real-key", "https://api.e2b.app", "e2b.app", "t1", 300)
-	incoming := e2bCfg(types.RedactedSecretPlaceholder, "https://api.e2b.app", "e2b.app", "t1", 300)
+	stored := e2bCfg("real-key", testE2BAPIURL, "e2b.app", "t1", 300)
+	incoming := e2bCfg(types.RedactedSecretPlaceholder, testE2BAPIURL, "e2b.app", "t1", 300)
 
 	merged := types.MergeSandboxConfigForUpdate(incoming, stored)
 
@@ -471,7 +483,7 @@ func TestQueryTemplatesEnsuresMissingWeKnoraTemplate(t *testing.T) {
 	svc := newTestConfigService(t, &fakeConfigRepo{}, client, stubAgentRepo{})
 
 	result, err := svc.QueryTemplates(context.Background(), 7, SandboxTemplateQueryInput{
-		Config:         e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "", 300),
+		Config:         e2bCfg("key-a", testE2BAPIURL, "e2b.app", "", 300),
 		EnsureStandard: true,
 	})
 
@@ -494,7 +506,7 @@ func TestQueryTemplatesEnsuresMissingDesktopTemplate(t *testing.T) {
 	svc := newTestConfigService(t, &fakeConfigRepo{}, client, stubAgentRepo{})
 
 	result, err := svc.QueryTemplates(context.Background(), 7, SandboxTemplateQueryInput{
-		Config:        e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "", 300),
+		Config:        e2bCfg("key-a", testE2BAPIURL, "e2b.app", "", 300),
 		EnsureDesktop: true,
 	})
 
@@ -523,7 +535,7 @@ func TestQueryTemplatesEnsureDesktopFailureKeepsCatalog(t *testing.T) {
 	svc := newTestConfigService(t, &fakeConfigRepo{}, client, stubAgentRepo{})
 
 	result, err := svc.QueryTemplates(context.Background(), 7, SandboxTemplateQueryInput{
-		Config:        e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "", 300),
+		Config:        e2bCfg("key-a", testE2BAPIURL, "e2b.app", "", 300),
 		EnsureDesktop: true,
 	})
 
@@ -535,7 +547,7 @@ func TestQueryTemplatesEnsureDesktopFailureKeepsCatalog(t *testing.T) {
 }
 
 func TestQueryTemplatesReplaceDesktopFailureIsFatal(t *testing.T) {
-	stored := e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "tpl-desktop", 300)
+	stored := e2bCfg("key-a", testE2BAPIURL, "e2b.app", "tpl-desktop", 300)
 	repo := &fakeConfigRepo{entity: &types.TenantSandboxConfigEntity{
 		ID: "cfg-a", TenantID: 7, SandboxType: "e2b", Config: stored,
 	}}
@@ -568,7 +580,7 @@ func TestQueryTemplatesCollapsesConcurrentProvisioning(t *testing.T) {
 		go func() {
 			defer group.Done()
 			_, err := svc.QueryTemplates(context.Background(), 7, SandboxTemplateQueryInput{
-				Config:         e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "", 300),
+				Config:         e2bCfg("key-a", testE2BAPIURL, "e2b.app", "", 300),
 				EnsureStandard: true,
 			})
 			require.NoError(t, err)
@@ -587,7 +599,7 @@ func TestQueryTemplatesProvisionsPerClusterIndependently(t *testing.T) {
 
 	for _, key := range []string{"key-a", "key-b"} {
 		_, err := svc.QueryTemplates(context.Background(), 7, SandboxTemplateQueryInput{
-			Config:         e2bCfg(key, "https://api.e2b.app", "e2b.app", "", 300),
+			Config:         e2bCfg(key, testE2BAPIURL, "e2b.app", "", 300),
 			EnsureStandard: true,
 		})
 		require.NoError(t, err)
@@ -610,7 +622,7 @@ func TestQueryTemplatesReprovisionsOverFailedStandardTemplate(t *testing.T) {
 	svc := newTestConfigService(t, &fakeConfigRepo{}, client, stubAgentRepo{})
 
 	result, err := svc.QueryTemplates(context.Background(), 7, SandboxTemplateQueryInput{
-		Config:         e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "", 300),
+		Config:         e2bCfg("key-a", testE2BAPIURL, "e2b.app", "", 300),
 		EnsureStandard: true,
 	})
 
@@ -631,7 +643,7 @@ func TestQueryTemplatesReportsFailedStandardTemplateWithoutEnsure(t *testing.T) 
 	svc := newTestConfigService(t, &fakeConfigRepo{}, client, stubAgentRepo{})
 
 	result, err := svc.QueryTemplates(context.Background(), 7, SandboxTemplateQueryInput{
-		Config: e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "", 300),
+		Config: e2bCfg("key-a", testE2BAPIURL, "e2b.app", "", 300),
 	})
 
 	require.NoError(t, err)
@@ -655,7 +667,7 @@ func TestQueryTemplatesSurfacesFailedEnsureWithoutProvisioning(t *testing.T) {
 	svc := newTestConfigService(t, &fakeConfigRepo{}, client, stubAgentRepo{})
 
 	result, err := svc.QueryTemplates(context.Background(), 7, SandboxTemplateQueryInput{
-		Config:         e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "", 300),
+		Config:         e2bCfg("key-a", testE2BAPIURL, "e2b.app", "", 300),
 		EnsureStandard: true,
 	})
 
@@ -678,7 +690,7 @@ func TestQueryTemplatesReplaceStandardRequiresConfigID(t *testing.T) {
 	svc := newTestConfigService(t, &fakeConfigRepo{}, client, stubAgentRepo{})
 
 	_, err := svc.QueryTemplates(context.Background(), 7, SandboxTemplateQueryInput{
-		Config:          e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "", 300),
+		Config:          e2bCfg("key-a", testE2BAPIURL, "e2b.app", "", 300),
 		ReplaceStandard: true,
 	})
 	require.Error(t, err)
@@ -686,7 +698,7 @@ func TestQueryTemplatesReplaceStandardRequiresConfigID(t *testing.T) {
 }
 
 func TestQueryTemplatesReplaceStandardPersistsNewTemplateID(t *testing.T) {
-	stored := e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "tpl-old", 300)
+	stored := e2bCfg("key-a", testE2BAPIURL, "e2b.app", "tpl-old", 300)
 	repo := &fakeConfigRepo{entity: &types.TenantSandboxConfigEntity{
 		ID: "cfg-a", TenantID: 7, SandboxType: "e2b", Config: stored,
 	}}
@@ -721,7 +733,7 @@ func TestQueryTemplatesReplaceStandardPersistsNewTemplateID(t *testing.T) {
 }
 
 func TestQueryTemplatesReplaceStandardKeepsOldTemplateWhileReplacementBuilds(t *testing.T) {
-	stored := e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "tpl-old", 300)
+	stored := e2bCfg("key-a", testE2BAPIURL, "e2b.app", "tpl-old", 300)
 	repo := &fakeConfigRepo{entity: &types.TenantSandboxConfigEntity{
 		ID: "cfg-a", TenantID: 7, SandboxType: "e2b", Config: stored,
 	}}
@@ -758,7 +770,7 @@ func TestQueryTemplatesReplaceStandardKeepsOldTemplateWhileReplacementBuilds(t *
 }
 
 func TestQueryTemplatesReplaceStandardKeepsOldTemplateWhenPersistFails(t *testing.T) {
-	stored := e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "tpl-old", 300)
+	stored := e2bCfg("key-a", testE2BAPIURL, "e2b.app", "tpl-old", 300)
 	repo := &fakeConfigRepo{
 		entity: &types.TenantSandboxConfigEntity{
 			ID: "cfg-a", TenantID: 7, SandboxType: "e2b", Config: stored,
@@ -796,7 +808,7 @@ func TestQueryTemplatesReplaceStandardKeepsOldTemplateWhenPersistFails(t *testin
 }
 
 func TestQueryTemplatesReplaceStandardRefusesWhenSkillIsInstalling(t *testing.T) {
-	stored := e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300)
+	stored := e2bCfg("key-a", testE2BAPIURL, "e2b.app", "t1", 300)
 	repo := &fakeConfigRepo{entity: &types.TenantSandboxConfigEntity{
 		ID: "cfg-a", TenantID: 7, SandboxType: "e2b", Config: stored,
 	}}
@@ -824,8 +836,8 @@ func TestQueryTemplatesReplaceStandardRefusesWhenSkillIsInstalling(t *testing.T)
 }
 
 func TestQueryTemplatesReplaceStandardRefusesWhenSiblingHasSkillSnapshot(t *testing.T) {
-	stored := e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300)
-	sibling := e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300)
+	stored := e2bCfg("key-a", testE2BAPIURL, "e2b.app", "t1", 300)
+	sibling := e2bCfg("key-a", testE2BAPIURL, "e2b.app", "t1", 300)
 	sibling.SkillImage = &types.SkillImageConfig{SnapshotID: "snap-1"}
 	repo := &fakeConfigRepo{
 		entity: &types.TenantSandboxConfigEntity{
@@ -855,7 +867,7 @@ func TestQueryTemplatesReplaceStandardRefusesWhenSiblingHasSkillSnapshot(t *test
 }
 
 func TestQueryTemplatesReplaceStandardRefusesWhenSkillSnapshotExists(t *testing.T) {
-	stored := e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300)
+	stored := e2bCfg("key-a", testE2BAPIURL, "e2b.app", "t1", 300)
 	stored.SkillImage = &types.SkillImageConfig{SnapshotID: "snap-1"}
 	repo := &fakeConfigRepo{entity: &types.TenantSandboxConfigEntity{
 		ID: "cfg-a", TenantID: 7, SandboxType: "e2b", Config: stored,
@@ -875,7 +887,7 @@ func TestQueryTemplatesReplaceStandardRefusesWhenSkillSnapshotExists(t *testing.
 
 	_, err := svc.QueryTemplates(context.Background(), 7, SandboxTemplateQueryInput{
 		ConfigID:        "cfg-a",
-		Config:          e2bCfg(types.RedactedSecretPlaceholder, "https://api.e2b.app", "e2b.app", "t1", 300),
+		Config:          e2bCfg(types.RedactedSecretPlaceholder, testE2BAPIURL, "e2b.app", "t1", 300),
 		ReplaceStandard: true,
 	})
 	require.ErrorIs(t, err, ErrSkillSnapshotBlocksTemplateChange)
@@ -884,7 +896,7 @@ func TestQueryTemplatesReplaceStandardRefusesWhenSkillSnapshotExists(t *testing.
 
 func TestUpdateRefusesTemplateChangeWhenSkillSnapshotExists(t *testing.T) {
 	t.Setenv("SYSTEM_AES_KEY", strings.Repeat("k", 32))
-	stored := e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300)
+	stored := e2bCfg("key-a", testE2BAPIURL, "e2b.app", "t1", 300)
 	stored.SkillImage = &types.SkillImageConfig{SnapshotID: "snap-1"}
 	repo := &fakeConfigRepo{entity: &types.TenantSandboxConfigEntity{
 		ID:          "cfg-a",
@@ -897,7 +909,7 @@ func TestUpdateRefusesTemplateChangeWhenSkillSnapshotExists(t *testing.T) {
 
 	_, err := svc.Update(context.Background(), 7, "cfg-a", UpdateSandboxConfigInput{
 		Name:   "prod",
-		Config: e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t2", 300),
+		Config: e2bCfg("key-a", testE2BAPIURL, "e2b.app", "t2", 300),
 	})
 	require.ErrorIs(t, err, ErrSkillSnapshotBlocksTemplateChange)
 	require.Nil(t, repo.updated)
@@ -905,7 +917,7 @@ func TestUpdateRefusesTemplateChangeWhenSkillSnapshotExists(t *testing.T) {
 
 func TestUpdateRefusesDesktopEnabledChangeWhenSkillSnapshotExists(t *testing.T) {
 	t.Setenv("SYSTEM_AES_KEY", strings.Repeat("k", 32))
-	stored := e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300)
+	stored := e2bCfg("key-a", testE2BAPIURL, "e2b.app", "t1", 300)
 	stored.SkillImage = &types.SkillImageConfig{SnapshotID: "snap-1"}
 	repo := &fakeConfigRepo{entity: &types.TenantSandboxConfigEntity{
 		ID:          "cfg-a",
@@ -916,7 +928,7 @@ func TestUpdateRefusesDesktopEnabledChangeWhenSkillSnapshotExists(t *testing.T) 
 	}}
 	svc := newTestConfigService(t, repo, &stubProviderClient{}, stubAgentRepo{})
 
-	incoming := e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300)
+	incoming := e2bCfg("key-a", testE2BAPIURL, "e2b.app", "t1", 300)
 	incoming.DesktopEnabled = true
 	_, err := svc.Update(context.Background(), 7, "cfg-a", UpdateSandboxConfigInput{
 		Name:   "prod",
@@ -928,7 +940,7 @@ func TestUpdateRefusesDesktopEnabledChangeWhenSkillSnapshotExists(t *testing.T) 
 
 func TestUpdateRefusesIdentityChangeWhenSkillSnapshotExists(t *testing.T) {
 	t.Setenv("SYSTEM_AES_KEY", strings.Repeat("k", 32))
-	stored := e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300)
+	stored := e2bCfg("key-a", testE2BAPIURL, "e2b.app", "t1", 300)
 	stored.SkillImage = &types.SkillImageConfig{SnapshotID: "snap-1"}
 	repo := &fakeConfigRepo{entity: &types.TenantSandboxConfigEntity{
 		ID:          "cfg-a",
@@ -941,7 +953,7 @@ func TestUpdateRefusesIdentityChangeWhenSkillSnapshotExists(t *testing.T) {
 
 	_, err := svc.Update(context.Background(), 7, "cfg-a", UpdateSandboxConfigInput{
 		Name:   "prod",
-		Config: e2bCfg("key-b", "https://api.e2b.app", "e2b.app", "t1", 300),
+		Config: e2bCfg("key-b", testE2BAPIURL, "e2b.app", "t1", 300),
 	})
 	require.ErrorIs(t, err, ErrSkillSnapshotBlocksTemplateChange)
 	require.Nil(t, repo.updated)
@@ -949,7 +961,7 @@ func TestUpdateRefusesIdentityChangeWhenSkillSnapshotExists(t *testing.T) {
 
 func TestUpdateRefusesIdentityChangeWhileSkillIsInstalling(t *testing.T) {
 	t.Setenv("SYSTEM_AES_KEY", strings.Repeat("k", 32))
-	stored := e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300)
+	stored := e2bCfg("key-a", testE2BAPIURL, "e2b.app", "t1", 300)
 	repo := &fakeConfigRepo{entity: &types.TenantSandboxConfigEntity{
 		ID:          "cfg-a",
 		TenantID:    7,
@@ -965,14 +977,14 @@ func TestUpdateRefusesIdentityChangeWhileSkillIsInstalling(t *testing.T) {
 
 	_, err := svc.Update(context.Background(), 7, "cfg-a", UpdateSandboxConfigInput{
 		Name:   "prod",
-		Config: e2bCfg("key-b", "https://api.e2b.app", "e2b.app", "t1", 300),
+		Config: e2bCfg("key-b", testE2BAPIURL, "e2b.app", "t1", 300),
 	})
 	require.ErrorIs(t, err, ErrSkillSnapshotBlocksTemplateChange)
 	require.Nil(t, repo.updated)
 }
 
 func TestQueryTemplatesEnsureAndReplaceDoNotShareSingleflight(t *testing.T) {
-	stored := e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300)
+	stored := e2bCfg("key-a", testE2BAPIURL, "e2b.app", "t1", 300)
 	repo := &fakeConfigRepo{entity: &types.TenantSandboxConfigEntity{
 		ID: "cfg-a", TenantID: 7, SandboxType: "e2b", Config: stored,
 	}}
@@ -1042,7 +1054,7 @@ func TestUpdateRefusesDNSChangeWhenSkillSnapshotExists(t *testing.T) {
 
 func TestUpdateRefusesPrivateEndpointChangeWhenSkillSnapshotExists(t *testing.T) {
 	t.Setenv("SYSTEM_AES_KEY", strings.Repeat("k", 32))
-	stored := e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300)
+	stored := e2bCfg("key-a", testE2BAPIURL, "e2b.app", "t1", 300)
 	stored.SkillImage = &types.SkillImageConfig{SnapshotID: "snap-1"}
 	repo := &fakeConfigRepo{entity: &types.TenantSandboxConfigEntity{
 		ID:          "cfg-a",
@@ -1053,7 +1065,7 @@ func TestUpdateRefusesPrivateEndpointChangeWhenSkillSnapshotExists(t *testing.T)
 	}}
 	svc := newTestConfigService(t, repo, &stubProviderClient{}, stubAgentRepo{})
 
-	next := e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300)
+	next := e2bCfg("key-a", testE2BAPIURL, "e2b.app", "t1", 300)
 	next.AllowPrivateEndpoints = true
 	_, err := svc.Update(context.Background(), 7, "cfg-a", UpdateSandboxConfigInput{
 		Name:   "prod",
@@ -1071,7 +1083,7 @@ func TestQueryTemplatesDeduplicatesSameProviderTemplateID(t *testing.T) {
 	svc := newTestConfigService(t, &fakeConfigRepo{}, client, stubAgentRepo{})
 
 	result, err := svc.QueryTemplates(context.Background(), 7, SandboxTemplateQueryInput{
-		Config: e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "", 300),
+		Config: e2bCfg("key-a", testE2BAPIURL, "e2b.app", "", 300),
 	})
 
 	require.NoError(t, err)
@@ -1084,7 +1096,7 @@ func TestQueryTemplatesDeduplicatesSameProviderTemplateID(t *testing.T) {
 func TestQueryTemplatesResolvesMaskedStoredCredential(t *testing.T) {
 	repo := &fakeConfigRepo{entity: &types.TenantSandboxConfigEntity{
 		ID: "cfg-a", TenantID: 7, SandboxType: "e2b",
-		Config: e2bCfg("stored-secret", "https://api.e2b.app", "e2b.app", "old", 300),
+		Config: e2bCfg("stored-secret", testE2BAPIURL, "e2b.app", "old", 300),
 	}}
 	svc := NewTenantSandboxConfigService(repo, stubAgentRepo{}, sandbox.DefaultConfig(), nil, nil)
 	client := &stubProviderClient{templates: []sandbox.RemoteTemplate{{ID: "tpl-a", Name: "a", Status: "ready"}}}
@@ -1095,7 +1107,7 @@ func TestQueryTemplatesResolvesMaskedStoredCredential(t *testing.T) {
 
 	_, err := svc.QueryTemplates(context.Background(), 7, SandboxTemplateQueryInput{
 		ConfigID: "cfg-a",
-		Config:   e2bCfg(types.RedactedSecretPlaceholder, "https://api.e2b.app", "e2b.app", "", 300),
+		Config:   e2bCfg(types.RedactedSecretPlaceholder, testE2BAPIURL, "e2b.app", "", 300),
 	})
 	require.NoError(t, err)
 }
@@ -1109,7 +1121,7 @@ func TestUpdateRefusesIdentityChangeWhileSandboxesLive(t *testing.T) {
 		TenantID:    7,
 		Name:        "prod",
 		SandboxType: "e2b",
-		Config:      e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300),
+		Config:      e2bCfg("key-a", testE2BAPIURL, "e2b.app", "t1", 300),
 	}}
 	svc := newTestConfigService(t, repo, &stubProviderClient{inventories: [][]sandbox.RemoteSandboxSummary{{
 		{ID: "sb-1", Metadata: map[string]string{sandbox.MetadataSessionIDKey(): "s-1"}},
@@ -1117,7 +1129,7 @@ func TestUpdateRefusesIdentityChangeWhileSandboxesLive(t *testing.T) {
 
 	_, err := svc.Update(context.Background(), 7, "cfg-a", UpdateSandboxConfigInput{
 		Name:   "prod",
-		Config: e2bCfg("key-b", "https://api.e2b.app", "e2b.app", "t1", 300),
+		Config: e2bCfg("key-b", testE2BAPIURL, "e2b.app", "t1", 300),
 	})
 
 	require.ErrorIs(t, err, ErrSandboxesStillLive)
@@ -1134,13 +1146,13 @@ func TestUpdateIdentityChangeCordonsThenWrites(t *testing.T) {
 		TenantID:    7,
 		Name:        "prod",
 		SandboxType: "e2b",
-		Config:      e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300),
+		Config:      e2bCfg("key-a", testE2BAPIURL, "e2b.app", "t1", 300),
 	}}
 	svc := newTestConfigService(t, repo, nil, stubAgentRepo{})
 
 	_, err := svc.Update(context.Background(), 7, "cfg-a", UpdateSandboxConfigInput{
 		Name:   "prod",
-		Config: e2bCfg("key-b", "https://api.e2b.app", "e2b.app", "t1", 300),
+		Config: e2bCfg("key-b", testE2BAPIURL, "e2b.app", "t1", 300),
 	})
 
 	require.NoError(t, err)
@@ -1156,13 +1168,13 @@ func TestUpdateNonIdentityEditSkipsCordon(t *testing.T) {
 		TenantID:    7,
 		Name:        "prod",
 		SandboxType: "e2b",
-		Config:      e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300),
+		Config:      e2bCfg("key-a", testE2BAPIURL, "e2b.app", "t1", 300),
 	}}
 	svc := newTestConfigService(t, repo, client, stubAgentRepo{})
 
 	_, err := svc.Update(context.Background(), 7, "cfg-a", UpdateSandboxConfigInput{
 		Name:   "prod renamed",
-		Config: e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 900),
+		Config: e2bCfg("key-a", testE2BAPIURL, "e2b.app", "t1", 900),
 	})
 
 	require.NoError(t, err)
@@ -1177,7 +1189,7 @@ func TestUpdateNonIdentityEditSkipsCordon(t *testing.T) {
 // every session still boots the base template.
 func TestUpdateKeepsSkillImageWhenEditorOmitsIt(t *testing.T) {
 	t.Setenv("SYSTEM_AES_KEY", strings.Repeat("k", 32))
-	stored := e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300)
+	stored := e2bCfg("key-a", testE2BAPIURL, "e2b.app", "t1", 300)
 	stored.SkillImage = &types.SkillImageConfig{
 		SnapshotID:       "snap-2",
 		Generation:       2,
@@ -1195,7 +1207,7 @@ func TestUpdateKeepsSkillImageWhenEditorOmitsIt(t *testing.T) {
 
 	updated, err := svc.Update(context.Background(), 7, "cfg-a", UpdateSandboxConfigInput{
 		Name:   "prod",
-		Config: e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 900),
+		Config: e2bCfg("key-a", testE2BAPIURL, "e2b.app", "t1", 900),
 	})
 
 	require.NoError(t, err)
@@ -1212,7 +1224,7 @@ func TestUpdateRefusalCarriesInventory(t *testing.T) {
 		TenantID:    7,
 		Name:        "prod",
 		SandboxType: "e2b",
-		Config:      e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300),
+		Config:      e2bCfg("key-a", testE2BAPIURL, "e2b.app", "t1", 300),
 	}}
 	svc := newTestConfigService(t, repo, &stubProviderClient{inventories: [][]sandbox.RemoteSandboxSummary{{
 		{ID: "sb-1", Metadata: map[string]string{sandbox.MetadataSessionIDKey(): "s-1"}},
@@ -1221,7 +1233,7 @@ func TestUpdateRefusalCarriesInventory(t *testing.T) {
 
 	_, err := svc.Update(context.Background(), 7, "cfg-a", UpdateSandboxConfigInput{
 		Name:   "prod",
-		Config: e2bCfg("key-b", "https://api.e2b.app", "e2b.app", "t1", 300),
+		Config: e2bCfg("key-b", testE2BAPIURL, "e2b.app", "t1", 300),
 	})
 
 	var liveErr *SandboxesStillLiveError
@@ -1243,13 +1255,13 @@ func TestUpdateSweepsSandboxCreatedDuringCordonWindow(t *testing.T) {
 		TenantID:    7,
 		Name:        "prod",
 		SandboxType: "e2b",
-		Config:      e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300),
+		Config:      e2bCfg("key-a", testE2BAPIURL, "e2b.app", "t1", 300),
 	}, onUpdate: cancel}
 	svc := newTestConfigService(t, repo, client, stubAgentRepo{})
 
 	_, err := svc.Update(ctx, 7, "cfg-a", UpdateSandboxConfigInput{
 		Name:   "prod",
-		Config: e2bCfg("key-b", "https://api.e2b.app", "e2b.app", "t1", 300),
+		Config: e2bCfg("key-b", testE2BAPIURL, "e2b.app", "t1", 300),
 	})
 
 	require.NoError(t, err)
@@ -1266,13 +1278,13 @@ func TestUpdateClearsCordonWhenRequestContextCancelled(t *testing.T) {
 		TenantID:    7,
 		Name:        "prod",
 		SandboxType: "e2b",
-		Config:      e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300),
+		Config:      e2bCfg("key-a", testE2BAPIURL, "e2b.app", "t1", 300),
 	}, onSetCordon: cancel}
 	svc := newTestConfigService(t, repo, nil, stubAgentRepo{})
 
 	_, err := svc.Update(ctx, 7, "cfg-a", UpdateSandboxConfigInput{
 		Name:   "prod",
-		Config: e2bCfg("key-b", "https://api.e2b.app", "e2b.app", "t1", 300),
+		Config: e2bCfg("key-b", testE2BAPIURL, "e2b.app", "t1", 300),
 	})
 
 	require.NoError(t, err)
@@ -1286,7 +1298,7 @@ func TestDeleteRefusesWhileSandboxesLive(t *testing.T) {
 		TenantID:    7,
 		Name:        "prod",
 		SandboxType: "e2b",
-		Config:      e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300),
+		Config:      e2bCfg("key-a", testE2BAPIURL, "e2b.app", "t1", 300),
 	}}
 	svc := newTestConfigService(t, repo, &stubProviderClient{inventories: [][]sandbox.RemoteSandboxSummary{{
 		{ID: "sb-1", Metadata: map[string]string{sandbox.MetadataSessionIDKey(): "s-1"}},
@@ -1309,7 +1321,7 @@ func TestDeleteRefusesWhileSandboxesLive(t *testing.T) {
 func TestDeleteRefusesWhenInventoryUnverifiable(t *testing.T) {
 	repo := &fakeConfigRepo{entity: &types.TenantSandboxConfigEntity{
 		ID: "cfg-a", TenantID: 7, Name: "prod", SandboxType: "e2b",
-		Config: e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300),
+		Config: e2bCfg("key-a", testE2BAPIURL, "e2b.app", "t1", 300),
 	}}
 	svc := newTestConfigService(t, repo, nil, stubAgentRepo{})
 	svc.newClient = func(*sandbox.Config) (sandbox.ConfigSandboxClient, error) {
@@ -1328,7 +1340,7 @@ func TestDeleteRefusesWhenInventoryUnverifiable(t *testing.T) {
 func TestDeleteForceRemovesConfigWithUnverifiableInventory(t *testing.T) {
 	repo := &fakeConfigRepo{entity: &types.TenantSandboxConfigEntity{
 		ID: "cfg-a", TenantID: 7, Name: "prod", SandboxType: "e2b",
-		Config: e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300),
+		Config: e2bCfg("key-a", testE2BAPIURL, "e2b.app", "t1", 300),
 	}}
 	svc := newTestConfigService(t, repo, nil, stubAgentRepo{})
 	svc.newClient = func(*sandbox.Config) (sandbox.ConfigSandboxClient, error) {
@@ -1345,7 +1357,7 @@ func TestDeleteForceRemovesConfigWithUnverifiableInventory(t *testing.T) {
 func TestDeleteForceStillRefusesVerifiedLiveSandboxes(t *testing.T) {
 	repo := &fakeConfigRepo{entity: &types.TenantSandboxConfigEntity{
 		ID: "cfg-a", TenantID: 7, Name: "prod", SandboxType: "e2b",
-		Config: e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300),
+		Config: e2bCfg("key-a", testE2BAPIURL, "e2b.app", "t1", 300),
 	}}
 	svc := newTestConfigService(t, repo, &stubProviderClient{inventories: [][]sandbox.RemoteSandboxSummary{{
 		{ID: "sb-1", Metadata: map[string]string{sandbox.MetadataSessionIDKey(): "s-1"}},
@@ -1362,7 +1374,7 @@ func TestDeleteForceStillRefusesVerifiedLiveSandboxes(t *testing.T) {
 func TestInventoryMarksUnverifiableInsteadOfFailing(t *testing.T) {
 	repo := &fakeConfigRepo{entity: &types.TenantSandboxConfigEntity{
 		ID: "cfg-a", TenantID: 7, Name: "prod", SandboxType: "e2b",
-		Config: e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300),
+		Config: e2bCfg("key-a", testE2BAPIURL, "e2b.app", "t1", 300),
 	}}
 	svc := newTestConfigService(t, repo, nil, stubAgentRepo{names: []string{"analyst"}})
 	svc.newClient = func(*sandbox.Config) (sandbox.ConfigSandboxClient, error) {
@@ -1384,7 +1396,7 @@ func TestUpdateProceedsWhenInventoryUnverifiable(t *testing.T) {
 	t.Setenv("SYSTEM_AES_KEY", strings.Repeat("k", 32))
 	repo := &fakeConfigRepo{entity: &types.TenantSandboxConfigEntity{
 		ID: "cfg-a", TenantID: 7, Name: "prod", SandboxType: "e2b",
-		Config: e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300),
+		Config: e2bCfg("key-a", testE2BAPIURL, "e2b.app", "t1", 300),
 	}}
 	svc := newTestConfigService(t, repo, nil, stubAgentRepo{})
 	svc.newClient = func(*sandbox.Config) (sandbox.ConfigSandboxClient, error) {
@@ -1393,7 +1405,7 @@ func TestUpdateProceedsWhenInventoryUnverifiable(t *testing.T) {
 
 	updated, err := svc.Update(context.Background(), 7, "cfg-a", UpdateSandboxConfigInput{
 		Name:   "prod",
-		Config: e2bCfg("key-b", "https://api.e2b.app", "e2b.app", "t1", 300),
+		Config: e2bCfg("key-b", testE2BAPIURL, "e2b.app", "t1", 300),
 	})
 
 	require.NoError(t, err)
@@ -1409,7 +1421,7 @@ func TestDeleteSoftDeletesWhenEmpty(t *testing.T) {
 		TenantID:    7,
 		Name:        "prod",
 		SandboxType: "e2b",
-		Config:      e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300),
+		Config:      e2bCfg("key-a", testE2BAPIURL, "e2b.app", "t1", 300),
 	}}
 	svc := newTestConfigService(t, repo, nil, stubAgentRepo{})
 
@@ -1829,7 +1841,7 @@ func TestDeleteMarksBuildingSnapshotsWhenProviderHasNoSnapshotClient(t *testing.
 func TestDeleteReleasesAnAbandonedBuildByPlannedName(t *testing.T) {
 	repo := &fakeConfigRepo{entity: &types.TenantSandboxConfigEntity{
 		ID: "cfg-a", TenantID: 7, Name: "prod", SandboxType: "e2b",
-		Config: e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300),
+		Config: e2bCfg("key-a", testE2BAPIURL, "e2b.app", "t1", 300),
 	}}
 	skills := &deleteSkillStore{
 		snapshots: []*types.TenantSkillSnapshotEntity{{
@@ -1863,7 +1875,7 @@ func TestDeleteReleasesAnAbandonedBuildByPlannedName(t *testing.T) {
 func TestDeleteAcceptsAnAbandonedBuildThatNeverCommitted(t *testing.T) {
 	repo := &fakeConfigRepo{entity: &types.TenantSandboxConfigEntity{
 		ID: "cfg-a", TenantID: 7, Name: "prod", SandboxType: "e2b",
-		Config: e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300),
+		Config: e2bCfg("key-a", testE2BAPIURL, "e2b.app", "t1", 300),
 	}}
 	skills := &deleteSkillStore{
 		snapshots: []*types.TenantSkillSnapshotEntity{{
@@ -1930,7 +1942,7 @@ func newSnapshotReleaseFixture(t *testing.T, failDelete map[string]error) *snaps
 	}
 	inner := &fakeConfigRepo{entity: &types.TenantSandboxConfigEntity{
 		ID: "cfg-a", TenantID: 7, Name: "prod", SandboxType: "e2b",
-		Config: e2bCfg("key-a", "https://api.e2b.app", "e2b.app", "t1", 300),
+		Config: e2bCfg("key-a", testE2BAPIURL, "e2b.app", "t1", 300),
 	}}
 	fx.repo = &eventRecordingConfigRepo{fakeConfigRepo: inner, events: &fx.events}
 	client := &snapshotReleaseClient{events: &fx.events, failDelete: failDelete}

@@ -90,6 +90,19 @@ export function componentsForWorkbench(rawWorkbench: string | undefined | null):
   return byId.value.get(id)?.components ?? [];
 }
 
+/**
+ * 已加载的 agent id 列表；列表还没加载出来时返回 null。
+ *
+ * 供「按 agent 能力决定落点」的入口使用（如 K 线面板的 HALO 报告按钮：当前 agent
+ * 跑不了 halo.* 时要改绑 builtin-halo）。返回 null 而不是空数组，是因为调用方
+ * 需要区分「这个空间里真没有」和「还没加载完」—— 后者不该把入口关掉。
+ * 列表本身是 ensureAgentsLoaded() 拉取后缓存的一份部署/租户内相对静态数据。
+ */
+export function knownAgentIds(): string[] | null {
+  const ids = Object.keys(agentsById.value);
+  return ids.length > 0 ? ids : null;
+}
+
 // ---------------------------------------------------------------------------
 // 当前 agent → 工作台
 // ---------------------------------------------------------------------------

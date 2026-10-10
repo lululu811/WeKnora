@@ -190,13 +190,25 @@
       <!-- 底部操作栏 -->
       <div class="stock-float__footer">
         <span class="stock-float__hint"> {{ t('stockCitation.engine') }} </span>
-        <button
-          type="button"
-          class="stock-float__action-btn"
-          @click="handleOpenWorkspace"
-        >
-          {{ t('stockCitation.openWorkspace') }}
-        </button>
+        <div class="stock-float__actions">
+          <button
+            type="button"
+            class="stock-float__pool-btn"
+            :class="{ 'is-pooled': isPooled }"
+            :disabled="isPooled || pooling"
+            @click="handleAddToWatchlist"
+          >
+            <t-icon :name="isPooled ? 'check' : 'add'" size="13px" />
+            <span>{{ isPooled ? t('watchlist.inPool') : t('watchlist.addToPool') }}</span>
+          </button>
+          <button
+            type="button"
+            class="stock-float__action-btn"
+            @click="handleOpenWorkspace"
+          >
+            {{ t('stockCitation.openWorkspace') }}
+          </button>
+        </div>
       </div>
     </div>
   </Teleport>
@@ -206,6 +218,8 @@
 import { ref, computed, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { fetchKline, computeChange, KlineFetchError } from './kline-cache';
+import { addWatchItem } from '@/finance/api/watchlist';
+import { MessagePlugin } from 'tdesign-vue-next';
 import {
   calcStockHoldingScore,
   calcDataQuality,
@@ -245,6 +259,31 @@ const loadError = ref<string>('');
 /** 数据是否不足以给出战法评级（区别于「评级很差」）。 */
 const insufficient = ref(false);
 
+const isPooled = ref(false);
+const pooling = ref(false);
+
+watch(() => props.thscode, () => {
+  isPooled.value = false;
+});
+
+const handleAddToWatchlist = async () => {
+  if (isPooled.value || pooling.value || !props.thscode) return;
+  pooling.value = true;
+  try {
+    const parts = props.thscode.split('.');
+    const res = await addWatchItem({
+      thscode: props.thscode,
+      name: stockName.value,
+      exchange: parts[1] || 'SH',
+    });
+    isPooled.value = true;
+    MessagePlugin.success(res.created ? t('watchlist.added') : t('watchlist.alreadyWatched'));
+  } catch (error: any) {
+    MessagePlugin.error(error?.message || t('watchlist.loadFailed'));
+  } finally {
+    pooling.value = false;
+  }
+};
 /**
  * 画像（资金面 / 估值 / 板块）。**独立于 K 线请求**，两条链路各自降级：
  * 画像挂了不影响战法评级，K 线挂了画像照样显示 —— 两块信息没有依赖关系，
@@ -524,6 +563,19 @@ const handleOpenWorkspace = () => {
 
 <style lang="less" scoped>
 .stock-citation-float {
+  /*
+   * A 股红涨绿跌 —— 与 KLineWorkspace / WatchDetailPanel / MarketDashboard
+   * 同一对色值。之前这里是裸的 Tailwind 色（#ef4444 / #10b981），色相与
+   * 其余三页不同，浮窗叠在 K 线工作区上时颜色会跳。
+   */
+  --wl-up: #dc2626;
+  --wl-down: #047857;
+
+  :root[theme-mode="dark"] & {
+    --wl-up: #f87171;
+    --wl-down: #34d399;
+  }
+
   position: fixed;
   z-index: 10050;
   width: 320px;
@@ -615,14 +667,14 @@ const handleOpenWorkspace = () => {
 
   .stock-float__price {
     font-size: var(--app-text-base);
-    &.is-up { color: #ef4444; }
-    &.is-down { color: #10b981; }
+    &.is-up { color: var(--wl-up); }
+    &.is-down { color: var(--wl-down); }
   }
 
   .stock-float__change {
     font-size: var(--app-text-sm);
-    &.is-up { color: #ef4444; }
-    &.is-down { color: #10b981; }
+    &.is-up { color: var(--wl-up); }
+    &.is-down { color: var(--wl-down); }
   }
 }
 
@@ -655,7 +707,7 @@ const handleOpenWorkspace = () => {
   justify-content: space-between;
   padding: 6px 10px;
   border-radius: var(--app-radius-sm);
-  border-left: 3px solid #ef4444;
+  border-left: 3px solid var(--wl-up);
   background: rgba(0, 0, 0, 0.02);
 
   :root[theme-mode="dark"] & {
@@ -913,8 +965,8 @@ const handleOpenWorkspace = () => {
   &.is-plain { color: inherit; }
 
   :root[theme-mode="dark"] & {
-    &.is-up { color: #ef4444; }
-    &.is-down { color: #10b981; }
+    &.is-up { color: var(--wl-up); }
+    &.is-down { color: var(--wl-down); }
   }
 }
 
@@ -988,6 +1040,38 @@ const handleOpenWorkspace = () => {
     color: var(--td-text-color-placeholder);
   }
 
+  .stock-float__actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .stock-float__pool-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    border: 1px solid var(--td-component-stroke);
+    background: var(--td-bg-color-container);
+    color: var(--td-text-color-primary);
+    font-size: var(--app-text-xs);
+    font-weight: 500;
+    padding: 3px 8px;
+    border-radius: var(--app-radius-xs);
+    cursor: pointer;
+    transition: all var(--app-motion-fast) ease;
+
+    &:hover:not(:disabled) {
+      border-color: var(--td-brand-color);
+      color: var(--td-brand-color);
+    }
+
+    &.is-pooled {
+      background: rgba(0, 82, 217, 0.08);
+      border-color: var(--td-brand-color);
+      color: var(--td-brand-color);
+      cursor: default;
+    }
+  }
   .stock-float__action-btn {
     border: none;
     background: var(--td-brand-color);

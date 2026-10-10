@@ -285,6 +285,19 @@ func formatToolGuidanceForMode(names []string, skillInstallMode bool, layout san
 		"after something relevant changes. Do not bypass permission or policy denials. For missing " +
 		"capabilities, an authorized equivalent tool may be used if it respects the user's source " +
 		"selection. Report a blocker only when it cannot be resolved within the task.\n")
+	b.WriteString("\nTool discipline & anti-abuse rules (CRITICAL):\n" +
+		"- Direct answer first: For conceptual explanations, general knowledge, standard code " +
+		"snippets, or questions answerable directly from context, answer directly WITHOUT invoking tools.\n")
+	// The frugal-invocation rule names shell_exec, so it may only appear in turns
+	// where that tool is actually granted: a turn whose tool list has no
+	// shell_exec must not carry the word at all (TestToolGuidanceUsesActualCapabilities).
+	if has("shell_exec") {
+		b.WriteString("- Frugal invocation: Invoke shell_exec or script execution ONLY when real computation, " +
+			"file mutation, or external environment inspection is strictly necessary.\n")
+	}
+	b.WriteString("- No trial-and-error loops: Do not repeatedly execute failing or speculative commands. " +
+		"If a command fails, inspect the error output once to understand the cause; never guess " +
+		"commands in a repetitive loop.\n")
 	if has("read_file") {
 		b.WriteString("Use read_file for workspace files, saved web:// pages and listed skill:// resources. " +
 			"In older instructions, translate read_skill(skill_name, file_path) to " +

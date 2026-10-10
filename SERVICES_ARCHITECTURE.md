@@ -176,7 +176,7 @@ WeKnora 的 `internal/` 虽然包罗万象，但本质上是一个**模块化单
   hithink-finance-financials          ├── /indicators/  (技术指标)
   hithink-finance-special-data        ├── /strategies/  (策略信号)
   hithink-finance-fund                ├── /screen       (选股)
-  hithink-finance-index               └── /zettaranc/analyze  (综合分析)
+  hithink-finance-index               └── /zettaranc/analyze  (综合分析；已无 agent 调用方，见 python-service/README.md)
   hithink-finance-valuation
 浏览器 ──HTTP GET──▶ python-service:50052
                                       └── /api/kline | /api/quotes | /api/symbols/* …

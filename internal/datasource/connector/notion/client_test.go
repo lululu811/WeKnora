@@ -352,6 +352,12 @@ func TestClientQueryDatabaseAll(t *testing.T) {
 var _ = time.Now
 
 func TestDownloadFile_RejectsLoopbackURL(t *testing.T) {
+	// Whitelist the client's base host, not loopback. The guard resolves
+	// hostnames, and on a machine behind a fake-IP resolver every public name
+	// answers from 198.18.0.0/15 (RFC 2544 benchmarking space), which the guard
+	// refuses — client construction would fail before the loopback URL is ever
+	// exercised. The attachment URL under test stays un-whitelisted.
+	t.Setenv("SSRF_WHITELIST", "api.notion.com")
 	secutils.ResetSSRFWhitelistForTest()
 	t.Cleanup(secutils.ResetSSRFWhitelistForTest)
 

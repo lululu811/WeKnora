@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Tencent/WeKnora/internal/utils"
 )
 
 func TestParseOssFilePath(t *testing.T) {
@@ -98,7 +100,27 @@ func TestParseOssFilePath(t *testing.T) {
 	}
 }
 
+// whitelistOSSHostsForTest pins the OSS fixture endpoints in the SSRF
+// whitelist for the duration of a test.
+//
+// Why: newOSSClient runs the endpoint through ValidateURLForSSRF, which
+// resolves the hostname. On a developer machine behind a fake-IP/TUN resolver
+// (Surge, clash, some corporate resolvers) every public name answers from
+// 198.18.0.0/15 — RFC 2544 benchmarking space — and the guard correctly
+// refuses it, so these tests failed on the local DNS rather than on the OSS
+// client they mean to exercise. A whitelisted host returns before resolution
+// (utils.ValidateURLForSSRF), which is the same lever an operator has.
+//
+// TestNewOSSClientRejectsUnsafeEndpoint deliberately does NOT call this: the
+// loopback endpoint it asserts on must stay outside the whitelist.
+func whitelistOSSHostsForTest(t *testing.T) {
+	t.Helper()
+	utils.SetSSRFWhitelistFromRaw("oss-cn-hangzhou.aliyuncs.com,example.com")
+	t.Cleanup(func() { utils.SetSSRFWhitelistFromRaw("") })
+}
+
 func TestNewOSSClient(t *testing.T) {
+	whitelistOSSHostsForTest(t)
 	tests := []struct {
 		name      string
 		endpoint  string
@@ -170,6 +192,7 @@ func TestCheckOssConnectivity_InvalidEndpoint(t *testing.T) {
 }
 
 func TestOssEnsureBucket_NonExistent(t *testing.T) {
+	whitelistOSSHostsForTest(t)
 	client, err := newOSSClient(
 		"https://oss-cn-hangzhou.aliyuncs.com",
 		"cn-hangzhou",
@@ -188,6 +211,7 @@ func TestOssEnsureBucket_NonExistent(t *testing.T) {
 }
 
 func TestOssEnsureBucket_CreateFails(t *testing.T) {
+	whitelistOSSHostsForTest(t)
 	client, err := newOSSClient(
 		"https://oss-cn-hangzhou.aliyuncs.com",
 		"cn-hangzhou",

@@ -29,7 +29,7 @@
  */
 import { ref, onMounted, type Ref } from 'vue';
 import { useKLineTickerObserver } from '@/finance/composables/useKLineTickerObserver';
-import { KNOWN_STOCK_NAMES, pickPrimaryMention } from '@/finance/utils/stockMentions';
+import { getStockName, pickPrimaryMention } from '@/finance/utils/stockMentions';
 import { shouldAutoSwitchChart } from '@/finance/utils/chartAutoSwitch';
 import type { AgentWorkspaceContext } from '@/finance/composables/useAgentWorkspace';
 
@@ -118,7 +118,7 @@ export function useFinanceChatIntegration(
     cancelStockFloatClose();
     const rect = el.getBoundingClientRect();
     const ticker = thscode.split('.')[0];
-    const matchedName = KNOWN_STOCK_NAMES[ticker] || '';
+    const matchedName = getStockName(ticker);
     stockFloat.value = {
       visible: true,
       top: rect.top,
@@ -272,7 +272,7 @@ export function useFinanceChatIntegration(
       if (!ticker) return;
       // 用户显式点了正文里的标的 -> 本轮不再自动切图
       agentWorkspace.markUserPick(thscode);
-      const matchedName = KNOWN_STOCK_NAMES[ticker] || '';
+      const matchedName = getStockName(ticker);
       handleOpenStockWorkspace({ ticker, exchange: exchange || 'SH', name: matchedName });
     },
   });
