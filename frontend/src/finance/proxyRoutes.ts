@@ -41,6 +41,18 @@ export const FINANCE_PROXY_ROUTES = [
   '/api/market/snapshot',
   // 大盘预览：龙虎榜净买入榜
   '/api/market/dragon-tiger',
+  // 大盘工作台：板块指数今日榜（848 个板块，按 涨停家数→放量→涨跌幅 排）
+  '/api/market/sectors',
+  // 大盘工作台：期股联动 —— 股指期货基差 + 5 年分位
+  '/api/market/basis',
+  // 大盘工作台：连板梯队（近 N 日 × 2/3/4/5/6/7+ 板）
+  '/api/market/limit-up-ladder',
+  // 批量行业归属（前端 finance/api/watchlist.ts 的 fetchIndustryMap 一直在调，后端此前 404）
+  '/api/market/industry-map',
+  // 大盘工作台：批量技术指标读数（indicators.duckdb，264 列 / 1036 万行）
+  '/api/market/technicals',
+  // 大盘工作台：集合竞价（高开低开分布 + 短线风向标 + 异动榜）
+  '/api/market/auction',
   // 「今天谁在动」：量价异动 /pulse + 财经日历 /calendar
   // 前缀级白名单（见文件头与 FINANCE_PROXY_ROUTES_REGEX 的说明）。
   '/api/finance',
@@ -55,7 +67,7 @@ export type FinanceProxyRoute = (typeof FINANCE_PROXY_ROUTES)[number];
  * 把所有路径写进一个 alternation。本常量只作为"应该同步到的目标形态"的
  * 文档，不被任何 JS 代码消费 —— nginx.conf 是静态配置，无法 import JS。
  *
- * 注意 `/api/market/(snapshot|dragon-tiger)` 这段：两条路径共享 `market`
+ * 注意 `/api/market/(snapshot|dragon-tiger|...)` 这段：多条路径共享 `market`
  * 前缀，但**不能**写成 `/api/market/.*` —— 那会把将来任何挂在 /api/market
  * 下的新端点（包括可能出现的写端点）一并直通到 python-service。
  * 反代白名单要显式枚举，漏一条是"页面少一块数据"（还能发现），
@@ -65,6 +77,10 @@ export type FinanceProxyRoute = (typeof FINANCE_PROXY_ROUTES)[number];
  * 与 `FINANCE_PROXY_ROUTES` 里的 `/api/finance` 一一对应：`(/.*)?$` 让子路径
  * 一并命中。它目前只挂只读端点，若将来挂上写端点，应把这里也降级成
  * `(pulse|calendar)` 这样的显式枚举。
+ *
+ * 2026-10-09：market 分支新增 sectors / basis / limit-up-ladder / industry-map。
+ * 少同步一条的表现是**前端静默少一块数据**（该请求 404、组件按空态渲染），
+ * 不会报错 —— 所以改这里之后要顺手核对 nginx.conf 那一行。
  */
 export const FINANCE_PROXY_ROUTES_REGEX =
-  '^/api/(kline|annotate|indicators|symbols|stock-profile|quotes|chart-pattern|market/(snapshot|dragon-tiger)|finance)(/.*)?$';
+  '^/api/(kline|annotate|indicators|symbols|stock-profile|quotes|chart-pattern|market/(snapshot|dragon-tiger|sectors|basis|limit-up-ladder|industry-map|technicals|auction)|finance)(/.*)?$';

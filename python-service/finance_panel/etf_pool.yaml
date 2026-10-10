@@ -10,39 +10,101 @@
 #
 # name 字段只是**给人看的注释**，运行时不依赖它（名称以库内 v_etf_universe 为准），
 # 保留是为了让这份清单脱离代码也能读懂。
+#
+# 两个池子，两种含义，**不要合并**：
+#   pool:        宽基。汇金历史重仓 → "国家队在进出宽基"这条结论只由这里得出。
+#   sector_pool: 行业。资金方向的补充视野，**不进**上面那条结论。
+# 合并会让"宽基里 n 只变了"这句话失去分母，所以分组靠 group 字段透传到前端。
 
 pool:
   # ---- 沪深 300 系 ----
   - code: "510300"
     name: "沪深300ETF华泰柏瑞"
+    group: broad
     tags: ["汇金重仓", "宽基"]
   - code: "510310"
     name: "沪深300ETF易方达"
+    group: broad
     tags: ["汇金重仓", "宽基"]
   - code: "159919"
     name: "沪深300ETF嘉实"
+    group: broad
     tags: ["汇金重仓", "宽基"]
 
   # ---- 上证 50 ----
   - code: "510050"
     name: "上证50ETF华夏"
+    group: broad
     tags: ["汇金重仓", "宽基"]
 
   # ---- 中证 500 / 1000 ----
   - code: "510500"
     name: "中证500ETF南方"
+    group: broad
     tags: ["汇金重仓", "宽基"]
   - code: "512100"
     name: "中证1000ETF南方"
+    group: broad
     tags: ["汇金重仓", "宽基"]
 
   # ---- 科创 50 / 创业板 ----
   - code: "588000"
     name: "科创50ETF华夏"
+    group: broad
     tags: ["汇金重仓", "宽基"]
   - code: "159915"
     name: "创业板ETF易方达"
+    group: broad
     tags: ["汇金重仓", "宽基"]
+
+# 行业 ETF：每只都是对应赛道成交与份额最大的那一只（代码已用同花顺代码表
+# 逐个核对过存在，见 2026-10-09 的扩池记录）。它们**不含**汇金口径，
+# 前端默认只显示 pool，sector_pool 靠分组筛选切换。
+#
+# ⚠️ 份额是季频（见 main.py 的 sync 端点注释）。新加入的这批要等库里攒到
+# **两个**报告期才可能有 share_change_pct；只有一个观测点时该字段是 null，
+# 前端显示「—」。这不是 bug，是口径。
+sector_pool:
+  - code: "512880"
+    name: "证券ETF国泰"
+    group: sector
+    tags: ["行业", "金融"]
+  - code: "512480"
+    name: "半导体ETF国联安"
+    group: sector
+    tags: ["行业", "科技"]
+  - code: "512760"
+    name: "芯片ETF国泰"
+    group: sector
+    tags: ["行业", "科技"]
+  - code: "515000"
+    name: "科技ETF华宝"
+    group: sector
+    tags: ["行业", "科技"]
+  - code: "512010"
+    name: "医药ETF易方达"
+    group: sector
+    tags: ["行业", "医药"]
+  - code: "512660"
+    name: "军工ETF国泰"
+    group: sector
+    tags: ["行业", "军工"]
+  - code: "512690"
+    name: "酒ETF鹏华"
+    group: sector
+    tags: ["行业", "消费"]
+  - code: "159928"
+    name: "消费ETF汇添富"
+    group: sector
+    tags: ["行业", "消费"]
+  - code: "515030"
+    name: "新能源车ETF华夏"
+    group: sector
+    tags: ["行业", "新能源"]
+  - code: "515790"
+    name: "光伏ETF华泰柏瑞"
+    group: sector
+    tags: ["行业", "新能源"]
 
 # 报告期持有人抽取覆盖的代码（B 线用）。默认与 A 线同一个池子；要单独扩池时
 # 在这里加 `holdings_pool:` 段即可，缺省回落到 `pool:`。

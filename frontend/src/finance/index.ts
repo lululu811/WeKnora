@@ -48,23 +48,27 @@ registerModule({
   icon: 'watchlist',
   insertAfter: 'toolbox',
   routeName: 'watchlist',
-  routeComponent: () => import('@/finance/views/Watchlist.vue'),
+  // 2026-10-09：菜单合并后这一页成了唯一的金融入口，本身是个四 tab 的壳
+  // （大盘 / 自选股 / 谁在动 / 权重 ETF）。原来直接挂 Watchlist.vue。
+  routeComponent: () => import('@/finance/views/Tracking.vue'),
 });
 
-// 「今天谁在动」量价异动。挂在 watchlist 之后 —— 它读的就是 watchlist 那一份
-// 自选清单（Go /api/v1/watchlist），菜单上紧挨着才说得通：先在那儿选股，
-// 再到这儿看哪只在动。注册顺序即插入顺序，必须在上面的 watchlist 之后调用，
-// 否则 menu store 按 insertAfter 找 anchor 时 watchlist 还没进数组，会退到
-// 默认位置（settings 前），两者就隔开了。
-// 图标复用内置表里的 'watchlist'，避免为一个图标去改通用菜单组件。
+// 「今天谁在动」不再有自己的菜单项 —— 量价异动读的就是 watchlist 那一份自选
+// 清单，两个入口并排放在侧边栏会让人以为它们看的是两批不同的票。内容收进
+// 个股追踪页的「谁在动」tab。
+//
+// 路由**保留**：`/platform/watch-pulse` 用重定向指到新位置，收藏、书签、别人
+// 发的链接都继续可用。这正是 registry 补 `hiddenInMenu` + `routeRedirect`
+// 的原因 —— 没有这两个字段，"合并菜单"就只能在"旧链接 404"和"菜单里留两个
+// 入口指向同一页"之间二选一。
 registerModule({
   id: 'watch-pulse',
   path: 'watch-pulse',
   titleKey: 'menu.watchPulse',
   icon: 'watchlist',
-  insertAfter: 'watchlist',
+  hiddenInMenu: true,
   routeName: 'watch-pulse',
-  routeComponent: () => import('@/finance/views/WatchPulse.vue'),
+  routeRedirect: { path: '/platform/watchlist', query: { tab: 'pulse' } },
 });
 
 // ─────────────────── 反代路由清单 ───────────────────

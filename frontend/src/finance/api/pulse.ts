@@ -168,6 +168,16 @@ export interface EtfFlowItem {
    * 与响应级 `trade_date`（每日行情日）不是同一个日期，caption 要用这个。
    */
   trade_date: string | null
+  /**
+   * 追踪池分组：`broad`（汇金重仓宽基）/ `sector`（行业 ETF）。
+   *
+   * 两组含义不同，不能混着读："宽基里 n 只变了"这个结论的分母只由 broad 得出。
+   * 归类是后端 `etf_pool.yaml` 的职责，前端**不从 name 猜赛道**。
+   *
+   * 老版本后端不返回这个字段（undefined），前端一律回落 broad ——
+   * 宁可只显示宽基，也不要把行业混进汇金那组分母里。
+   */
+  group?: 'broad' | 'sector'
 }
 
 /** 请求了但没拿到的标的（代码非法 / 库里没有 / 观测点不足 …）。 */
@@ -175,6 +185,16 @@ export interface EtfFlowMissing {
   thscode: string
   /** 服务端原话。 */
   reason: string;
+  /** 同 `EtfFlowItem.group`。缺失的分组也要能对上，否则筛选里的计数会算错。 */
+  group?: 'broad' | 'sector'
+}
+
+/** 分组计数，让前端不用自己数，也不用把 sector 混进 broad 的分母。 */
+export interface EtfFlowByGroup {
+  /** 该组实际返回几只。 */
+  included: number
+  /** 该组有几只触发了 signal。 */
+  signalled: number
 }
 
 export interface EtfFlowCounts {
@@ -197,6 +217,13 @@ export interface EtfFlowResponse {
   items: EtfFlowItem[]
   missing: EtfFlowMissing[]
   counts: EtfFlowCounts;
+  /**
+   * 按 group 拆开的计数（`broad` / `sector`）。
+   *
+   * 2026-10-09 起可选 —— 老版本后端不返回，前端按 items 自己数也能得到同样的值，
+   * 所以缺它不是错误，只是多打一遍遍历。
+   */
+  by_group?: Record<'broad' | 'sector', EtfFlowByGroup>
 }
 
 /** 权重 ETF 大资金动向。无可选参数：口径由后端固定，前端不传 date 去猜。 */

@@ -1,4 +1,64 @@
 export default {
+  watchPulse: {
+    technicals: {
+      title: '技術位置',
+      caption: '指標截至 {date}',
+      sma20: 'MA20',
+      sma60: 'MA60',
+      sma250: 'MA250',
+      bb: '布林',
+      align: { bull: '多頭排列', bear: '空頭排列', mixed: '均線糾纏', na: '均線判不出' },
+      missing: '無指標讀數：{codes}'
+    },
+    title: 'Who is Moving Today',
+    recalc: 'Recalculate',
+    retry: 'Retry',
+    watchlistError: 'Failed to load your watchlist',
+    pulseError: 'Failed to load volume and price activity',
+    overflowHint: 'Bar is at the display cap, the real multiple is higher',
+    tickFib: '0.618',
+    tickPivot: 'Pivot 1.0',
+    tickFibHigh: '1.382',
+    cal: {
+      title: 'Coming days',
+      today: 'Today',
+      tomorrow: 'Tomorrow',
+      inDays: '+{days}d',
+      daysAgo: '{days}d ago',
+      more: '{n} more',
+      total: '{n} events pending',
+      empty: 'No events in the coming days',
+      failed: 'Calendar unavailable, the main panel is unaffected'
+    },
+    state: {
+      up: 'Volume up',
+      down: 'Volume down',
+      normal: 'Normal'
+    },
+    normal: {
+      title: 'Normal volume ({n})'
+    },
+    noItems: {
+      title: 'No readings this round',
+      desc: 'None of your symbols has usable daily data for the latest trading day.'
+    },
+    allNormal: {
+      title: '{n} with normal volume',
+      desc: 'Nothing shows notable volume expansion or contraction today.'
+    },
+    empty: {
+      title: 'No watchlist items yet',
+      desc: 'Add the symbols you follow on the watchlist page, then come back here to see which ones are expanding in volume.',
+      cta: 'Add to watchlist'
+    },
+    missing: {
+      title: '{n} not included'
+    },
+    meta: {
+      quote: 'Quotes {date} · {included}/{total} included, {volumeUp} volume up, {volumeDown} volume down. Close basis',
+      coverage: 'Daily coverage: {included} symbols on {date}'
+    }
+  },
   samples: {
     markdown: 'Markdown Document',
     faq: 'Q&A FAQ',
@@ -1503,7 +1563,12 @@ export default {
       statusInactive: '有 {count} 個已勾選工具在當前設定下無法生效',
       effectiveLabel: '最終啟用的工具',
       effectiveDesc: '根據當前設定計算，這是智慧代理儲存後實際能呼叫的工具集合',
-      effectiveEmpty: '當前沒有可用工具，智慧代理將退化為純模型問答'
+      effectiveEmpty: '當前沒有可用工具，智慧代理將退化為純模型問答',
+      groupCode: 'Code & Terminal',
+      shellExec: 'Shell Terminal (Bash)',
+      shellExecDesc: 'Execute shell commands and scripts in a controlled environment (use frugally when verification or execution is needed; do not abuse)',
+      editSandboxFile: 'Edit Workspace File',
+      editSandboxFileDesc: 'Make targeted edits to code or text files in the session workspace'
     },
     desc: {
       name: '為智慧代理設定一個易於識別的名稱',
@@ -5680,6 +5745,12 @@ export default {
     baseUrlLabel: '實例地址',
     baseUrlPlaceholder: 'https://searxng.example.com',
     apiKeyPlaceholder: '請輸入 API 金鑰',
+    configFields: {
+      region: 'API Region',
+      regionDesc: 'Select MiniMax API service region (China / Global)',
+      regionCN: 'China (api.minimaxi.com)',
+      regionGlobal: 'Global (api.minimax.io)'
+    },
     toasts: {
       providerCreated: '搜尋引擎設定已建立',
       providerUpdated: '搜尋引擎設定已更新',
@@ -7489,7 +7560,13 @@ export default {
     logoutSuccess: '已登出',
     myChats: '我的對話',
     apiChats: 'API 會話',
-    noSessions: '暫無對話'
+    noSessions: '暫無對話',
+    watchPulse: 'Who moved',
+    collapseSessionList: 'Collapse conversation list',
+    expandSessionList: 'Expand conversation list',
+    sessionListCollapsed: 'Conversations collapsed',
+    collapseAllGroups: 'Collapse all',
+    expandAllGroups: 'Expand all'
   },
   watchlist: {
     title: 'Watchlist',
@@ -7612,6 +7689,40 @@ export default {
     todayAlerts: 'Today Alerts',
     totalTracked: 'Total Tracked',
     watchPool: 'Watch Pool',
+    condStateLiveMet: 'Satisfied (Live)',
+    condStateLiveUnmet: 'Not satisfied (Live)',
+    scoreFinal: 'AI Score',
+    toggleDimensions: 'Toggle dimension breakdown',
+    expandDimensions: 'View 18-D scores',
+    collapseDimensions: 'Collapse details',
+    browseWorkspace: 'Browse Charts',
+    stopBreached: 'Stop loss breached',
+    targetShares: 'Position Shares',
+    targetPnlAmount: 'Floating PnL',
+    sharesPlaceholder: 'Shares (e.g. 1000)',
+    resonanceTitle: 'Multi-Timeframe Trend Resonance',
+    resonanceMonth: 'Monthly Macro',
+    resonanceWeek: 'Weekly Swing',
+    resonanceDay: 'Daily Action',
+    trendBull: 'Bullish',
+    trendBear: 'Bearish',
+    portfolioMarketValue: 'Total Market Value',
+    portfolioTotalPnl: 'Portfolio PnL',
+    portfolioCount: 'Holdings',
+    portfolioStopAlerts: 'Stop Loss Alert',
+    verdict: {
+      buy: 'Buy',
+      hold: 'Hold',
+      sell: 'Sell',
+      keep: 'Keep',
+      tighten: 'Tighten',
+      exit: 'Exit',
+      none: 'None'
+    },
+    ranking: {
+      title: 'Today\'s Ranking',
+      empty: 'No scoring data yet'
+    },
     columns: {
       code: 'Code',
       name: 'Name',
@@ -7621,10 +7732,54 @@ export default {
       change: 'Change',
       turnover: 'Turnover',
       date: 'Last trade date',
-      actions: 'Actions'
+      actions: 'Actions',
+      score: 'Score'
+    }
+  },
+  tracking: {
+    openFullscreen: '展開全螢幕',
+    tabsLabel: '個股追蹤分區',
+    tab: { market: '大盤', watchlist: '自選股', pulse: '誰在動', etf: '權重 ETF' },
+    etf: {
+      title: '權重 ETF',
+      caption: '份額截至 {date} · {basis}口徑',
+      groupLabel: 'ETF 分類',
+      sortLabel: '排序',
+      sort: { signal: '異動優先', share: '份額變動', multiple: '放量倍數' },
+      group: { broad: '寬基', sector: '產業' },
+      col: {
+        name: '名稱',
+        price: '現價',
+        share: '份額變動',
+        multiple: '放量',
+        signal: '訊號',
+        observed: '觀測日'
+      },
+      signalTitle: '觸發異動',
+      footPriceFallback: '* 該檔無上一份額觀測點，此欄退回近 5 日漲跌幅',
+      sectorEmpty: '產業池為空。追蹤池已擴到 10 檔產業 ETF，跑一次份額同步才會有資料。',
+      basis: { quarterly: '季頻', unknown: '未知' },
+      signalCount: '異動訊號',
+      inflowCount: '份額淨增',
+      topMove: '變動最大',
+      openWorkspace: '看全表 →'
     }
   },
   marketDashboard: {
+    auction: {
+      title: '今早怎麼開的',
+      caption: '集合競價 {date} 終態（9:25 撮合完成）',
+      barTitle: '全市場高開 / 平開 / 低開 / 未報價的家數分布',
+      up: '高開 {n}',
+      flat: '平開 {n}',
+      down: '低開 {n}',
+      noQuote: '未報價 {n}',
+      limitOpen: '競價漲停 {up} · 跌停 {down}',
+      benchmark: '風向標',
+      expand: '看異動榜',
+      col: { name: '標的', open: '競價', volRatio: '量比', cap: '流通市值' },
+      foot: '異動榜按流通市值 ≥ {cap} 億過濾 —— 極小市值票的競價量比不可比，那是流動性噪音'
+    },
     title: 'Market Overview',
     back: 'Back to workbench',
     dataTime: 'As of',
@@ -7645,17 +7800,72 @@ export default {
     backToWorkbench: 'Back',
     refreshFailed: 'Failed to refresh quotes. Please try again.',
     loading: 'Loading…',
+    marketState: {
+      title: 'Market State',
+      caption: 'Five-factor score · reference only',
+      notTradable: 'Not a buy/sell signal: year-by-year backtest shows the direction flips (-0.52 / +0.07 / -0.22 / +0.33 / -0.15).',
+      referenceOnly: 'Reference only',
+      shortTerm: 'Short-term',
+      exposure: 'Exposure reference',
+      expNeutral: 'No direction',
+      expFollow: 'Follow',
+      expContrarian: 'Contrarian',
+      empty: 'No market state data',
+      temp: {
+        cold: 'Cold',
+        hot: 'Hot',
+        neutral: 'Mild'
+      },
+      regime: {
+        strong: 'Strong',
+        neutral: 'Neutral',
+        weak: 'Weak'
+      }
+    },
     etf: {
       title: 'Broad ETFs',
-      caption: 'Broad-based'
+      caption: 'Broad-based',
+      captionFallback: 'Shares not synced · price only',
+      unsynced: 'Not synced',
+      signal: 'Alert',
+      holdings: '匯金披露持倉：巨潮未收錄場內 ETF 定期報告，該資料來源不可用'
     },
     dragonTiger: {
       title: 'Top traded',
       caption: 'Top 5 net buys · All market',
+      captionCount: '淨買入 {n} 筆 · {date} · 全市場',
       net: 'Net',
       org: 'Inst.',
       empty: 'No data today',
       full: 'Full list →'
+    },
+    sectors: {
+      title: '板塊動向',
+      caption: '{date} · 依 漲停家數 → 放量倍數 → 漲跌幅 排序',
+      tagLabel: '板塊分類',
+      failed: '板塊資料未就緒',
+      showAll: '展開全部',
+      tag: { industry: '產業', concept: '概念', tszs: '特色', region: '地域' },
+      col: { name: '板塊', change: '漲跌幅', volume: '放量', limitUp: '漲停' },
+      foot: '顯示 {shown} / {total} 個'
+    },
+    ladder: {
+      title: '連板梯隊',
+      caption: '近 {n} 個交易日 · 顏色深淺 = 家數',
+      failed: '連板資料未就緒',
+      level: { two: '2板', three: '3板', four: '4板', five: '5板', six: '6板', seven: '7板+' }
+    },
+    basis: {
+      title: '期股連動 · 股股指數期貨基差',
+      caption: '基差截至 {date}',
+      lagged: '基差截至 {basis}（期貨較現貨落後一日）· 現貨已至 {spot}',
+      percentile: '5 年分位 {v}%',
+      expand: '看背離',
+      failed: '期貨資料未就緒',
+      divergence: '{name} 基差率 vs 現貨日漲跌',
+      legendBasis: '基差率',
+      legendSpot: '現貨日漲跌',
+      window: '近 {n} 個交易日'
     },
     watchlist: {
       title: 'Watchlist',
@@ -8064,6 +8274,7 @@ export default {
     needKb: 'Select a knowledge base first',
     close: 'Close',
     llmNote: 'Seven qualitative dimensions (moat / stagflation defence / ESG / management / shareholder & flow / valuation / risk) are scored by the model; every other number is computed by the scoring kernel. The report is valid for 30 days.',
+    launchNoAgent: 'No agent in this workspace can run halo.analyze, so the full report cannot be generated. Enable HALO in agent settings.',
     growthSubs: {
       revenue: 'Revenue growth',
       profit: 'Profit growth',

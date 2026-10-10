@@ -14,13 +14,19 @@
   3. **一屏无滚动**。1440×900 与 1366×768 都要放下，小视口走
      `@media (max-height: 800px)` 收紧（自选股减到 6 行）。
 
+  两种形态，同一份代码：
+  - `embedded=false`（/dashboard）：全屏大屏，自己占满视口，顶栏带返回/主题/刷新。
+  - `embedded=true`（个股追踪 → 大盘 tab）：塞进侧边栏壳的正常流里，顶栏由外层壳
+    提供、`100vh` 换成自适应、@media 收紧规则整段不生效（那套是给固定视口调的）。
+    ETF 卡在嵌入态降级成摘要行 —— 全表由「权重 ETF」tab 独占，不在两处各画一次。
+
   数据链路（与 finance/api/market.ts 的注释对应）：
     指数 / 情绪 / ETF  → python-service `/api/market/snapshot`
     龙虎榜            → python-service `/api/market/dragon-tiger`
     自选股            → Go `/api/v1/watchlist` + python-service `/api/quotes`
 -->
 <template>
-  <div class="md-page" :class="{ 'is-flashing': flashing }">
+  <div class="md-page" :class="{ 'is-flashing': flashing, 'is-embedded': embedded }">
     <!--
       折线渐变（涨跌两色）。必须放在 template 内：SFC 里 `</style>` 之后的第二个
       顶层标签会被 vue-loader 当成 custom block 解析（vite 报 import-analysis 语法错），
@@ -40,7 +46,9 @@
       </defs>
     </svg>
     <!-- ══════ 顶栏 ══════ -->
-    <header class="md-topbar md-tile" style="--d: 0ms">
+    <!-- 嵌入态（个股追踪 → 大盘 tab）：顶栏归外层壳，这里不画。
+         大屏态才需要返回 / 主题 / 刷新三个按钮。 -->
+    <header v-if="!embedded" class="md-topbar md-tile" style="--d: 0ms">
       <button type="button" class="md-icon-btn" :title="$t('marketDashboard.back')"
         :aria-label="$t('marketDashboard.back')" @click="goBack">
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
@@ -213,6 +221,31 @@
         </div>
       </section>
 
+      <!--
+        ── 板块 / 情绪位置 / 期股联动（2026-10-09 新增）──
+
+        位置不是按数据新鲜度排的，是按「这一块回答哪个问题」：
+
+          板块榜      钱往哪个方向走      ← 大盘页真正缺的那一块
+          连板梯队    情绪在垒还是在塌
+          期股联动    对冲盘有多重（期货比现货先表态）
+
+        三块都只在大盘 tab（embedded）出现。全屏 /dashboard 是一屏看完的速览，
+        塞三块进去会把它撑成两屏 —— 而那一屏的用途恰恰是"一眼"。
+
+        `md-full` 让它们在大屏态隐藏、嵌入态整宽显示，与 .md-tile 的栅格并排无关。
+      -->
+      <div v-if="embedded" class="md-full">
+        <!-- 竞价排在板块榜之前：它解释"今天怎么开的"，板块榜解释"钱往哪走"，
+             时间上先后、逻辑上因果。 -->
+        <AuctionStrip />
+        <SectorBoard class="md-full__item" />
+        <div class="md-full__pair">
+          <LadderHeat />
+          <BasisStrip />
+        </div>
+      </div>
+
       <!-- ── 自选股 ── -->
       <section class="md-tile md-watchlist" style="--d: 420ms">
         <div class="md-tile__head">
@@ -238,7 +271,9 @@
         <div v-else-if="watchlistHasRows" class="md-wl-rows">
           <div v-for="w in watchRows" :key="w.thscode" class="md-wl-row">
             <span class="md-wl-row__name">
-              {{ w.name }}
+              <!-- name 可能为空（库里存的是代码而非名字，见 watchRows 的说明），
+                   空时不渲染这一段，让 thscode 单独当标识，不留一段空白撑出间距 -->
+              <template v-if="w.name">{{ w.name }}</template>
               <span class="md-wl-row__code md-num">{{ w.thscode }}</span>
             </span>
             <span class="md-wl-row__price md-num" :class="trendClass(w.change_pct)">{{ fmtNum(w.close) }}</span>
@@ -254,7 +289,8 @@
       <section class="md-tile md-lhb" style="--d: 480ms">
         <div class="md-tile__head">
           <span class="md-tile__title">{{ $t('marketDashboard.dragonTiger.title') }}</span>
-          <span class="md-tile__caption">{{ $t('marketDashboard.dragonTiger.caption') }}</span>
+          <!-- 标题不再写死"前五"：写的是真实条数，改 limit 不会让标题说谎 -->
+          <span class="md-tile__caption">{{ dragonCaption }}</span>
         </div>
         <div v-if="dragonRows.length" class="md-lhb-rows">
           <div v-for="(r, i) in dragonRows" :key="r.thscode" class="md-lhb-row">
@@ -284,28 +320,58 @@
           <span class="md-tile__title">{{ $t('marketDashboard.etf.title') }}</span>
           <span class="md-tile__caption">{{ etfCaption }}</span>
         </div>
-        <div v-if="etfRows.length" class="md-etf-rows">
-          <div v-for="r in etfRows" :key="r.thscode" class="md-etf-row">
-            <span class="md-etf-row__name">
-              {{ r.name }}
-              <span class="md-etf-row__code md-num">{{ r.thscode }}</span>
-            </span>
-            <span class="md-etf-row__price md-num" :class="trendClass(r.change_pct)">{{ fmtPrice(r.price) }}</span>
-            <span class="md-pill md-num" :class="trendClass(r.change_pct)">{{ fmtPct(r.change_pct) }}</span>
-            <!-- 份额列是这张卡的主角：季频口径，红=净流入（与价格红涨同一套语义） -->
-            <span class="md-etf-row__share md-num" :class="r.share_class">{{ r.share_text }}</span>
-            <span
-              class="md-etf-row__mult md-num"
-              :class="{ 'md-etf-row__mult--hot': r.multiple_hot }"
-            >{{ r.multiple_text }}</span>
-            <span v-if="r.signal" class="md-etf-row__signal">
-              <span class="md-etf-row__dot" />{{ $t('marketDashboard.etf.signal') }}
-            </span>
+        <!--
+          嵌入态：全表由「权重 ETF」tab 独占，这张卡降级成一行摘要。
+          两处各画一张同样的表不是"更方便"，是同一件事被画两遍 —— 用户切 tab
+          会以为内容变了。大屏态（/dashboard）没有那个 tab，所以保持原来的全表。
+        -->
+        <div v-if="embedded" class="md-etf-summary">
+          <div class="md-etf-summary__stats">
+            <div class="md-etf-summary__stat">
+              <span class="md-etf-summary__k">{{ $t('tracking.etf.signalCount') }}</span>
+              <span class="md-etf-summary__v md-num">{{ etfSignalText }}</span>
+            </div>
+            <div class="md-etf-summary__stat">
+              <span class="md-etf-summary__k">{{ $t('tracking.etf.inflowCount') }}</span>
+              <span class="md-etf-summary__v md-num" :class="trendClass(etfInflowDelta)">
+                {{ etfInflowText }}
+              </span>
+            </div>
+            <div class="md-etf-summary__stat">
+              <span class="md-etf-summary__k">{{ $t('tracking.etf.topMove') }}</span>
+              <span class="md-etf-summary__v">{{ etfTopMoveText }}</span>
+            </div>
           </div>
+          <router-link class="md-etf-summary__cta"
+            :to="{ path: '/platform/watchlist', query: { tab: 'etf' } }">
+            {{ $t('tracking.etf.openWorkspace') }}
+          </router-link>
         </div>
-        <p v-else-if="!loading" class="md-tile-empty">{{ $t('marketDashboard.noData') }}</p>
-        <!-- 预留披露持仓（B 线）：数据通了再换成真持仓，这里只占位不误导 -->
-        <p class="md-tile__caption md-etf__foot">{{ $t('marketDashboard.etf.holdings') }}</p>
+
+        <template v-else>
+          <div v-if="etfRows.length" class="md-etf-rows">
+            <div v-for="r in etfRows" :key="r.thscode" class="md-etf-row">
+              <span class="md-etf-row__name">
+                {{ r.name }}
+                <span class="md-etf-row__code md-num">{{ r.thscode }}</span>
+              </span>
+              <span class="md-etf-row__price md-num" :class="trendClass(r.change_pct)">{{ fmtPrice(r.price) }}</span>
+              <span class="md-pill md-num" :class="trendClass(r.change_pct)">{{ fmtPct(r.change_pct) }}</span>
+              <!-- 份额列是这张卡的主角：季频口径，红=净流入（与价格红涨同一套语义） -->
+              <span class="md-etf-row__share md-num" :class="r.share_class">{{ r.share_text }}</span>
+              <span
+                class="md-etf-row__mult md-num"
+                :class="{ 'md-etf-row__mult--hot': r.multiple_hot }"
+              >{{ r.multiple_text }}</span>
+              <span v-if="r.signal" class="md-etf-row__signal">
+                <span class="md-etf-row__dot" />{{ $t('marketDashboard.etf.signal') }}
+              </span>
+            </div>
+          </div>
+          <p v-else-if="!loading" class="md-tile-empty">{{ $t('marketDashboard.noData') }}</p>
+          <!-- 预留披露持仓（B 线）：数据通了再换成真持仓，这里只占位不误导 -->
+          <p class="md-tile__caption md-etf__foot">{{ $t('marketDashboard.etf.holdings') }}</p>
+        </template>
       </section>
     </main>
   </div>
@@ -325,6 +391,10 @@ import {
 } from '@/finance/api/market'
 import { getEtfFlow, type EtfFlowResponse } from '@/finance/api/pulse'
 import { fetchQuotes, listWatchlist, type Quote, type WatchState } from '@/finance/api/watchlist'
+import AuctionStrip from '@/finance/components/market/AuctionStrip.vue'
+import SectorBoard from '@/finance/components/market/SectorBoard.vue'
+import LadderHeat from '@/finance/components/market/LadderHeat.vue'
+import BasisStrip from '@/finance/components/market/BasisStrip.vue'
 import { useTheme } from '@/composables/useTheme'
 import {
   CHART,
@@ -339,10 +409,27 @@ import {
   trendOf,
   usableCloses,
 } from './market-geometry'
+import { displayStockName } from '@/finance/utils/stockDisplayName'
+
+const props = withDefaults(
+  defineProps<{
+    /**
+     * 嵌入态：渲染进个股追踪页的「大盘」tab，而不是 /dashboard 全屏路由。
+     * 只改三处 —— 顶栏（交给外层壳）、视口高度约束（交给正常流）、
+     * ETF 卡（全表由「权重 ETF」tab 独占，这里降级成摘要行）。
+     */
+    embedded?: boolean
+  }>(),
+  { embedded: false },
+)
+const embedded = computed(() => props.embedded)
 
 const router = useRouter()
 const { t } = useI18n()
 const { effectiveTheme, setTheme } = useTheme()
+
+/** 龙虎榜取多少条。后端上限 50，写小了就等于自己把榜单截断了。 */
+const DRAGON_LIMIT = 50
 
 const loading = ref(true)
 const refreshing = ref(false)
@@ -429,6 +516,15 @@ const tickers = computed<MarketIndex[]>(() => snapshot.value?.tickers ?? [])
 const etfs = computed<MarketEtf[]>(() => snapshot.value?.etfs ?? [])
 const dragonRows = computed<DragonTigerRow[]>(() => dragon.value?.data ?? [])
 
+/** 龙虎榜副标题：真实条数 + 交易日。原 i18n 文案写死"前五"，与实际条数脱钩。 */
+const dragonCaption = computed(() => {
+  const n = dragonRows.value.length
+  const d = dragon.value?.trade_date
+  return d
+    ? t('marketDashboard.dragonTiger.captionCount', { n, date: d })
+    : t('marketDashboard.dragonTiger.captionCount', { n, date: DASH })
+})
+
 // ── 权重 ETF · 大资金动向 ────────────────────────────────────────────────
 //
 // 回答的是「国家队是不是在进出宽基 ETF、动的哪只、力度多大」。份额变动才是
@@ -513,6 +609,65 @@ const etfCaption = computed(() => {
   })
 })
 
+// ── 嵌入态 ETF 摘要 ──────────────────────────────────────────────────────
+//
+// 三个数回答"资金在不在动、往哪个方向、动得最大的是哪只"。这三个是看 ETF 的
+// 全部理由，其余的列（现价 / 放量 / 信号）是核对细节时才用的，留在 ETF tab。
+//
+// 口径陷阱照旧：只看**有上一观测点**的那些。`share_change_pct === null` 是
+// "没有可比的上期"，不是"没动"，把它算进"增加/减少"的分母会得出假结论。
+
+/** 有份额观测点的子集 —— 摘要的分母，只能是它。 */
+const etfWithShare = computed(() =>
+  (etfFlow.value?.items ?? []).filter(
+    (i) => i.share_change_pct !== null && i.share_change_pct !== undefined,
+  ),
+)
+
+const etfSignalText = computed(() => {
+  const items = etfFlow.value?.items ?? []
+  if (!items.length) return DASH
+  return `${items.filter((i) => i.signal).length} / ${etfFlow.value?.counts?.total ?? items.length}`
+})
+
+/** 份额净增加的家数。没有可比观测点时返回 null —— 显示「—」而不是 0。 */
+const etfInflowCount = computed(() => {
+  const withShare = etfWithShare.value
+  if (!withShare.length) return null
+  return withShare.filter((i) => (i.share_change_pct as number) > 0).length
+})
+
+const etfInflowDelta = computed(() => {
+  const n = etfInflowCount.value
+  if (n === null) return null
+  const total = etfWithShare.value.length
+  // 净流入为 0 不是"持平"结论，是"这批全在流出"——给一个方向量而不是颜色。
+  return n === 0 ? -1 : n / total
+})
+
+const etfInflowText = computed(() => {
+  const n = etfInflowCount.value
+  if (n === null) return DASH
+  return `${n} / ${etfWithShare.value.length}`
+})
+
+/** 变动幅度最大的那一只（取绝对值最大，不分方向 —— 流出也是"动"）。 */
+const etfTopMove = computed(() => {
+  const withShare = etfWithShare.value
+  if (!withShare.length) return null
+  return withShare.reduce((best, cur) =>
+    Math.abs((cur.share_change_pct as number)) > Math.abs((best.share_change_pct as number))
+      ? cur
+      : best,
+  )
+})
+
+const etfTopMoveText = computed(() => {
+  const top = etfTopMove.value
+  if (!top) return DASH
+  return `${top.name} ${fmtPct(top.share_change_pct)}`
+})
+
 const EMPTY_SENTIMENT: MarketSentiment = {
   trade_date: null,
   limit_up: null,
@@ -594,7 +749,11 @@ const watchRows = computed<WatchRow[]>(() =>
       const q = quotes.value[item.thscode]
       return {
         thscode: item.thscode,
-        name: item.name,
+        // 名字优先取行情源（python-service 的标的表），清单里存的名字只当兜底。
+        // 存的名字**可能压根不是名字**：新增自选时若客户端只传了代码，库里存下
+        // 的就是 "002859"，那一行会渲染成「002859」+「002859.SZ」两行同文。
+        // 规则见 utils/stockDisplayName.ts（与个股追踪页共用同一份判定）。
+        name: displayStockName(item.name, item.thscode, q?.name),
         state: item.state,
         close: q?.close ?? null,
         change_pct: q?.change_pct ?? null,
@@ -649,7 +808,10 @@ async function load(isRefresh = false) {
   // etf-flow 失败时 etfFlow 保持 null，etfRows 自动退回快照的纯价格行。
   const [snap, dt, flow] = await Promise.allSettled([
     getMarketSnapshot(60),
-    getDragonTiger(5),
+    // 50 = 后端上限（`limit: int = Query(5, ge=1, le=50)`）。原来写死 5 是因为
+    // 大屏只放得下 5 行；现在行容器自带 overflow-y:auto（见 .md-lhb-rows 的注释），
+    // 大屏不滚页也能看全，嵌入态则并排两列铺开 —— 两种形态都不再截断。
+    getDragonTiger(DRAGON_LIMIT),
     getEtfFlow(),
   ])
   if (snap.status === 'fulfilled') snapshot.value = snap.value
@@ -1437,5 +1599,144 @@ function watchStateLabel(s: WatchState): string {
   .is-spin { animation: none; }
 
   .is-flashing :deep(.md-num) { animation: none; }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   嵌入态（个股追踪 → 大盘 tab）
+
+   全屏大屏那套是给"固定视口、一屏看完"调的：100vh + overflow:hidden + 12 栅格 +
+   两行网格 + @media(max-height:800px) 逐项收紧。塞进侧边栏壳以后这些全部反过来
+   —— 高度由内容定、页面该滚就滚、宽度随侧栏伸缩。所以这里不是"微调"，是把
+   固定视口的假设逐条换掉。
+
+   下面每条都写在 `@media (max-height: 800px)` 之后：那段是收紧，嵌入态要把它
+   逐项放宽，选择器多带类保证压得住。
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.md-page.is-embedded {
+  /* 高度交给内容，页面滚。overflow:hidden 留着会把超出部分直接吃掉。 */
+  height: auto;
+  min-height: 0;
+  overflow: visible;
+  padding: 0;
+  gap: 12px;
+  background: transparent;
+}
+
+/* 12 栅格 + 两行等高是给大屏的。嵌入态改成单列顺流：宽度不确定时，
+   强行两行等高会让龙虎榜那 50 条永远塞不进第二行的格子里。 */
+.md-page.is-embedded .md-board {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 0 0 auto;
+}
+
+.md-page.is-embedded .md-ticker {
+  flex: 0 0 auto;
+}
+
+/* 新增三块（板块榜 / 连板梯队 / 期股联动）的容器。
+   整宽铺满，不参与 .md-board 的 12 栅格 —— 它们自己内部已经排好版了，
+   再塞进栅格只会让它们的列宽随旁边卡片的 span 抖动。 */
+.md-full {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.md-full__pair {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+/* 窄内容区时梯队与基差改成上下排 —— 侧边栏收起来时两栏会挤成两条竖线。 */
+@media (max-width: 1200px) {
+  .md-full__pair { grid-template-columns: minmax(0, 1fr); }
+}
+
+.md-page.is-embedded .md-index-grid {
+  /* 大屏是两列；侧栏壳里宽度更窄，仍两列但卡片会挤 —— 保持 2 列，
+     它是"四大指数"这一组的天然分组，换成一列会让它变成四条横幅。 */
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+/* 三张速览卡（自选股 / 龙虎榜 / ETF）在大屏是同一行三等分；
+   嵌入态里龙虎榜要放 50 条、ETF 要放摘要，各自需要的行数差一个量级，
+   强行并排会让高的那张把另外两张挤成半行。改纵向排列。 */
+.md-page.is-embedded .md-wl,
+.md-page.is-embedded .md-lhb,
+.md-page.is-embedded .md-etf {
+  grid-column: 1 / -1;
+}
+
+/* 龙虎榜 50 条：两列铺开。这是"缩编全景"这一版的核心 ——
+   大屏一列 5 行，嵌入态两列 50 行，不用滚就能扫完一屏两屏。 */
+.md-page.is-embedded .md-lhb-rows {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 20px;
+  align-content: start;
+  overflow: visible;
+}
+
+.md-page.is-embedded .md-lhb-row {
+  padding: 6px 2px;
+}
+
+/* 把 @media(max-height:800px) 那几项收紧逐条放宽 —— 它是为"塞进 768px 高的
+   固定视口"调的，嵌入态的高度由内容决定，套用它只会白白挤掉信息。 */
+.md-page.is-embedded .md-board,
+.md-page.is-embedded .md-index-grid {
+  gap: 12px;
+}
+
+.md-page.is-embedded .md-tile { padding: 12px 14px; }
+.md-page.is-embedded .md-tile__head { margin-bottom: 8px; }
+.md-page.is-embedded .md-wl-row { padding: 6px 2px; }
+.md-page.is-embedded .md-etf-row { padding: 7px 2px; }
+.md-page.is-embedded .md-index-panel__chart { margin: 6px 0 8px; }
+.md-page.is-embedded .md-lu5 { margin-bottom: 8px; }
+
+/* 自选股第 7 行：那张卡在大屏小视口下是"只留 6 行"，嵌入态没有理由丢一只。 */
+.md-page.is-embedded .md-wl-row:nth-child(7) { display: flex; }
+
+/* ── 嵌入态 ETF 摘要 ── */
+.md-etf-summary {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.md-etf-summary__stats {
+  display: flex;
+  gap: 28px;
+  flex-wrap: wrap;
+}
+
+.md-etf-summary__stat { display: flex; flex-direction: column; gap: 2px; }
+
+.md-etf-summary__k {
+  font-size: var(--app-text-xs);
+  color: var(--td-text-color-secondary);
+}
+
+/* 摘要的三个数用展示字号，不是正文 —— 它们是这一格的结论，不是明细。 */
+.md-etf-summary__v {
+  font-size: var(--app-text-lg);
+  color: var(--td-text-color-primary);
+}
+
+.md-etf-summary__cta {
+  flex: 0 0 auto;
+  font-size: var(--app-text-sm);
+  color: var(--td-brand-color);
+  text-decoration: none;
+  border-bottom: 1px solid color-mix(in srgb, var(--td-brand-color) 40%, transparent);
 }
 </style>

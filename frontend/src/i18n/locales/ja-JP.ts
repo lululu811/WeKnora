@@ -1,5 +1,15 @@
 export default {
   watchPulse: {
+    technicals: {
+      title: 'テクニカル位置',
+      caption: '指標は {date} 時点',
+      sma20: 'MA20',
+      sma60: 'MA60',
+      sma250: 'MA250',
+      bb: 'ボリンジャー',
+      align: { bull: '上昇配列', bear: '下降配列', mixed: '交錯', na: '判定不可' },
+      missing: '指標データなし：{codes}'
+    },
     title: '今日動いている銘柄',
     recalc: '再計算',
     retry: '再試行',
@@ -1553,7 +1563,12 @@ export default {
       statusInactive: '選択済みの{count}個のツールは、現在の設定では有効になりません',
       effectiveLabel: '有効なツール',
       effectiveDesc: '現在の設定から算出された、エージェントが実際に呼び出せるツールです',
-      effectiveEmpty: '利用可能なツールがありません。エージェントは通常のモデル対話にフォールバックします'
+      effectiveEmpty: '利用可能なツールがありません。エージェントは通常のモデル対話にフォールバックします',
+      groupCode: 'コードとターミナル',
+      shellExec: 'コマンドライン端末 (Bash)',
+      shellExecDesc: '隔離環境でシェルコマンドやスクリプトを実行（必要な場合のみ使用し乱用を避けてください）',
+      editSandboxFile: 'ワークスペースファイル編集',
+      editSandboxFileDesc: 'ワークスペース内のコードやテキストファイルを正確に編集'
     },
     desc: {
       name: 'エージェントを識別しやすい名前を設定します',
@@ -5730,6 +5745,12 @@ export default {
     baseUrlLabel: 'インスタンスURL',
     baseUrlPlaceholder: 'https://searxng.example.com',
     apiKeyPlaceholder: 'APIキーを入力',
+    configFields: {
+      region: 'インターフェース地域',
+      regionDesc: 'MiniMax API サービス地域を選択（中国 / グローバル）',
+      regionCN: '中国（api.minimaxi.com）',
+      regionGlobal: 'グローバル（api.minimax.io）'
+    },
     toasts: {
       providerCreated: '検索プロバイダを作成しました',
       providerUpdated: '検索プロバイダを更新しました',
@@ -7511,7 +7532,6 @@ export default {
     }
   },
   menu: {
-    watchPulse: '動いている銘柄',
     sessionInProgress: '会話中',
     knowledgeBase: 'ナレッジベース',
     agents: 'エージェント',
@@ -7540,7 +7560,13 @@ export default {
     logoutSuccess: 'ログアウトしました',
     myChats: 'マイチャット',
     apiChats: 'APIセッション',
-    noSessions: '会話はまだありません'
+    noSessions: '会話はまだありません',
+    watchPulse: '動いている銘柄',
+    collapseSessionList: '会話リストを折りたたむ',
+    expandSessionList: '会話リストを展開',
+    sessionListCollapsed: '会話を折りたたみ中',
+    collapseAllGroups: 'すべて折りたたむ',
+    expandAllGroups: 'すべて展開'
   },
   watchlist: {
     title: '個別銘柄ウォッチ',
@@ -7663,6 +7689,40 @@ export default {
     todayAlerts: '本日のアラート',
     totalTracked: '追跡総数',
     watchPool: '重点観察',
+    condStateLiveMet: 'リアルタイム成立',
+    condStateLiveUnmet: 'リアルタイム不成立',
+    scoreFinal: 'AIスコア',
+    toggleDimensions: '詳細ディメンション切替',
+    expandDimensions: '18次元スコア表示',
+    collapseDimensions: '詳細を折りたたむ',
+    browseWorkspace: '一括チャート',
+    stopBreached: '損切りライン到達',
+    targetShares: '保有株式数',
+    targetPnlAmount: '評価損益額',
+    sharesPlaceholder: '保有数量 (例: 1000)',
+    resonanceTitle: '複数周期トレンド共鳴',
+    resonanceMonth: '月足トレンド',
+    resonanceWeek: '週足スイング',
+    resonanceDay: '日足アクション',
+    trendBull: '強気',
+    trendBear: '弱気',
+    portfolioMarketValue: '保有総時価',
+    portfolioTotalPnl: 'ポートフォリオ損益',
+    portfolioCount: '保有銘柄',
+    portfolioStopAlerts: 'ロスカット警告',
+    verdict: {
+      buy: '買い',
+      hold: '保有',
+      sell: '売り',
+      keep: '維持',
+      tighten: '引き締め',
+      exit: '手仕舞い',
+      none: 'なし'
+    },
+    ranking: {
+      title: '本日のランキング',
+      empty: 'スコアリングデータがまだありません'
+    },
     columns: {
       code: 'コード',
       name: '名称',
@@ -7672,10 +7732,54 @@ export default {
       change: '騰落',
       turnover: '売買代金',
       date: '直近取引日',
-      actions: '操作'
+      actions: '操作',
+      score: 'スコア'
+    }
+  },
+  tracking: {
+    openFullscreen: '全画面表示',
+    tabsLabel: 'トラッキングのセクション',
+    tab: { market: '市場概況', watchlist: '自選株', pulse: '動き銘柄', etf: 'ウェイト ETF' },
+    etf: {
+      title: 'ウェイト ETF',
+      caption: '口数は {date} 時点 · {basis}',
+      groupLabel: 'ETF 区分',
+      sortLabel: '並び替え',
+      sort: { signal: 'シグナル優先', share: '口数変動', multiple: '出来高倍率' },
+      group: { broad: 'ブロード', sector: '業種' },
+      col: {
+        name: '銘柄',
+        price: '現在値',
+        share: '口数変動',
+        multiple: '出来高倍率',
+        signal: 'シグナル',
+        observed: '観測日'
+      },
+      signalTitle: 'シグナル点灯',
+      footPriceFallback: '* 前の口数観測値がないため、直近 5 日の騰落率を表示しています',
+      sectorEmpty: '業種プールは空です。10 隻の業種 ETF を追加しましたが、口数同期を実行するまでデータは表示されません。',
+      basis: { quarterly: '四半期', unknown: '不明' },
+      signalCount: 'シグナル',
+      inflowCount: '口数純増',
+      topMove: '最大変動',
+      openWorkspace: '全表を見る →'
     }
   },
   marketDashboard: {
+    auction: {
+      title: '寄り付き',
+      caption: '板寄競り {date} 終値（9:25 約定）',
+      barTitle: '全市場の寄り付き分布：高-rise / 横ばい / 下落 / VIDなし',
+      up: '高寄り {n}',
+      flat: '横ばい {n}',
+      down: '下寄り {n}',
+      noQuote: 'VIDなし {n}',
+      limitOpen: '寄り付き涨停 {up} · 跌停 {down}',
+      benchmark: ' Ortega ',
+      expand: '変動榜',
+      col: { name: '銘柄', open: '寄り付き', volRatio: '出来高倍率', cap: '流通時価総額' },
+      foot: '変動榜は流通時価総額 ≥ {cap}億で絞る — 超小型株の寄り付き倍率は比較にならず、流動性のノイズにすぎない'
+    },
     title: '市場概観',
     back: 'ワークベンチに戻る',
     dataTime: 'データ時刻',
@@ -7696,21 +7800,72 @@ export default {
     backToWorkbench: '戻る',
     refreshFailed: '行情の更新に失敗しました。もう一度お試しください。',
     loading: '読み込み中…',
+    marketState: {
+      title: '市場状態',
+      caption: '5因子スコア · 参考のみ',
+      notTradable: '売買シグナルではありません：年次バックテストで方向が反転（-0.52 / +0.07 / -0.22 / +0.33 / -0.15）。',
+      referenceOnly: '参考のみ',
+      shortTerm: '短期温度',
+      exposure: 'ポジション量の目安',
+      expNeutral: '方向不明',
+      expFollow: '順張り',
+      expContrarian: '逆張り',
+      empty: '市場状態データなし',
+      temp: {
+        cold: '涼',
+        hot: '熱い',
+        neutral: '平常'
+      },
+      regime: {
+        strong: '強気',
+        neutral: '中性',
+        weak: '弱気'
+      }
+    },
     etf: {
       title: '大型 ETF',
       caption: 'シグナル {signal}/{total} · 口数 {date} 時点（四半期）',
       captionFallback: '口数未同期 · 価格のみ',
       unsynced: '未同期',
       signal: '異変',
-      holdings: '中央匯金の開示保有：データ準備中'
+      holdings: '中央匯金の開示保有：巨潮情報に上場 ETF の定期報告が無く、利用不可'
     },
     dragonTiger: {
       title: '売買代金情報',
       caption: '純買い上位5 · 全市場',
+      captionCount: '純買い {n} 件 · {date} · 全市場',
       net: '純買',
       org: '機関',
       empty: '本日はデータなし',
       full: '詳細を見る →'
+    },
+    sectors: {
+      title: 'セクター動向',
+      caption: '{date} · 涨停数 → 出来高倍率 → 騰落率 順',
+      tagLabel: 'セクター区分',
+      failed: 'セクターデータ未準備',
+      showAll: 'すべて表示',
+      tag: { industry: '業種', concept: 'コンセプト', tszs: 'テーマ', region: '地域' },
+      col: { name: 'セクター', change: '騰落率', volume: '出来高', limitUp: '涨停' },
+      foot: '{total} 件中 {shown} 件を表示'
+    },
+    ladder: {
+      title: '連板ラダー',
+      caption: '直近 {n} 営業日 · 濃淡 = 家数',
+      failed: '連板データ未準備',
+      level: { two: '2板', three: '3板', four: '4板', five: '5板', six: '6板', seven: '7板+' }
+    },
+    basis: {
+      title: '先物・现货リンク · 股指先物基差',
+      caption: '基差は {date} 時点',
+      lagged: '基差は {basis} 時点（先物は现货より1日遅れる）· 现货は {spot} まで',
+      percentile: '5年分位 {v}%',
+      expand: '乖離を見る',
+      failed: '先物データ未準備',
+      divergence: '{name} 基差率 vs 现货日騰落',
+      legendBasis: '基差率',
+      legendSpot: '现货日騰落',
+      window: '直近 {n} 営業日'
     },
     watchlist: {
       title: 'ウォッチ',
@@ -8119,6 +8274,7 @@ export default {
     needKb: '先にナレッジベースを選択してください',
     close: '閉じる',
     llmNote: '7 つの定性ディメンション（堀／スタグフレーション耐性／ESG／経営陣／株主・資金面／バリュエーション／リスク）はモデルが採点し、その他の数値は採点カーネルが計算します。レポートの有効期間は 30 日です。',
+    launchNoAgent: 'このワークスペースには halo.analyze を実行できるエージェントがないため、完全なレポートを生成できません。エージェント設定で HALO を有効にしてください。',
     growthSubs: {
       revenue: '売上成長',
       profit: '利益成長',

@@ -1,5 +1,15 @@
 export default {
   watchPulse: {
+    technicals: {
+      title: 'Техническая позиция',
+      caption: 'Индикаторы на {date}',
+      sma20: 'MA20',
+      sma60: 'MA60',
+      sma250: 'MA250',
+      bb: 'Боллинджер',
+      align: { bull: 'Бычья структура', bear: 'Медвежья структура', mixed: 'Смешанные', na: 'Не определить' },
+      missing: 'Нет данных индикаторов: {codes}'
+    },
     title: 'Кто двигается сегодня',
     recalc: 'Пересчитать',
     retry: 'Повторить',
@@ -1553,7 +1563,12 @@ export default {
       statusInactive: '{count} отмеченных инструментов не смогут работать при текущей конфигурации',
       effectiveLabel: 'Итоговые активные инструменты',
       effectiveDesc: 'Рассчитано на основе текущей конфигурации — это набор инструментов, которые агент сможет вызывать после сохранения',
-      effectiveEmpty: 'Нет доступных инструментов — агент перейдёт к простому чату с моделью'
+      effectiveEmpty: 'Нет доступных инструментов — агент перейдёт к простому чату с моделью',
+      groupCode: 'Код и терминал',
+      shellExec: 'Командная строка (Bash)',
+      shellExecDesc: 'Выполнение команд оболочки и сценариев в изолированной среде (используйте только при необходимости)',
+      editSandboxFile: 'Редактирование файлов рабочей области',
+      editSandboxFileDesc: 'Точечное редактирование кода или текстовых файлов в рабочей области'
     },
     desc: {
       name: 'Задайте легко узнаваемое имя для агента',
@@ -5730,6 +5745,12 @@ export default {
     baseUrlLabel: 'URL экземпляра',
     baseUrlPlaceholder: 'https://searxng.example.com',
     apiKeyPlaceholder: 'Введите API-ключ',
+    configFields: {
+      region: 'Регион API',
+      regionDesc: 'Выберите регион сервиса MiniMax API (Китай / Глобальный)',
+      regionCN: 'Китай (api.minimaxi.com)',
+      regionGlobal: 'Глобальный (api.minimax.io)'
+    },
     toasts: {
       providerCreated: 'Поисковый провайдер создан',
       providerUpdated: 'Поисковый провайдер обновлён',
@@ -7511,7 +7532,6 @@ export default {
     }
   },
   menu: {
-    watchPulse: 'Кто двигается',
     sessionInProgress: 'Диалог выполняется',
     knowledgeBase: 'База знаний',
     agents: 'Агенты',
@@ -7540,7 +7560,13 @@ export default {
     logoutSuccess: 'Вы вышли из системы',
     myChats: 'Мои чаты',
     apiChats: 'Сессии API',
-    noSessions: 'Пока нет диалогов'
+    noSessions: 'Пока нет диалогов',
+    watchPulse: 'Кто двигается',
+    collapseSessionList: 'Свернуть список диалогов',
+    expandSessionList: 'Развернуть список диалогов',
+    sessionListCollapsed: 'Диалоги свёрнуты',
+    collapseAllGroups: 'Свернуть все',
+    expandAllGroups: 'Развернуть все'
   },
   watchlist: {
     title: 'Отслеживание акций',
@@ -7663,6 +7689,40 @@ export default {
     todayAlerts: 'Оповещения сегодня',
     totalTracked: 'Всего отслеживается',
     watchPool: 'Пул наблюдения',
+    condStateLiveMet: 'Выполнено (онлайн)',
+    condStateLiveUnmet: 'Не выполнено (онлайн)',
+    scoreFinal: 'Оценка AI',
+    toggleDimensions: 'Переключить детали',
+    expandDimensions: 'Показать 18 показателей',
+    collapseDimensions: 'Свернуть детали',
+    browseWorkspace: 'Обзор графиков',
+    stopBreached: 'Пробит стоп-лосс',
+    targetShares: 'Количество акций',
+    targetPnlAmount: 'Сумма PnL',
+    sharesPlaceholder: 'Количество (напр. 1000)',
+    resonanceTitle: 'Резонанс трендов по таймфреймам',
+    resonanceMonth: 'Месячный тренд',
+    resonanceWeek: 'Недельный тренд',
+    resonanceDay: 'Дневной тренд',
+    trendBull: 'Бычий',
+    trendBear: 'Медвежий',
+    portfolioMarketValue: 'Рыночная стоимость',
+    portfolioTotalPnl: 'PnL портфеля',
+    portfolioCount: 'Позиции',
+    portfolioStopAlerts: 'Сигнал стоп-лосс',
+    verdict: {
+      buy: 'Покупать',
+      hold: 'Держать',
+      sell: 'Продавать',
+      keep: 'Сохранять',
+      tighten: 'Сокращать',
+      exit: 'Выходить',
+      none: 'Нет'
+    },
+    ranking: {
+      title: 'Сегодняшний рейтинг',
+      empty: 'Пока нет данных оценки'
+    },
     columns: {
       code: 'Код',
       name: 'Название',
@@ -7672,10 +7732,54 @@ export default {
       change: 'Изменение',
       turnover: 'Оборот',
       date: 'Последняя сделка',
-      actions: 'Действия'
+      actions: 'Действия',
+      score: 'Score'
+    }
+  },
+  tracking: {
+    openFullscreen: 'На весь экран',
+    tabsLabel: 'Разделы отслеживания',
+    tab: { market: 'Рынок', watchlist: 'Список', pulse: 'Кто движется', etf: 'Весовые ETF' },
+    etf: {
+      title: 'Весовые ETF',
+      caption: 'Доли на {date} · {basis}',
+      groupLabel: 'Группа ETF',
+      sortLabel: 'Сортировка',
+      sort: { signal: 'Сначала сигналы', share: 'Изм. долей', multiple: 'Кратность объёма' },
+      group: { broad: 'Широкий рынок', sector: 'Отраслевые' },
+      col: {
+        name: 'Название',
+        price: 'Цена',
+        share: 'Изм. долей',
+        multiple: 'Объём',
+        signal: 'Сигнал',
+        observed: 'Дата'
+      },
+      signalTitle: 'Сигнал сработал',
+      footPriceFallback: '* Нет предыдущего наблюдения долей — показано изменение за 5 дней',
+      sectorEmpty: 'Отраслевой пул пуст. В пул добавлено 10 отраслевых ETF; данные появятся после синхронизации долей.',
+      basis: { quarterly: 'квартальные', unknown: 'неизвестно' },
+      signalCount: 'Сигналы',
+      inflowCount: 'Прирост долей',
+      topMove: 'Макс. изменение',
+      openWorkspace: 'Вся таблица →'
     }
   },
   marketDashboard: {
+    auction: {
+      title: 'Как открылись',
+      caption: 'Аукцион открытия {date}, финальный (09:25)',
+      barTitle: 'Распределение по рынку: с гэпом вверх / без изменений / с гэпом вниз / без котировки',
+      up: 'Гэп вверх {n}',
+      flat: 'Без изм. {n}',
+      down: 'Гэп вниз {n}',
+      noQuote: 'Без котировки {n}',
+      limitOpen: 'Открылись на лимите {up} · на снижении лимита {down}',
+      benchmark: 'Ориентиры',
+      expand: 'Движения',
+      col: { name: 'Название', open: 'Аукцион', volRatio: 'Объём', cap: 'Капитализация' },
+      foot: 'Список движений отфильтрован по капитализации ≥ {cap} млрд — кратности объёма на микрокапах несопоставимы и являются шумом ликвидности'
+    },
     title: 'Обзор рынка',
     back: 'Назад к рабочей области',
     dataTime: 'Данные на',
@@ -7696,21 +7800,72 @@ export default {
     backToWorkbench: 'Назад',
     refreshFailed: 'Не удалось обновить котировки. Попробуйте ещё раз.',
     loading: 'Загрузка…',
+    marketState: {
+      title: 'Состояние рынка',
+      caption: '5-факторная оценка · только справочно',
+      notTradable: 'Не сигнал на покупку/продажу: направление меняется по годам (-0.52 / +0.07 / -0.22 / +0.33 / -0.15).',
+      referenceOnly: 'Справочно',
+      shortTerm: 'Краткосрочно',
+      exposure: 'Ориентир по экспозиции',
+      expNeutral: 'Без направления',
+      expFollow: 'По тренду',
+      expContrarian: 'Против тренда',
+      empty: 'Нет данных о состоянии рынка',
+      temp: {
+        cold: 'Холодно',
+        hot: 'Горячо',
+        neutral: 'Обычно'
+      },
+      regime: {
+        strong: 'Сильный',
+        neutral: 'Нейтральный',
+        weak: 'Слабый'
+      }
+    },
     etf: {
       title: 'Крупные ETF · Движение капитала',
       caption: 'Сигналы {signal}/{total} · объём паёв на {date} (квартально)',
       captionFallback: 'Объём не синхронизирован · только цены',
       unsynced: 'Не синхронизировано',
       signal: 'Сигнал',
-      holdings: 'Раскрытые активы Центрального хуицзиня: данные подключаются'
+      holdings: 'Раскрытые активы Центрального хуицзиня: недоступно — Cninfo не публикует периодические отчёты по биржевым фондам'
     },
     dragonTiger: {
       title: 'Особые сделки',
       caption: 'Топ-5 по нетто-покупкам · Весь рынок',
+      captionCount: 'Покупки на {n} · {date} · Весь рынок',
       net: 'Нетто',
       org: 'Институты',
       empty: 'Сегодня данных нет',
       full: 'Весь список →'
+    },
+    sectors: {
+      title: 'Движение секторов',
+      caption: '{date} · по лимитным → объёму → изменению',
+      tagLabel: 'Группа секторов',
+      failed: 'Данные по секторам недоступны',
+      showAll: 'Показать все',
+      tag: { industry: 'Отрасль', concept: 'Концепт', tszs: 'Тема', region: 'Регион' },
+      col: { name: 'Сектор', change: 'Изменение', volume: 'Объём', limitUp: 'Лимитный ап' },
+      foot: 'Показано {shown} из {total}'
+    },
+    ladder: {
+      title: 'Лестница лимитных движений',
+      caption: 'Последние {n} дней · насыщенность = количество',
+      failed: 'Данные лестницы недоступны',
+      level: { two: '2под', three: '3под', four: '4под', five: '5под', six: '6под', seven: '7под+' }
+    },
+    basis: {
+      title: 'Связь фьючерс–спот · базис',
+      caption: 'Базис на {date}',
+      lagged: 'Базис на {basis} (фьючерс отстаёт от спота на день) · спот уже на {spot}',
+      percentile: '5-летний перцентиль {v}%',
+      expand: 'Расхождение',
+      failed: 'Данные по фьючерсам недоступны',
+      divergence: 'Базис {name} vs дневное изменение спота',
+      legendBasis: 'Ставка базиса',
+      legendSpot: 'Изменение спота',
+      window: 'Последние {n} торговых дней'
     },
     watchlist: {
       title: 'Избранное',
@@ -8119,6 +8274,7 @@ export default {
     needKb: 'Сначала выберите базу знаний',
     close: 'Закрыть',
     llmNote: 'Семь качественных измерений (защитная способность, устойчивость к стагфляции, ESG, менеджмент, акционеры и потоки, оценка, риски) оценивает модель; все остальные числа рассчитывает ядро оценки. Отчёт действителен 30 дней.',
+    launchNoAgent: 'В этом пространстве нет агента, умеющего выполнять halo.analyze, поэтому полный отчёт построить нельзя. Включите HALO в настройках агентов.',
     growthSubs: {
       revenue: 'Рост выручки',
       profit: 'Рост прибыли',

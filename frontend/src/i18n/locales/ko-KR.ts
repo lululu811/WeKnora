@@ -1,5 +1,15 @@
 export default {
   watchPulse: {
+    technicals: {
+      title: '기술적 위치',
+      caption: '지표 기준일 {date}',
+      sma20: 'MA20',
+      sma60: 'MA60',
+      sma250: 'MA250',
+      bb: '볼린저',
+      align: { bull: '상승 배열', bear: '하락 배열', mixed: '혼재', na: '판단 불가' },
+      missing: '지표 데이터 없음: {codes}'
+    },
     title: '오늘 움직이는 종목',
     recalc: '다시 계산',
     retry: '다시 시도',
@@ -1553,7 +1563,12 @@ export default {
       statusInactive: '{count}개의 체크된 도구가 현재 설정에서는 작동하지 않습니다',
       effectiveLabel: '최종 활성 도구',
       effectiveDesc: '현재 설정 기준 저장 시 에이전트가 실제 호출할 수 있는 도구 집합',
-      effectiveEmpty: '사용 가능한 도구가 없어 일반 모델 대화로 동작합니다'
+      effectiveEmpty: '사용 가능한 도구가 없어 일반 모델 대화로 동작합니다',
+      groupCode: '코드 및 터미널',
+      shellExec: '명령줄 터미널 (Bash)',
+      shellExecDesc: '격리된 환경에서 셸 명령 및 스크립트 실행 (필요한 경우에만 신중하게 사용하며 남용을 금지합니다)',
+      editSandboxFile: '워크스페이스 파일 편집',
+      editSandboxFileDesc: '워크스페이스 내 코드 또는 텍스트 파일을 정밀하게 편집'
     },
     desc: {
       name: '에이전트를 쉽게 식별할 수 있는 이름을 설정하세요',
@@ -5730,6 +5745,12 @@ export default {
     baseUrlLabel: '인스턴스 URL',
     baseUrlPlaceholder: 'https://searxng.example.com',
     apiKeyPlaceholder: 'API 키를 입력하세요',
+    configFields: {
+      region: '인터페이스 지역',
+      regionDesc: 'MiniMax API 서비스 지역 선택 (중국 / 글로벌)',
+      regionCN: '중국（api.minimaxi.com）',
+      regionGlobal: '글로벌（api.minimax.io）'
+    },
     toasts: {
       providerCreated: '검색 엔진 프로바이더가 생성되었습니다',
       providerUpdated: '검색 엔진 프로바이더가 업데이트되었습니다',
@@ -7511,7 +7532,6 @@ export default {
     }
   },
   menu: {
-    watchPulse: '움직이는 종목',
     sessionInProgress: '대화 진행 중',
     knowledgeBase: '지식베이스',
     agents: '에이전트',
@@ -7540,7 +7560,13 @@ export default {
     logoutSuccess: '로그아웃되었습니다',
     myChats: '내 대화',
     apiChats: 'API 세션',
-    noSessions: '대화가 없습니다'
+    noSessions: '대화가 없습니다',
+    watchPulse: '움직이는 종목',
+    collapseSessionList: '대화 목록 접기',
+    expandSessionList: '대화 목록 펼치기',
+    sessionListCollapsed: '대화가 접혀 있습니다',
+    collapseAllGroups: '모두 접기',
+    expandAllGroups: '모두 펼치기'
   },
   watchlist: {
     title: '종목 추적',
@@ -7663,6 +7689,40 @@ export default {
     todayAlerts: '오늘의 경보',
     totalTracked: '총 추적 수',
     watchPool: '중점 관찰',
+    condStateLiveMet: '실시간 충족',
+    condStateLiveUnmet: '실시간 미충족',
+    scoreFinal: 'AI 종합 점수',
+    toggleDimensions: '차원별 상세 토글',
+    expandDimensions: '18차원 점수 보기',
+    collapseDimensions: '상세 접기',
+    browseWorkspace: '일괄 차트 보기',
+    stopBreached: '손절선 도달',
+    targetShares: '보유 주식수',
+    targetPnlAmount: '평가손익금',
+    sharesPlaceholder: '보유 수량 (예: 1000)',
+    resonanceTitle: '다주기 추세 공명',
+    resonanceMonth: '월봉 대세',
+    resonanceWeek: '주봉 스윙',
+    resonanceDay: '일봉 매매',
+    trendBull: '상승장',
+    trendBear: '하락장',
+    portfolioMarketValue: '보유 총 평가액',
+    portfolioTotalPnl: '포트폴리오 손익',
+    portfolioCount: '보유 종목',
+    portfolioStopAlerts: '손절 경고',
+    verdict: {
+      buy: '매수',
+      hold: '보유',
+      sell: '매도',
+      keep: '유지',
+      tighten: '축소',
+      exit: '청산',
+      none: '없음'
+    },
+    ranking: {
+      title: '오늘의 랭킹',
+      empty: '채점 데이터가 없습니다'
+    },
     columns: {
       code: '코드',
       name: '이름',
@@ -7672,10 +7732,54 @@ export default {
       change: '등락',
       turnover: '거래대금',
       date: '최근 거래일',
-      actions: '작업'
+      actions: '작업',
+      score: '점수'
+    }
+  },
+  tracking: {
+    openFullscreen: '전체 화면',
+    tabsLabel: '추적 섹션',
+    tab: { market: '시장', watchlist: '관심종목', pulse: '움직이는 종목', etf: '웨이트 ETF' },
+    etf: {
+      title: '웨이트 ETF',
+      caption: '份额은 {date} 기준 · {basis}',
+      groupLabel: 'ETF 분류',
+      sortLabel: '정렬',
+      sort: { signal: '신호 우선', share: '份额 변동', multiple: '거래량 배수' },
+      group: { broad: '시장지수', sector: '업종' },
+      col: {
+        name: '종목',
+        price: '현재가',
+        share: '份额 변동',
+        multiple: '거래량',
+        signal: '신호',
+        observed: '관측일'
+      },
+      signalTitle: '신호 발생',
+      footPriceFallback: '* 직전 份额 관측값이 없어 최근 5일 등락률로 대체합니다',
+      sectorEmpty: '업종 풀이 비어 있습니다. 업종 ETF 10종을 추가했으며, 份额 동기화를 실행해야 데이터가 표시됩니다.',
+      basis: { quarterly: '분기', unknown: '알 수 없음' },
+      signalCount: '신호',
+      inflowCount: '份额 순증가',
+      topMove: '최대 변동',
+      openWorkspace: '전체 표 보기 →'
     }
   },
   marketDashboard: {
+    auction: {
+      title: '어떻게 열렸나',
+      caption: '경매 {date} 종결(9:25 체결)',
+      barTitle: '전 시장 상승 / 보합 / 하락 / 미호가 분포',
+      up: '상승 {n}',
+      flat: '보합 {n}',
+      down: '하락 {n}',
+      noQuote: '미호가 {n}',
+      limitOpen: '경매 상한 {up} · 하한 {down}',
+      benchmark: '벤치마크',
+      expand: '변동 순위',
+      col: { name: '종목', open: '경매', volRatio: '거래량 배수', cap: '유통 시가총액' },
+      foot: '변동 순위는 유통 시가총액 ≥ {cap}억으로 필터링 — 초소형주는 경매 배수가 비교 불가하며 유동성 노이즈에 불과'
+    },
     title: '시장 개요',
     back: '워크벤치로 돌아가기',
     dataTime: '데이터 시각',
@@ -7696,21 +7800,72 @@ export default {
     backToWorkbench: '뒤로',
     refreshFailed: '시세 갱신에 실패했습니다. 다시 시도해 주세요.',
     loading: '불러오는 중…',
+    marketState: {
+      title: '시장 상태',
+      caption: '5-factor 스코어 · 참고용',
+      notTradable: '매매 신호 아님: 연도별 백테스트에서 방향이 뒤집힘(-0.52 / +0.07 / -0.22 / +0.33 / -0.15).',
+      referenceOnly: '참고용',
+      shortTerm: '단기 온도',
+      exposure: '포지션 비중 참고',
+      expNeutral: '방향 무관',
+      expFollow: '추세 추종',
+      expContrarian: '역추세',
+      empty: '시장 상태 데이터 없음',
+      temp: {
+        cold: '냉',
+        hot: '과열',
+        neutral: '보통'
+      },
+      regime: {
+        strong: '강세',
+        neutral: '중립',
+        weak: '약세'
+      }
+    },
     etf: {
       title: '대형 ETF',
       caption: '시그널 {signal}/{total} · 발행주식수 {date} 기준 (분기)',
       captionFallback: '발행주식수 미동기화 · 가격만',
       unsynced: '미동기화',
       signal: '이상징후',
-      holdings: '중앙회진 공시 보유: 데이터 연동 예정'
+      holdings: '중앙회진 공시 보유: 巨潮 정보에 상장 ETF 정기보고서가 없어 이용 불가'
     },
     dragonTiger: {
       title: '상향종목',
       caption: '순매수 상위 5 · 전 시장',
+      captionCount: '순매수 {n}건 · {date} · 전시장',
       net: '순매수',
       org: '기관',
       empty: '오늘 데이터 없음',
       full: '전체 보기 →'
+    },
+    sectors: {
+      title: '섹터 동향',
+      caption: '{date} · 상한가 수 → 거래량 배수 → 등락률 순',
+      tagLabel: '섹터 분류',
+      failed: '섹터 데이터 미준비',
+      showAll: '전체 보기',
+      tag: { industry: '업종', concept: '테마', tszs: '특성', region: '지역' },
+      col: { name: '섹터', change: '등락률', volume: '거래량', limitUp: '상한가' },
+      foot: '{total}개 중 {shown}개 표시'
+    },
+    ladder: {
+      title: '연속 상한가 사다리',
+      caption: '최근 {n} 거래일 · 진하기 = 종목 수',
+      failed: '사다리 데이터 미준비',
+      level: { two: '2판', three: '3판', four: '4판', five: '5판', six: '6판', seven: '7판+' }
+    },
+    basis: {
+      title: '선물–현물 연동 · 지수선물 基차',
+      caption: '基차 기준일 {date}',
+      lagged: '基차 기준일 {basis}(선물이 현물보다 하루 늦음) · 현물은 {spot}까지',
+      percentile: '5년 백분위 {v}%',
+      expand: '괴리 보기',
+      failed: '선물 데이터 미준비',
+      divergence: '{name} 基차율 vs 현물 일간 등락',
+      legendBasis: '基차율',
+      legendSpot: '현물 일간 등락',
+      window: '최근 {n} 거래일'
     },
     watchlist: {
       title: '관심 종목',
@@ -8119,6 +8274,7 @@ export default {
     needKb: '먼저 지식베이스를 선택하세요',
     close: '닫기',
     llmNote: '7개 정성 차원(해자/스태그플레이션 방어/ESG/경영진/주주·자금/밸류에이션/리스크)은 모델이 채점하고, 나머지 수치는 채점 커널이 계산합니다. 보고서 유효기간은 30일입니다.',
+    launchNoAgent: '이 워크스페이스에는 halo.analyze를 실행할 수 있는 에이전트가 없어 전체 보고서를 생성할 수 없습니다. 에이전트 설정에서 HALO를 활성화하세요.',
     growthSubs: {
       revenue: '매출 성장',
       profit: '이익 성장',

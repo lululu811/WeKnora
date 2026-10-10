@@ -1,8 +1,13 @@
 <template>
   <main class="watchlist-page">
-    <header class="watchlist-header" style="--wails-draggable: drag">
+    <!--
+      embedded = 渲染在个股追踪壳的「自选股」tab 里，页头由 Tracking.vue 提供。
+      这时**只藏标题和副标题**，动作按钮留着 —— 刷新 / 浏览工作区 / 组合诊断
+      是这一屏自己的事，壳不知道它们存在，藏掉等于把入口丢了。
+    -->
+    <header class="watchlist-header" :class="{ 'is-embedded': embedded }" style="--wails-draggable: drag">
       <div class="watchlist-title-row" style="--wails-draggable: drag">
-        <h2 style="--wails-draggable: drag">
+        <h2 v-if="!embedded" style="--wails-draggable: drag">
           <t-icon name="chart-line" size="24px" />
           {{ t('watchlist.title') }}
         </h2>
@@ -17,6 +22,16 @@
           </t-button>
           <t-button
             variant="outline"
+            theme="default"
+            size="small"
+            :disabled="rows.length === 0"
+            @click="openFullWorkspace()"
+          >
+            <template #icon><t-icon name="chart-line" /></template>
+            {{ t('watchlist.browseWorkspace') }}
+          </t-button>
+          <t-button
+            variant="outline"
             theme="primary"
             size="small"
             :disabled="rows.length === 0"
@@ -27,63 +42,66 @@
           </t-button>
         </div>
       </div>
-      <p class="watchlist-subtitle" style="--wails-draggable: drag">{{ t('watchlist.subtitle') }}</p>
+      <p v-if="!embedded" class="watchlist-subtitle" style="--wails-draggable: drag">{{ t('watchlist.subtitle') }}</p>
     </header>
 
-    <!-- 顶部决策指标条 (Executive Metric Bar) -->
+    <!--
+      概览条 —— 一行文字，不是五张卡。
+
+      早前是 5 张等宽卡片，而 5 个数字里通常 3 个是 0（今日触发 0、当前持仓 0、
+      已归档 0）。零值占着最贵的首屏，真正的决策信息（哪只要动手）被挤到下面。
+      现在压成一行：非 0 的加粗上色，0 的淡下去，仍然可点（切分类）。
+      数字不再是主角，"今天有几只需要动手"才是。
+    -->
     <div class="watchlist-metrics" v-if="rows.length">
-      <div
-        class="wl-metric-card"
+      <button
+        class="wl-metric"
         :class="{ 'is-active': activeTab === 'all' }"
         @click="activeTab = 'all'"
       >
-        <div class="wl-metric-card__title">{{ t('watchlist.metricTotal') }}</div>
-        <div class="wl-metric-card__val">{{ rows.length }}</div>
-      </div>
-      <div
-        class="wl-metric-card wl-metric-card--triggered"
-        :class="{ 'is-active': activeTab === 'triggered', 'has-badge': countTriggered > 0 }"
+        <span class="wl-metric__label">{{ t('watchlist.metricTotal') }}</span>
+        <span class="wl-metric__val">{{ rows.length }}</span>
+      </button>
+
+      <button
+        class="wl-metric wl-metric--triggered"
+        :class="{ 'is-active': activeTab === 'triggered', 'is-zero': countTriggered === 0 }"
         @click="activeTab = 'triggered'"
       >
-        <div class="wl-metric-card__title">
-          <t-icon name="notification-filled" size="14px" />
-          {{ t('watchlist.metricTriggered') }}
-        </div>
-        <div class="wl-metric-card__val">{{ countTriggered }}</div>
-      </div>
-      <div
-        class="wl-metric-card wl-metric-card--holding"
-        :class="{ 'is-active': activeTab === 'holding' }"
+        <t-icon name="notification-filled" size="13px" />
+        <span class="wl-metric__label">{{ t('watchlist.metricTriggered') }}</span>
+        <span class="wl-metric__val">{{ countTriggered }}</span>
+      </button>
+
+      <button
+        class="wl-metric wl-metric--holding"
+        :class="{ 'is-active': activeTab === 'holding', 'is-zero': countHolding === 0 }"
         @click="activeTab = 'holding'"
       >
-        <div class="wl-metric-card__title">
-          <span class="wl-state__dot is-holding"></span>
-          {{ t('watchlist.metricHolding') }}
-        </div>
-        <div class="wl-metric-card__val">{{ countHolding }}</div>
-      </div>
-      <div
-        class="wl-metric-card wl-metric-card--observing"
-        :class="{ 'is-active': activeTab === 'observing' }"
+        <span class="wl-state__dot is-holding"></span>
+        <span class="wl-metric__label">{{ t('watchlist.metricHolding') }}</span>
+        <span class="wl-metric__val">{{ countHolding }}</span>
+      </button>
+
+      <button
+        class="wl-metric wl-metric--observing"
+        :class="{ 'is-active': activeTab === 'observing', 'is-zero': countObserving === 0 }"
         @click="activeTab = 'observing'"
       >
-        <div class="wl-metric-card__title">
-          <span class="wl-state__dot is-observing"></span>
-          {{ t('watchlist.metricObserving') }}
-        </div>
-        <div class="wl-metric-card__val">{{ countObserving }}</div>
-      </div>
-      <div
-        class="wl-metric-card wl-metric-card--dropped"
-        :class="{ 'is-active': activeTab === 'dropped' }"
+        <span class="wl-state__dot is-observing"></span>
+        <span class="wl-metric__label">{{ t('watchlist.metricObserving') }}</span>
+        <span class="wl-metric__val">{{ countObserving }}</span>
+      </button>
+
+      <button
+        class="wl-metric wl-metric--dropped"
+        :class="{ 'is-active': activeTab === 'dropped', 'is-zero': countDropped === 0 }"
         @click="activeTab = 'dropped'"
       >
-        <div class="wl-metric-card__title">
-          <span class="wl-state__dot is-dropped"></span>
-          {{ t('watchlist.metricDropped') }}
-        </div>
-        <div class="wl-metric-card__val">{{ countDropped }}</div>
-      </div>
+        <span class="wl-state__dot is-dropped"></span>
+        <span class="wl-metric__label">{{ t('watchlist.metricDropped') }}</span>
+        <span class="wl-metric__val">{{ countDropped }}</span>
+      </button>
     </div>
 
     <!-- 添加：输入代码或名称片段 → 联想 → 选中即加入。回车在有候选时直接取第一条，
@@ -104,6 +122,28 @@
           <span class="watchlist-suggest__name">{{ s.name }}</span>
         </li>
       </ul>
+    </div>
+
+    <!-- 行业分组标签 -->
+    <div class="wl-industry-groups" v-if="rows.length && industryGroups.length > 1">
+      <button
+        class="wl-industry-tag"
+        :class="{ 'is-active': !activeIndustry }"
+        @click="activeIndustry = ''"
+      >
+        {{ t('watchlist.allIndustries') }}
+        <span class="wl-industry-tag__count">{{ rows.length }}</span>
+      </button>
+      <button
+        v-for="group in industryGroups"
+        :key="group.industry"
+        class="wl-industry-tag"
+        :class="{ 'is-active': activeIndustry === group.industry }"
+        @click="activeIndustry = group.industry"
+      >
+        {{ group.industry }}
+        <span class="wl-industry-tag__count">{{ group.count }}</span>
+      </button>
     </div>
 
     <!-- 查不到的标的是**显式告知**而不是偷偷少一行：本地库里没有它的行情，
@@ -173,10 +213,47 @@
             </t-radio-button>
           </t-radio-group>
         </div>
-        <t-table row-key="thscode" class="watchlist-table" :data="filteredRows" :columns="columns"
+        <!-- 持仓资产全景看板 (仅在持仓 Tab 激活且有持仓时呈现) -->
+        <div v-if="activeTab === 'holding' && portfolioHoldings.length" class="wl-portfolio-banner">
+          <div class="wl-portfolio-banner__item">
+            <span class="lbl">{{ t('watchlist.portfolioMarketValue') }}</span>
+            <span class="val mono">¥{{ portfolioStats.totalMarketValue.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }}</span>
+          </div>
+          <div class="wl-portfolio-banner__item" v-if="portfolioStats.totalCostValue > 0">
+            <span class="lbl">{{ t('watchlist.portfolioTotalPnl') }}</span>
+            <span class="val mono" :class="portfolioStats.totalPnl >= 0 ? 'is-up' : 'is-down'">
+              {{ portfolioStats.totalPnl >= 0 ? '+' : '' }}¥{{ portfolioStats.totalPnl.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }}
+              <small>({{ portfolioStats.totalPnlPct >= 0 ? '+' : '' }}{{ portfolioStats.totalPnlPct.toFixed(2) }}%)</small>
+            </span>
+          </div>
+          <div class="wl-portfolio-banner__item">
+            <span class="lbl">{{ t('watchlist.portfolioCount') }}</span>
+            <span class="val">{{ portfolioStats.holdingCount }} 只</span>
+          </div>
+          <div class="wl-portfolio-banner__item is-warn" v-if="portfolioStats.stopLossAlertCount > 0">
+            <span class="lbl">⚠️ {{ t('watchlist.portfolioStopAlerts') }}</span>
+            <span class="val">{{ portfolioStats.stopLossAlertCount }} 只触发止损</span>
+          </div>
+        </div>
+        <t-table row-key="thscode" class="watchlist-table" :data="sortedRows" :columns="columns"
           :loading="loading || quotesLoading" size="medium" hover
+          :sort="sortConfig" @sort-change="handleSortChange"
           :row-class-name="rowClassName" @row-click="onRowClick">
-      <template #thscode="{ row }">
+      <template #score="{ row }">
+          <!--
+            评分 + 当日名次。null 显示「—」而不是 0 —— "今天没评分"和"评了 0 分"
+            是两件事，后者会让人以为这只票很差。
+          -->
+          <div v-if="row.final_score != null" class="wl-score-cell">
+            <span class="wl-score" :class="scoreClass(row.final_score)">
+              {{ row.final_score.toFixed(1) }}
+            </span>
+            <span v-if="row.rank" class="wl-rank md-num">#{{ row.rank }}</span>
+          </div>
+          <span v-else class="wl-score-none">—</span>
+        </template>
+
+        <template #thscode="{ row }">
         <div class="wl-code">
           <span class="wl-code__code">{{ row.thscode }}</span>
           <span v-if="row.exchange" class="wl-code__exchange">{{ row.exchange }}</span>
@@ -185,7 +262,9 @@
 
       <template #name="{ row }">
         <div class="wl-name-cell">
-          <span class="wl-name">{{ row.quote?.name || row.name || '—' }}</span>
+          <!-- 名字优先取行情源；清单里存的可能压根是代码（见 utils/stockDisplayName）。
+               识别不出真名时退回 thscode，不显示「—」也不显示伪装成名字的代码。 -->
+          <span class="wl-name">{{ displayStockName(row.name, row.thscode, row.quote?.name) || row.thscode }}</span>
           <!-- 「今日触发」只认事件流。条件行上的 last_satisfied 只说明"此刻满不满足"，
                分不清"今天刚跨过"和"早就一直满足"；事件是跨过那一刻留下的、
                之后任何一轮评估都覆盖不掉的证据。note 就是机器写下的原因。 -->
@@ -194,6 +273,35 @@
             <t-icon name="notification-filled" size="12px" />
             {{ t('watchlist.triggeredToday') }}
           </span>
+        </div>
+      </template>
+
+      <!-- 行业列：一级行业，没有则显示板块类型 -->
+      <template #industry="{ row }">
+        <span class="wl-industry" v-if="industryMap[row.thscode]">
+          {{ industryMap[row.thscode].level1 }}
+        </span>
+        <span class="wl-industry wl-industry--board" v-else-if="isBoard(row)">
+          {{ t('watchlist.board') }}
+        </span>
+        <span class="wl-industry wl-industry--unknown" v-else>—</span>
+      </template>
+
+      <!-- 技术信号汇总：金叉/死叉/砖型等 -->
+      <template #signals="{ row }">
+        <div class="wl-signals">
+          <span v-if="rowSignals(row).length" class="wl-signal-list">
+            <span
+              v-for="sig in rowSignals(row)"
+              :key="sig.type"
+              class="wl-signal"
+              :class="`is-${sig.kind}`"
+              :title="sig.label"
+            >
+              {{ sig.icon }}
+            </span>
+          </span>
+          <span v-else class="wl-muted">—</span>
         </div>
       </template>
 
@@ -224,9 +332,21 @@
       </template>
 
       <template #close="{ row }">
-        <span v-if="num(row.quote?.close) !== null" class="wl-num"
-          :class="changeClass(row)">{{ formatPrice(row.quote?.close) }}</span>
-        <span v-else class="wl-muted">{{ t('watchlist.noData') }}</span>
+        <div class="wl-close-cell">
+          <span v-if="num(row.quote?.close) !== null" class="wl-num"
+            :class="changeClass(row)">{{ formatPrice(row.quote?.close) }}</span>
+          <span v-else class="wl-muted">{{ t('watchlist.noData') }}</span>
+          <!-- 持仓成本与浮动盈亏胶囊 -->
+          <span v-if="rowTargetPnl(row)" class="wl-cost-pill" :class="rowTargetPnl(row)!.pnlClass"
+            :title="`持仓成本: ¥${rowTargetPnl(row)!.cost.toFixed(2)}，浮动盈亏: ${rowTargetPnl(row)!.pnlText}`">
+            成本 ¥{{ rowTargetPnl(row)!.cost.toFixed(2) }} ({{ rowTargetPnl(row)!.pnlText }})
+          </span>
+          <!-- 跌破止损预警 -->
+          <span v-if="rowTargetStopAlert(row)" class="wl-stop-pill"
+            :title="`当前价格已触及/跌破预设止损价 ¥${rowTargetStopAlert(row)!.stopLoss.toFixed(2)}`">
+            ⚠️ {{ t('watchlist.stopBreached') }}
+          </span>
+        </div>
       </template>
 
       <template #change="{ row }">
@@ -436,7 +556,11 @@ import HaloReportDialog from '@/finance/components/kline/HaloReportDialog.vue'
 const KLineWorkspace = defineAsyncComponent(
   () => import('@/finance/components/kline/KLineWorkspace.vue'),
 )
+import { registerStockName } from '@/finance/utils/stockMentions'
+import { displayStockName } from '@/finance/utils/stockDisplayName'
 import { provideAgentWorkspace } from '@/finance/composables/useAgentWorkspace'
+import { withLaunchAgent } from '@/utils/launchAgent'
+import { useSettingsStore } from '@/stores/settings'
 import { provideChatKLinePanel } from '@/finance/composables/useChatKLinePanel'
 import {
   addCondition,
@@ -456,12 +580,25 @@ import {
   type SymbolSuggestion,
   type WatchCondition,
   type WatchEvent,
+  listRanking,
   type WatchItem,
   type WatchState,
+  fetchIndustryMap,
+  type IndustryInfo,
 } from '@/finance/api/watchlist'
 
 const { t } = useI18n()
 const router = useRouter()
+const settingsStore = useSettingsStore()
+
+/**
+ * embedded = 渲染在个股追踪壳（Tracking.vue）的「自选股」tab 里。
+ * 只影响页头：标题与副标题交给外壳，刷新/浏览工作台/组合诊断三个动作仍然留着 ——
+ * 它们是这一屏自己的事，外壳不知道它们存在，藏掉等于把入口丢了。
+ * 默认 false 时行为与合并前完全一致（/platform/watchlist 仍可直接进）。
+ */
+const props = withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
+const embedded = computed(() => props.embedded)
 
 // 注入 AgentWorkspace 上下文以供全功能 K 线工作台模态使用
 const agentWorkspace = provideAgentWorkspace()
@@ -489,21 +626,43 @@ function openHaloReport(row: WatchRow) {
   haloVisible.value = true
 }
 
-function openFullWorkspace(row: WatchRow) {
-  const parts = row.thscode.split('.')
-  const ticker = parts[0] || row.thscode
-  const exchange = parts[1] || 'SH'
-  const name = displayName(row)
-  fullWorkspaceTitle.value = `${name} (${row.thscode})`
-  agentWorkspace.open('kline', [{ ticker, exchange, name }], 0)
+function openFullWorkspace(row?: WatchRow) {
+  const currentList = sortedRows.value.length > 0 ? sortedRows.value : rows.value
+  if (!currentList.length) return
+  const targetRow = row || currentList[0]
+  const picks = currentList.map((r) => {
+    const parts = r.thscode.split('.')
+    return {
+      ticker: parts[0] || r.thscode,
+      exchange: parts[1] || 'SH',
+      name: displayName(r),
+    }
+  })
+  const initialIdx = Math.max(0, currentList.findIndex((r) => r.thscode === targetRow.thscode))
+  const name = displayName(targetRow)
+  fullWorkspaceTitle.value = `${name} (${targetRow.thscode})`
+  agentWorkspace.open('kline', picks, initialIdx)
   fullWorkspaceVisible.value = true
 }
 
+/**
+ * 工作台底部那些问法（形态研判、HALO 六维/七维、治理事实）走这里开新对话。
+ *
+ * **必须把当前 agent 一起带走**。新会话用哪个 agent 取自 settings.selectedAgentId，
+ * 而这个值是会漂的：从会话页跳到 creatChat 时，会话页的 onBeforeRouteLeave 会
+ * restoreDefaultsIfSnapshotted()，把 settings 换成「进入会话前的全局默认」——
+ * 也就是 settings.ts 里的 builtin-quick-answer。那种情况下用户点的是
+ * 「用 halo.analyze 取六维」，落到新会话却变成 RAG 管线，工具进不了 tool schema，
+ * 模型只能回一句「检索材料中没有相关信息」。
+ *
+ * 落点把 agent 挂在 query 上，由 creatChat 在路由守卫之后应用（见
+ * applyLaunchAgent / utils/launchAgent.ts）。
+ */
 agentWorkspace.sendToChatCallback.value = (text: string) => {
   fullWorkspaceVisible.value = false
   router.push({
     path: '/platform/creatChat',
-    query: { q: text },
+    query: withLaunchAgent({ q: text }, settingsStore.selectedAgentId),
   })
 }
 
@@ -516,6 +675,87 @@ function openPortfolioDiagnosis() {
   diagnosisVisible.value = true
 }
 
+// ── 行业分组 ──────────────────────────────────────────────
+/** thscode → 行业信息 */
+const industryMap = ref<Record<string, IndustryInfo>>({})
+/** 当前选中的行业过滤，空串 = 全部 */
+const activeIndustry = ref('')
+
+interface IndustryGroup {
+  industry: string
+  count: number
+}
+
+const industryGroups = computed<IndustryGroup[]>(() => {
+  const counts = new Map<string, number>()
+  for (const row of rows.value) {
+    const info = industryMap.value[row.thscode]
+    if (info?.level1) {
+      counts.set(info.level1, (counts.get(info.level1) ?? 0) + 1)
+    }
+  }
+  return Array.from(counts.entries())
+    .map(([industry, count]) => ({ industry, count }))
+    .sort((a, b) => b.count - a.count)
+})
+
+/** 行业过滤后的行 */
+const industryFilteredRows = computed(() => {
+  if (!activeIndustry.value) return rows.value
+  return rows.value.filter((r) => {
+    const info = industryMap.value[r.thscode]
+    return info?.level1 === activeIndustry.value
+  })
+})
+
+function isBoard(row: WatchRow): boolean {
+  return row.exchange === 'TI'
+}
+
+async function loadIndustries() {
+  const codes = rows.value.map((r) => r.thscode)
+  if (!codes.length) return
+  try {
+    const res = await fetchIndustryMap(codes)
+    if (res.code === 0 && res.data) {
+      industryMap.value = { ...industryMap.value, ...res.data }
+    }
+  } catch {
+    // 静默失败，行业是增强项
+  }
+}
+
+// ── 技术信号汇总 ───────────────────────────────────────────────
+interface TechSignal {
+  type: string
+  kind: 'bull' | 'bear' | 'neutral'
+  icon: string
+  label: string
+}
+
+/** 从行情数据计算简单技术信号 */
+function rowSignals(row: WatchRow): TechSignal[] {
+  const q = row.quote
+  if (!q) return []
+  const signals: TechSignal[] = []
+
+  // 涨跌信号
+  if (q.change_pct != null) {
+    if (q.change_pct >= 5) {
+      signals.push({ type: 'surge', kind: 'bull', icon: '🔴', label: `大涨 +${q.change_pct.toFixed(1)}%` })
+    } else if (q.change_pct <= -5) {
+      signals.push({ type: 'drop', kind: 'bear', icon: '🟢', label: `大跌 ${q.change_pct.toFixed(1)}%` })
+    }
+  }
+
+  // 成交量信号（成交额突增）
+  if (q.turnover != null && q.turnover > 50_0000_0000) {
+    signals.push({ type: 'highVol', kind: 'bull', icon: '📊', label: '放量' })
+  }
+
+  return signals
+}
+
 function launchAiPortfolioReport() {
   diagnosisVisible.value = false
   const holdingList = rows.value.filter(r => r.state === 'holding').map(r => {
@@ -524,6 +764,11 @@ function launchAiPortfolioReport() {
     if (target?.cost && r.quote?.close) {
       const pnl = (((r.quote.close - target.cost) / target.cost) * 100).toFixed(2)
       pnlStr = ` (持仓成本 ¥${target.cost.toFixed(2)}, 当前浮动盈亏: ${Number(pnl) >= 0 ? '+' : ''}${pnl}%)`
+      if (target.shares) {
+        const mv = (target.shares * r.quote.close).toFixed(2)
+        const diffMoney = ((r.quote.close - target.cost) * target.shares).toFixed(2)
+        pnlStr += ` [持股: ${target.shares}股, 市值: ¥${mv}, 浮动盈亏额: ${Number(diffMoney) >= 0 ? '+' : ''}¥${diffMoney}]`
+      }
     }
     return `- ${displayName(r)} (${r.thscode}): 现价 ¥${r.quote?.close?.toFixed(2) ?? '—'}, 日内涨跌 ${r.quote?.change_pct ? `${r.quote.change_pct >= 0 ? '+' : ''}${r.quote.change_pct.toFixed(2)}%` : '—'}${pnlStr}`
   })
@@ -552,7 +797,7 @@ function launchAiPortfolioReport() {
 
   router.push({
     path: '/platform/creatChat',
-    query: { q: prompt },
+    query: withLaunchAgent({ q: prompt }, settingsStore.selectedAgentId),
   })
 }
 
@@ -596,6 +841,17 @@ const SEARCH_DEBOUNCE_MS = 250
 
 interface WatchRow extends WatchItem {
   quote?: Quote
+  /**
+   * 评分（0-100）与当日总排名，来自 `listRanking`。
+   *
+   * 这两个字段**不在 WatchItem 上** —— 服务端把评分存在日记（WatchDiary）里，
+   * 清单接口不返回。所以这里单独取一次排行再按 thscode 合并，让表格能按
+   * 评分排序。评分为 null = 该票当天没有评分作业，不是 0 分。
+   */
+  final_score?: number | null
+  rank?: number | null
+  /** 排行里的模型建议（buy/sell/…），同样只在有日记时才有。 */
+  verdict?: string | null
 }
 
 const items = ref<WatchItem[]>([])
@@ -606,11 +862,28 @@ const keyword = ref('')
 const suggestions = ref<SymbolSuggestion[]>([])
 const lastUpdated = ref('')
 
+/**
+ * 评分索引：thscode → { score, rank, verdict }。
+ *
+ * 单独一个接口（`listRanking`），与清单接口并行发出。取不到就留空 —— 表格
+ * 照常显示，只是没有评分列、排序退回按代码。评分是增强项，不该让它拖垮整页。
+ */
+const scoreIndex = ref<Record<string, { score: number | null; rank: number | null; verdict: string | null }>>({})
+
 let searchTimer: ReturnType<typeof setTimeout> | null = null
 let refreshTimer: ReturnType<typeof setInterval> | null = null
 
 const rows = computed<WatchRow[]>(() =>
-  items.value.map((item) => ({ ...item, quote: quotes.value[item.thscode] })),
+  items.value.map((item) => {
+    const s = scoreIndex.value[item.thscode]
+    return {
+      ...item,
+      quote: quotes.value[item.thscode],
+      final_score: s?.score ?? null,
+      rank: s?.rank ?? null,
+      verdict: s?.verdict ?? null,
+    }
+  }),
 )
 
 /** 清单里格式合法、但本地没有行情的代码（服务端 missing）。 */
@@ -664,23 +937,155 @@ const countTriggered = computed(
   () => rows.value.filter((r) => (todayTriggerNotesByCode.value[r.thscode]?.length ?? 0) > 0).length,
 )
 const countHolding = computed(() => rows.value.filter((r) => r.state === 'holding').length)
+const portfolioHoldings = computed(() => {
+  return rows.value.filter((r) => r.state === 'holding')
+})
+
+const portfolioStats = computed(() => {
+  let totalMarketValue = 0
+  let totalCostValue = 0
+  let totalShares = 0
+  const holdingCount = portfolioHoldings.value.length
+  let stopLossAlertCount = 0
+
+  for (const r of portfolioHoldings.value) {
+    const target = getTradeTarget(r.thscode)
+    const close = r.quote?.close
+    if (close && target?.stopLoss && close <= target.stopLoss) {
+      stopLossAlertCount++
+    }
+    if (close && target?.shares && target.shares > 0) {
+      const mv = close * target.shares
+      totalMarketValue += mv
+      totalShares += target.shares
+      if (target.cost && target.cost > 0) {
+        totalCostValue += target.cost * target.shares
+      }
+    }
+  }
+
+  const totalPnl = totalCostValue > 0 ? totalMarketValue - totalCostValue : 0
+  const totalPnlPct = totalCostValue > 0 ? (totalPnl / totalCostValue) * 100 : 0
+
+  return {
+    holdingCount,
+    totalMarketValue,
+    totalCostValue,
+    totalPnl,
+    totalPnlPct,
+    stopLossAlertCount,
+    hasSharesData: totalShares > 0,
+  }
+})
 const countObserving = computed(() => rows.value.filter((r) => r.state === 'observing').length)
 const countDropped = computed(() => rows.value.filter((r) => r.state === 'dropped').length)
 
+/**
+ * 状态过滤 + 行业过滤。两层过滤顺序：先按状态分桶（tab），再按行业筛选。
+ */
 const filteredRows = computed(() => {
+  let list: WatchRow[]
   switch (activeTab.value) {
     case 'triggered':
-      return rows.value.filter((r) => (todayTriggerNotesByCode.value[r.thscode]?.length ?? 0) > 0)
+      list = rows.value.filter((r) => (todayTriggerNotesByCode.value[r.thscode]?.length ?? 0) > 0)
+      break
     case 'holding':
-      return rows.value.filter((r) => r.state === 'holding')
+      list = rows.value.filter((r) => r.state === 'holding')
+      break
     case 'observing':
-      return rows.value.filter((r) => r.state === 'observing')
+      list = rows.value.filter((r) => r.state === 'observing')
+      break
     case 'dropped':
-      return rows.value.filter((r) => r.state === 'dropped')
+      list = rows.value.filter((r) => r.state === 'dropped')
+      break
     default:
-      return rows.value
+      list = rows.value
   }
+  // 行业过滤
+  if (activeIndustry.value) {
+    list = list.filter((r) => {
+      const info = industryMap.value[r.thscode]
+      return info?.level1 === activeIndustry.value
+    })
+  }
+  return list
 })
+/**
+ * 默认按评分降序 —— 这就是原来那块独立的「今日评分排行」，并进了表格。
+ *
+ * 之前排行和表格是两块，排行里的票在表格里又出现一遍，用户要判断
+ * "哪只要动手"得先看排行、再往下扫表格找同一只票。现在只有一份数据，
+ * 排序即结论。
+ */
+const sortConfig = ref<{ sortBy: string; descending: boolean } | null>({
+  sortBy: 'score',
+  descending: true,
+})
+
+function handleSortChange(sort: any) {
+  sortConfig.value = sort || null
+}
+
+const sortedRows = computed(() => {
+  const list = [...filteredRows.value]
+  if (!sortConfig.value || !sortConfig.value.sortBy) return list
+  const { sortBy, descending } = sortConfig.value
+  return list.sort((a, b) => {
+    let va: number | string | null | undefined
+    let vb: number | string | null | undefined
+    if (sortBy === 'close') {
+      va = a.quote?.close
+      vb = b.quote?.close
+    } else if (sortBy === 'change') {
+      va = a.quote?.change_pct
+      vb = b.quote?.change_pct
+    } else if (sortBy === 'turnover') {
+      va = a.quote?.turnover
+      vb = b.quote?.turnover
+    } else if (sortBy === 'thscode') {
+      va = a.thscode
+      vb = b.thscode
+    } else if (sortBy === 'score') {
+      va = a.final_score
+      vb = b.final_score
+    }
+    if (va == null && vb == null) return 0
+    if (va == null) return 1
+    if (vb == null) return -1
+    if (typeof va === 'string' && typeof vb === 'string') {
+      return descending ? vb.localeCompare(va) : va.localeCompare(vb)
+    }
+    return descending ? Number(vb) - Number(va) : Number(va) - Number(vb)
+  })
+})
+
+function rowTargetPnl(row: WatchRow): { cost: number; pnlText: string; pnlClass: string } | null {
+  if (row.state !== 'holding' || !row.quote?.close) return null
+  const target = getTradeTarget(row.thscode)
+  if (!target?.cost) return null
+  const diff = ((row.quote.close - target.cost) / target.cost) * 100
+  let extraText = ''
+  if (target.shares) {
+    const pnlVal = (row.quote.close - target.cost) * target.shares
+    extraText = ` · ${pnlVal >= 0 ? '+' : ''}¥${Math.round(pnlVal).toLocaleString()}`
+  }
+  return {
+    cost: target.cost,
+    pnlText: `${diff >= 0 ? '+' : ''}${diff.toFixed(2)}%${extraText}`,
+    pnlClass: diff >= 0 ? 'is-up' : 'is-down',
+  }
+}
+
+function rowTargetStopAlert(row: WatchRow): { stopLoss: number } | null {
+  if (row.state !== 'holding' || !row.quote?.close) return null
+  const target = getTradeTarget(row.thscode)
+  if (!target?.stopLoss) return null
+  if (row.quote.close <= target.stopLoss) {
+    return { stopLoss: target.stopLoss }
+  }
+  return null
+}
+
 
 /** 条件面板当前对着哪一行（只存代码 + 展示名，避免行情刷新后握着过期对象）。 */
 const condThscode = ref('')
@@ -720,16 +1125,37 @@ const opOptions = computed(() => [
 const canSubmitCondition = computed(() => num(condValue.value) !== null)
 
 const columns = computed(() => [
-  { colKey: 'thscode', title: t('watchlist.columns.code'), width: 148 },
+  {
+    colKey: 'score',
+    title: t('watchlist.columns.score'),
+    width: 92,
+    sorter: true,
+    align: 'right' as const,
+  },
+  { colKey: 'thscode', title: t('watchlist.columns.code'), width: 148, sorter: true },
   { colKey: 'name', title: t('watchlist.columns.name'), minWidth: 140 },
+  { colKey: 'industry', title: t('watchlist.columns.industry'), width: 110 },
+  { colKey: 'signals', title: t('watchlist.columns.signals'), width: 140 },
   { colKey: 'state', title: t('watchlist.columns.state'), width: 112 },
   { colKey: 'note', title: t('watchlist.columns.note'), minWidth: 150 },
-  { colKey: 'close', title: t('watchlist.columns.price'), width: 110, align: 'right' as const },
-  { colKey: 'change', title: t('watchlist.columns.change'), width: 170, align: 'right' as const },
-  { colKey: 'turnover', title: t('watchlist.columns.turnover'), width: 110, align: 'right' as const },
+  { colKey: 'close', title: t('watchlist.columns.price'), width: 130, align: 'right' as const, sorter: true },
+  { colKey: 'change', title: t('watchlist.columns.change'), width: 170, align: 'right' as const, sorter: true },
+  { colKey: 'turnover', title: t('watchlist.columns.turnover'), width: 110, align: 'right' as const, sorter: true },
   { colKey: 'date', title: t('watchlist.columns.date'), width: 128, align: 'center' as const },
   { colKey: 'actions', title: t('watchlist.columns.actions'), width: 190, align: 'right' as const },
 ])
+
+
+/**
+ * 评分着色。评分是"关注度"不是"涨跌"，所以**不用红绿** ——
+ * 红绿在这个页面已经被"涨/跌"占用了，用在这里会让人以为
+ * "高分=今天涨得多"。改用深浅：>=70 强调，<50 淡下去。
+ */
+function scoreClass(score: number): string {
+  if (score >= 70) return 'is-high'
+  if (score >= 50) return 'is-mid'
+  return 'is-low'
+}
 
 /** 徽标文案。`triggered` 只能被买点触发写入，前端只读不提供入口。 */
 function stateLabel(state: string): string {
@@ -864,9 +1290,12 @@ function formatAmount(v: number | null | undefined): string {
  * 行情返回的名称最权威（ST 前缀、更名都会反映），清单里存的那份只是本地无行情
  * 时的回退；两者都空时退回代码本身 —— 弹窗里写「确认把「—」移出自选？」是在让
  * 用户对着一团墨迹点确认，而代码至少能指出是哪一行。
+ *
+ * 与表格那一列共用 utils/stockDisplayName 的判定：清单里存的可能压根是代码
+ * （新增时只传了代码），那种"名字"不能当名字用。
  */
 function displayName(row: WatchRow): string {
-  return row.quote?.name || row.name || row.thscode
+  return displayStockName(row.name, row.thscode, row.quote?.name) || row.thscode
 }
 
 function changeClass(row: WatchRow): string {
@@ -885,13 +1314,34 @@ function isStale(row: WatchRow): boolean {
  * 一个灰色状态，就是把「尚无法判定」误报成「已确认不满足」，而这两句话让
  * 人做的决定完全不同：前者是"再等等"，后者是"这事没发生"。
  */
-function conditionState(c: WatchCondition): 'met' | 'unmet' | 'unknown' {
-  if (c.last_satisfied === null) return 'unknown'
+function evalLiveCondition(c: WatchCondition): boolean | null {
+  const q = quotes.value[c.thscode]
+  if (!q) return null
+  if (c.field === 'price' && q.close !== null) {
+    return c.op === 'above' ? q.close > c.value : q.close < c.value
+  }
+  if (c.field === 'pct_change' && q.change_pct !== null) {
+    return c.op === 'above' ? q.change_pct > c.value : q.change_pct < c.value
+  }
+  return null
+}
+
+function conditionState(c: WatchCondition): 'met' | 'unmet' | 'live_met' | 'live_unmet' | 'unknown' {
+  if (c.last_satisfied === null) {
+    const live = evalLiveCondition(c)
+    if (live === true) return 'live_met'
+    if (live === false) return 'live_unmet'
+    return 'unknown'
+  }
   return c.last_satisfied ? 'met' : 'unmet'
 }
 
 function conditionStateLabel(c: WatchCondition): string {
   switch (conditionState(c)) {
+    case 'live_met':
+      return t('watchlist.condStateLiveMet')
+    case 'live_unmet':
+      return t('watchlist.condStateLiveUnmet')
     case 'met':
       return t('watchlist.condStateMet')
     case 'unmet':
@@ -929,6 +1379,13 @@ function conditionExpr(c: WatchCondition): string {
  * 还是这只票的历史数据一直不够 —— 后者是本地数据问题，值得用户去查。
  */
 function conditionEvalTitle(c: WatchCondition): string {
+  if (c.last_satisfied === null) {
+    const live = evalLiveCondition(c)
+    if (live !== null) {
+      return '基于最新行情实时计算；正式事件归档与推送将于隔夜任务（08:30）执行'
+    }
+    return t('watchlist.condNeverEval')
+  }
   return c.last_eval_date
     ? t('watchlist.condEvalAt', { date: c.last_eval_date })
     : t('watchlist.condNeverEval')
@@ -1038,6 +1495,11 @@ async function loadItems() {
   try {
     const res = await listWatchlist()
     items.value = res.data ?? []
+    for (const item of items.value) {
+      if (item.thscode && item.name) {
+        registerStockName(item.thscode, item.name)
+      }
+    }
   } catch (error: any) {
     MessagePlugin.error(error?.message || t('watchlist.loadFailed'))
   } finally {
@@ -1056,6 +1518,11 @@ async function refreshQuotes(silent = false) {
   try {
     const res = await fetchQuotes(codes)
     quotes.value = res.data ?? {}
+    for (const q of Object.values(quotes.value)) {
+      if (q.thscode && q.name) {
+        registerStockName(q.thscode, q.name)
+      }
+    }
     lastUpdated.value = new Date().toLocaleTimeString()
   } catch (error: any) {
     if (!silent) MessagePlugin.error(error?.message || t('watchlist.loadFailed'))
@@ -1065,8 +1532,31 @@ async function refreshQuotes(silent = false) {
 }
 
 /** 手动刷新：行情和活动流一起补齐（「今日触发」徽标也依赖后者）。 */
+/**
+ * 取当日评分排行，按 thscode 建索引供表格排序用。
+ *
+ * 失败不抛：评分是增强项，取不到时表格只是没有评分列，
+ * 不该让整页因为一个附加接口挂掉。
+ */
+async function loadScores() {
+  try {
+    const res = await listRanking({ limit: 200 })
+    const idx: Record<string, { score: number | null; rank: number | null; verdict: string | null }> = {}
+    for (const r of res.data || []) {
+      idx[r.thscode] = {
+        score: r.final_score ?? null,
+        rank: r.rank ?? null,
+        verdict: r.verdict ?? null,
+      }
+    }
+    scoreIndex.value = idx
+  } catch {
+    scoreIndex.value = {}
+  }
+}
+
 async function refreshAll() {
-  await Promise.all([refreshQuotes(), loadEvents()])
+  await Promise.all([refreshQuotes(), loadEvents(), loadScores()])
 }
 
 async function reloadAll() {
@@ -1091,6 +1581,14 @@ function handleKeywordChange() {
       suggestions.value = []
     }
   }, SEARCH_DEBOUNCE_MS)
+}
+
+function handleRankingSelect(thscode: string) {
+  selectedThscode.value = thscode
+  const targetRow = rows.value.find((r) => r.thscode === thscode)
+  if (targetRow && activeTab.value !== 'all' && activeTab.value !== targetRow.state) {
+    activeTab.value = 'all'
+  }
 }
 
 async function handleEnter() {
@@ -1189,6 +1687,8 @@ function handleVisibility() {
 
 onMounted(async () => {
   await reloadAll()
+  // 行业数据是增强项，加载失败不影响主流程
+  await loadIndustries()
   refreshTimer = setInterval(() => {
     if (document.visibilityState === 'visible') void refreshQuotes(true)
   }, REFRESH_INTERVAL_MS)
@@ -1221,6 +1721,13 @@ onUnmounted(() => {
 
 .watchlist-header {
   flex-shrink: 0;
+}
+
+/* 嵌入态：标题让给外壳，这一行只剩右对齐的动作按钮，压成一条窄条。
+   不写 `justify-content: flex-end` 的话，按钮会贴到左边、和 tab 条的
+   「大盘」重叠 —— 外壳的标题在上一行，视觉上仍是一条标题区。 */
+.watchlist-header.is-embedded .watchlist-title-row {
+  justify-content: flex-end;
 }
 
 // 表格与详情面板并排。表格这一侧必须 min-width: 0，否则 t-table 的内容宽度
@@ -1344,6 +1851,96 @@ onUnmounted(() => {
   background: var(--td-bg-color-secondarycontainer);
   color: var(--td-text-color-secondary);
   font-size: var(--app-text-sm);
+}
+
+/* 行业分组标签 */
+.wl-industry-groups {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 12px 0 8px;
+}
+
+.wl-industry-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border: 1px solid var(--td-component-stroke);
+  border-radius: var(--app-radius-pill);
+  background: transparent;
+  color: var(--td-text-color-secondary);
+  font-size: var(--app-text-xs);
+  cursor: pointer;
+  transition: all var(--app-motion-fast) ease;
+
+  &:hover {
+    border-color: var(--td-brand-color);
+    color: var(--td-brand-color);
+  }
+
+  &.is-active {
+    background: var(--td-brand-color);
+    border-color: var(--td-brand-color);
+    color: #ffffff;
+  }
+
+  &__count {
+    font-family: var(--app-font-family-mono);
+    font-size: var(--app-text-2xs);
+    opacity: 0.8;
+  }
+}
+
+/* 行业列 */
+.wl-industry {
+  font-size: var(--app-text-xs);
+  color: var(--td-text-color-secondary);
+
+  &--board {
+    color: var(--td-text-color-placeholder);
+    font-style: italic;
+  }
+
+  &--unknown {
+    color: var(--td-text-color-placeholder);
+  }
+}
+
+/* 技术信号 */
+.wl-signals {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.wl-signal-list {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.wl-signal {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: help;
+
+  &.is-bull {
+    background: rgba(239, 68, 68, 0.12);
+  }
+
+  &.is-bear {
+    background: rgba(16, 185, 129, 0.12);
+  }
+
+  &.is-neutral {
+    background: rgba(107, 114, 128, 0.12);
+  }
 }
 
 .watchlist-table {
@@ -1479,6 +2076,85 @@ onUnmounted(() => {
   &.wl-state--dropped {
     color: var(--td-text-color-placeholder);
   }
+}
+.wl-portfolio-banner {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 14px;
+  margin-bottom: 8px;
+  background: var(--td-bg-color-secondarycontainer);
+  border: 1px solid var(--td-component-stroke);
+  border-radius: var(--app-radius-sm);
+  flex-wrap: wrap;
+
+  &__item {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    font-size: var(--app-text-sm);
+
+    .lbl {
+      color: var(--td-text-color-secondary);
+      font-size: var(--app-text-xs);
+    }
+
+    .val {
+      font-weight: 600;
+      color: var(--td-text-color-primary);
+
+      &.is-up { color: var(--wl-up, #dc2626); }
+      &.is-down { color: var(--wl-down, #047857); }
+
+      small {
+        font-size: var(--app-text-xs);
+        margin-left: 2px;
+      }
+    }
+
+    &.is-warn .val {
+      color: var(--wl-up, #dc2626);
+      font-weight: 700;
+    }
+  }
+}
+
+.wl-close-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.wl-cost-pill {
+  font-size: 11px;
+  line-height: 1.2;
+  padding: 1px 4px;
+  border-radius: 2px;
+  background: var(--td-bg-color-secondarycontainer, #f3f3f3);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+
+  &.is-up {
+    color: var(--wl-up, #dc2626);
+    background: rgba(220, 38, 38, 0.08);
+  }
+
+  &.is-down {
+    color: var(--wl-down, #047857);
+    background: rgba(4, 120, 87, 0.08);
+  }
+}
+
+.wl-stop-pill {
+  font-size: 10px;
+  line-height: 1.2;
+  padding: 1px 4px;
+  border-radius: 2px;
+  background: rgba(220, 38, 38, 0.12);
+  color: var(--wl-up, #dc2626);
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .wl-note {
@@ -1625,13 +2301,18 @@ onUnmounted(() => {
     }
   }
 
-  &--met {
+  &--met, &--live_met {
     border-color: color-mix(in srgb, var(--td-brand-color) 45%, transparent);
     background: color-mix(in srgb, var(--td-brand-color) 10%, transparent);
 
     .wl-cond-chip__state {
       color: var(--td-brand-color);
     }
+  }
+
+  &--unmet, &--live_unmet {
+    border-color: var(--td-component-stroke);
+    background: var(--td-bg-color-secondarycontainer);
   }
 
   &--unknown {
@@ -1689,65 +2370,89 @@ onUnmounted(() => {
   }
 }
 
+/*
+ * 概览条 —— 一行文字，不是五张卡。
+ *
+ * 早前是 5 张等宽卡片（min-width 120px + 大号数字），而 5 个数字里通常 3 个是 0。
+ * 零值占着最贵的首屏，真正的决策信息被挤到下面。
+ * 现在压成一行：非 0 加粗上色，0 淡下去，仍然可点（切分类）。
+ */
 .watchlist-metrics {
   display: flex;
+  align-items: center;
   flex-wrap: wrap;
-  gap: 12px;
-  margin: 16px 0 12px;
+  gap: 4px;
+  margin: 14px 0 10px;
+  padding: 3px;
+  border-radius: var(--app-radius-pill);
+  background: var(--td-bg-color-secondarycontainer);
+  width: fit-content;
 }
 
-.wl-metric-card {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 120px;
-  padding: 10px 14px;
-  border: 1px solid var(--td-border-level-1-color);
-  border-radius: var(--app-radius-sm);
-  background: var(--td-bg-color-container);
+.wl-metric {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 11px;
+  border: 0;
+  border-radius: var(--app-radius-pill);
+  background: transparent;
   cursor: pointer;
-  transition: all var(--app-motion-fast) ease;
+  font-size: var(--app-text-sm);
+  color: var(--td-text-color-secondary);
+  transition: background var(--app-motion-fast) ease, color var(--app-motion-fast) ease;
 
-  &:hover {
-    border-color: var(--td-brand-color-hover);
-    background: var(--td-bg-color-secondarycontainer);
-  }
+  &:hover { background: var(--td-bg-color-container); }
 
   &.is-active {
-    border-color: var(--td-brand-color);
-    box-shadow: 0 0 0 1px var(--td-brand-color);
-    background: color-mix(in srgb, var(--td-brand-color) 6%, var(--td-bg-color-container));
+    background: var(--td-bg-color-container);
+    color: var(--td-text-color-primary);
+    box-shadow: var(--td-shadow-1);
   }
 
-  &__label {
-    font-size: var(--app-text-xs);
-    color: var(--td-text-color-secondary);
-  }
+  /* 0 值：淡下去但仍可点。不隐藏 —— 隐藏会让用户忘了这个分类存在。 */
+  &.is-zero { opacity: 0.5; }
 
   &__val {
-    font-size: var(--app-text-xl);
     font-weight: 600;
-    font-family: monospace;
+    font-family: var(--app-font-family-mono);
     color: var(--td-text-color-primary);
-    line-height: 1.2;
+    font-variant-numeric: tabular-nums;
   }
 
-  &--triggered {
-    &.has-badge {
-      border-color: color-mix(in srgb, var(--td-warning-color) 45%, transparent);
-      background: color-mix(in srgb, var(--td-warning-color) 8%, var(--td-bg-color-container));
+  &.is-zero &__val { font-weight: 400; color: var(--td-text-color-placeholder); }
 
-      .wl-metric-card__val {
-        color: var(--td-warning-color);
-      }
-
-      &.is-active {
-        border-color: var(--td-warning-color);
-        box-shadow: 0 0 0 1px var(--td-warning-color);
-      }
-    }
+  /* 今日触发：唯一需要"叫人"的分类，非 0 时用警示色 */
+  &--triggered:not(.is-zero) {
+    color: var(--td-warning-color);
+    .wl-metric__val { color: var(--td-warning-color); }
   }
 }
+
+/* ── 表格里的评分列 ──
+   评分是"关注度"不是"涨跌"，所以不用红绿（红绿在这个页面已被涨/跌占用，
+   用在这里会让人以为"高分=今天涨得多"），改用深浅。 */
+.wl-score-cell { display: inline-flex; align-items: baseline; gap: 5px; }
+
+.wl-score {
+  font-family: var(--app-font-family-mono);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--td-text-color-primary);
+
+  &.is-high { font-size: var(--app-text-md); }
+  &.is-mid { color: var(--td-text-color-secondary); }
+  &.is-low { color: var(--td-text-color-placeholder); font-weight: 400; }
+}
+
+.wl-rank {
+  font-size: var(--app-text-2xs);
+  color: var(--td-text-color-placeholder);
+}
+
+/* 「今天没评分」是 null，不是 0 分 —— 显示破折号，别让它看起来像 0。 */
+.wl-score-none { color: var(--td-text-color-placeholder); }
+
 
 .watchlist-tabs {
   margin-bottom: 12px;

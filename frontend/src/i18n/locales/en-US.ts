@@ -108,7 +108,8 @@ export default {
     archiveFailed: 'Archive failed',
     needKb: 'Select a knowledge base first',
     close: 'Close',
-    llmNote: 'Seven qualitative dimensions (moat / stagflation defence / ESG / management / shareholder & flow / valuation / risk) are scored by the model; every other number is computed by the scoring kernel. The report is valid for 30 days.'
+    llmNote: 'Seven qualitative dimensions (moat / stagflation defence / ESG / management / shareholder & flow / valuation / risk) are scored by the model; every other number is computed by the scoring kernel. The report is valid for 30 days.',
+    launchNoAgent: 'No agent in this workspace can run halo.analyze, so the full report cannot be generated. Enable HALO in agent settings.'
   },
   modelCatalog: {
     title: 'Model catalog',
@@ -423,7 +424,50 @@ export default {
     nameAscending: 'A–Z',
     nameDescending: 'Z–A'
   },
+  tracking: {
+    openFullscreen: 'Open full screen',
+    tabsLabel: 'Tracking sections',
+    tab: { market: 'Market', watchlist: 'Watchlist', pulse: "Who's moving", etf: 'Weight ETFs' },
+    etf: {
+      title: 'Weight ETFs',
+      caption: 'Shares as of {date} · {basis}',
+      groupLabel: 'ETF group',
+      sortLabel: 'Sort',
+      sort: { signal: 'Signal first', share: 'Share change', multiple: 'Volume multiple' },
+      group: { broad: 'Broad-based', sector: 'Sector' },
+      col: {
+        name: 'Name',
+        price: 'Price',
+        share: 'Share change',
+        multiple: 'Volume',
+        signal: 'Signal',
+        observed: 'As of'
+      },
+      signalTitle: 'Signal triggered',
+      footPriceFallback: '* No previous share observation for this one; column falls back to 5-day change',
+      sectorEmpty: 'Sector pool is empty. The pool now lists 10 sector ETFs — a share sync is needed before data appears.',
+      basis: { quarterly: 'quarterly', unknown: 'unknown' },
+      signalCount: 'Signals',
+      inflowCount: 'Share inflow',
+      topMove: 'Largest move',
+      openWorkspace: 'Full table →'
+    }
+  },
   marketDashboard: {
+    auction: {
+      title: 'How it opened',
+      caption: 'Call auction {date}, final (matched at 9:25)',
+      barTitle: 'Market-wide count of gap-up / flat / gap-down / no-quote opens',
+      up: 'Gap up {n}',
+      flat: 'Flat {n}',
+      down: 'Gap down {n}',
+      noQuote: 'No quote {n}',
+      limitOpen: 'Opened at limit {up} · limit-down {down}',
+      benchmark: 'Benchmark names',
+      expand: 'Movers',
+      col: { name: 'Name', open: 'Auction', volRatio: 'Vol ratio', cap: 'Float cap' },
+      foot: 'Movers filtered to float cap ≥ {cap}bn — auction volume ratios on micro-caps are liquidity noise, not conviction'
+    },
     title: 'Market Overview',
     back: 'Back to workbench',
     dataTime: 'As of',
@@ -476,10 +520,39 @@ export default {
     dragonTiger: {
       title: 'Top traded',
       caption: 'Top 5 net buys · All market',
+      captionCount: '{n} net buys · {date} · All market',
       net: 'Net',
       org: 'Inst.',
       empty: 'No data today',
       full: 'Full list →'
+    },
+    sectors: {
+      title: 'Sector moves',
+      caption: '{date} · by limit-ups → volume → change',
+      tagLabel: 'Sector group',
+      failed: 'Sector data unavailable',
+      showAll: 'Show all',
+      tag: { industry: 'Industry', concept: 'Concept', tszs: 'Thematic', region: 'Region' },
+      col: { name: 'Sector', change: 'Change', volume: 'Volume', limitUp: 'Limit-ups' },
+      foot: 'Showing {shown} of {total}'
+    },
+    ladder: {
+      title: 'Consecutive limit-up ladder',
+      caption: 'Last {n} trading days · shade = count',
+      failed: 'Ladder data unavailable',
+      level: { two: '2B', three: '3B', four: '4B', five: '5B', six: '6B', seven: '7B+' }
+    },
+    basis: {
+      title: 'Futures–spot basis',
+      caption: 'Basis as of {date}',
+      lagged: 'Basis as of {basis} (futures lag spot by a day) · spot already at {spot}',
+      percentile: '5-yr percentile {v}%',
+      expand: 'Divergence',
+      failed: 'Futures data unavailable',
+      divergence: '{name} basis rate vs spot daily change',
+      legendBasis: 'Basis rate',
+      legendSpot: 'Spot daily change',
+      window: 'Last {n} trading days'
     },
     etf: {
       title: 'Broad ETFs · Fund Flows',
@@ -487,14 +560,36 @@ export default {
       captionFallback: 'Shares not synced · price only',
       unsynced: 'Not synced',
       signal: 'Alert',
-      holdings: 'Disclosed Huijin holdings: data incoming'
+      holdings: 'Disclosed Huijin holdings: unavailable — Cninfo does not carry periodic reports for exchange-traded funds'
     },
     noData: 'No data',
     sourceUnavailable: 'Some data sources are unavailable ({sources}); those panels are empty',
     indexUnavailable: 'No local quote data for this index',
     backToWorkbench: 'Back',
     refreshFailed: 'Failed to refresh quotes. Please try again.',
-    loading: 'Loading…'
+    loading: 'Loading…',
+    marketState: {
+      title: 'Market State',
+      caption: 'Five-factor score · reference only',
+      notTradable: 'Not a buy/sell signal: year-by-year backtest shows the direction flips (-0.52 / +0.07 / -0.22 / +0.33 / -0.15).',
+      referenceOnly: 'Reference only',
+      regime: {
+        strong: 'Strong',
+        neutral: 'Neutral',
+        weak: 'Weak'
+      },
+      shortTerm: 'Short-term',
+      temp: {
+        cold: 'Cold',
+        hot: 'Hot',
+        neutral: 'Mild'
+      },
+      exposure: 'Exposure reference',
+      expNeutral: 'No direction',
+      expFollow: 'Follow',
+      expContrarian: 'Contrarian',
+      empty: 'No market state data'
+    }
   },
   watchlist: {
     title: 'Watchlist',
@@ -602,7 +697,8 @@ export default {
       change: 'Change',
       turnover: 'Turnover',
       date: 'Last trade date',
-      actions: 'Actions'
+      actions: 'Actions',
+      score: 'Score'
     },
     backtestBadgeText: 'Backtest Win Rate {winRate}% ({wins}/{total}, avg max gain +{maxGain}%)',
     backtestBadgeTitle: 'Backtest statistics based on historical buy signals',
@@ -627,10 +723,43 @@ export default {
     targetStop: 'Stop Loss',
     todayAlerts: 'Today Alerts',
     totalTracked: 'Total Tracked',
-    watchPool: 'Watch Pool'
+    watchPool: 'Watch Pool',
+    condStateLiveMet: 'Satisfied (Live)',
+    condStateLiveUnmet: 'Not satisfied (Live)',
+    scoreFinal: 'AI Score',
+    toggleDimensions: 'Toggle dimension breakdown',
+    expandDimensions: 'View 18-D scores',
+    collapseDimensions: 'Collapse details',
+    browseWorkspace: 'Browse Charts',
+    stopBreached: 'Stop loss breached',
+    targetShares: 'Position Shares',
+    targetPnlAmount: 'Floating PnL',
+    sharesPlaceholder: 'Shares (e.g. 1000)',
+    resonanceTitle: 'Multi-Timeframe Trend Resonance',
+    resonanceMonth: 'Monthly Macro',
+    resonanceWeek: 'Weekly Swing',
+    resonanceDay: 'Daily Action',
+    trendBull: 'Bullish',
+    trendBear: 'Bearish',
+    portfolioMarketValue: 'Total Market Value',
+    portfolioTotalPnl: 'Portfolio PnL',
+    portfolioCount: 'Holdings',
+    portfolioStopAlerts: 'Stop Loss Alert',
+    ranking: {
+      title: 'Today\'s Ranking',
+      empty: 'No scoring data yet'
+    },
+    verdict: {
+      buy: 'Buy',
+      hold: 'Hold',
+      sell: 'Sell',
+      keep: 'Keep',
+      tighten: 'Tighten',
+      exit: 'Exit',
+      none: 'None'
+    }
   },
   menu: {
-    watchPulse: 'Who moved',
     sessionInProgress: 'Conversation in progress',
     knowledgeBase: 'Knowledge Base',
     agents: 'Agents',
@@ -659,7 +788,13 @@ export default {
     logoutSuccess: 'Logged out successfully',
     myChats: 'My chats',
     apiChats: 'API sessions',
-    noSessions: 'No conversations yet'
+    noSessions: 'No conversations yet',
+    watchPulse: 'Who moved',
+    collapseSessionList: 'Collapse conversation list',
+    expandSessionList: 'Expand conversation list',
+    sessionListCollapsed: 'Conversations collapsed',
+    collapseAllGroups: 'Collapse all',
+    expandAllGroups: 'Expand all'
   },
   chatHeader: {
     moreActions: 'More conversation actions',
@@ -2469,6 +2604,12 @@ export default {
       providerDeleted: 'Search provider deleted',
       testSuccess: 'Connection test succeeded',
       testFailed: 'Connection test failed'
+    },
+    configFields: {
+      region: 'API Region',
+      regionDesc: 'Select MiniMax API service region (China / Global)',
+      regionCN: 'China (api.minimaxi.com)',
+      regionGlobal: 'Global (api.minimax.io)'
     }
   },
   vectorStoreSettings: {
@@ -6673,7 +6814,12 @@ export default {
       statusInactive: '{count} ticked tool(s) cannot take effect with the current config',
       effectiveLabel: 'Effective Tools',
       effectiveDesc: 'Computed from the current config — these are the tools the agent will actually be able to call',
-      effectiveEmpty: 'No tool available — the agent will fall back to plain model chat'
+      effectiveEmpty: 'No tool available — the agent will fall back to plain model chat',
+      groupCode: 'Code & Terminal',
+      shellExec: 'Shell Terminal (Bash)',
+      shellExecDesc: 'Execute shell commands and scripts in a controlled environment (use frugally when verification or execution is needed; do not abuse)',
+      editSandboxFile: 'Edit Workspace File',
+      editSandboxFileDesc: 'Make targeted edits to code or text files in the session workspace'
     },
     embed: {
       title: 'Web Page Embed',
@@ -8116,7 +8262,23 @@ export default {
     expand: 'Click to expand',
     switchTo: 'Switch chart to {name} ({thscode})'
   },
+  samples: {
+    markdown: 'Markdown Document',
+    faq: 'Q&A FAQ',
+    chapter: 'Multi-chapter Document',
+    plain: 'Plain Text Paragraph'
+  },
   watchPulse: {
+    technicals: {
+      title: 'Technical position',
+      caption: 'Indicators as of {date}',
+      sma20: 'MA20',
+      sma60: 'MA60',
+      sma250: 'MA250',
+      bb: 'BB',
+      align: { bull: 'Bullish stack', bear: 'Bearish stack', mixed: 'MAs tangled', na: 'MAs unclear' },
+      missing: 'No indicator data: {codes}'
+    },
     title: 'Who is Moving Today',
     recalc: 'Recalculate',
     retry: 'Retry',
@@ -8165,11 +8327,5 @@ export default {
       empty: 'No events in the coming days',
       failed: 'Calendar unavailable, the main panel is unaffected'
     }
-  },
-  samples: {
-    markdown: 'Markdown Document',
-    faq: 'Q&A FAQ',
-    chapter: 'Multi-chapter Document',
-    plain: 'Plain Text Paragraph'
   }
 }

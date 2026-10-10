@@ -19,7 +19,7 @@ import os
 import re
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.encoders import jsonable_encoder
@@ -1355,7 +1355,12 @@ async def zettaranc_screen(request: ScreenRequest) -> Dict[str, Any]:
 
 @app.post("/zettaranc/analyze")
 async def zettaranc_analyze(request: AnalyzeRequest) -> Dict[str, Any]:
-    """综合技术分析 — 趋势 + 量价 + 形态 + 支撑阻力"""
+    """综合技术分析 — 趋势 + 量价 + 形态 + 支撑阻力
+
+    服务 API，**不再由 agent 工具调用**（2026-10-05 起 Go 侧 zettaranc.analyze 复合
+    工具已删除；单票分析走四个原子工具 hithink.finance.analysis.trend / .volume /
+    .pattern / .levels，各返回一段，由模型自行组合）。保留给外部调用方与前端。
+    """
     from datasources import registry
     from zettaranc import (
         fetch_market_data, analyze_trend, analyze_volume,
@@ -2636,6 +2641,9 @@ _MARKET_ETFS: List[tuple[str, str]] = [
 _MARKET_INDEX_SERIES_DAYS = 60
 # 近 5 日涨停家数柱状图。
 _MARKET_LIMIT_UP_TREND_DAYS = 5
+# 市场状态评估的基准指数。选沪深300 而非上证：回测全部以它为基准
+# （`scripts/backtest_market_state.py`），口径必须一致，否则对比无意义。
+_MARKET_STATE_INDEX = "000300.SH"
 
 # 龙虎榜榜单元数据 → 人话。本地只有这两个值（见文件头第 3 条）。
 _DRAGON_BOARD_TYPE_LABELS = {"all": "全部榜", "org": "机构榜"}
@@ -2919,14 +2927,232 @@ async def market_snapshot(
         "tickers": tickers,
         "sentiment": sentiment,
         "etfs": etfs,
+        "market_state": await _market_state_block(trade_date),
         "unavailable": sorted(set(unavailable)),
         "sources": {
             "index": "index.v_index_daily",
             "sentiment": "special.v_limit_{up,down,break}_pool",
             "breadth": "market.v_daily_qfq",
             "etf": "fund.v_etf_latest",
+            "market_state": "zettaranc.market_state + data/market_breadth.csv",
         },
     }
+
+
+async def _market_state_block(trade_date: Optional[str]) -> Dict[str, Any]:
+    """
+    取市场状态评估（composite + 短期热度 + 暴露参考）。
+
+    走 `zettaranc.market_state` 纯计算，输入是 index 库的宽基 K 线与本地
+    宽度缓存 CSV。任一环节失败都返回 `{error}` —— snapshot 的其余部分照常返回，
+    降级优先于报错（与本函数其他查询一致）。
+
+    **返回里带 `tradable: false`**：composite 的逐年 IC 反复反号，不能当方向
+    信号用。调用方（前端）若要据此做仓位决策，会在数据里直接看到这个标记。
+
+    Args:
+        trade_date: 目标交易日 YYYY-MM-DD；None = 库中最新。
+            **必须真的传到 SQL 里** —— 早前版本忽略了这个参数、永远取最新，
+            导致宽度新鲜度检测形同虚设（传什么日期都是 lag=0）。
+    """
+    from zettaranc.market_state import compute_market_state
+
+    try:
+        from datasources import registry
+
+        idx_src = registry.get("index")
+        if idx_src is None:
+            return {"error": "index 数据源未就绪"}
+
+        if trade_date:
+            rows = await idx_src.execute(
+                """
+                SELECT trade_date, close, volume, turnover
+                FROM v_index_daily
+                WHERE thscode = ? AND close IS NOT NULL
+                  AND CAST(trade_date AS VARCHAR) <= ?
+                ORDER BY trade_date DESC
+                LIMIT 120
+                """,
+                [_MARKET_STATE_INDEX, trade_date],
+            )
+        else:
+            rows = await idx_src.execute(
+                """
+                SELECT trade_date, close, volume, turnover
+                FROM v_index_daily
+                WHERE thscode = ? AND close IS NOT NULL
+                ORDER BY trade_date DESC
+                LIMIT 120
+                """,
+                [_MARKET_STATE_INDEX],
+            )
+        if not rows:
+            return {"error": f"{_MARKET_STATE_INDEX} 无 K 线数据"}
+
+        # v_index_daily 的日期列是 DATE，to_dict 后可能是 date 对象
+        idx_rows = [
+            {
+                "trade_date": _iso_date(r.get("trade_date")),
+                "close": _f(r.get("close")),
+                "volume": _f(r.get("volume")) or 0.0,
+                "turnover": _f(r.get("turnover")) or 0.0,
+            }
+            for r in rows
+        ]
+
+        b_row, b_hist, freshness = _load_breadth_for(_iso_date(idx_rows[0]["trade_date"]))
+        state = compute_market_state(idx_rows, b_row, b_hist)
+        state["as_of"] = _iso_date(idx_rows[0]["trade_date"])
+        # 宽度缓存是静态文件，没有定时任务重建。新鲜度必须随响应返回 ——
+        # 否则会用过期宽度算 composite，而调用方完全看不出来。
+        state["breadth_freshness"] = freshness
+        return state
+    except Exception as exc:  # noqa: BLE001 —— 降级优先于报错
+        logger.warning("market_state 计算失败：%s", exc)
+        return {"error": str(exc)}
+
+
+# 宽度缓存落后多少个**自然日**就报警。缓存是 `build_breadth_cache.py` 生成的
+# 静态文件，没有任何调度会自动重建它 —— 5 个自然日（跨一个周末 + 一个长假）
+# 就足以让 composite 的宽度/量能维度静默偏一周以上，所以这里宁可吵也不要静默。
+_BREADTH_STALE_DAYS = 5
+
+# 缓存距今超过多少自然日就报"数据同步可能中断"。比上面宽松，因为 A 股长假
+# （春节/国庆）最长能停 9 天，交易日本来就少。超过 12 天基本是同步挂了。
+_BREADTH_ABSOLUTE_MAX_DAYS = 12
+
+
+def _load_breadth_for(
+    date_str: str, csv_path: Optional[str] = None
+) -> Tuple[Optional[Dict[str, Any]], List[Dict[str, Any]], Dict[str, Any]]:
+    """
+    从本地宽度缓存 CSV 取指定日期的行 + 截至该日（含）的 60 日历史。
+
+    返回 `(current, history, freshness)`。`freshness` 说明缓存的最后一个交易日
+    相对请求日期落后多少天 —— 缓存是静态文件、**没有定时任务会重建它**，
+    数据同步后宽度指标不会自动跟新。不把这件事说出来，就会用两周前的宽度
+    去算 composite，而且界面上完全看不出来。
+
+    Args:
+        date_str: 请求的交易日 YYYY-MM-DD
+        csv_path: 缓存路径，None = `data/market_breadth.csv`。
+            单元测试用它注入临时文件（tests/unit/test_breadth_freshness.py）。
+
+    CSV 由 `scripts/build_breadth_cache.py` 生成，列见该脚本。
+    """
+    import csv as _csv
+    from pathlib import Path as _Path
+
+    freshness: Dict[str, Any] = {
+        "source": "data/market_breadth.csv",
+        "last_date": None,
+        "lag_trading_days": None,
+        "days_behind_today": None,
+        "stale": True,
+        "note": None,
+    }
+
+    path = _Path(csv_path) if csv_path else _Path(__file__).parent / "data" / "market_breadth.csv"
+    freshness["source"] = str(path.name if csv_path else "data/market_breadth.csv")
+    if not path.exists():
+        freshness["note"] = "宽度缓存不存在，宽度/量能维度已退化为中性分"
+        return None, [], freshness
+
+    try:
+        with path.open(encoding="utf-8") as fh:
+            all_rows = list(_csv.DictReader(fh))
+    except OSError as exc:
+        freshness["note"] = f"宽度缓存读取失败：{exc}"
+        return None, [], freshness
+
+    if not all_rows:
+        freshness["note"] = "宽度缓存为空，宽度/量能维度已退化为中性分"
+        return None, [], freshness
+
+    up_to = [r for r in all_rows if not date_str or r.get("date", "") <= date_str]
+    if not up_to:
+        freshness["note"] = "宽度缓存中没有该日期及之前的记录"
+        return None, [], freshness
+
+    def _to_row(r: Dict[str, str]) -> Dict[str, Any]:
+        return {
+            "n_stocks": int(r["n_stocks"]),
+            "pct_new_high_120": float(r["pct_new_high_120"]),
+            "pct_above_ma60": float(r["pct_above_ma60"]),
+            "pct_above_ma20": float(r["pct_above_ma20"]),
+            "total_turnover": float(r["total_turnover"]),
+        }
+
+    current = _to_row(up_to[-1])
+    history = [_to_row(r) for r in up_to[-60:]]
+
+    # 新鲜度：对比「缓存最后一天」与「指数实际最新日」。
+    #
+    # 注意不能用请求日期 date_str 当基准：调用方传未来日期（或节假日之后）时，
+    # 缓存末行仍会被选中，若拿 date_str 比就会得出 lag=0 的假"新鲜"。
+    # 正确做法是同时看 date_str 在缓存里落在第几根。
+    last_date = up_to[-1].get("date")
+    freshness["last_date"] = last_date
+
+    cache_dates = [r["date"] for r in up_to]
+    if last_date and last_date == date_str:
+        lag = 0
+    elif last_date and date_str:
+        # 请求日期不在缓存内（缓存落后）：用两者的自然日差给个量级
+        from datetime import date as _date
+        try:
+            lag = (
+                _date.fromisoformat(date_str) - _date.fromisoformat(last_date)
+            ).days
+        except ValueError:
+            lag = None
+    else:
+        lag = None
+
+    freshness["lag_trading_days"] = lag
+    if lag is None:
+        freshness["stale"] = True
+        freshness["note"] = (
+            f"指数数据到 {date_str}，宽度缓存只到 {last_date}，无法对齐交易日序号"
+        )
+    elif lag > _BREADTH_STALE_DAYS:
+        freshness["stale"] = True
+        freshness["note"] = (
+            f"宽度缓存落后指数数据 {lag} 个自然日（缓存到 {last_date}，指数到 {date_str}）。"
+            f"重跑 scripts/build_breadth_cache.py 更新；"
+            f"当前 composite 的宽度/量能维度基于过期数据。"
+        )
+    else:
+        freshness["stale"] = False
+        freshness["note"] = f"宽度缓存到 {last_date}（落后 {lag} 天，正常）"
+
+    # 第二层检查：**整体数据新鲜度**。
+    #
+    # 上面那层只比"缓存 vs 指数"，两者同步滞后时查不出来 —— 实测 2026-10-06
+    # 时 index 库与宽度缓存都停在 09-30，两者 lag=0 判为新鲜，但相对今天已
+    # 落后 6 天。所以再比一次"绝对日期 vs 今天"，数据同步挂了要能报出来。
+    if last_date:
+        from datetime import date as _date, datetime as _dt
+        try:
+            age = (_dt.now().date() - _date.fromisoformat(last_date)).days
+        except ValueError:
+            age = None
+        freshness["days_behind_today"] = age
+        if age is not None and age > _BREADTH_ABSOLUTE_MAX_DAYS:
+            freshness["stale"] = True
+            freshness["note"] = (
+                f"宽度缓存只到 {last_date}，距今 {age} 天。数据同步可能已中断，"
+                f"重跑 scripts/build_breadth_cache.py。"
+            )
+        elif age is not None:
+            # 没超阈值也要说清楚落后多少天 —— 否则看 note 以为数据是当天的
+            freshness["note"] = (
+                f"{freshness['note']}；缓存最后一天距今 {age} 天"
+                f"（阈值 {_BREADTH_ABSOLUTE_MAX_DAYS} 天）"
+            )
+
+    return current, history, freshness
 
 
 @app.get("/api/market/dragon-tiger")
@@ -2989,6 +3215,75 @@ if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", "50052")))
 
 
+# ===== 批量行业归属查询（给 Go 侧 grading job 用） =====
+
+class IndustryMapRequest(BaseModel):
+    """批量查行业归属。"""
+    thscodes: List[str] = Field(..., max_items=500, description="股票代码列表，最多 500")
+
+
+@app.post("/watchlist/industry-map")
+async def batch_industry_map(request: IndustryMapRequest) -> Dict[str, Any]:
+    """批量返回每只股票的行业归属（一级 + 二级）。
+
+    给 Go 侧的 StockWatchGradingJob 用：拿到行业归属后按二级行业分组，
+    同行业的股票打包成一次 LLM 调用，减少调用次数。
+
+    数据源：v_index_constituents × v_index_universe（tag='industry'），
+    层级判定用指数编码前缀（881 = 一级 / 884 = 二级），与 halo/industry_map.py 一致。
+    """
+    from datasources import registry
+
+    src = registry.get("index")
+    if src is None:
+        return {"code": 0, "data": {}}
+
+    thscodes = [t.strip() for t in request.thscodes if t and t.strip()]
+    if not thscodes:
+        return {"code": 0, "data": {}}
+
+    placeholders = ", ".join(["?"] * len(thscodes))
+    sql = f"""
+    SELECT c.thscode, u.thscode AS index_code, u.name AS industry_name,
+           (SELECT COUNT(*) FROM v_index_constituents c2
+             WHERE c2.index_thscode = u.thscode) AS members
+    FROM v_index_constituents c
+    JOIN v_index_universe u ON c.index_thscode = u.thscode
+    WHERE c.thscode IN ({placeholders}) AND u.tag = 'industry'
+    ORDER BY c.thscode, members DESC
+    """
+    try:
+        rows = await src.execute(sql, thscodes)
+    except Exception as exc:
+        raise fail(503, f"查行业归属失败: {exc}") from exc
+
+    # Group by thscode, apply level logic (same as halo/industry_map.py)
+    from collections import defaultdict
+    grouped = defaultdict(list)
+    for r in rows:
+        code = str(r.get("index_code") or "")
+        prefix = code.split(".")[0][:3]
+        level = {"881": 1, "884": 2}.get(prefix)
+        if level is None:
+            level = 2 if (r.get("members") or 0) <= 40 else 1
+        grouped[r["thscode"]].append({
+            "industry": r.get("industry_name"),
+            "level": level,
+        })
+
+    result = {}
+    for thscode in thscodes:
+        memberships = grouped.get(thscode, [])
+        l1 = next((m["industry"] for m in memberships if m["level"] == 1), None)
+        l2 = next((m["industry"] for m in memberships if m["level"] == 2), None)
+        result[thscode] = {
+            "level1": l1,
+            "level2": l2 or l1,  # fallback to level1 if no level2
+        }
+
+    return {"code": 0, "data": result}
+
+
 # ===== 自选股「量价异动面板」 =====
 #
 # 三块能力：量价异动（/finance/pulse）+ 财经日历抓取与读取。
@@ -3018,6 +3313,151 @@ class PulseRequest(BaseModel):
         if not re.match(r"^\d{4}-\d{2}-\d{2}$", v):
             raise ValueError("date 必须是 YYYY-MM-DD")
         return v
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# 板块 / 情绪 / 期股联动
+#
+# 这一组端点补的是「有数据但没有出口」的那部分：index 库里 848 个板块指数与
+# 五年日线、special 库里的连板梯队、futures 库里的四个股指期货主力连续，
+# 在此之前没有任何端点在读，前端 proxy 路由里也没有对应条目。
+#
+# 取数与口径全部在 `finance_panel/board.py`，这里只做参数校验与转交。
+# ══════════════════════════════════════════════════════════════════════════
+
+
+@app.get("/api/market/sectors")
+async def market_sectors(
+    tag: Optional[str] = Query(
+        None, description="板块分类：industry 行业 / concept 概念 / tszs 特色 / region 地域，缺省全部"
+    ),
+    limit: int = Query(60, ge=1, le=400, description="返回条数（先全量排序再截断）"),
+):
+    """板块指数今日榜 —— 涨幅 + 放量倍数 + 板块内涨停家数。
+
+    **排序是字典序而不是加权合成分**：涨停家数 → 放量倍数 → |涨跌幅|。
+    理由是合成分必须给权重，而权重是拍的；字典序表达的是真实判断顺序 ——
+    先看有没有涨停（最硬的证据），再看有没有放量（资金来没来），
+    最后才看涨了多少（涨得多不代表有资金）。
+
+    涨停家数跨库（special ↔ index），所以在 Python 侧合并后排序，见
+    `board.list_sectors` 的实现说明。
+    """
+    from datasources import registry
+    from finance_panel import board
+
+    return await board.list_sectors(
+        registry.get("index"), registry.get("special"), tag=tag, limit=limit
+    )
+
+
+@app.get("/api/market/limit-up-ladder")
+async def market_limit_up_ladder(
+    days: int = Query(30, ge=2, le=120, description="回看交易日数"),
+):
+    """连板梯队 —— 近 N 日 × 2/3/4/5/6/7+ 板的家数矩阵。
+
+    涨停家数只说"今天热不热"，梯队说"热度在往上垒还是在塌"。2 板堆到 7 板，
+    和每天都停在 2 板，是两种完全不同的市场。
+    """
+    from datasources import registry
+    from finance_panel import board
+
+    return await board.limit_up_ladder(registry.get("special"), days=days)
+
+
+@app.get("/api/market/basis")
+async def market_basis():
+    """期股联动 —— 股指期货（主力连续）基差 + 5 年分位数。
+
+    **基差日取期货与现货的共同最新交易日。** 实测期货更新到 T-1、现货已到 T；
+    拿 T-1 的期货减 T 的现货会把一整天涨跌混进"基差"，那不是基差而是跨日差，
+    而且算完之后看起来完全正常。所以响应里 `basis_date` / `futures_latest` /
+    `spot_latest` 三个日期分开给，前端用不着也不该自己猜该配哪天。
+
+    percentile 才是有用的那个数：「-1.4% 贴水」没有信息量（股指期货常年贴水），
+    「-1.4% 处在 5 年 4% 分位」才是判断。
+    """
+    from datasources import registry
+    from finance_panel import board
+
+    return await board.index_futures_basis(
+        registry.get("futures"), registry.get("index")
+    )
+
+
+class IndustryMapRequest(BaseModel):
+    thscodes: List[str] = Field(..., max_items=500, description="股票代码列表，最多 500")
+
+
+@app.get("/api/market/auction")
+async def market_auction(
+    date: Optional[str] = Query(None, description="交易日 YYYY-MM-DD，缺省取库内最新"),
+    min_float_cap: float = Query(
+        5e9, gt=0, description="流通市值门槛（元），低于此体量的票竞价量比不可比"
+    ),
+    limit: int = Query(20, ge=1, le=200, description="异动榜条数"),
+):
+    """集合竞价 —— 盘前那一分钟的信息：高开低开分布 + 短线风向标 + 异动榜。
+
+    收盘复盘回答"今天发生了什么"，这一块回答"**今天怎么开的**"。它是全市场
+    唯一能比昨天更早拿到读数的时刻：5471 只票在 9:15–9:25 各报一次价。
+
+    **异动榜必须过流通市值门槛。** 实测全市场量比>2 有 910 只，但排在最前面的
+    "量比 70 倍"大半是几亿市值的小盘票 —— 那个倍数是流动性噪音不是资金信号；
+    50 亿门槛下同样条件只剩 395 只，排第一的园林股份（52 亿、开盘涨停、量比 70）
+    才是真信号。门槛可调，理由写在 `finance_panel/auction.py` 模块头。
+
+    分布（高开/低开家数）是全市场统计，**不设门槛** —— 两个口径混在一张榜里，
+    高开家数会被榜单的数量级盖过去。
+    """
+    from datasources import registry
+    from finance_panel import auction
+
+    return await auction.auction_overview(
+        registry.get("special"), date=date, min_float_cap=min_float_cap, limit=limit
+    )
+
+
+@app.post("/api/market/technicals")
+async def market_technicals(request: IndustryMapRequest) -> Dict[str, Any]:
+    """批量技术指标读数（最新日）+ 派生判断。
+
+    让「谁在动」能回答**为什么**：同样是涨 4%，在 250 日线上方 3% 和在下方 12%
+    是两件事 —— 前者可能是延续，后者是反弹。只给量价倍数说不了这个。
+
+    数据来自 `indicators.duckdb`（264 列、1036 万行、2016-09 起）。按代码取
+    最新日实测 0.2 秒以内，**不做预聚合也不建索引** —— 那个形状的查询本来就快，
+    预先加工反而要多维护一份口径。
+
+    派生判断在服务端算（`above_sma20` / `ma_alignment` / `rsi_zone` …），
+    与 `WatchPulse.vue` 头部"前端不重算任何指标"是同一条约定。
+    """
+    from datasources import registry
+    from finance_panel import technicals
+
+    return await technicals.latest_technicals(
+        registry.get("indicators"), registry.get("market"), request.thscodes
+    )
+
+
+@app.post("/api/market/industry-map")
+async def market_industry_map(request: IndustryMapRequest) -> Dict[str, Any]:
+    """批量行业归属 `{thscode: {level1, level2}}`。
+
+    前端 `finance/api/watchlist.ts` 早就声明了 `fetchIndustryMap`，但后端一直
+    404。这里按它声明的形状实现，段位规则（881 一级 / 884 二级）从
+    `halo.industry_map` 直接 import，不复制那条规则。
+
+    查不到时 level1/level2 都是 null —— 调用方据此跳过行业判断，
+    **不要拿股票名顶上**：那是另一个维度的名字，混用会让"所属行业"变成编的。
+    """
+    from datasources import registry
+    from finance_panel import board
+
+    result = await board.industry_map_batch(registry.get("index"), request.thscodes)
+    # 前端声明的返回形状是 `{code, data}`，这里保持一致。
+    return {"code": 0 if result.get("ok") else 500, "data": result.get("data", {})}
 
 
 @app.post("/api/finance/pulse")

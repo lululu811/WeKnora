@@ -56,10 +56,28 @@ export interface ModuleRegistration {
   insertAfter?: string;
   /** 路由 name（vue-router）。 */
   routeName?: string;
-  /** 路由组件（lazy import）。 */
+  /** 路由组件（lazy import）。与 `routeRedirect` 二选一，同时给会被忽略。 */
   routeComponent?: () => Promise<any>;
+  /**
+   * 路由重定向（vue-router 的 `redirect`）。与 `routeComponent` 二选一。
+   *
+   * 用于模块合并后的旧地址：内容搬走了，但收藏、书签、别人发的链接还指着老路由，
+   * 让它直接跳到新位置，而不是 404 也不是"再放一个入口"。
+   */
+  routeRedirect?: string | Record<string, any>;
   /** 路由 meta（与通用路由 meta 合并：`requiresInit: true, requiresAuth: true` 自动加）。 */
   routeMeta?: Record<string, any>;
+  /**
+   * 只注册路由，不进菜单。
+   *
+   * 用于**内容已被吸进别的页面、但旧地址仍要能打开**的模块：
+   * 例如「今天谁在动」并进个股追踪页后，`/platform/watch-pulse` 要继续存在
+   * （收藏、别人发的链接、书签都指着它），但侧边栏不该再有两个入口指同一处内容。
+   *
+   * 2026-10-09 之前没有这个开关，所以"合并菜单"只能二选一：要么砍掉路由让旧链接
+   * 404，要么留着菜单项 —— 正是它逼出了菜单里两个入口指向同一页面的局面。
+   */
+  hiddenInMenu?: boolean;
 }
 
 const modules: ModuleRegistration[] = [];

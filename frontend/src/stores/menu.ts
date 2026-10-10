@@ -47,6 +47,9 @@ export const useMenuStore = defineStore('menuStore', () => {
   // 默认插入到 `settings` 之前（即 toolbox 之后）；找不到 anchor 时退到
   // `settings` 之前（即末尾倒数第二个位置，因为末尾是 settings + logout）。
   for (const mod of getRegisteredModules()) {
+    // hiddenInMenu 的模块只贡献路由（见 registry.ts 的说明）：内容已被吸进
+    // 别的页面，旧地址要继续能打开，但侧边栏不再给它一个入口。
+    if (mod.hiddenInMenu) continue
     const anchor = mod.insertAfter || 'settings'
     const anchorIdx = menuArr.findIndex((item) => item.path === anchor)
     const targetIdx = anchorIdx >= 0 ? anchorIdx + 1 : Math.max(0, menuArr.length - 2)

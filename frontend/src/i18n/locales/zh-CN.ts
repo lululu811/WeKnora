@@ -1,5 +1,15 @@
 export default {
   watchPulse: {
+    technicals: {
+      title: '技术位置',
+      caption: '指标截至 {date}',
+      sma20: 'MA20',
+      sma60: 'MA60',
+      sma250: 'MA250',
+      bb: '布林',
+      align: { bull: '多头排列', bear: '空头排列', mixed: '均线纠缠', na: '均线判不出' },
+      missing: '无指标读数：{codes}'
+    },
     title: '今天谁在动',
     recalc: '重算',
     retry: '重试',
@@ -1553,7 +1563,12 @@ export default {
       statusInactive: '有 {count} 个已勾选工具在当前配置下无法生效',
       effectiveLabel: '最终启用的工具',
       effectiveDesc: '根据当前配置计算，这是智能体保存后实际能调用的工具集合',
-      effectiveEmpty: '当前没有可用工具，智能体将退化为纯模型问答'
+      effectiveEmpty: '当前没有可用工具，智能体将退化为纯模型问答',
+      groupCode: '代码与终端',
+      shellExec: '命令行终端 (Bash)',
+      shellExecDesc: '在受控环境中执行命令行指令与脚本运行（仅在需要验证数据、运行程序或计算时克制调用，禁止无端滥用）',
+      editSandboxFile: '工作区文件编辑',
+      editSandboxFileDesc: '精准局部修改会话工作区内的代码或文本文件'
     },
     desc: {
       name: '为智能体设置一个易于识别的名称',
@@ -5730,6 +5745,12 @@ export default {
     baseUrlLabel: '实例地址',
     baseUrlPlaceholder: 'https://searxng.example.com',
     apiKeyPlaceholder: '请输入 API 密钥',
+    configFields: {
+      region: '接口区域',
+      regionDesc: '选择 MiniMax API 服务所在区域（国内 / 海外）',
+      regionCN: '国内（api.minimaxi.com）',
+      regionGlobal: '海外（api.minimax.io）'
+    },
     toasts: {
       providerCreated: '搜索引擎配置已创建',
       providerUpdated: '搜索引擎配置已更新',
@@ -7511,7 +7532,6 @@ export default {
     }
   },
   menu: {
-    watchPulse: '谁在动',
     sessionInProgress: '会话进行中',
     knowledgeBase: '知识库',
     agents: '智能体',
@@ -7540,7 +7560,13 @@ export default {
     logoutSuccess: '已退出登录',
     myChats: '我的对话',
     apiChats: 'API 会话',
-    noSessions: '暂无对话'
+    noSessions: '暂无对话',
+    watchPulse: '谁在动',
+    collapseSessionList: '收起会话列表',
+    expandSessionList: '展开会话列表',
+    sessionListCollapsed: '会话已收起',
+    collapseAllGroups: '全部收起',
+    expandAllGroups: '全部展开'
   },
   watchlist: {
     title: '个股追踪',
@@ -7663,19 +7689,101 @@ export default {
     todayAlerts: '今日预警',
     totalTracked: '追踪总数',
     watchPool: '重点观察',
+    condStateLiveMet: '实时满足',
+    condStateLiveUnmet: '实时未满足',
+    scoreFinal: '综合评分',
+    toggleDimensions: '切换维度明细',
+    expandDimensions: '查看18维得分',
+    collapseDimensions: '收起细项',
+    browseWorkspace: '批量看图',
+    stopBreached: '已跌破止损',
+    targetShares: '持仓股数',
+    targetPnlAmount: '浮动盈亏额',
+    sharesPlaceholder: '持股数量 (如 1000)',
+    resonanceTitle: '多周期大势共振',
+    resonanceMonth: '月线大势',
+    resonanceWeek: '周线波段',
+    resonanceDay: '日线买卖',
+    trendBull: '多头',
+    trendBear: '空头',
+    portfolioMarketValue: '持仓总市值',
+    portfolioTotalPnl: '组合浮动盈亏',
+    portfolioCount: '持仓标的',
+    portfolioStopAlerts: '止损告警',
+    verdict: {
+      buy: '买入',
+      hold: '持有',
+      sell: '卖出',
+      keep: '继续持有',
+      tighten: '收紧',
+      exit: '退出',
+      none: '未判定'
+    },
+    ranking: {
+      title: '今日评分排行',
+      empty: '暂无评分数据'
+    },
     columns: {
       code: '代码',
       name: '名称',
+      industry: '行业',
+      signals: '信号',
       state: '状态',
       note: '备注',
       price: '最新价',
       change: '涨跌',
       turnover: '成交额',
       date: '最新交易日',
-      actions: '操作'
+      actions: '操作',
+      score: 'Score'
+    },
+    allIndustries: '全部行业',
+    board: '板块',
+  },
+  tracking: {
+    openFullscreen: '展开全屏',
+    tabsLabel: '个股追踪分区',
+    tab: { market: '大盘', watchlist: '自选股', pulse: '谁在动', etf: '权重 ETF' },
+    etf: {
+      title: '权重 ETF',
+      caption: '份额截至 {date} · {basis}口径',
+      groupLabel: 'ETF 分类',
+      sortLabel: '排序',
+      sort: { signal: '异动优先', share: '份额变动', multiple: '放量倍数' },
+      group: { broad: '宽基', sector: '行业' },
+      col: {
+        name: '名称',
+        price: '现价',
+        share: '份额变动',
+        multiple: '放量',
+        signal: '信号',
+        observed: '观测日'
+      },
+      signalTitle: '触发异动',
+      footPriceFallback: '* 该只暂无上一份额观测点，此列退回近 5 日涨跌幅',
+      sectorEmpty: '行业池为空。追踪池已扩到 10 只行业 ETF，跑一次份额同步才会有数据。',
+      basis: { quarterly: '季频', unknown: '未知' },
+      signalCount: '异动信号',
+      inflowCount: '份额净增',
+      topMove: '变动最大',
+      openWorkspace: '看全表 →'
     }
   },
   marketDashboard: {
+    auction: {
+      title: '今早怎么开的',
+      caption: '集合竞价 {date} 终态（9:25 撮合完成）',
+      barTitle: '全市场高开 / 平开 / 低开 / 未报价的家数分布',
+      up: '高开 {n}',
+      flat: '平开 {n}',
+      down: '低开 {n}',
+      noQuote: '未报价 {n}',
+      limitOpen: '竞价涨停 {up} · 跌停 {down}',
+      benchmark: '风向标',
+      expand: '看异动榜',
+      col: { name: '标的', open: '竞价', volRatio: '量比', cap: '流通市值' },
+      foot: '异动榜按流通市值 ≥ {cap} 亿过滤 —— 极小市值票的竞价量比不可比，那是流动性噪音'
+    },
     title: '大盘预览',
     back: '返回工作台',
     dataTime: '数据时间',
@@ -7696,21 +7804,72 @@ export default {
     backToWorkbench: '返回',
     refreshFailed: '行情刷新失败，请稍后重试',
     loading: '加载中…',
+    marketState: {
+      title: '市场状态',
+      caption: '五维打分 · 仅供状态参考',
+      notTradable: '综合分不可作为买卖方向信号：逐年回测显示方向反复翻转（2022 -0.52 / 2023 +0.07 / 2024 -0.22 / 2025 +0.33 / 2026 -0.15）。',
+      referenceOnly: '仅供参考',
+      shortTerm: '短期温度',
+      exposure: '仓位暴露参考',
+      expNeutral: '不猜方向',
+      expFollow: '顺势',
+      expContrarian: '逆势',
+      empty: '暂无市场状态数据',
+      temp: {
+        cold: '偏冷',
+        hot: '偏热',
+        neutral: '常温'
+      },
+      regime: {
+        strong: '偏强',
+        neutral: '中性',
+        weak: '偏弱'
+      }
+    },
     etf: {
       title: '权重 ETF',
       caption: '信号 {signal}/{total} · 份额 {date}（季频）',
       captionFallback: '份额未同步 · 仅价格',
       unsynced: '未同步',
       signal: '异动',
-      holdings: '汇金披露持仓：数据接入中'
+      holdings: '汇金披露持仓：巨潮未收录场内 ETF 定期报告，该数据源不可用'
     },
     dragonTiger: {
       title: '龙虎榜',
       caption: '净买入前五 · 全市场',
+      captionCount: '净买入 {n} 条 · {date} · 全市场',
       net: '净买',
       org: '机构',
       empty: '今日暂无数据',
       full: '完整榜单 →'
+    },
+    sectors: {
+      title: '板块动向',
+      caption: '{date} · 按 涨停家数 → 放量倍数 → 涨跌幅 排',
+      tagLabel: '板块分类',
+      failed: '板块数据未就绪',
+      showAll: '展开全部',
+      tag: { industry: '行业', concept: '概念', tszs: '特色', region: '地域' },
+      col: { name: '板块', change: '涨跌幅', volume: '放量', limitUp: '涨停' },
+      foot: '显示 {shown} / {total} 个'
+    },
+    ladder: {
+      title: '连板梯队',
+      caption: '近 {n} 个交易日 · 颜色深浅 = 家数',
+      failed: '连板数据未就绪',
+      level: { two: '2板', three: '3板', four: '4板', five: '5板', six: '6板', seven: '7板+' }
+    },
+    basis: {
+      title: '期股联动 · 股指期货基差',
+      caption: '基差截至 {date}',
+      lagged: '基差截至 {basis}（期货较现货滞后一日）· 现货已至 {spot}',
+      percentile: '5 年分位 {v}%',
+      expand: '看背离',
+      failed: '期货数据未就绪',
+      divergence: '{name} 基差率 vs 现货日涨跌',
+      legendBasis: '基差率',
+      legendSpot: '现货日涨跌',
+      window: '近 {n} 个交易日'
     },
     watchlist: {
       title: '自选股',
@@ -8119,6 +8278,7 @@ export default {
     needKb: '请先选择知识库',
     close: '关闭',
     llmNote: '报告中 7 个定性维度（护城河/滞胀防御/ESG/管理层/股东资金面/估值/风险）由模型判分，其余数值由评分内核计算。报告有效期 30 天。',
+    launchNoAgent: '当前空间里没有能执行 halo.analyze 的 agent，无法生成完整报告。请在智能体设置里启用 HALO。',
     growthSubs: {
       revenue: '营收增长',
       profit: '利润增长',

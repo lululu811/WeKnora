@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 1,
+  "project": "WeKnora 金融菜单合并",
+  "brief": "把大盘预览大屏与「谁在动」合并进个股追踪页。三个候选交付同一份产出物——一份「今天该看什么」的速览：我的持仓哪只在动、龙虎榜谁在被买、国家队进了哪只宽基 ETF。视觉全部沿用现有暖米色纸张体系，候选之间只比「出现在哪里 / 要几步 / 谁在做事」，不比配色。",
+  "round": "01",
+  "serve": {
+    "command": "npm run dev",
+    "cwd": "/Users/chenlei/007_DB/WeKnora/frontend",
+    "url": "http://localhost:5173"
+  },
+  "candidates": [
+    {
+      "id": "baseline",
+      "name": "现状 · 大盘预览大屏",
+      "concept": "收盘后扫一眼的独立全屏大屏：指数条、四张指数小图、市场情绪，底部自选股/龙虎榜/权重ETF 三张速览卡。它不在侧边栏菜单里，返回入口在组件内。",
+      "typography": "衬线标题 + 等宽数字，实际取自 MarketDashboard 的 app-font-display 与 app-font-family-mono",
+      "palette": ["#FAF7F2", "#DC2626", "#047857"],
+      "traits": ["独立全屏路由，不在菜单中", "龙虎榜只有 5 条且第 5 行被裁切", "权重 ETF 只有 8 只、无筛选"],
+      "kind": "image",
+      "source": "baseline-dashboard.png",
+      "baseline": true
+    },
+    {
+      "id": "a",
+      "name": "A · 缩编全景",
+      "concept": "全屏大屏整体缩进侧边栏壳，指数卡 4 张排 2×2，龙虎榜 50 条双列全铺，ETF 全表接在下面。拿到全量不用点任何东西。",
+      "typography": "与现状同一套衬线标题 + 等宽数字，未新造字阶",
+      "palette": ["#FAF7F2", "#DC2626", "#047857"],
+      "traits": ["点击 1 次，页面切换 0 次", "全量在同页，需向下滚约一屏", "不做判断，只呈现"],
+      "kind": "url",
+      "url": "http://localhost:5173/platform/design-lab/finance?variant=a"
+    },
+    {
+      "id": "b",
+      "name": "B · 三块速览",
+      "concept": "大盘 tab 只留指数条、市场情绪、一行信号速览；龙虎榜 50 条与 ETF 全表收进抽屉，点开才展开。",
+      "typography": "与现状同一套衬线标题 + 等宽数字，未新造字阶",
+      "palette": ["#FAF7F2", "#DC2626", "#047857"],
+      "traits": ["一屏读完不滚", "看全量需多点一次", "用户自己翻表"],
+      "kind": "url",
+      "url": "http://localhost:5173/platform/design-lab/finance?variant=b"
+    },
+    {
+      "id": "c",
+      "name": "C · ETF 提级",
+      "concept": "ETF 提到一级 tab 并先给结论，大盘 tab 退成指数条 + 指数卡 + 情绪 + 龙虎榜前三一行摘要。",
+      "typography": "与现状同一套衬线标题 + 等宽数字，未新造字阶",
+      "palette": ["#FAF7F2", "#DC2626", "#047857"],
+      "traits": ["结论先行，决定数降到 0", "大盘 tab 变薄，指数需滚动", "系统替你读表"],
+      "kind": "url",
+      "url": "http://localhost:5173/platform/design-lab/finance?variant=c"
+    },
+    {
+      "id": "c-etf",
+      "name": "C · ETF 工作区",
+      "concept": "C 的 ETF 一级 tab：顶部一句系统结论（2026-06-30 报告期，8 只有份额观测点、0 只份额增加、变动最大 −33.08%），下面是带分类筛选的全表。行业档当前为 0 只并置灰——这是真状态，池子尚未扩。",
+      "typography": "与现状同一套衬线标题 + 等宽数字，未新造字阶",
+      "palette": ["#FAF7F2", "#DC2626", "#047857"],
+      "traits": ["不用自己数 8 行表", "宽基/行业筛选在表上方", "行业档 0 只且置灰，不造假数据"],
+      "kind": "url",
+      "url": "http://localhost:5173/platform/design-lab/finance?variant=c&tab=etf"
+    }
+  ]
+}

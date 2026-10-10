@@ -264,6 +264,36 @@ const router = createRouter({
         component: () => import('../views/design-lab/c/index.vue'),
         meta: { requiresAuth: false, requiresInit: false }
       },
+      // 菜单合并方案对比页（个股追踪 tab 化）。用 ?variant=a|b|c 切换候选，
+      // 三个候选共享同一份真实数据与同一套页面骨架，只比"出现在哪里 / 要几步 /
+      // 谁在做的事"。与 a/b/c 方向样例无关，故单列一条。
+      {
+        path: '/platform/design-lab/finance',
+        name: 'designLabFinance',
+        component: () => import('../views/design-lab/finance/index.vue'),
+        meta: { requiresAuth: false, requiresInit: false }
+      },
+      // 菜单合并后的真实页面（个股追踪四 tab），走一条不鉴权的 dev 路由。
+      //
+      // 为什么需要它：合并后这一页 requiresAuth，而「大盘」与「权重 ETF」两个 tab
+      // 的数据其实全部来自 python-service（不鉴权）。没有这条 dev 路由，
+      // 未登录状态下就没法验收那两个 tab —— 每次验收都要先建号或登录。
+      // 仅 DEV 存在，生产构建里这条路由不存在。
+      {
+        path: '/platform/dev/tracking',
+        name: 'devTracking',
+        component: () => import('@/finance/views/Tracking.vue'),
+        meta: { requiresAuth: false, requiresInit: false }
+      },
+      // 大盘工作台新增三块（板块榜 / 连板梯队 / 期股联动）的 dev 预览。
+      // 与 devTracking 的区别：那一条验的是合并后的页面（有鉴权），
+      // 这一条只验三个组件本身（无鉴权），用于未登录状态下验收。
+      {
+        path: '/platform/design-lab/board',
+        name: 'designLabBoard',
+        component: () => import('../views/design-lab/board/index.vue'),
+        meta: { requiresAuth: false, requiresInit: false }
+      },
     ] : []),
   ],
 });
@@ -319,7 +349,14 @@ let liteDeepLinkRestoreDone = false
 // 启动时：把已注册的外部模块路由动态挂到 /platform 下。
 // 注册发生在 main.ts 顶部 `import '@/finance'` 的副作用，早于 router 创建。
 for (const mod of getRegisteredModules()) {
-  if (mod.routeName && mod.routeComponent) {
+  if (mod.routeRedirect) {
+    router.addRoute('Platform', {
+      path: mod.path,
+      name: mod.routeName,
+      redirect: mod.routeRedirect,
+      meta: { requiresInit: true, requiresAuth: true, ...mod.routeMeta },
+    })
+  } else if (mod.routeName && mod.routeComponent) {
     router.addRoute('Platform', {
       path: mod.path,
       name: mod.routeName,

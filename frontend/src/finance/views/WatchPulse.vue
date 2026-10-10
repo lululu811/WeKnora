@@ -29,9 +29,14 @@
 -->
 <template>
   <main class="wp-page">
-    <!-- ══════ 标题行 ══════ -->
-    <header class="wp-header">
-      <h2 class="wp-title">
+    <!--
+      embedded = 渲染在个股追踪壳（Tracking.vue）的「谁在动」tab 里。
+      标题让给外壳，「重新计算」按钮留着 —— 它是这一屏自己的动作，
+      外壳不知道 python-service 的 /api/finance/pulse，藏掉等于把入口丢了。
+      默认 false 时行为与合并前完全一致（/platform/watch-pulse 仍可直接进）。
+    -->
+    <header class="wp-header" :class="{ 'is-embedded': embedded }">
+      <h2 v-if="!embedded" class="wp-title">
         <t-icon name="chart-bar" size="24px" />
         {{ t('watchPulse.title') }}
       </h2>
@@ -75,6 +80,22 @@
     </div>
 
     <template v-else>
+      <!--
+        技术位置条 —— 让本页能回答**为什么**。
+
+        本页原本只说"谁在动"（放量几倍、涨跌几点），而同样是涨 4%：
+        站在 250 日线上方 3% 和下方 12% 是两件事。缺了这一条，用户看到
+        一片异动只能自己去翻 K 线，而那正是本页想替他省掉的步骤。
+
+        放在异动列表**之上**而不是并入每一行：这一条回答的是"整体处在什么
+        位置"，属于结论性的一层；逐行展开会让每行从 4 个字段涨到 10 个，
+        而那一屏本来是按"异动强度"排序的，混进均线就排不动了。
+      -->
+      <TechnicalStrip
+        :thscodes="watchCodes"
+        :labels="watchLabels"
+      />
+
       <!-- ══════ 元信息 ══════ -->
       <section class="wp-meta">
         <p class="wp-meta__line">
@@ -321,6 +342,7 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import EmptyState from '@/components/EmptyState.vue'
 import { listWatchlist, type WatchItem } from '@/finance/api/watchlist'
+import TechnicalStrip from '@/finance/components/watchlist/TechnicalStrip.vue'
 import {
   getFinanceCalendar,
   getWatchPulse,
@@ -345,6 +367,13 @@ import {
 const { t } = useI18n()
 const router = useRouter()
 
+/**
+ * embedded = 渲染在个股追踪壳（Tracking.vue）的「谁在动」tab 里。
+ * 只影响页头（藏标题），「重新计算」按钮保留 —— 见模板里的说明。
+ */
+const props = withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
+const embedded = computed(() => props.embedded)
+
 /** 日历横条每格最多直接显示几条事件标题，超出折叠成「另有 N 条」。 */
 const CAL_MAX_TITLES = 2
 
@@ -367,6 +396,19 @@ const today = ref(todayYmd())
 const nameByCode = computed(() => {
   const map = new Map<string, string>()
   for (const w of watchlist.value) map.set(toBareCode(w.thscode), w.name)
+  return map
+})
+
+// 技术位置条的两个入参。
+//
+// **必须传带后缀的 thscode**，不能传裸码：`indicators.duckdb` 的 key 是
+// `600519.SH` 这种形态，传裸码一条都匹配不上 —— 而那个接口查不到时返回的是
+// 空字典，不是错误，界面会安安静静地什么都不显示，看起来像"没有数据"而不是
+// "你传错了"。
+const watchCodes = computed(() => watchlist.value.map((w) => w.thscode))
+const watchLabels = computed(() => {
+  const map: Record<string, string> = {}
+  for (const w of watchlist.value) map[w.thscode] = w.name
   return map
 })
 
@@ -525,6 +567,11 @@ onMounted(() => {
   justify-content: space-between;
   gap: 12px;
   flex-shrink: 0;
+}
+
+/* 嵌入态：标题让给外壳，这一行只剩右对齐的「重新计算」，压成一条窄条。 */
+.wp-header.is-embedded {
+  justify-content: flex-end;
 }
 
 .wp-title {

@@ -363,8 +363,12 @@ async def compute_flows(
         )
         if result.get("missing"):
             missing.append({"thscode": code, "name": result.get("name", ""),
+                            "group": entry.get("group") or "broad",
                             "reason": result.get("reason")})
             continue
+        # group 从池子透传到 item：前端按它切「宽基 / 行业」。前端**不复算**
+        # 归类，也不从 name 猜赛道 —— 归类是这份 yaml 的职责。
+        result["group"] = entry.get("group") or "broad"
         items.append(result)
 
     def _sort_key(r: Dict[str, Any]):
@@ -374,10 +378,23 @@ async def compute_flows(
 
     items.sort(key=_sort_key)
 
+    # 分组计数让前端不用自己数，也不用把 industry 混进宽基的分母。
+    by_group: Dict[str, Dict[str, int]] = {}
+    for r in items:
+        g = by_group.setdefault(
+            r.get("group") or "broad", {"included": 0, "signalled": 0}
+        )
+        g["included"] += 1
+        if r.get("signal"):
+            g["signalled"] += 1
+    for m in missing:
+        by_group.setdefault(m.get("group") or "broad", {"included": 0, "signalled": 0})
+
     return {
         "ok": True,
         "trade_date": trade_date,
         "items": items,
         "missing": missing,
         "counts": {"total": len(codes), "included": len(items), "missing": len(missing)},
+        "by_group": by_group,
     }

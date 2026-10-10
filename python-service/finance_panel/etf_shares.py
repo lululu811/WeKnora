@@ -244,7 +244,11 @@ def sync_pool(
 
 
 def load_pool(path: Optional[str] = None) -> List[Dict[str, str]]:
-    """读 `etf_pool.yaml` → `[{code, name, tags}]`。
+    """读 `etf_pool.yaml` → `[{code, name, tags, group}]`。
+
+    读两个段：`pool`（宽基，汇金口径）与 `sector_pool`（行业，补充视野）。
+    **两段必须分开读、不能混成一个列表丢掉分组** —— 前端按 `group` 切筛选，
+    且"宽基里 n 只变了"这个结论的分母只由 `pool` 得出。
 
     YAML 解析失败不抛异常，返回空列表 —— 清单读不出来应该让端点回固定 shape，
     而不是 500。
@@ -261,15 +265,20 @@ def load_pool(path: Optional[str] = None) -> List[Dict[str, str]]:
     except Exception as exc:  # noqa: BLE001
         logger.warning("读取 ETF 追踪池失败 %s: %s", path, exc)
         return []
-    items = data.get("pool") or []
+
     out: List[Dict[str, str]] = []
-    for it in items:
-        if isinstance(it, dict) and it.get("code"):
+    # (段名, 该段的默认 group)。缺 group 字段时用段名兜底，
+    # 这样老清单（只有 pool 段、没有 group）仍按宽基处理，不会静默变空。
+    for section, default_group in (("pool", "broad"), ("sector_pool", "sector")):
+        for it in data.get(section) or []:
+            if not isinstance(it, dict) or not it.get("code"):
+                continue
             out.append(
                 {
                     "code": str(it["code"]).strip(),
                     "name": str(it.get("name") or "").strip(),
                     "tags": list(it.get("tags") or []),
+                    "group": str(it.get("group") or default_group).strip(),
                 }
             )
     return out
