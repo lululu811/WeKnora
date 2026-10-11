@@ -431,7 +431,7 @@ onMounted(load)
 
 .backend-card__badge {
   .provider-card-badge();
-  .provider-card-badge-color(#0052d9);
+  .provider-card-badge-color(var(--td-brand-color));
 }
 
 .backend-card__badge-img {
@@ -445,7 +445,7 @@ onMounted(load)
   .provider-card-badge-color(#c0382b);
 }
 .backend-card--cos .backend-card__badge {
-  .provider-card-badge-color(#0052d9);
+  .provider-card-badge-color(var(--td-brand-color));
 }
 .backend-card--tos .backend-card__badge {
   .provider-card-badge-color(#0089ff);
@@ -640,7 +640,7 @@ onMounted(load)
     border-color: var(--td-brand-color);
     color: var(--td-brand-color);
     font-weight: 500;
-    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+    box-shadow: var(--td-shadow-1);
   }
 }
 
@@ -666,7 +666,7 @@ onMounted(load)
   }
 }
 
-/* TODO 2.2: 7 处色值未收敛（图表/状态/语义不明，保留原值）：0052d9, c0382b, 0089ff, d97706, e55a00, 07a050, ce1126 */
+/* TODO 2.2: 6 处色值未收敛（供应商身份色，保留原值）：c0382b, 0089ff, d97706, e55a00, 07a050, ce1126 */
 </style>
 
 <!--
@@ -679,14 +679,14 @@ onMounted(load)
   box-shadow: inset 0 0 0 1px var(--td-component-stroke);
 }
 
-.storage-backend-drawer--local .setting-drawer__header-icon { background: rgba(70, 70, 70, 0.1); color: var(--td-gray-color-11); }
+.storage-backend-drawer--local .setting-drawer__header-icon { background: color-mix(in srgb, var(--td-text-color-primary) 10%, transparent); color: var(--td-gray-color-11); }
 .storage-backend-drawer--minio .setting-drawer__header-icon { background: rgba(225, 38, 38, 0.12); color: #C0382B; }
-.storage-backend-drawer--cos .setting-drawer__header-icon { background: rgba(0, 82, 217, 0.1); color: #0052D9; }
+.storage-backend-drawer--cos .setting-drawer__header-icon { background: color-mix(in srgb, var(--td-brand-color) 10%, transparent); color: var(--td-brand-color); }
 .storage-backend-drawer--tos .setting-drawer__header-icon { background: rgba(0, 137, 255, 0.12); color: #0089FF; }
 .storage-backend-drawer--s3 .setting-drawer__header-icon { background: rgba(255, 153, 0, 0.12); color: #D97706; }
 .storage-backend-drawer--oss .setting-drawer__header-icon { background: rgba(255, 90, 0, 0.12); color: #E55A00; }
 .storage-backend-drawer--ks3 .setting-drawer__header-icon { background: color-mix(in srgb, var(--td-brand-color) 12%, transparent); color: #07A050; }
 .storage-backend-drawer--obs .setting-drawer__header-icon { background: rgba(206, 17, 38, 0.1); color: #CE1126; }
 
-/* TODO 2.2: 7 处色值未收敛（图表/状态/语义不明，保留原值）：0052d9, c0382b, 0089ff, d97706, e55a00, 07a050, ce1126 */
+/* TODO 2.2: 6 处色值未收敛（供应商身份色，保留原值）：c0382b, 0089ff, d97706, e55a00, 07a050, ce1126 */
 </style>

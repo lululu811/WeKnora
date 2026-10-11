@@ -2502,7 +2502,7 @@ const handleKBEditorSuccess = (kbIdValue: string) => {
 .document-filter-popup .t-popup__content {
   border: 1px solid var(--td-component-stroke);
   border-radius: var(--app-radius-xl);
-  box-shadow: 0 8px 32px rgb(0 0 0 / 10%);
+  box-shadow: var(--td-shadow-3);
 }
 
 </style>

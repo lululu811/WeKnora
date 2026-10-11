@@ -793,7 +793,7 @@ onMounted(async () => {
 
 .provider-card__badge {
   .provider-card-badge();
-  .provider-card-badge-color(#0052d9);
+  .provider-card-badge-color(var(--td-brand-color));
 }
 
 // 真实品牌 logo：白底 + 细边，logo 用 mask-image 染成 currentColor（沿用品牌色）。
@@ -1029,7 +1029,7 @@ onMounted(async () => {
   }
 }
 
-/* TODO 2.2: 9 处色值未收敛（图表/状态/语义不明，保留原值）：0052d9, de5833, 0089ff, 4285f4, 6235bb, 2932e1, 215689, 149e82, 2563eb */
+/* TODO 2.2: 9 处色值未收敛（供应商身份色，保留原值）：de5833, 0089ff, 4285f4, 6235bb, 2932e1, 215689, 149e82, 2563eb, e84335 */
 </style>
 
 <!--
@@ -1073,7 +1073,7 @@ onMounted(async () => {
   color: #215689;
 }
 .websearch-drawer--ollama .setting-drawer__header-icon {
-  background: rgba(70, 70, 70, 0.12);
+  background: color-mix(in srgb, var(--td-text-color-primary) 12%, transparent);
   color: var(--td-gray-color-11);
 }
 .websearch-drawer--keenable .setting-drawer__header-icon {
@@ -1089,5 +1089,5 @@ onMounted(async () => {
   color: #E84335;
 }
 
-/* TODO 2.2: 9 处色值未收敛（图表/状态/语义不明，保留原值）：0052d9, de5833, 0089ff, 4285f4, 6235bb, 2932e1, 215689, 149e82, 2563eb */
+/* TODO 2.2: 9 处色值未收敛（供应商身份色，保留原值）：de5833, 0089ff, 4285f4, 6235bb, 2932e1, 215689, 149e82, 2563eb, e84335 */
 </style>

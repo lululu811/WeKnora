@@ -177,7 +177,7 @@ onMounted(() => {
   border-left: 4px solid var(--td-brand-color);
   background: linear-gradient(135deg,
     var(--td-bg-color-container) 0%,
-    var(--app-brand-subtle, rgba(45, 106, 100, 0.04)) 100%);
+    var(--app-brand-subtle, color-mix(in srgb, var(--td-brand-color) 4%, transparent)) 100%);
 }
 
 .greeting-text {
@@ -338,13 +338,13 @@ onMounted(() => {
   position: relative;
   text-align: center;
   /* 温润现代：赭石点缀 */
-  border-top: 2px solid var(--app-accent-ochre, #B8855E);
+  border-top: 2px solid var(--app-accent-ochre, var(--td-warning-color));
 }
 
 .quote-mark {
   font-family: var(--app-font-display);
   font-size: var(--app-text-display-lg);
-  color: var(--app-accent-ochre, #B8855E);
+  color: var(--app-accent-ochre, var(--td-warning-color));
   line-height: 1;
   margin-bottom: var(--app-space-2);
   opacity: 0.4;

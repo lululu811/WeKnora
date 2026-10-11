@@ -1302,7 +1302,7 @@ watch(keyword, () => { collapsedOrgSections.value = new Set() })
   border-radius: var(--app-radius-sm);
   font-size: var(--app-text-sm);
   font-weight: 500;
-  background: rgba(250, 173, 20, 0.12);
+  background: color-mix(in srgb, var(--td-warning-color) 12%, transparent);
   color: var(--td-warning-color);
   white-space: nowrap;
 }
@@ -1386,7 +1386,7 @@ watch(keyword, () => { collapsedOrgSections.value = new Set() })
   position: fixed;
   inset: 0;
   z-index: 2000;
-  background: rgba(0, 0, 0, 0.5);
+  background: color-mix(in srgb, var(--td-gray-color-14) 55%, transparent);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1401,7 +1401,7 @@ watch(keyword, () => { collapsedOrgSections.value = new Set() })
   max-height: 90vh;
   background: var(--td-bg-color-container);
   border-radius: var(--app-radius-xl);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+  box-shadow: var(--td-shadow-3);
   overflow: hidden;
   display: flex;
   flex-direction: column;

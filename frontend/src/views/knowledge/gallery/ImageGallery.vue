@@ -848,7 +848,7 @@ watch(
 .gallery-toolbar-popup .t-popup__content {
   border: 1px solid var(--td-component-stroke);
   border-radius: var(--app-radius-xl);
-  box-shadow: 0 8px 32px rgb(0 0 0 / 10%);
+  box-shadow: var(--td-shadow-3);
 }
 </style>
 
@@ -1096,7 +1096,7 @@ watch(
     &.active {
       background: var(--td-bg-color-container);
       color: var(--td-text-color-primary);
-      box-shadow: 0 1px 3px rgb(0 0 0 / 8%);
+      box-shadow: var(--td-shadow-1);
     }
 
     &.is-off.active { color: var(--td-error-color); }
@@ -1202,7 +1202,7 @@ watch(
   border: 1px solid var(--td-component-border);
   border-radius: var(--app-radius-md);
   background: var(--td-bg-color-container);
-  box-shadow: 0 1px 2px rgb(0 0 0 / 6%);
+  box-shadow: var(--td-shadow-1);
   color: inherit;
   font: inherit;
   text-align: left;
@@ -1211,7 +1211,7 @@ watch(
 
   &:hover {
     border-color: color-mix(in srgb, var(--td-component-stroke) 55%, var(--td-brand-color));
-    box-shadow: 0 4px 14px rgb(0 0 0 / 7%);
+    box-shadow: var(--td-shadow-2);
 
     .ig-card__thumb img { transform: scale(1.03); }
   }
@@ -1257,7 +1257,7 @@ watch(
     left: 8px;
     padding: 0 6px;
     border-radius: var(--app-radius-xs);
-    background: rgb(0 0 0 / 55%);
+    background: color-mix(in srgb, var(--td-gray-color-14) 55%, transparent);
     color: var(--td-text-color-anti);
     font-size: var(--app-text-xs);
     line-height: 18px;

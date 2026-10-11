@@ -2939,7 +2939,7 @@ watch(() => entries.value.map(e => ({
     padding: 8px 10px;
     font-size: var(--app-text-sm);
     white-space: nowrap;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+    box-shadow: var(--td-shadow-2);
 
     .faq-import-strip__text {
       max-width: 360px;
@@ -2986,7 +2986,7 @@ watch(() => entries.value.map(e => ({
     width: 72px;
     height: 4px;
     border-radius: 2px;
-    background: rgba(0, 0, 0, 0.08);
+    background: color-mix(in srgb, var(--td-text-color-primary) 8%, transparent);
     overflow: hidden;
   }
 
@@ -3035,7 +3035,7 @@ watch(() => entries.value.map(e => ({
     transition: background var(--app-motion-fast) ease, color var(--app-motion-fast) ease;
 
     &:hover {
-      background: rgba(0, 0, 0, 0.06);
+      background: color-mix(in srgb, var(--td-text-color-primary) 6%, transparent);
       color: var(--td-text-color-secondary);
     }
   }
@@ -3063,8 +3063,8 @@ watch(() => entries.value.map(e => ({
   }
 
   &--failed {
-    border-color: rgba(227, 77, 89, 0.3);
-    background: rgba(227, 77, 89, 0.06);
+    border-color: color-mix(in srgb, var(--td-error-color) 30%, transparent);
+    background: color-mix(in srgb, var(--td-error-color) 6%, transparent);
 
     .faq-import-strip__icon {
       color: var(--td-error-color);
@@ -3201,7 +3201,7 @@ watch(() => entries.value.map(e => ({
   border-radius: var(--app-radius-lg);
   background: var(--td-bg-color-container);
   padding: 10px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  box-shadow: var(--td-shadow-1);
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -3289,7 +3289,7 @@ watch(() => entries.value.map(e => ({
   gap: 6px;
   padding: 8px 12px;
   margin: 0 -10px -10px;
-  background: rgba(48, 50, 54, 0.02);
+  background: color-mix(in srgb, var(--td-text-color-primary) 2%, transparent);
   border-top: 1px solid var(--td-component-stroke);
   flex-wrap: nowrap;
 }
@@ -3674,7 +3674,7 @@ watch(() => entries.value.map(e => ({
   position: fixed;
   inset: 0;
   z-index: 1000;
-  background: rgba(0, 0, 0, 0.5);
+  background: color-mix(in srgb, var(--td-gray-color-14) 55%, transparent);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3689,7 +3689,7 @@ watch(() => entries.value.map(e => ({
   max-height: 90vh;
   background: var(--td-bg-color-container);
   border-radius: var(--app-radius-xl);
-  box-shadow: 0 6px 28px rgba(15, 23, 42, 0.08);
+  box-shadow: var(--td-shadow-3);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -4201,7 +4201,7 @@ watch(() => entries.value.map(e => ({
   border: 1px solid var(--td-component-stroke);
   border-radius: var(--app-radius-md);
   transition: all var(--app-motion-base) ease;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  box-shadow: var(--td-shadow-1);
   position: relative;
 
   &.answer-row {
@@ -4223,7 +4223,7 @@ watch(() => entries.value.map(e => ({
     &:hover {
       background: var(--td-warning-color-light);
       border-color: var(--td-warning-color);
-      box-shadow: 0 2px 8px rgba(251, 191, 36, 0.15);
+      box-shadow: 0 2px 8px color-mix(in srgb, var(--td-warning-color) 15%, transparent);
     }
   }
 
@@ -4835,7 +4835,7 @@ watch(() => entries.value.map(e => ({
   background: var(--td-bg-color-container);
   padding: 14px;
   transition: border-color var(--app-motion-base) ease, box-shadow var(--app-motion-base) ease;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  box-shadow: var(--td-shadow-1);
   width: 100%;
   box-sizing: border-box;
   min-width: 0;
@@ -4925,7 +4925,7 @@ watch(() => entries.value.map(e => ({
 
   .matched-text {
     color: var(--td-warning-color-active);
-    background: linear-gradient(90deg, rgba(251, 191, 36, 0.15) 0%, rgba(251, 191, 36, 0.05) 100%);
+    background: linear-gradient(90deg, color-mix(in srgb, var(--td-warning-color) 15%, transparent) 0%, color-mix(in srgb, var(--td-warning-color) 5%, transparent) 100%);
     padding: 1px 6px;
     border-radius: var(--app-radius-xs);
     word-break: break-word;
@@ -5017,7 +5017,7 @@ watch(() => entries.value.map(e => ({
   position: fixed;
   inset: 0;
   z-index: 1000;
-  background: rgba(0, 0, 0, 0.5);
+  background: color-mix(in srgb, var(--td-gray-color-14) 55%, transparent);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -5031,7 +5031,7 @@ watch(() => entries.value.map(e => ({
   max-width: 480px;
   background: var(--td-bg-color-container);
   border-radius: var(--app-radius-xl);
-  box-shadow: 0 6px 28px rgba(15, 23, 42, 0.08);
+  box-shadow: var(--td-shadow-3);
   overflow: hidden;
   display: flex;
   flex-direction: column;

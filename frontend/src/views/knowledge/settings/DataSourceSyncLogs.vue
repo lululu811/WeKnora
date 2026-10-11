@@ -350,7 +350,7 @@ const groupedLogs = computed(() => {
   border-radius: var(--app-radius-xl);
   background: var(--td-bg-color-container);
   border: 1px solid var(--td-border-level-1-color);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+  box-shadow: var(--td-shadow-1);
   display: flex;
   flex-direction: column;
   gap: 4px;

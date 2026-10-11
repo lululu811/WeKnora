@@ -197,7 +197,7 @@ const toggleFold = () => {
             }
 
             &::-webkit-scrollbar-thumb {
-                background: rgba(0, 0, 0, 0.1);
+                background: color-mix(in srgb, var(--td-text-color-primary) 10%, transparent);
                 border-radius: 2px;
             }
         }
@@ -223,16 +223,6 @@ const toggleFold = () => {
     100% {
         transform: scale(1.2);
         opacity: 0;
-    }
-}
-
-html[theme-mode="dark"] {
-    .deep-think {
-        .think-content .content-inner {
-            &::-webkit-scrollbar-thumb {
-                background: rgba(255, 255, 255, 0.15);
-            }
-        }
     }
 }
 </style>

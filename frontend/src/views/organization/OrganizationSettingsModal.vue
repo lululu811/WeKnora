@@ -3018,15 +3018,6 @@ watch(addMemberPopupVisible, (visible) => {
   }
 }
 
-:root[theme-mode='dark'] .org-permissions-popup-overlay .t-popup__content {
-  background: rgba(36, 36, 36, 0.92) !important;
-  border-color: rgba(255, 255, 255, 0.08) !important;
-  box-shadow:
-    0 0 0 0.5px rgba(255, 255, 255, 0.05),
-    0 2px 4px rgba(0, 0, 0, 0.12),
-    0 8px 32px rgba(0, 0, 0, 0.28) !important;
-}
-
 @media (max-width: 480px) {
   .org-permissions-popup-overlay .permissions-compact.permissions-compact--popover .permissions-compact-grid {
     grid-template-columns: 1fr;
@@ -3043,7 +3034,7 @@ watch(addMemberPopupVisible, (visible) => {
     padding: 16px;
     border-radius: var(--app-radius-lg);
     border: 1px solid var(--td-component-stroke);
-    box-shadow: var(--td-shadow-2), 0 8px 24px rgba(15, 23, 42, 0.08);
+    box-shadow: var(--td-shadow-3);
   }
 }
 

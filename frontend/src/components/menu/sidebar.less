@@ -26,8 +26,9 @@
     width: var(--sidebar-width, 260px);
     flex-shrink: 0;
     padding: 8px 6px 6px;
-    // Direction A：侧栏 = 次表面（纸底之上的暖灰陶土面）
-    background: var(--td-bg-color-secondarycontainer);
+    // Direction A：侧栏 = 次表面（纸底之下的暖灰陶土面，亮暗双主题均下沉半档，
+    // 与设置弹窗导航轨同向；--td-bg-color-sidebar 亮色值与次表面相同，仅暗色更沉）
+    background: var(--td-bg-color-sidebar);
     box-sizing: border-box;
     // 不用 100vh：<html> 带了 zoom 缩放，100vh 会按未缩放视口计算后再次缩放，
     // 侧栏就会超出窗口。祖先链（html/body/#app/.main）本身已是 height: 100%。
@@ -291,7 +292,7 @@
         position: sticky;
         top: 0;
         z-index: 2;
-        background: var(--td-bg-color-secondarycontainer);
+        background: var(--td-bg-color-sidebar);
     }
 }
 

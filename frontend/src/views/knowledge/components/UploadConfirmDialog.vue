@@ -1700,7 +1700,7 @@ const handleConfirm = () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.5);
+  background: color-mix(in srgb, var(--td-gray-color-14) 55%, transparent);
   backdrop-filter: blur(4px);
 }
 
@@ -1715,7 +1715,7 @@ const handleConfirm = () => {
   overflow: hidden;
   border-radius: var(--app-radius-xl);
   background: var(--td-bg-color-container);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+  box-shadow: var(--td-shadow-3);
 }
 
 .close-btn {
@@ -2479,10 +2479,7 @@ const handleConfirm = () => {
     border-radius: var(--app-radius-lg) !important;
     background: var(--td-bg-color-container) !important;
     border: 0.5px solid var(--td-component-stroke) !important;
-    box-shadow:
-      0 0 0 0.5px rgba(0, 0, 0, 0.03),
-      0 2px 4px rgba(0, 0, 0, 0.04),
-      0 8px 24px rgba(0, 0, 0, 0.1) !important;
+    box-shadow: var(--td-shadow-3) !important;
   }
 }
 </style>

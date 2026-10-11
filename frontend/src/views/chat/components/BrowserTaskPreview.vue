@@ -153,7 +153,7 @@ onBeforeUnmount(() => { alive = false; document.removeEventListener('visibilityc
   position: absolute; right: 20px; bottom: 16px; width: 320px; max-width: calc(100% - 40px);
   max-height: calc(100% - 24px); box-sizing: border-box; z-index: 5; overflow: auto;
   background: var(--td-bg-color-container); border: 1px solid var(--td-component-stroke);
-  border-radius: var(--app-radius-xl); box-shadow: 0 8px 28px #18252014, 0 2px 6px #18252008;
+  border-radius: var(--app-radius-xl); box-shadow: var(--td-shadow-3);
 }
 .preview-heading {
   display: flex; align-items: center; gap: 8px; min-height: 38px; padding: 0 9px 0 12px;

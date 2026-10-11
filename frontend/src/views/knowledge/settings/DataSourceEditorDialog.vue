@@ -1857,7 +1857,7 @@ const drawerConfirmText = computed(() => {
               >
                 <path
                   d="M10 3L4.5 8.5L2 6"
-                  stroke="#fff"
+                  stroke="var(--td-text-color-anti)"
                   stroke-width="2"
                   stroke-linecap="round"
                   stroke-linejoin="round"
@@ -2899,7 +2899,7 @@ const drawerConfirmText = computed(() => {
   background: var(--td-bg-color-container);
   border-color: var(--td-component-stroke);
   color: var(--td-text-color-primary);
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+  box-shadow: var(--td-shadow-1);
 }
 
 .gitlab-project-list {

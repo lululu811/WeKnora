@@ -130,7 +130,7 @@ const folderPickerVisible = ref(false);
   background: var(--td-bg-color-container);
   border: 1px solid var(--td-component-stroke);
   border-radius: var(--app-radius-md);
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);
+  box-shadow: var(--td-shadow-2);
 }
 
 .batch-bar-left {

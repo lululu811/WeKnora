@@ -1309,7 +1309,7 @@ const handleClose = () => {
     border-color: var(--td-brand-color);
     color: var(--td-brand-color);
     font-weight: 500;
-    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+    box-shadow: var(--td-shadow-1);
   }
 }
 

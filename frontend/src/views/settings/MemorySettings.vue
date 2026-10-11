@@ -1163,10 +1163,7 @@ onMounted(async () => {
     border-radius: var(--app-radius-xl) !important;
     background: var(--td-bg-color-container) !important;
     border: 0.5px solid var(--td-component-stroke) !important;
-    box-shadow:
-      0 0 0 0.5px rgba(0, 0, 0, 0.03),
-      0 2px 4px rgba(0, 0, 0, 0.04),
-      0 8px 24px rgba(0, 0, 0, 0.1) !important;
+    box-shadow: var(--td-shadow-3) !important;
   }
 
   .usage-popup {
@@ -1214,15 +1211,6 @@ onMounted(async () => {
   }
 }
 
-:root[theme-mode='dark'] .memory-usage-popup-overlay .t-popup__content {
-  background: rgba(36, 36, 36, 0.92) !important;
-  border-color: rgba(255, 255, 255, 0.08) !important;
-  box-shadow:
-    0 0 0 0.5px rgba(255, 255, 255, 0.05),
-    0 2px 4px rgba(0, 0, 0, 0.12),
-    0 8px 32px rgba(0, 0, 0, 0.28) !important;
-}
-
 .memory-add-popup-overlay {
   z-index: 3050;
 
@@ -1233,10 +1221,7 @@ onMounted(async () => {
     border-radius: var(--app-radius-xl) !important;
     background: var(--td-bg-color-container) !important;
     border: 0.5px solid var(--td-component-stroke) !important;
-    box-shadow:
-      0 0 0 0.5px rgba(0, 0, 0, 0.03),
-      0 2px 4px rgba(0, 0, 0, 0.04),
-      0 8px 24px rgba(0, 0, 0, 0.1) !important;
+    box-shadow: var(--td-shadow-3) !important;
   }
 
   .add-popup {
@@ -1278,14 +1263,5 @@ onMounted(async () => {
 /* The kind dropdown mounts to body too, above the popup that opened it. */
 .memory-add-kind-popup {
   z-index: 6200;
-}
-
-:root[theme-mode='dark'] .memory-add-popup-overlay .t-popup__content {
-  background: rgba(36, 36, 36, 0.92) !important;
-  border-color: rgba(255, 255, 255, 0.08) !important;
-  box-shadow:
-    0 0 0 0.5px rgba(255, 255, 255, 0.05),
-    0 2px 4px rgba(0, 0, 0, 0.12),
-    0 8px 32px rgba(0, 0, 0, 0.28) !important;
 }
 </style>

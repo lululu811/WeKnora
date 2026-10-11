@@ -509,7 +509,7 @@ const handleAction = (action: 'download' | 'edit' | 'reparse' | 'cancel-parse' |
 
   &.is-stuck {
     border-radius: 0;
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+    box-shadow: var(--td-shadow-1);
   }
 }
 

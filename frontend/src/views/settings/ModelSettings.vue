@@ -1048,12 +1048,12 @@ onMounted(() => {
 
 .model-card__badge {
   .provider-card-badge();
-  .provider-card-badge-color(#0052d9);
+  .provider-card-badge-color(var(--td-brand-color));
 }
 
 // 5 种类型的徽章配色 —— 比原 tag 配色饱和度低一档，避免炫光
 .model-card--chat .model-card__badge {
-  .provider-card-badge-color(#0052d9);
+  .provider-card-badge-color(var(--td-brand-color));
 }
 
 .model-card--embedding .model-card__badge {

@@ -24,7 +24,7 @@
 
     <!-- 凭证失效 -->
     <div v-else-if="credentialState === 'expired'" class="credential-warning">
-      <t-icon name="error-circle" style="font-size: var(--app-text-xl); color: #f97316; flex-shrink: 0; margin-top: 1px;" />
+      <t-icon name="error-circle" style="font-size: var(--app-text-xl); color: var(--td-warning-color); flex-shrink: 0; margin-top: 1px;" />
       <div class="warning-text">
         <strong>{{ $t('settings.weknoraCloud.expired') }}</strong><br />
         {{ reinitReason || $t('settings.weknoraCloud.expiredDefault') }}
@@ -379,9 +379,9 @@ onMounted(async () => {
 
 .credential-warning {
   margin-bottom: 20px;
-  background: #fff7ed;
-  border: 1px solid #fed7aa;
-  border-left: 3px solid #f97316;
+  background: var(--td-warning-color-1);
+  border: 1px solid var(--td-warning-color-2);
+  border-left: 3px solid var(--td-warning-color);
   border-radius: var(--app-radius-sm);
   padding: 12px 16px;
   display: flex;
@@ -390,7 +390,7 @@ onMounted(async () => {
 
   .warning-text {
     font-size: var(--app-text-md);
-    color: #9a3412;
+    color: var(--td-warning-color-8);
     line-height: 1.5;
   }
 }

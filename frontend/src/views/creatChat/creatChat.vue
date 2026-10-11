@@ -642,11 +642,11 @@ async function openProjectDir() {
 }
 
 .md-up {
-    color: var(--md-up, #dc2626);
+    color: var(--md-up, var(--td-error-color));
 }
 
 .md-down {
-    color: var(--md-down, #047857);
+    color: var(--md-down, var(--td-success-color));
 }
 
 .md-flat {

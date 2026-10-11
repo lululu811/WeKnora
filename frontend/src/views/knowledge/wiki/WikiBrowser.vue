@@ -5028,7 +5028,7 @@ onUnmounted(() => {
   &.active {
     color: var(--td-brand-color);
     background: var(--td-bg-color-container);
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+    box-shadow: var(--td-shadow-1);
   }
 
   .t-icon {
@@ -6163,7 +6163,7 @@ onUnmounted(() => {
 }
 
 :deep(.wiki-graph-drawer) {
-  box-shadow: -4px 0 16px rgba(0, 0, 0, 0.08);
+  box-shadow: var(--td-shadow-2);
 }
 
 .graph-search-select {
@@ -6278,7 +6278,7 @@ onUnmounted(() => {
   display: inline-block;
   flex-shrink: 0;
   box-sizing: border-box;
-  border: 2px solid #0052d9;
+  border: 2px solid var(--td-brand-color);
   background: transparent;
 }
 

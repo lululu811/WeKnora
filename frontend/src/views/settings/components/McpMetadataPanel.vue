@@ -255,10 +255,7 @@ onBeforeUnmount(() => { generation++; emit('busy', false); emit('synced', false)
     border-radius: var(--app-radius-xl) !important;
     background: var(--td-bg-color-container) !important;
     border: 0.5px solid var(--td-component-stroke) !important;
-    box-shadow:
-      0 0 0 0.5px rgba(0, 0, 0, 0.03),
-      0 2px 4px rgba(0, 0, 0, 0.04),
-      0 8px 24px rgba(0, 0, 0, 0.1) !important;
+    box-shadow: var(--td-shadow-3) !important;
   }
 
   .server-docs-popup {
@@ -283,10 +280,5 @@ onBeforeUnmount(() => { generation++; emit('busy', false); emit('synced', false)
     white-space: pre-wrap;
     overflow-wrap: anywhere;
   }
-}
-
-:root[theme-mode='dark'] .mcp-server-docs-popup-overlay .t-popup__content {
-  background: rgba(36, 36, 36, 0.92) !important;
-  border-color: rgba(255, 255, 255, 0.08) !important;
 }
 </style>

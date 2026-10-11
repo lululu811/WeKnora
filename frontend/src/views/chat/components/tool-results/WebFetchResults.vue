@@ -297,7 +297,7 @@ const indexKey = (index: number, item: WebFetchResultItem): string => {
   }
 
   &.status-skipped {
-    background: rgba(0, 0, 0, 0.06);
+    background: color-mix(in srgb, var(--td-text-color-primary) 6%, transparent);
     color: var(--td-text-color-secondary);
   }
 

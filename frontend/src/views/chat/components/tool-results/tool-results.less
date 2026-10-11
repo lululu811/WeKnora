@@ -14,7 +14,7 @@
 @card-border: var(--td-component-stroke);
 @card-hover-border: var(--td-brand-color);
 @card-radius: 6px;
-@card-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+@card-shadow: var(--td-shadow-1);
 @card-shadow-hover: 0 2px 6px color-mix(in srgb, var(--td-brand-color) 8%, transparent);
 
 // Animation timing
@@ -37,22 +37,22 @@
   line-height: 1.4;
 
   &.high {
-    background-color: rgba(0, 168, 112, 0.12);
+    background-color: color-mix(in srgb, var(--td-success-color) 12%, transparent);
     color: @relevance-high;
   }
 
   &.medium {
-    background-color: rgba(255, 152, 0, 0.12);
+    background-color: color-mix(in srgb, var(--td-warning-color) 12%, transparent);
     color: var(--td-warning-color);
   }
 
   &.low {
-    background-color: rgba(117, 117, 117, 0.12);
+    background-color: color-mix(in srgb, var(--td-text-color-primary) 12%, transparent);
     color: @relevance-low;
   }
 
   &.weak {
-    background-color: rgba(189, 189, 189, 0.12);
+    background-color: color-mix(in srgb, var(--td-text-color-primary) 12%, transparent);
     color: var(--td-text-color-secondary);
   }
 }

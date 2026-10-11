@@ -1410,7 +1410,7 @@ watch(keyword, () => { collapsedKbSections.value = new Set() })
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.4);
+  background: color-mix(in srgb, var(--td-gray-color-14) 45%, transparent);
   z-index: 1000;
   display: flex;
   justify-content: flex-end;
@@ -1421,7 +1421,7 @@ watch(keyword, () => { collapsedKbSections.value = new Set() })
   max-width: 90vw;
   height: 100%;
   background: var(--td-bg-color-container);
-  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.12);
+  box-shadow: var(--td-shadow-3);
   display: flex;
   flex-direction: column;
   font-family: var(--app-font-family);

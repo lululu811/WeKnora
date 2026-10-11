@@ -24,8 +24,8 @@ defineProps<{ sourceType?: string; fileName: string }>();
   flex: 0 0 32px;
   width: 32px;
   height: 38px;
-  color: #7885ad;
-  &--url { color: #53978e; }
+  color: var(--td-text-color-secondary);
+  &--url { color: var(--td-success-color); }
   > svg { .artifact-file-icon-style(); color: inherit; }
   &__badge {
     position: absolute;

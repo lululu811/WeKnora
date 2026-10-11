@@ -817,7 +817,7 @@ onMounted(loadAll)
 
 .engine-card__badge {
   .provider-card-badge();
-  .provider-card-badge-color(#0052d9);
+  .provider-card-badge-color(var(--td-brand-color));
 }
 
 // 解析引擎徽章配色 —— 内置/官方系绿，外部工具按性质各取一色。
@@ -1136,7 +1136,7 @@ onMounted(loadAll)
   letter-spacing: 0.02em;
 }
 
-/* TODO 2.2: 3 处色值未收敛（图表/状态/语义不明，保留原值）：0052d9, 0089ff, 6235bb */
+/* TODO 2.2: 2 处色值未收敛（供应商身份色，保留原值）：0089ff, 6235bb */
 </style>
 
 <!--
@@ -1153,7 +1153,7 @@ onMounted(loadAll)
   color: var(--td-brand-color);
 }
 .parser-engine-drawer--simple .setting-drawer__header-icon {
-  background: rgba(70, 70, 70, 0.1);
+  background: color-mix(in srgb, var(--td-text-color-primary) 10%, transparent);
   color: var(--td-gray-color-11);
 }
 .parser-engine-drawer--markitdown .setting-drawer__header-icon {
@@ -1168,5 +1168,5 @@ onMounted(loadAll)
   color: #6235BB;
 }
 
-/* TODO 2.2: 3 处色值未收敛（图表/状态/语义不明，保留原值）：0052d9, 0089ff, 6235bb */
+/* TODO 2.2: 2 处色值未收敛（供应商身份色，保留原值）：0089ff, 6235bb */
 </style>

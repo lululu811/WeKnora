@@ -44,6 +44,13 @@
   overscroll-behavior: contain;
 }
 
+// 表单弹层里的输入控件：填充沉半档，与弹层底色拉开可交互层级
+// （暗色下弹层底 ≈ container #2A231C，透明输入框会与底色融为一体）。
+.wk-popover--form .t-input,
+.wk-popover--form .t-textarea__inner {
+  background: var(--td-bg-color-secondarycontainer);
+}
+
 // A quiet option surface, with the brand accent reserved for the small check.
 .t-select-option.t-is-selected:not(.t-is-disabled),
 .t-select-option.t-is-selected:not(.t-is-disabled):hover {

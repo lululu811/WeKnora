@@ -157,10 +157,7 @@ const manage = () => {
   border-radius: var(--app-radius-md) !important;
   background: var(--td-bg-color-container) !important;
   border: 0.5px solid var(--td-component-stroke) !important;
-  box-shadow:
-    0 0 0 0.5px rgba(0, 0, 0, 0.03),
-    0 2px 4px rgba(0, 0, 0, 0.04),
-    0 8px 24px rgba(0, 0, 0, 0.1) !important;
+  box-shadow: var(--td-shadow-2) !important;
 }
 </style>
 <style scoped lang="less">

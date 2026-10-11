@@ -834,7 +834,7 @@ function formatShortTime(iso?: string): string {
 }
 
 .wiki-rev-diff-line--del {
-  background: rgba(213, 73, 65, 0.06);
+  background: color-mix(in srgb, var(--td-error-color) 6%, transparent);
   color: var(--td-text-color-secondary);
 }
 </style>

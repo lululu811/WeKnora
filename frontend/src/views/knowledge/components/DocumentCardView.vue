@@ -682,7 +682,7 @@ const handleAction = (action: 'download' | 'edit' | 'view-trace' | 'reparse' | '
   transition: border-color var(--app-motion-base) ease, box-shadow var(--app-motion-base) ease;
   &:hover {
     border-color: var(--app-selection-border);
-    box-shadow: 0 3px 12px rgba(0, 0, 0, 0.035);
+    box-shadow: var(--td-shadow-1);
   }
 
   &.is-selected { border-color: var(--app-selection-border); background: var(--td-bg-color-container); box-shadow: none; }
@@ -875,7 +875,7 @@ const handleAction = (action: 'download' | 'edit' | 'view-trace' | 'reparse' | '
   background: var(--td-bg-color-container);
   border: 1px solid var(--td-component-stroke);
   border-radius: var(--app-radius-md);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  box-shadow: var(--td-shadow-2);
   font-family: var(--app-font-family);
   transition: opacity var(--app-motion-fast) ease;
   will-change: transform;

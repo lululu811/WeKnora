@@ -454,13 +454,13 @@ watch(
     background: var(--td-bg-color-container);
     text-align: left;
     cursor: pointer;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+    box-shadow: var(--td-shadow-1);
     transition: border-color var(--app-motion-fast) ease, box-shadow var(--app-motion-fast) ease, background var(--app-motion-fast) ease;
 
     &:hover {
       border-color: color-mix(in srgb, var(--td-text-color-primary) 10%, var(--td-component-stroke));
       background: color-mix(in srgb, var(--td-text-color-primary) 4%, var(--td-bg-color-container));
-      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+      box-shadow: var(--td-shadow-2);
     }
 
     &--skeleton {
@@ -506,7 +506,7 @@ watch(
       var(--td-component-stroke)
     );
     border-radius: 4px 14px 14px 14px;
-    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+    box-shadow: var(--td-shadow-1);
   }
 }
 
@@ -596,7 +596,7 @@ watch(
   border-radius: 50%;
   background: var(--td-bg-color-container);
   border: 1px solid var(--td-component-stroke);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--td-shadow-2);
   display: flex;
   align-items: center;
   justify-content: center;

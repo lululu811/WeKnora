@@ -860,7 +860,7 @@ onMounted(async () => {
 
 .store-card__badge {
   .provider-card-badge();
-  .provider-card-badge-color(#0052d9);
+  .provider-card-badge-color(var(--td-brand-color));
 }
 
 // 真实品牌 logo 的渲染：保留每个 engine 类的 color 作为品牌色，
@@ -886,7 +886,7 @@ onMounted(async () => {
   .provider-card-badge-color(#d97706);
 }
 .store-card--postgres .store-card__badge {
-  .provider-card-badge-color(#0052d9);
+  .provider-card-badge-color(var(--td-brand-color));
 }
 .store-card--opensearch .store-card__badge {
   .provider-card-badge-color(#6235bb);
@@ -895,7 +895,7 @@ onMounted(async () => {
   .provider-card-badge-color(#6235bb);
 }
 .store-card--tencent_vectordb .store-card__badge {
-  .provider-card-badge-color(#0052d9);
+  .provider-card-badge-color(var(--td-brand-color));
 }
 .store-card--doris .store-card__badge {
   .provider-card-badge-color(#e55a00);
@@ -1159,7 +1159,7 @@ onMounted(async () => {
   &.unavailable { color: var(--td-error-color); }
 }
 
-/* TODO 2.2: 7 处色值未收敛（图表/状态/语义不明，保留原值）：0052d9, e12626, 0089ff, 07a050, d97706, 6235bb, e55a00 */
+/* TODO 2.2: 6 处色值未收敛（供应商身份色，保留原值）：e12626, 0089ff, 07a050, d97706, 6235bb, e55a00 */
 </style>
 
 <!--
@@ -1195,8 +1195,8 @@ onMounted(async () => {
   color: #D97706;
 }
 .vectorstore-drawer--postgres .setting-drawer__header-icon {
-  background: rgba(0, 82, 217, 0.1);
-  color: #0052D9;
+  background: color-mix(in srgb, var(--td-brand-color) 10%, transparent);
+  color: var(--td-brand-color);
 }
 .vectorstore-drawer--opensearch .setting-drawer__header-icon {
   background: rgba(98, 53, 187, 0.12);
@@ -1207,17 +1207,17 @@ onMounted(async () => {
   color: #6235BB;
 }
 .vectorstore-drawer--tencent_vectordb .setting-drawer__header-icon {
-  background: rgba(0, 82, 217, 0.1);
-  color: #0052D9;
+  background: color-mix(in srgb, var(--td-brand-color) 10%, transparent);
+  color: var(--td-brand-color);
 }
 .vectorstore-drawer--doris .setting-drawer__header-icon {
   background: rgba(255, 90, 0, 0.12);
   color: #E55A00;
 }
 .vectorstore-drawer--sqlite .setting-drawer__header-icon {
-  background: rgba(70, 70, 70, 0.1);
+  background: color-mix(in srgb, var(--td-text-color-primary) 10%, transparent);
   color: var(--td-gray-color-11);
 }
 
-/* TODO 2.2: 7 处色值未收敛（图表/状态/语义不明，保留原值）：0052d9, e12626, 0089ff, 07a050, d97706, 6235bb, e55a00 */
+/* TODO 2.2: 6 处色值未收敛（供应商身份色，保留原值）：e12626, 0089ff, 07a050, d97706, 6235bb, e55a00 */
 </style>

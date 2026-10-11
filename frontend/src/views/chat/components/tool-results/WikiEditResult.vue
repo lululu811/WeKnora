@@ -180,7 +180,7 @@ const headerTitle = computed(() => {
 
     &.created {
       color: var(--td-success-color);
-      background: rgba(0, 168, 112, 0.1);
+      background: color-mix(in srgb, var(--td-success-color) 10%, transparent);
     }
     &.updated {
       color: var(--td-brand-color);
@@ -188,11 +188,11 @@ const headerTitle = computed(() => {
     }
     &.renamed {
       color: var(--td-warning-color);
-      background: rgba(255, 152, 0, 0.1);
+      background: color-mix(in srgb, var(--td-warning-color) 10%, transparent);
     }
     &.deleted {
       color: var(--td-error-color);
-      background: rgba(227, 77, 89, 0.1);
+      background: color-mix(in srgb, var(--td-error-color) 10%, transparent);
     }
   }
 
@@ -212,8 +212,8 @@ const headerTitle = computed(() => {
 
   &.created {
     color: var(--td-success-color);
-    background: rgba(0, 168, 112, 0.1);
-    border: 1px solid rgba(0, 168, 112, 0.2);
+    background: color-mix(in srgb, var(--td-success-color) 10%, transparent);
+    border: 1px solid color-mix(in srgb, var(--td-success-color) 20%, transparent);
   }
   &.updated {
     color: var(--td-brand-color);
@@ -222,13 +222,13 @@ const headerTitle = computed(() => {
   }
   &.renamed {
     color: var(--td-warning-color);
-    background: rgba(255, 152, 0, 0.1);
-    border: 1px solid rgba(255, 152, 0, 0.2);
+    background: color-mix(in srgb, var(--td-warning-color) 10%, transparent);
+    border: 1px solid color-mix(in srgb, var(--td-warning-color) 20%, transparent);
   }
   &.deleted {
     color: var(--td-error-color);
-    background: rgba(227, 77, 89, 0.1);
-    border: 1px solid rgba(227, 77, 89, 0.2);
+    background: color-mix(in srgb, var(--td-error-color) 10%, transparent);
+    border: 1px solid color-mix(in srgb, var(--td-error-color) 20%, transparent);
   }
 }
 
@@ -248,12 +248,12 @@ const headerTitle = computed(() => {
   line-height: 1.5;
 
   &.diff-old {
-    background: rgba(227, 77, 89, 0.06);
+    background: color-mix(in srgb, var(--td-error-color) 6%, transparent);
     color: var(--td-error-color);
     border-bottom: 1px solid @card-border;
   }
   &.diff-new {
-    background: rgba(0, 168, 112, 0.06);
+    background: color-mix(in srgb, var(--td-success-color) 6%, transparent);
     color: var(--td-success-color);
   }
 }

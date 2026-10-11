@@ -87,7 +87,7 @@ const blocks = computed(() => {
   border: 1px solid var(--td-component-stroke);
   border-radius: var(--app-radius-md);
   background: var(--td-bg-color-container);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+  box-shadow: var(--td-shadow-2);
   word-wrap: break-word;
   word-break: break-word;
   overflow: hidden;
@@ -133,7 +133,7 @@ const blocks = computed(() => {
   }
 
   :deep(.search-highlight) {
-    background: rgba(255, 213, 0, 0.35);
+    background: color-mix(in srgb, var(--td-warning-color) 35%, transparent);
     color: inherit;
     padding: 0 1px;
     border-radius: 2px;
