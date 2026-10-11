@@ -25,9 +25,9 @@
                 @click="openAttachmentPreview(att)">
                 <div class="attachment_card_icon">
                     <svg viewBox="0 0 40 48" fill="none" xmlns="http://www.w3.org/2000/svg" width="36" height="44">
-                        <rect width="40" height="48" rx="4" fill="#4A90D9" />
-                        <path d="M8 6h16l8 8v28a2 2 0 01-2 2H8a2 2 0 01-2-2V8a2 2 0 012-2z" fill="#5BA3E8" />
-                        <path d="M24 6l8 8h-6a2 2 0 01-2-2V6z" fill="#3A7BC8" />
+                        <rect class="att-ico-back" width="40" height="48" rx="4" />
+                        <path class="att-ico-page" d="M8 6h16l8 8v28a2 2 0 01-2 2H8a2 2 0 01-2-2V8a2 2 0 012-2z" />
+                        <path class="att-ico-back" d="M24 6l8 8h-6a2 2 0 01-2-2V6z" />
                         <rect x="10" y="20" width="20" height="2" rx="1" fill="white" fill-opacity="0.9" />
                         <rect x="10" y="26" width="20" height="2" rx="1" fill="white" fill-opacity="0.9" />
                         <rect x="10" y="32" width="14" height="2" rx="1" fill="white" fill-opacity="0.9" />
@@ -280,15 +280,16 @@ const closePreImg = () => {
 
 .user_msg {
     width: max-content;
-    max-width: min(76%, 820px);
+    max-width: 72%;
     display: flex;
-    padding: 8px 12px;
+    padding: 9px 14px;
     flex-direction: column;
     justify-content: center;
     align-items: flex-start;
     gap: 4px;
     flex: 1 0 0;
-    border-radius: var(--app-radius-md);
+    border-radius: var(--app-radius-lg);
+    border: 1px solid var(--td-component-stroke);
     background: var(--td-bg-color-secondarycontainer);
     margin-left: auto;
     color: var(--td-text-color-primary);
@@ -336,7 +337,7 @@ const closePreImg = () => {
 
         &:hover {
             border-color: var(--td-brand-color-2);
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+            box-shadow: var(--td-shadow-1);
         }
     }
 
@@ -345,6 +346,19 @@ const closePreImg = () => {
         display: flex;
         align-items: center;
         justify-content: center;
+
+        /* 方向 A 暖色文档图标：陶土底 + 珊瑚页面；暗色下品牌色阶反转，用深陶棕保对比 */
+        .att-ico-back {
+            fill: var(--td-brand-color-6);
+        }
+
+        .att-ico-page {
+            fill: var(--td-brand-color);
+        }
+
+        [theme-mode="dark"] & .att-ico-back {
+            fill: var(--td-brand-color-2);
+        }
     }
 
     .attachment_card_info {

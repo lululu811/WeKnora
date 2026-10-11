@@ -781,7 +781,7 @@ const scrollToItem = (index: number) => {
 }
 
 .mention-item.active .faq-icon {
-  color: var(--weknora-faq-color, #0052d9);
+  color: var(--td-success-color);
 }
 
 .item-main {
@@ -902,9 +902,9 @@ const scrollToItem = (index: number) => {
   color: var(--td-brand-color);
 }
 .mention-detail-content .detail-type-badge.faq {
-  border-color: rgba(0, 82, 217, 0.16);
-  background: rgba(0, 82, 217, 0.08);
-  color: var(--weknora-faq-color, #0052d9);
+  border-color: color-mix(in srgb, var(--td-success-color) 24%, transparent);
+  background: color-mix(in srgb, var(--td-success-color) 10%, transparent);
+  color: var(--td-success-color);
 }
 .mention-detail-content .detail-desc {
   margin: 0 0 8px;

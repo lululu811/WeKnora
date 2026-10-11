@@ -86,3 +86,6 @@ miniprogram/project.private.config.json
 
 # Locally built BrowserSkill runtime and extension bundles
 /artifacts/browserskill/
+
+# UI 升级取证引导页（含本地登录 token，永不提交）
+frontend/public/__ui_lab_bootstrap.html

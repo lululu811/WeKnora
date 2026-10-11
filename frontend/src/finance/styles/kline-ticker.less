@@ -9,42 +9,45 @@
  * 归属：金融模块（finance）。原散落在 chat/index.vue 的全局样式块，
  * 随金融逻辑整体搬到 finance/styles/，被 src/finance/index.ts 入口
  * 作为副作用 import，确保只要金融能力接入主应用，样式就生效。
+ *
+ * 色彩：品牌珊瑚的 color-mix 透明叠加，深浅主题共用一套写法（品牌色在两个
+ * 主题里都是 #E85D3D，深底上同比例叠加自然更亮，无需单列暗色覆盖）。
  */
 .kline-ticker {
     cursor: pointer;
     padding: 0 3px;
     border-radius: var(--app-radius-xs);
-    background: rgba(0, 82, 217, 0.08);
+    background: color-mix(in srgb, var(--td-brand-color) 9%, transparent);
     text-underline-offset: 2px;
     transition: background var(--app-motion-instant) ease;
 
-    /* 深色正文下同一个蓝底几乎看不见，换更亮的蓝并抬高透明度 */
+    /* 深色正文下同一比例几乎看不见，抬高到 16% */
     :root[theme-mode="dark"] & {
-        background: rgba(96, 165, 250, 0.18);
+        background: color-mix(in srgb, var(--td-brand-color) 16%, transparent);
     }
 }
 
 .kline-ticker:hover,
 .kline-ticker:focus {
     /* 悬停时底色加深一档 + 补一条下划线：底色是"这里可点"，下划线是"正要帮你打开" */
-    background: rgba(0, 82, 217, 0.18);
+    background: color-mix(in srgb, var(--td-brand-color) 18%, transparent);
     text-decoration: underline;
     text-decoration-thickness: 1px;
     outline: none;
 
     :root[theme-mode="dark"] & {
-        background: rgba(96, 165, 250, 0.32);
+        background: color-mix(in srgb, var(--td-brand-color) 28%, transparent);
     }
 }
 
 .kline-ticker:focus-visible {
-    background: rgba(0, 82, 217, 0.18);
+    background: color-mix(in srgb, var(--td-brand-color) 18%, transparent);
     text-decoration: underline;
     text-decoration-thickness: 1px;
-    outline: 2px solid rgba(0, 82, 217, 0.4);
+    outline: 2px solid color-mix(in srgb, var(--td-brand-color) 40%, transparent);
     outline-offset: 1px;
 
     :root[theme-mode="dark"] & {
-        background: rgba(96, 165, 250, 0.32);
+        background: color-mix(in srgb, var(--td-brand-color) 28%, transparent);
     }
 }

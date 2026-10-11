@@ -2989,7 +2989,7 @@ const getImgSrc = (url: string) => {
   background: var(--td-bg-color-container);
   border-radius: var(--app-radius-xl);
   border: 1px solid var(--td-component-stroke);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04), 0 8px 16px -4px rgba(0, 0, 0, 0.06);
+  box-shadow: var(--td-shadow-1);
 
   &:focus-within {
     border-color: var(--td-brand-color);
@@ -3048,7 +3048,7 @@ const getImgSrc = (url: string) => {
   height: 8px;
   border-radius: 50%;
   background: var(--td-bg-color-secondarycontainer);
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 0 0 1px var(--td-component-stroke);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3111,7 +3111,7 @@ const getImgSrc = (url: string) => {
 }
 
 .mention-chip--faq .mention-chip__icon-wrap {
-  color: var(--weknora-faq-color, #0052d9);
+  color: var(--td-success-color);
 }
 
 .mention-chip--file {
@@ -3129,11 +3129,11 @@ const getImgSrc = (url: string) => {
 }
 
 .mention-chip--tag .mention-chip__icon-wrap {
-  color: #9f7aea;
+  color: var(--app-accent-purple);
 }
 
 .mention-chip--mcp .mention-chip__icon-wrap {
-  color: #0f766e;
+  color: var(--td-success-color);
 }
 
 .mention-chip--tool .mention-chip__icon-wrap {

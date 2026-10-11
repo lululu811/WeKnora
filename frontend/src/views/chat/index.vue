@@ -27,7 +27,7 @@
         <div class="chat_thread" :style="{ '--chat-composer-height': `${composerHeight}px`, '--chat-scrollbar-gutter': `${scrollbarGutter}px` }">
             <div ref="scrollContainer" class="chat_scroll_box" @scroll="handleScroll">
                 <div class="chat_scroll_content">
-                    <div class="msg_list" :class="{ 'is-embedded': embeddedMode }">
+                    <div ref="msgListEl" class="msg_list" :class="{ 'is-embedded': embeddedMode }">
                         <!-- 消息列表骨架屏 -->
                         <div v-if="historyLoading && messagesList.length === 0" class="msg-skeleton-list">
                             <div class="msg-skeleton msg-skeleton-user">
@@ -256,6 +256,7 @@ import { provideChatReferencesDrawer } from '@/composables/useChatReferencesDraw
 import { provideChatAttachmentPreviewDrawer } from '@/composables/useChatAttachmentPreviewDrawer';
 import { useSessionActivityStore } from '@/stores/sessionActivity';
 import { provideChatSandboxPanel } from '@/composables/useChatSandboxPanel';
+import { useSessionEnter } from '@/composables/useMotion';
 import SandboxSidePanel from '@/components/chat/SandboxSidePanel.vue';
 import AgentWorkspacePanel from '@/components/workspace/AgentWorkspacePanel.vue';
 import { provideAgentWorkspace } from '@/finance/composables/useAgentWorkspace';
@@ -628,9 +629,13 @@ const hasMoreHistory = ref(true);
 // Prefill after THIS session's history load settles. A messagesList watch
 // would fire on the splice-to-empty that starts a session switch and then
 // get clobbered by composer reset / history mount.
+const msgListEl = ref(null)
+const { enter: sessionEnter } = useSessionEnter()
 watch(historyLoading, (loading) => {
     if (loading) return
     applyForkLanding()
+    // 会话切换来路：历史就位后消息列从右侧 8px 淡入（交叉淡化的进入半程）
+    sessionEnter(msgListEl.value)
 }, { flush: 'post' })
 let fullContent = ref('')
 const scrollContainer = ref(null)
@@ -1839,6 +1844,8 @@ onBeforeRouteUpdate((to, from, next) => {
     // 消息列与输入列各自用 --chat-content-inset 做左右对称的留白（窄屏时才可见）。
     padding: 0;
     --chat-content-inset: 20px;
+    // 方向 A「午后的工作室」：消息流与 composer 同宽居中，720px 长文阅读列宽
+    --chat-content-max: 720px;
     box-sizing: border-box;
     flex: 1;
     // The parent .platform-route-outlet is a flex column with min-height:0
@@ -1955,7 +1962,7 @@ onBeforeRouteUpdate((to, from, next) => {
     height: 24px;
     padding: 0;
     border: 0;
-    border-radius: 5px;
+    border-radius: var(--app-radius-sm);
     color: var(--td-text-color-placeholder);
     background: transparent;
     cursor: pointer;
@@ -1983,11 +1990,11 @@ onBeforeRouteUpdate((to, from, next) => {
     scroll-padding-bottom: var(--chat-composer-height, 0px);
     scrollbar-gutter: auto;
     scrollbar-width: thin;
-    scrollbar-color: rgba(148, 163, 184, 0.35) transparent;
+    scrollbar-color: color-mix(in srgb, var(--td-text-color-secondary) 30%, transparent) transparent;
 
     &:hover,
     &:focus-within {
-        scrollbar-color: rgba(100, 116, 139, 0.65) transparent;
+        scrollbar-color: color-mix(in srgb, var(--td-text-color-secondary) 55%, transparent) transparent;
     }
 
     &::-webkit-scrollbar {
@@ -2000,13 +2007,13 @@ onBeforeRouteUpdate((to, from, next) => {
 
     &::-webkit-scrollbar-thumb {
         border-radius: var(--app-radius-pill);
-        background: rgba(148, 163, 184, 0.35);
+        background: color-mix(in srgb, var(--td-text-color-secondary) 30%, transparent);
         transition: background-color var(--app-motion-base) ease;
     }
 
     &:hover::-webkit-scrollbar-thumb,
     &:focus-within::-webkit-scrollbar-thumb {
-        background: rgba(100, 116, 139, 0.65);
+        background: color-mix(in srgb, var(--td-text-color-secondary) 55%, transparent);
     }
 }
 
@@ -2032,7 +2039,8 @@ onBeforeRouteUpdate((to, from, next) => {
     right: var(--chat-scrollbar-gutter, 0px);
     z-index: 12;
     padding: 16px 0 max(8px, env(safe-area-inset-bottom));
-    background: var(--td-bg-color-container);
+    /* 方向 A：composer 上缘渐隐，消息从下方淡入而不是被硬边切断（与页面基底同色） */
+    background: linear-gradient(to top, var(--td-bg-color-page) 72%, transparent);
 }
 
 .is-embedded .chat_composer {
@@ -2051,8 +2059,8 @@ onBeforeRouteUpdate((to, from, next) => {
 
 .scroll-to-bottom-btn {
     position: absolute;
-    left: 50%;
-    transform: translateX(-50%);
+    /* 放在栏右水沟：720 栏心收窄后，居中会骑在正文文字上 */
+    right: 20px;
     bottom: calc(100% + 8px);
     z-index: 10;
     width: 32px;
@@ -2060,7 +2068,7 @@ onBeforeRouteUpdate((to, from, next) => {
     border-radius: 50%;
     background: var(--td-bg-color-container);
     border: 1px solid var(--td-component-stroke);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    box-shadow: var(--td-shadow-1);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -2071,11 +2079,11 @@ onBeforeRouteUpdate((to, from, next) => {
     &:hover {
         background: var(--td-bg-color-container-hover);
         color: var(--td-text-color-primary);
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        box-shadow: var(--td-shadow-2);
     }
 
     &:active {
-        transform: translateX(-50%) scale(0.92);
+        transform: scale(0.92);
     }
 }
 
@@ -2087,7 +2095,7 @@ onBeforeRouteUpdate((to, from, next) => {
 .scroll-btn-fade-enter-from,
 .scroll-btn-fade-leave-to {
     opacity: 0;
-    transform: translateX(-50%) translateY(8px);
+    transform: translateY(8px);
 }
 
 @keyframes contentFadeIn {
@@ -2106,7 +2114,7 @@ onBeforeRouteUpdate((to, from, next) => {
     display: flex;
     flex-direction: column;
     gap: 20px;
-    max-width: 960px;
+    max-width: var(--chat-content-max, 720px);
     padding: 16px 0;
     animation: contentFadeIn 0.3s ease-out;
 }
@@ -2128,13 +2136,13 @@ onBeforeRouteUpdate((to, from, next) => {
     flex-shrink: 0;
     margin: 0 auto;
     width: 100%;
-    max-width: 960px;
+    max-width: var(--chat-content-max, 720px);
     box-sizing: border-box;
     position: relative;
 
     &:not(.is-embedded) {
         padding: 0 var(--chat-content-inset, 20px);
-        max-width: calc(960px + 2 * var(--chat-content-inset, 20px));
+        max-width: calc(var(--chat-content-max, 720px) + 2 * var(--chat-content-inset, 20px));
     }
 
     &.is-embedded {
@@ -2152,7 +2160,7 @@ onBeforeRouteUpdate((to, from, next) => {
     display: flex;
     flex-direction: column;
     gap: 16px;
-    max-width: 960px;
+    max-width: var(--chat-content-max, 720px);
     flex: 1;
     margin: 0 auto;
     width: 100%;
@@ -2160,7 +2168,7 @@ onBeforeRouteUpdate((to, from, next) => {
 
     &:not(.is-embedded) {
         padding: 0 var(--chat-content-inset, 20px);
-        max-width: calc(960px + 2 * var(--chat-content-inset, 20px));
+        max-width: calc(var(--chat-content-max, 720px) + 2 * var(--chat-content-inset, 20px));
     }
 
     /*

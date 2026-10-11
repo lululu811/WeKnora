@@ -136,7 +136,8 @@ const onClick = () => {
   }
 
   &.disabled {
-    background-color: var(--td-success-color-light);
+    /* 不可用时仍站在珊瑚家族里（淡化珊瑚），不让青绿冒充主行动色 */
+    background-color: var(--td-brand-color-disabled);
     cursor: not-allowed;
   }
 }

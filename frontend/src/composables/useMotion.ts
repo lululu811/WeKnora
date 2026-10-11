@@ -64,8 +64,8 @@ export function useSendFlight(options: {
             top: ${source.getBoundingClientRect().top + 14}px;
             padding: 6px 10px;
             border-radius: 8px;
-            background: var(--dl-surface, #F3EAD9);
-            color: var(--dl-ink-2, #8A7B6D);
+            background: var(--td-bg-color-secondarycontainer, #F3EAD9);
+            color: var(--td-text-color-secondary, #8A7B6D);
             font-size: 13px;
             line-height: 18px;
             white-space: nowrap;
@@ -129,6 +129,29 @@ export function useSessionTransition(options?: {
     }
 
     return { transition }
+}
+
+/**
+ * Session enter: the enter half of the session cross-fade, for reactive flows
+ * where the leave half is the skeleton/empty swap rather than a manual update.
+ * Slides the message column in from 8px right when history finishes loading.
+ */
+export function useSessionEnter(options?: {
+    duration?: number
+}) {
+    const reduced = useReducedMotion()
+    const duration = (options?.duration ?? 180) / 1000
+
+    const enter = (el: HTMLElement | null) => {
+        if (reduced.value || !el) return
+        animate(
+            el,
+            { opacity: [0, 1], x: [8, 0] },
+            { duration, ease: [0.16, 1, 0.3, 1] }
+        )
+    }
+
+    return { enter }
 }
 
 /**

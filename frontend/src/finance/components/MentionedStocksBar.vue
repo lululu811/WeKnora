@@ -257,12 +257,7 @@ const handleAddToPool = async (stock: MentionedStock) => {
   background: var(--td-bg-color-secondarycontainer);
   border: 1px solid var(--td-component-stroke);
   border-radius: var(--app-radius-md);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
-
-  :root[theme-mode="dark"] & {
-    background: rgba(30, 41, 59, 0.5);
-    border-color: rgba(51, 65, 85, 0.6);
-  }
+  box-shadow: var(--td-shadow-1);
 }
 
 .stocks-bar__label {
@@ -370,7 +365,7 @@ const handleAddToPool = async (stock: MentionedStock) => {
     border-color: var(--td-brand-color);
     background: var(--td-brand-color-light);
     transform: translateY(-1px);
-    box-shadow: 0 2px 6px rgba(0, 82, 217, 0.15);
+    box-shadow: 0 2px 6px color-mix(in srgb, var(--td-brand-color) 18%, transparent);
 
     .stock-chip__action {
       color: var(--td-brand-color);
