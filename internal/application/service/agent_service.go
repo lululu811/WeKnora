@@ -6,9 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
-	"path/filepath"
-	"slices"
 	"strings"
 
 	"github.com/Tencent/WeKnora/internal/agent"
@@ -26,6 +23,7 @@ import (
 	"github.com/Tencent/WeKnora/internal/agent/tools/hithink_finance/query"
 	"github.com/Tencent/WeKnora/internal/agent/tools/hithink_finance/special"
 	"github.com/Tencent/WeKnora/internal/agent/tools/zettaranc"
+	"github.com/Tencent/WeKnora/internal/application/attachment"
 	"github.com/Tencent/WeKnora/internal/application/repository"
 	"github.com/Tencent/WeKnora/internal/browserskill"
 	"github.com/Tencent/WeKnora/internal/config"
@@ -253,6 +251,7 @@ func (s *agentService) CreateAgentEngine(
 	s.registerSandboxShellIfAllowed(ctx, toolRegistry, sessionID, config)
 	s.registerSandboxFileTools(ctx, toolRegistry, sessionID, config)
 	s.registerWebPageFiles(ctx, toolRegistry, config, sessionID, assistantMessageID)
+	attachmentReader := s.registerAttachmentReader(ctx, toolRegistry, config, sessionID)
 	// Advertise cached service summaries independently of @mentions. Concrete
 	// tool definitions are published after describe, before the next model request.
 	toolRegistry.PrepareMCPTools(ctx)
@@ -285,9 +284,18 @@ func (s *agentService) CreateAgentEngine(
 	// Vision chat models receive the original images after the tool replies.
 	if config.VLMModelID != "" {
 		if vlmModel, err := s.modelService.GetVLMModel(ctx, config.VLMModelID); err == nil {
-			engine.SetImageDescriber(func(ctx context.Context, imgBytes []byte, prompt string) (string, error) {
+			describe := func(ctx context.Context, imgBytes []byte, prompt string) (string, error) {
 				return vlmModel.Predict(ctx, [][]byte{imgBytes}, prompt)
-			})
+			}
+			engine.SetImageDescriber(describe)
+			if attachmentReader != nil && !config.ChatModelSupportsVision {
+				tenantID, _ := types.SandboxTenantIDFromContext(ctx)
+				attachmentReader.Images = &attachment.ImageReader{
+					Model: config.VLMModelID, Describe: describe,
+					Cache: repository.NewAttachmentDescriptionRepository(s.db, tenantID),
+				}
+			}
+
 			logger.Infof(ctx, "VLM image describer set for tool result analysis (model: %s)", config.VLMModelID)
 		} else {
 			logger.Warnf(ctx, "Failed to load VLM model %s for tool image fallback: %v", config.VLMModelID, err)
@@ -575,40 +583,20 @@ func (s *agentService) registerSandboxShellIfAllowed(
 	}
 	sandboxMgr, err := s.resolveWorkspaceSandbox(ctx, sessionID, config)
 	if err != nil {
-		// Fail closed. An unresolved backend says nothing about which machine
-		// this run belongs to, so it is not a licence to fall back to the host.
 		logger.Warnf(ctx, "Failed to resolve sandbox for shell_exec: %v", err)
 		return
 	}
-
-	if sandboxMgr != nil && sandboxMgr.GetType() != sandbox.SandboxTypeDisabled {
-		// Remote backends keep the skills entitlement: a shell there only exists
-		// to serve skill scripts, unless the agent declares shell_exec in its own
-		// AllowedTools — that is how a general-purpose agent opts in without
-		// turning skills on for the whole tenant. The host backend IS the
-		// feature, so gating it on skills would leave Lite with a sandbox nobody
-		// can reach.
-		if sandboxMgr.GetType() != sandbox.SandboxTypeHost &&
-			!config.SkillsEnabled && !config.SkillInstallMode() &&
-			!slices.Contains(config.AllowedTools, tools.ToolShellExec) {
-			return
-		}
-		s.registerSandboxShellTool(ctx, toolRegistry, sandboxMgr, config)
+	if sandboxMgr == nil {
 		return
 	}
-
-	// No usable sandbox (script execution off for this workspace). An agent that
-	// explicitly declares shell_exec still gets a shell, scoped to a per-session
-	// directory under the OS temp root rather than the host filesystem.
-	if slices.Contains(config.AllowedTools, tools.ToolShellExec) {
-		workDir := filepath.Join(os.TempDir(), "weknora_sessions", sessionID)
-		executor := tools.NewLocalShellExecutor(workDir)
-		resolver := s.userEnvResolver(ctx, config)
-		toolRegistry.RegisterTool(
-			tools.NewShellExecTool(executor, resolver).WithEnvCapture(s.skillEnvCapture(config)),
-		)
-		logger.Infof(ctx, "Registered local shell_exec tool for session: %s", sessionID)
+	// Remote backends keep the skills entitlement: a shell there only exists
+	// to serve skill scripts. The host backend IS the feature, so gating it on
+	// skills would leave Lite with a sandbox nobody can reach.
+	if sandboxMgr.GetType() != sandbox.SandboxTypeHost &&
+		!config.SkillsEnabled && !config.SkillInstallMode() {
+		return
 	}
+	s.registerSandboxShellTool(ctx, toolRegistry, sandboxMgr, config)
 }
 
 // resolveOpts is every resolve option this run is entitled to. Only the
@@ -1064,17 +1052,11 @@ func (s *agentService) registerTools(
 	//   - We still *filter out* tools whose capability prerequisites are missing
 	//     (no KB in scope, no Wiki-capable KB, etc.) so the LLM can't call tools
 	//     that would error at runtime.
-	//   - Legacy agents without AllowedTools fall back to DefaultAllowedTools().
-	var allowedTools []string
-	if len(config.AllowedTools) > 0 {
-		// Retired retrieval tool names in stored configs map onto their
-		// successors here, so no data migration is needed.
-		allowedTools = tools.NormalizeAllowedTools(config.AllowedTools)
-		logger.Infof(ctx, "Using custom allowed tools from config: %v", allowedTools)
-	} else {
-		allowedTools = tools.DefaultAllowedTools()
-		logger.Infof(ctx, "Using default allowed tools: %v", allowedTools)
-	}
+	//   - Agents whose AllowedTools was never set fall back to
+	//     DefaultAllowedTools(); an empty list means no built-in tools.
+	//     tools.EffectiveAllowedTools also rewrites retired names.
+	allowedTools := tools.EffectiveAllowedTools(config.AllowedTools)
+	logger.Infof(ctx, "Using allowed tools: %v (set in config: %v)", allowedTools, config.AllowedTools != nil)
 	if config.SharedAgentReadOnly {
 		allowedTools = withoutWikiWriteTools(allowedTools)
 	}
@@ -1271,6 +1253,12 @@ func (s *agentService) registerTools(
 			toolToRegister = tools.NewSequentialThinkingTool()
 		case tools.ToolTodoWrite:
 			toolToRegister = tools.NewTodoWriteTool()
+		case tools.ToolAskUser:
+			asker, ok := s.toolApprovalGate.(approval.UserAsker)
+			if !ok || asker == nil {
+				continue
+			}
+			toolToRegister = tools.NewAskUserTool(asker)
 		case tools.ToolSearchKnowledge:
 			toolToRegister = tools.NewSearchKnowledgeTool(
 				s.knowledgeBaseService,
@@ -1279,7 +1267,7 @@ func (s *agentService) registerTools(
 				config.SearchTargets,
 				rerankModel,
 				s.cfg,
-			)
+			).WithContextImages(config.ChatModelSupportsVision)
 		case tools.ToolReadDocument:
 			toolToRegister = tools.NewReadDocumentTool(s.knowledgeService, s.chunkService, config.SearchTargets)
 		case tools.ToolListDocuments:

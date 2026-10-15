@@ -27,8 +27,8 @@
     </button>
 
     <div class="card-header">
+      <KbTypeAvatar :type="kb.type" />
       <span class="card-title" :title="kb.name">
-        <KbWikiBadge v-if="isWiki" />
         <span class="card-title-text">{{ kb.name }}</span>
       </span>
 
@@ -118,7 +118,7 @@
     </div>
 
     <div class="card-content">
-      <div class="card-description" :title="kb.description || $t('knowledgeBase.noDescription')">
+      <div class="card-description" :class="{ 'is-empty': !kb.description }" :title="kb.description || $t('knowledgeBase.noDescription')">
         {{ kb.description || $t('knowledgeBase.noDescription') }}
       </div>
     </div>
@@ -133,6 +133,9 @@
               <t-icon v-if="isMineMode && kb.isProcessing" name="loading" size="12px" class="processing-icon" />
             </div>
           </t-tooltip>
+          <div v-if="isWiki" class="feature-badge wiki">
+            <KbWikiBadge />
+          </div>
           <t-tooltip v-if="showKnowledgeGraph" :content="$t('knowledgeList.features.knowledgeGraph')" placement="top">
             <div class="feature-badge kg"><t-icon name="relation" size="14px" /></div>
           </t-tooltip>
@@ -169,6 +172,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import KbWikiBadge from '../components/KbWikiBadge.vue'
+import KbTypeAvatar from '../components/KbTypeAvatar.vue'
 import ResourceOriginBadge from '@/components/ResourceOriginBadge.vue'
 import { isInitialized, isWikiKb, type KB, type KbCardMode } from './kbList.types'
 
@@ -413,6 +417,15 @@ function onTrackedMenuVisible(visible: boolean) {
     .processing-icon {
       animation: wk-spin 1s linear infinite;
     }
+  }
+
+  &.wiki :deep(.kb-wiki-badge) {
+    color: var(--app-accent-teal);
+  }
+
+  :deep(.kb-wiki-badge svg) {
+    width: 14px;
+    height: 14px;
   }
 
   &.kg {

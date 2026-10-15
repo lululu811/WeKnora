@@ -31,29 +31,32 @@ var versionedSQLiteTables = []string{
 	"browser_task_interruptions",
 	"fork_snapshot_leases",
 	"mcp_endpoints",
+	"mcp_metadata",
 	"message_artifacts",
 	"tenant_skills",
 	"tenant_skill_snapshots",
 	"tenant_skill_catalog",
 	"tenant_user_env_vars",
+	"agent_prompts",
+	"agent_run_suspensions",
 	"stock_watches",
 	"stock_watch_events",
 	"stock_watch_conditions",
 	"stock_watch_notifications",
-	"mcp_metadata",
 }
 
 // versionedSQLiteColumns maps each existing table to the columns that the
 // versioned migrations add and the SQLite baseline was missing.
 var versionedSQLiteColumns = map[string][]string{
-	"model_catalog_configs": {"version", "overlay", "history", "updated_by", "updated_at"},        // 000031
-	"memory_subjects":       {"extraction_state"},                                                 // 000094
-	"memory_items":          {"replaces_id"},                                                      // 000094
-	"tenants":               {"api_principal_config"},                                             // 000064
-	"users":                 {"is_system_admin"},                                                  // 000053
-	"knowledges":            {"pending_subtasks_count", "profile"},                                // 000056, 000101
-	"knowledge_bases":       {"profile_config", "generated_profile"},                              // 000101
-	"messages":              {"attachments", "usage", "sandbox_checkpoint", "context_checkpoint"}, // 000034/085/097/105
+	"model_catalog_configs": {"version", "overlay", "history", "updated_by", "updated_at"}, // 000031
+	"memory_subjects":       {"extraction_state"},                                          // 000094
+	"memory_items":          {"replaces_id"},                                               // 000094
+	"tenants":               {"api_principal_config"},                                      // 000064
+	"users":                 {"is_system_admin"},                                           // 000053
+	"knowledges":            {"pending_subtasks_count", "profile"},                         // 000056, 000101
+	"knowledge_bases":       {"profile_config", "generated_profile"},                       // 000101
+	// 000034/085/097/105/119
+	"messages": {"attachments", "usage", "sandbox_checkpoint", "context_checkpoint", "run_state"},
 	"sessions": {
 		"parent_session_id", "forked_from_message_id", "fork_bootstrap", // 000097
 		"sandbox_config_tenant_id", // 000027
@@ -65,6 +68,7 @@ var versionedSQLiteColumns = map[string][]string{
 	"chunks":             {"source_locators"},                // 000033
 	"mcp_oauth_tokens":   {"principal_type", "principal_id"}, // 000064
 	"mcp_tool_approvals": {"enabled"},                        // 000091
+	"mcp_services":       {"usage_instructions"},             // 000092
 	"message_artifacts":  {"deleted_at"},                     // 000107
 	"tenant_skills": {
 		"envs", "served", "catalog_id", "install_session_id", "install_message_id",
@@ -73,28 +77,31 @@ var versionedSQLiteColumns = map[string][]string{
 	"tenant_user_env_vars": {
 		"principal_type", "principal_id", "sandbox_config_id", "skill_id", "name", "value",
 	}, // 000028
-	"stock_watches":      {"state", "note"},      // 000035
-	"stock_watch_events": {"eval_date"},          // 000037
-	"mcp_services":       {"usage_instructions"}, // 000041
-	"stock_watch_diaries": {"final_score", "rank", "scores"}, // 000042
+	"stock_watches":       {"state", "note"},                 // 000039
+	"stock_watch_events":  {"eval_date"},                     // 000041
+	"stock_watch_diaries": {"final_score", "rank", "scores"}, // 000045
 }
 
 // expectedSQLiteMigrationVersion is the version every SQLite migration run must
 // land on.
 //
 // It is hand-maintained, which has already cost one red suite: it was last
-// bumped 33 -> 37, and then 000038_stock_watch_note_widen and
-// 000039_stock_watch_diaries were added without touching it, so three tests in
-// this file failed with "expected: 37, actual: 39". The expensive part is not
-// the number — it is that a stale constant is indistinguishable from a real
-// migration regression in the failure output, so the red suite hides actual
-// breakage.
+// bumped 33 -> 37, and then two local migrations were added without touching
+// it, so three tests in this file failed with "expected: 37, actual: 39". The
+// expensive part is not the number — it is that a stale constant is
+// indistinguishable from a real migration regression in the failure output, so
+// the red suite hides actual breakage.
 //
 // TestExpectedSQLiteMigrationVersionMatchesDisk pins this constant to the
 // migrations directory. The constant stays a constant (readable, greppable,
 // and still the thing the assertions below compare against); what changes is
 // that drifting from disk now fails loudly and names the number to write.
-const expectedSQLiteMigrationVersion = 42
+//
+// The 2026-10-15 upstream merge renumbered the local SQLite migrations to
+// "upstream max + 1", because upstream shipped 000034..000037 of its own:
+// the local stock-watch and tenant-members migrations now occupy
+// 000038..000045, which makes 45 the high-water mark on disk.
+const expectedSQLiteMigrationVersion = 45
 
 func TestSQLiteMigrationsCreateVersionedSchema(t *testing.T) {
 	repoRoot := sqliteRepoRoot(t)
@@ -125,6 +132,8 @@ func TestSQLiteMigrationsCreateVersionedSchema(t *testing.T) {
 
 	require.True(t, sqliteIndexExists(t, db, "idx_messages_session_created_id"),
 		"SQLite migrations must add the session/created_at index") // 000106
+	require.True(t, sqliteIndexExists(t, db, "idx_messages_live_attachments"),
+		"SQLite migrations must index live user message references")
 	assertSQLiteAgentHistoryQueriesUseTheIndex(t, db)
 
 	var catalogVersion int

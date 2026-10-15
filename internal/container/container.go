@@ -39,6 +39,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/Tencent/WeKnora/internal/agent/approval"
+	"github.com/Tencent/WeKnora/internal/agent/hitl"
 	"github.com/Tencent/WeKnora/internal/alertnotify"
 	"github.com/Tencent/WeKnora/internal/application/repository"
 	dorisRepo "github.com/Tencent/WeKnora/internal/application/repository/retriever/doris"
@@ -87,6 +88,7 @@ import (
 	"github.com/Tencent/WeKnora/internal/im/wechat"
 	"github.com/Tencent/WeKnora/internal/im/wecom"
 	"github.com/Tencent/WeKnora/internal/im/yunzhijia"
+	"github.com/Tencent/WeKnora/internal/industry"
 	"github.com/Tencent/WeKnora/internal/infrastructure/docparser"
 	infra_web_search "github.com/Tencent/WeKnora/internal/infrastructure/web_search"
 	"github.com/Tencent/WeKnora/internal/logger"
@@ -97,7 +99,6 @@ import (
 	"github.com/Tencent/WeKnora/internal/models/limiter" // register built-in vendors
 	"github.com/Tencent/WeKnora/internal/models/utils/ollama"
 	"github.com/Tencent/WeKnora/internal/quoteclient"
-	"github.com/Tencent/WeKnora/internal/industry"
 	"github.com/Tencent/WeKnora/internal/router"
 	"github.com/Tencent/WeKnora/internal/sandbox"
 	"github.com/Tencent/WeKnora/internal/storageallowlist"
@@ -184,6 +185,8 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(neo4jRepo.NewNeo4jRepository))
 	must(container.Provide(repository.NewMCPServiceRepository))
 	must(container.Provide(repository.NewMCPToolApprovalRepository))
+	must(container.Provide(repository.NewAgentPromptRepository))
+	must(container.Provide(repository.NewAgentRunSuspensionRepository))
 	must(container.Provide(repository.NewMCPOAuthRepository))
 	must(container.Provide(repository.NewTenantSandboxConfigRepository))
 	must(container.Provide(repository.NewTenantSkillRepository))
@@ -339,8 +342,24 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	logger.Debugf(ctx, "[Container] Registering event bus and agent service...")
 	must(container.Provide(event.NewEventBus))
 	must(container.Provide(service.NewSessionSandboxPinner))
-	must(container.Provide(func(cfg *config.Config, s interfaces.MCPToolApprovalService, rdb *redis.Client) *approval.Gate {
-		return approval.NewGate(cfg, &approval.Adapter{Svc: s}, rdb)
+	must(container.Provide(func(
+		cfg *config.Config,
+		prompts interfaces.AgentPromptRepository,
+		suspensions interfaces.AgentRunSuspensionRepository,
+		rdb *redis.Client,
+	) *hitl.Broker {
+		opts := []hitl.Option{hitl.WithSuspensionStore(suspensions)}
+		if cfg != nil && cfg.Agent != nil {
+			opts = append(opts, hitl.WithSuspendExpiry(cfg.Agent.PromptExpiry()))
+		}
+		return hitl.NewBroker(prompts, rdb, opts...)
+	}))
+	must(container.Provide(service.NewSuspendedRunService))
+	must(container.Invoke(startAgentPromptReaper))
+	must(container.Provide(func(
+		cfg *config.Config, s interfaces.MCPToolApprovalService, broker *hitl.Broker,
+	) *approval.Gate {
+		return approval.NewGate(cfg, &approval.Adapter{Svc: s}, broker)
 	}))
 	// Expose Gate as MCPApproval interface so AgentService and others can depend on the abstraction.
 	must(container.Provide(func(g *approval.Gate) approval.MCPApproval { return g }))
@@ -645,6 +664,14 @@ func BuildContainer(container *dig.Container) *dig.Container {
 		agents interfaces.AgentShareService,
 	) *handler.MCPServiceHandler {
 		return handler.NewMCPServiceHandler(mcpService, toolApprovals, gate, models, agents)
+	}))
+	must(container.Invoke(func(
+		sessions *session.Handler, mcp *handler.MCPServiceHandler,
+		broker *hitl.Broker, runs *service.SuspendedRunService, rewind *service.SessionRewindService,
+	) {
+		rewind.SetSuspendedRuns(runs)
+		sessions.SetSuspendedRuns(broker, runs)
+		mcp.SetRunResumer(sessions)
 	}))
 	must(container.Provide(handler.NewMCPCredentialsHandler))
 	must(container.Provide(handler.NewMCPOAuthHandler))
@@ -2090,6 +2117,31 @@ func startForkSnapshotReaper(reaper *service.ForkSnapshotReaper, cleaner interfa
 		}
 	}()
 	cleaner.RegisterWithName("ForkSnapshotReaper", func() error {
+		close(stop)
+		return nil
+	})
+}
+
+// startAgentPromptReaper takes over prompts whose owner stopped renewing its
+// lease and suspended prompts past their expiry, so a crash never leaves a
+// prompt or its run open forever.
+func startAgentPromptReaper(runs *service.SuspendedRunService, cleaner interfaces.ResourceCleaner) {
+	stop := make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				if _, err := runs.Reap(context.Background(), time.Now()); err != nil {
+					logger.Warnf(context.Background(), "[AgentPromptReaper] reap failed: %v", err)
+				}
+			case <-stop:
+				return
+			}
+		}
+	}()
+	cleaner.RegisterWithName("AgentPromptReaper", func() error {
 		close(stop)
 		return nil
 	})

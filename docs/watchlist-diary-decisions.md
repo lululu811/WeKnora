@@ -272,8 +272,8 @@ verdict 的结构化标签和颜色全丢。与 `alertnotify/feishu.go:3-7` 的�
 
 ### Q18 —— 迁移如何落地？
 
-`migrations/` 下有**两套并行体系**：`migrations/versioned/`（000115–000118，PG）和
-`migrations/sqlite/`（000034–000037，Lite）。每个 stock_watch 特性都是**成对**的两条。
+`migrations/` 下有**两套并行体系**：`migrations/versioned/`（000120–000126，PG）和
+`migrations/sqlite/`（000038–000045，Lite）。每个 stock_watch 特性都是**成对**的两条。
 
 - **A（已选）**：四条都写（两套 × up/down），照抄现有互指注释风格；
   **PG 侧的 `note` 改用 `TEXT`**

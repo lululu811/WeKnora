@@ -275,7 +275,6 @@ watch(modelButtonRef, (el) => relay(el, props.modelButtonElRef), { immediate: tr
               stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"
             />
           </svg>
-          <span v-if="selectedCount > 0" class="kb-count">{{ selectedCount }}</span>
         </div>
       </t-tooltip>
 

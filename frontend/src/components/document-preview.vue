@@ -1690,13 +1690,20 @@ mark.source-locate-mark {
   background-color: var(--app-source-highlight-bg);
   color: inherit;
   border-radius: var(--app-radius-xs);
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
 }
 
 .source-locate-block {
   background-color: var(--app-source-highlight-soft-bg) !important;
-  outline: 1px solid var(--app-source-highlight-border);
-  outline-offset: 2px;
-  border-radius: var(--app-radius-xs);
+  box-shadow: inset 3px 0 var(--app-source-highlight-border);
+}
+
+/* Cell backgrounds can obscure a row's marker. Paint each cell once and
+   keep the accent on the leading edge, without boxing every table row. */
+tr.source-locate-block {
+  background-color: transparent !important;
+  box-shadow: none;
 }
 
 tr.source-locate-block > td {
@@ -1704,4 +1711,12 @@ tr.source-locate-block > td {
 }
 
 /* TODO 2.2: 14 处色值未收敛（图表/状态/语义不明，保留原值）：000000, ff7b72, d2a8ff, 79c0ff, a5d6ff, ffa657, 8b949e, 7ee787, 1f6feb, f2cc60, aff5b4, 033a16, ffdcd7, 67060c */
+tr.source-locate-block > td:first-child {
+  box-shadow: inset 3px 0 var(--app-source-highlight-border);
+}
+
+img.source-locate-block {
+  outline: 1px solid var(--app-source-highlight-border);
+  outline-offset: 2px;
+}
 </style>

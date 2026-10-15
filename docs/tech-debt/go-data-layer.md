@@ -107,13 +107,13 @@
 
 ### [S2] `stock_watches.note` / `stock_watch_events.note` 三处类型声明互不相同
 
-- **位置**：`internal/types/stock_watch.go:44`、`internal/types/stock_watch.go:200`、`migrations/versioned/000119_stock_watch_note_text.up.sql:27`、`migrations/sqlite/000038_stock_watch_note_widen.up.sql:32`
+- **位置**：`internal/types/stock_watch.go:44`、`internal/types/stock_watch.go:200`、`migrations/versioned/000124_stock_watch_note_text.up.sql:27`、`migrations/sqlite/000042_stock_watch_note_widen.up.sql:32`
 - **证据**：三份"真相"各说各话——
 
   ```
   Go 模型          stock_watch.go:44   Note string `gorm:"type:varchar(200);not null;default:''"`
-  Postgres 迁移    000119 (up)         ALTER TABLE stock_watches ALTER COLUMN note TYPE TEXT;
-  SQLite 迁移      000038 (up)         note VARCHAR(500) NOT NULL DEFAULT ''
+  Postgres 迁移    000124 (up)         ALTER TABLE stock_watches ALTER COLUMN note TYPE TEXT;
+  SQLite 迁移      000042 (up)         note VARCHAR(500) NOT NULL DEFAULT ''
   ```
 
   且两个迁移的**文件名也不同**（`stock_watch_note_text` vs `stock_watch_note_widen`），无法按 topic 名做配对校验。真实约束在应用层：`stock_watch.go:108` `const MaxStockWatchNoteLen = 500`。
@@ -195,7 +195,7 @@
   message_suggestion_sets, sync_logs, tenant_sandbox_configs, vector_stores, web_search_providers
   ```
 
-- **影响**：`migrate down` 到 version 0 后残留 13 张表，再 `up` 时 `CREATE TABLE IF NOT EXISTS` 会跳过它们——如果上一轮有手工改动，数据/结构会带着脏状态进入新一轮。SQLite 侧还有唯一一处"DROP 多于 CREATE"的迁移（`000038` 建 3 张临时表、down 删 2 张），虽属正确的表重建写法，但同样是人工推理出来的。
+- **影响**：`migrate down` 到 version 0 后残留 13 张表，再 `up` 时 `CREATE TABLE IF NOT EXISTS` 会跳过它们——如果上一轮有手工改动，数据/结构会带着脏状态进入新一轮。SQLite 侧还有唯一一处"DROP 多于 CREATE"的迁移（`000042` 建 3 张临时表、down 删 2 张），虽属正确的表重建写法，但同样是人工推理出来的。
 - **修复**：补齐 13 条 `DROP TABLE IF EXISTS`（注意 FK 顺序，SQLite 迁移开了 `_foreign_keys=on`），并加一条测试断言"down 到 0 后 `sqlite_master` 中无残留表"。
 - **工作量**：S(<半天)
 

@@ -59,6 +59,7 @@
                     :active-session-path="currentSecondpath"
                     :revealed-session-id="revealedSessionId"
                     :activity-by-id="sessionActivityEntries"
+                    :unread-by-id="sessionUnread"
                     :build-menu-options="buildSessionMenuOptions"
                     @select-source="switchSessionBucket"
                     @navigate="gotopage"
@@ -94,6 +95,7 @@
                 <line x1="3" y1="14.5" x2="17" y2="14.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
             </svg>
         </div>
+
     </div>
 </template>
 
@@ -198,7 +200,7 @@ const platformLogo = (p: string): string => (p ? PLATFORM_LOGO[p] || '' : '');
 const { t } = useI18n();
 const usemenuStore = useMenuStore();
 const sessionActivity = useSessionActivityStore();
-const { entries: sessionActivityEntries } = storeToRefs(sessionActivity);
+const { entries: sessionActivityEntries, unread: sessionUnread } = storeToRefs(sessionActivity);
 let sessionActivityTimer: ReturnType<typeof setInterval> | undefined;
 const authStore = useAuthStore();
 const deploymentCapabilities = useDeploymentCapabilitiesStore();
@@ -942,7 +944,7 @@ const loadSessionOriginMeta = async () => {
 const handleSessionMutation = (event: Event) => {
     const detail = (event as CustomEvent<SessionMutationDetail>).detail;
     if (!detail?.sessionId) return;
-    if (detail.removed || detail.messagesCleared) sessionActivity.update(detail.sessionId, false);
+    if (detail.removed || detail.messagesCleared) sessionActivity.dismiss(detail.sessionId);
     if (detail.patch) {
         updateSessionInBuckets(detail.sessionId, {
             ...detail.patch,
@@ -976,6 +978,8 @@ const onToggleSidebar = () => {
 };
 
 onMounted(async () => {
+    sessionActivity.restore();
+    void sessionActivity.refresh();
     sessionActivityTimer = setInterval(() => { void sessionActivity.refresh(); }, 5000);
     const routeName = typeof route.name === 'string' ? route.name : (route.name ? String(route.name) : '')
     currentpath.value = routeName;
@@ -1225,6 +1229,8 @@ const resizeSidebar = (delta: number, keyboard: boolean) => {
     }
 }
 </script>
+
+
 
 <style lang="less">
 /*

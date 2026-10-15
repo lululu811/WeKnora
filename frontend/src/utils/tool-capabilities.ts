@@ -53,6 +53,7 @@ export const TOOL_CAPABILITY_REQUIREMENTS: Record<string, ToolRequirement> = {
   // ---- base / reasoning (no KB dependency) ----
   thinking: {},
   todo_write: {},
+  ask_user: {},
 
   shell_exec: {},
   edit_sandbox_file: {},
@@ -126,8 +127,20 @@ export function evaluateToolRequirement(
   scope: ScopeCapabilities,
   hasAnyKb: boolean,
 ): { ok: boolean; missKind: RequirementMissKind } {
-  const req = TOOL_CAPABILITY_REQUIREMENTS[toolName];
-  // Tools absent from the map or with no requirements: always available.
+  return evaluateRequirement(TOOL_CAPABILITY_REQUIREMENTS[toolName], scope, hasAnyKb);
+}
+
+/**
+ * Evaluate a requirement given directly, such as one served by the backend
+ * tool catalog (`GET /api/v1/agents/tools`). An absent or empty requirement
+ * is always satisfied.
+ */
+export function evaluateRequirement(
+  req: Pick<ToolRequirement, 'anyOf' | 'allOf'> | undefined,
+  scope: ScopeCapabilities,
+  hasAnyKb: boolean,
+): { ok: boolean; missKind: RequirementMissKind } {
+  // No requirements: always available.
   if (!req || (!req.anyOf?.length && !req.allOf?.length)) {
     return { ok: true, missKind: 'none' };
   }

@@ -58,7 +58,7 @@ make migrate-up         # 应用
 
 ### 2.1 `stock_watches` —— 自选股
 
-**迁移**：`migrations/versioned/000115_stock_watches.up.sql`（PG）、`migrations/sqlite/000034_stock_watches.up.sql`（SQLite）
+**迁移**：`migrations/versioned/000120_stock_watches.up.sql`（PG）、`migrations/sqlite/000038_stock_watches.up.sql`（SQLite）
 
 ```sql
 CREATE TABLE stock_watches (
@@ -109,18 +109,18 @@ CREATE INDEX idx_stock_watches_tenant_id
 
 ### 2.2 自选股池：条件 / 事件 / 通知
 
-自选股从「一份列表」演进为「一个追踪池」时涉及 4 张表。**当前状态：代码在 `feat/watchlist-pool` / `feat/watchlist-conditions` 分支，迁移 000116 尚未合并到 `mine`**。
+自选股从「一份列表」演进为「一个追踪池」时涉及 4 张表。**迁移 `000121_stock_watch_pool_state`（PG）/ `000039_stock_watch_pool_state`（SQLite）已随 `mine` 落地**（2026-10-15 合并上游时，本地序号从 000115–000121 重编到 000120–000126，避让上游新增的 000115–000119）。
 
 > 📌 **第 5 张表已落地**：`stock_watch_diaries`（每日 LLM 观察日记），
-> 迁移 `000120`（PG）/ `000039`（SQLite）；`note` 列同时加宽——PG 侧改为
-> `TEXT`（`000119`），SQLite 侧 `VARCHAR(500)`（`000038`）。
+> 迁移 `000125`（PG）/ `000043`（SQLite）；`note` 列同时加宽——PG 侧改为
+> `TEXT`（`000124`），SQLite 侧 `VARCHAR(500)`（`000042`）。
 > 设计与决策记录见 [`watchlist-diary-design.md`](watchlist-diary-design.md)
 > 与 [`watchlist-diary-decisions.md`](watchlist-diary-decisions.md)。
 
 
 #### 2.2.1 `stock_watches` 增列（`state` / `note`）
 
-来自 `000116_stock_watch_pool_state`：
+来自 `000121_stock_watch_pool_state`：
 
 ```sql
 ALTER TABLE stock_watches ADD COLUMN IF NOT EXISTS state VARCHAR(16)  NOT NULL DEFAULT 'observing';
@@ -158,7 +158,7 @@ CREATE INDEX idx_stock_watch_events_user_tenant_created
 CREATE INDEX idx_stock_watch_events_tenant_id ON stock_watch_events (tenant_id);
 ```
 
-> 📌 本机库的这张表还多一个 `eval_date DATE` 列，是手工加的，未写进 000116 迁移。
+> 📌 本机库的这张表还多一个 `eval_date DATE` 列，是手工加的，未写进 000121 迁移。
 
 - **只追加**：应用层没有任何 UPDATE 或 DELETE。每行是一个事实（「这只票进池了」「用户改成 holding」「用户改了理由」），不是当前状态的镜像——所以读日志能回答「这行为什么变成这样」，而 `stock_watches` 那行在时刻过去后答不了。
 - 这里用**代理主键**：与 `stock_watches` 不同，事件不被调用方寻址，它是一条流。
@@ -214,7 +214,7 @@ CREATE INDEX idx_stock_watch_notifications_user_tenant_created
 
 #### 2.2.5 `stock_watch_diaries` —— 每日观察日记
 
-**迁移**：`migrations/versioned/000120_stock_watch_diaries.up.sql`（PG）、`migrations/sqlite/000039_stock_watch_diaries.up.sql`（SQLite）
+**迁移**：`migrations/versioned/000125_stock_watch_diaries.up.sql`（PG）、`migrations/sqlite/000043_stock_watch_diaries.up.sql`（SQLite）
 
 | 列 | 类型 | 说明 |
 |---|---|---|

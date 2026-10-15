@@ -94,7 +94,7 @@ const (
 // MaxStockWatchNoteLen is the ceiling on a tracking reason, counted in runes.
 //
 // It is no longer a mirror of a column width. The PostgreSQL column is TEXT
-// (migration 000119) and SQLite does not enforce VARCHAR widths at all, so
+// (migration 000124) and SQLite does not enforce VARCHAR widths at all, so
 // this constant is the only thing standing between a runaway LLM and an
 // unbounded row. That is the point: the guard belongs in the layer that can
 // report a useful error (ErrStockWatchNoteTooLong) rather than in a schema

@@ -94,4 +94,23 @@ type QARequest struct {
 	// IM/MCP, which call the QA services directly, do not and leave this
 	// false so the service takes the lease itself.
 	TurnLeaseHeld bool
+	// Suspendable lets the run end while it waits on a user prompt and be
+	// resumed later. Set by callers whose client can render a suspended
+	// message and answer it afterwards (web, embed, API); IM and MCP callers
+	// wait synchronously.
+	Suspendable bool
+	// Interactive marks a caller that can show and answer a prompt the agent
+	// raises on its own, such as an ask_user question. API-key callers cannot
+	// answer prompts, so their runs are not interactive.
+	Interactive bool
+	// Resume, when set, continues a suspended run instead of starting one.
+	Resume *AgentResume
+}
+
+// AgentResume is what a resumed run continues from.
+type AgentResume struct {
+	// Snapshot is the run state saved when the run suspended.
+	Snapshot []byte
+	// Prompt is the answered prompt the run was suspended on.
+	Prompt *AgentPrompt
 }

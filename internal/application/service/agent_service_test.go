@@ -616,59 +616,6 @@ func TestRegisterSandboxShellIfAllowedHostIgnoresSkillsGate(t *testing.T) {
 		"the host backend is the Lite feature and must not wait on SkillsEnabled")
 }
 
-func TestRegisterSandboxShellIfAllowedByAllowedTools(t *testing.T) {
-	registry := tools.NewToolRegistry()
-	svc := &agentService{
-		sandboxResolver: stubSandboxResolver{
-			mgr: &capableManager{
-				typ:   sandbox.SandboxTypeDocker,
-				shell: &stubShellExecutor{},
-			},
-		},
-	}
-	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(7))
-
-	// Without AllowedTools and without SkillsEnabled -> not registered
-	svc.registerSandboxShellIfAllowed(ctx, registry, "sess-1", &types.AgentConfig{
-		SkillsEnabled: false,
-		AllowedTools:  []string{},
-	})
-	require.False(t, toolRegistered(registry, tools.ToolShellExec))
-
-	// With AllowedTools containing ToolShellExec -> registered even with SkillsEnabled=false
-	registryWithTool := tools.NewToolRegistry()
-	svc.registerSandboxShellIfAllowed(ctx, registryWithTool, "sess-1", &types.AgentConfig{
-		SkillsEnabled: false,
-		AllowedTools:  []string{tools.ToolShellExec},
-	})
-	require.True(t, toolRegistered(registryWithTool, tools.ToolShellExec))
-}
-
-// A workspace with script execution switched off has no sandbox to run in, but
-// an agent that explicitly declares shell_exec still gets a shell: scoped to a
-// per-session directory under the OS temp root instead of the host filesystem.
-func TestRegisterSandboxShellIfAllowedFallsBackToLocalShellWithoutSandbox(t *testing.T) {
-	registry := tools.NewToolRegistry()
-	svc := &agentService{
-		sandboxResolver: stubSandboxResolver{
-			mgr: &capableManager{typ: sandbox.SandboxTypeDisabled},
-		},
-	}
-	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(7))
-
-	svc.registerSandboxShellIfAllowed(ctx, registry, "sess-1", &types.AgentConfig{
-		SandboxConfigID: "cfg-remote",
-		SkillsEnabled:   false,
-		AllowedTools:    []string{tools.ToolShellExec},
-	})
-
-	require.True(t, toolRegistered(registry, tools.ToolShellExec),
-		"script execution off is not the same as no shell: an explicit entitlement still gets one")
-}
-
-// An unresolved sandbox is not an invitation to run on the host. The failure
-// mode has to be "no shell", not "a shell somewhere unexpected": a resolver
-// error says nothing about which machine this run belongs to.
 func TestRegisterSandboxShellIfAllowedFailsClosedWhenResolutionErrors(t *testing.T) {
 	registry := tools.NewToolRegistry()
 	svc := &agentService{
@@ -856,4 +803,30 @@ func TestValidInstallDirUsesTheHostVersionsRoot(t *testing.T) {
 	noRoot := &agentService{}
 	_, ok = noRoot.validInstallDir(host)
 	require.False(t, ok)
+}
+
+// TestSwitchManagedToolsIgnoreTheAllowlist pins tools.SwitchManagedTools to
+// what registerTools does: with every switch off, naming those tools in the
+// allowlist must not offer any of them. The agent editor relies on this list
+// to tell users that such stored entries have no effect. It covers the
+// allowlist path only: registering a listed tool from the allowlist, or no
+// longer stripping a web or memory tool, fails it. The code that registers
+// sandbox, skill and MCP tools from their own settings is tested elsewhere.
+func TestSwitchManagedToolsIgnoreTheAllowlist(t *testing.T) {
+	ctx := context.WithValue(context.Background(), types.TenantIDContextKey, uint64(7))
+	allowed := []string{tools.ToolThinking}
+	allowed = append(allowed, tools.SwitchManagedTools()...)
+	chatModel := &fakeAgentChatModel{}
+	config := &types.AgentConfig{AllowedTools: allowed}
+
+	engine, err := (&agentService{}).CreateAgentEngine(ctx, config, chatModel, nil, nil, "sess-1", "msg-1")
+	require.NoError(t, err)
+	_, err = engine.Execute(ctx, "sess-1", "msg-1", "hello", nil)
+	require.NoError(t, err)
+
+	require.True(t, toolOffered(chatModel.lastToolNames, tools.ToolThinking), "the run must have offered tools at all")
+	for _, managed := range tools.SwitchManagedTools() {
+		require.False(t, toolOffered(chatModel.lastToolNames, managed),
+			"%s follows another agent setting, not the allowlist", managed)
+	}
 }

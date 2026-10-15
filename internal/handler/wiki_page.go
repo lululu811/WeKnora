@@ -405,12 +405,12 @@ func (h *WikiPageHandler) recordManualWikiActivity(
 
 // GetPage godoc
 // @Summary      Get a wiki page by slug
-// @Description  Retrieve a wiki page by its slug
+// @Description  Retrieve a wiki page by its slug, including titles of existing backlinks
 // @Tags         Wiki
 // @Produce      json
 // @Param        kb_id  path  string  true  "Knowledge base ID"
 // @Param        slug   path  string  true  "Page slug"
-// @Success      200  {object}  types.WikiPage
+// @Success      200  {object}  types.WikiPageDetail
 // @Failure      404  {object}  errors.AppError
 // @Security     Bearer
 // @Router       /knowledgebase/{kb_id}/wiki/pages/{slug} [get]
@@ -437,7 +437,24 @@ func (h *WikiPageHandler) GetPage(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, page)
+	titles := make(map[string]string, len(page.InLinks))
+	// Bound SQL parameters while resolving every backlink, including pages
+	// outside the sidebar's paginated window.
+	const batchSize = 1000
+	for start := 0; start < len(page.InLinks); start += batchSize {
+		end := min(start+batchSize, len(page.InLinks))
+		pages, err := h.wikiService.ListBySlugs(c.Request.Context(), kbID, page.InLinks[start:end])
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		for slug, backlink := range pages {
+			if backlink != nil {
+				titles[slug] = backlink.Title
+			}
+		}
+	}
+	c.JSON(http.StatusOK, types.WikiPageDetail{WikiPage: page, InLinkTitles: titles})
 }
 
 // UpdatePage godoc
@@ -878,6 +895,17 @@ func (h *WikiPageHandler) GetGraph(c *gin.Context) {
 	c.JSON(http.StatusOK, graph)
 }
 
+// WikiMessageResponse is the {"message": ...} body Wiki maintenance endpoints
+// write on success.
+type WikiMessageResponse struct {
+	Message string `json:"message"`
+}
+
+// WikiErrorResponse is the {"error": ...} body Wiki endpoints write on failure.
+type WikiErrorResponse struct {
+	Error string `json:"error"`
+}
+
 // GetStats godoc
 // @Summary      Get wiki statistics
 // @Description  Returns aggregate statistics about the wiki
@@ -885,6 +913,8 @@ func (h *WikiPageHandler) GetGraph(c *gin.Context) {
 // @Produce      json
 // @Param        kb_id  path  string  true  "Knowledge base ID"
 // @Success      200  {object}  types.WikiStats
+// @Failure      400  {object}  handler.WikiErrorResponse  "Not a Wiki knowledge base, or no access"
+// @Failure      500  {object}  handler.WikiErrorResponse
 // @Security     Bearer
 // @Router       /knowledgebase/{kb_id}/wiki/stats [get]
 func (h *WikiPageHandler) GetStats(c *gin.Context) {
@@ -910,8 +940,10 @@ func (h *WikiPageHandler) GetStats(c *gin.Context) {
 // @Produce      json
 // @Param        kb_id  path   string  true   "Knowledge base ID"
 // @Param        slug   query  string  false  "Filter by page slug"
-// @Param        status query  string  false  "Filter by status (pending, ignored, resolved)"
-// @Success      200  {array}  types.WikiPageIssue
+// @Param        status query  string  false  "Filter by status"  Enums(pending, ignored, resolved)
+// @Success      200  {array}   types.WikiPageIssue
+// @Failure      400  {object}  handler.WikiErrorResponse  "Not a Wiki knowledge base, or no access"
+// @Failure      500  {object}  handler.WikiErrorResponse
 // @Security     Bearer
 // @Router       /knowledgebase/{kb_id}/wiki/issues [get]
 func (h *WikiPageHandler) ListIssues(c *gin.Context) {
@@ -1048,7 +1080,7 @@ type WikiSearchHit struct {
 // @Accept       json
 // @Produce      json
 // @Param        request  body  SearchWikiRequest  true  "Wiki search request"
-// @Success      200  {object}  map[string]interface{}
+// @Success      200  {object}  handler.DataResponse{data=[]handler.WikiSearchHit}
 // @Failure      400  {object}  errors.AppError
 // @Security     Bearer
 // @Security     ApiKeyAuth
@@ -1136,8 +1168,11 @@ func mergeWikiSearchKBIDs(ids []string, single string) []string {
 // @Summary      Rebuild wiki links
 // @Description  Re-parse all pages and rebuild bidirectional link references
 // @Tags         Wiki
+// @Produce      json
 // @Param        kb_id  path  string  true  "Knowledge base ID"
-// @Success      200  {object}  map[string]string
+// @Success      200  {object}  handler.WikiMessageResponse
+// @Failure      400  {object}  handler.WikiErrorResponse  "Not a Wiki knowledge base, or no access"
+// @Failure      500  {object}  handler.WikiErrorResponse
 // @Security     Bearer
 // @Router       /knowledgebase/{kb_id}/wiki/rebuild-links [post]
 func (h *WikiPageHandler) RebuildLinks(c *gin.Context) {
@@ -1162,6 +1197,8 @@ func (h *WikiPageHandler) RebuildLinks(c *gin.Context) {
 // @Produce      json
 // @Param        kb_id  path  string  true  "Knowledge base ID"
 // @Success      200  {object}  service.WikiLintReport
+// @Failure      400  {object}  handler.WikiErrorResponse  "Not a Wiki knowledge base, or no access"
+// @Failure      500  {object}  handler.WikiErrorResponse
 // @Security     Bearer
 // @Router       /knowledgebase/{kb_id}/wiki/lint [get]
 func (h *WikiPageHandler) Lint(c *gin.Context) {
@@ -1186,7 +1223,7 @@ func (h *WikiPageHandler) Lint(c *gin.Context) {
 // @Tags         Wiki
 // @Produce      json
 // @Param        kb_id  path  string  true  "Knowledge base ID"
-// @Success      200  {object}  map[string]interface{}
+// @Success      200  {object}  handler.AutoFixResponse
 // @Security     Bearer
 // @Router       /knowledgebase/{kb_id}/wiki/auto-fix [post]
 func (h *WikiPageHandler) AutoFix(c *gin.Context) {

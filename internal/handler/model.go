@@ -16,6 +16,9 @@ import (
 	"github.com/Tencent/WeKnora/internal/logger"
 	"github.com/Tencent/WeKnora/internal/models/api"
 	"github.com/Tencent/WeKnora/internal/models/chat"
+	"github.com/Tencent/WeKnora/internal/models/embedding"
+	"github.com/Tencent/WeKnora/internal/models/imageprep"
+	"github.com/Tencent/WeKnora/internal/models/rerank"
 	"github.com/Tencent/WeKnora/internal/types"
 	"github.com/Tencent/WeKnora/internal/types/interfaces"
 	secutils "github.com/Tencent/WeKnora/internal/utils"
@@ -60,7 +63,7 @@ type CreateModelRequest struct {
 // @Accept       json
 // @Produce      json
 // @Param        request  body      CreateModelRequest  true  "模型信息"
-// @Success      201      {object}  map[string]interface{}  "创建的模型"
+// @Success      201      {object}  handler.DataResponse{data=dto.ModelResponse}  "创建的模型"
 // @Failure      400      {object}  errors.AppError         "请求参数错误"
 // @Security     Bearer
 // @Security     ApiKeyAuth
@@ -143,7 +146,7 @@ type CopyModelRequest struct {
 // @Produce      json
 // @Param        id       path      string           true  "源模型ID"
 // @Param        request  body      CopyModelRequest true  "副本展示名"
-// @Success      201      {object}  map[string]interface{}  "复制的模型"
+// @Success      201      {object}  handler.DataResponse{data=dto.ModelResponse}  "复制的模型"
 // @Failure      400      {object}  errors.AppError         "请求参数错误"
 // @Failure      404      {object}  errors.AppError         "模型不存在"
 // @Security     Bearer
@@ -205,7 +208,7 @@ func (h *ModelHandler) CopyModel(c *gin.Context) {
 // @Accept       json
 // @Produce      json
 // @Param        id   path      string  true  "模型ID"
-// @Success      200  {object}  map[string]interface{}  "模型详情"
+// @Success      200  {object}  handler.DataResponse{data=dto.ModelResponse}  "模型详情"
 // @Failure      404  {object}  errors.AppError         "模型不存在"
 // @Security     Bearer
 // @Security     ApiKeyAuth
@@ -249,7 +252,7 @@ func (h *ModelHandler) GetModel(c *gin.Context) {
 // @Tags         模型管理
 // @Accept       json
 // @Produce      json
-// @Success      200  {object}  map[string]interface{}  "模型列表"
+// @Success      200  {object}  handler.DataResponse{data=[]dto.ModelResponse}  "模型列表"
 // @Failure      400  {object}  errors.AppError         "请求参数错误"
 // @Security     Bearer
 // @Security     ApiKeyAuth
@@ -293,6 +296,9 @@ type ModelDebugOptions struct {
 	Thinking     *bool    `json:"thinking,omitempty"`
 	// ReasoningEffort is the graded level; when set it overrides Thinking.
 	ReasoningEffort string `json:"reasoning_effort,omitempty"`
+	// Similarity makes an embedding test score the documents (and an
+	// optional image) against the input as a search query.
+	Similarity bool `json:"similarity,omitempty"`
 }
 
 func parseModelDebugOptions(raw string) (ModelDebugOptions, error) {
@@ -433,6 +439,18 @@ func consumeModelDebugChatStream(stream <-chan types.StreamResponse) (*modelDebu
 	return result, nil
 }
 
+// Model metadata and the legacy vision switch both allow image chat tests.
+func modelDebugChatAcceptsImages(model *types.Model) bool {
+	if model.Parameters.SupportsVision {
+		return true
+	}
+	if model.Source == types.ModelSourceLocal {
+		return false
+	}
+	resolved, err := chat.Resolve(chat.ConfigFromModel(model, "", ""))
+	return err == nil && resolved.Spec.AcceptsImages()
+}
+
 // DebugModel executes a saved model through the same service constructors used
 // by production calls and returns the complete normalized response. Credentials
 // stay server-side; the request preview contains only non-secret fields.
@@ -516,13 +534,26 @@ func (h *ModelHandler) DebugModel(c *gin.Context) {
 		fileSize = int64(len(fileBytes))
 	}
 
+	var image api.EmbedImage
+	if fileName != "" && model.Type != types.ModelTypeASR {
+		image, err = imageprep.Prepare(fileBytes, imageprep.Limits{})
+		if err != nil {
+			_ = c.Error(errors.NewBadRequestError(err.Error()))
+			return
+		}
+	}
+
 	requestPreview := modelDebugRequestPreview(model, input, documents, opts, fileName, fileSize)
 	observations := gin.H{}
 
 	switch model.Type {
 	case types.ModelTypeKnowledgeQA:
-		if strings.TrimSpace(input) == "" {
-			c.Error(errors.NewBadRequestError("query cannot be empty"))
+		if len(fileBytes) > 0 && !modelDebugChatAcceptsImages(model) {
+			_ = c.Error(errors.NewBadRequestError("chat model does not accept images"))
+			return
+		}
+		if strings.TrimSpace(input) == "" && len(fileBytes) == 0 {
+			_ = c.Error(errors.NewBadRequestError("query cannot be empty"))
 			return
 		}
 		instance, callErr := h.service.GetChatModel(ctx, id)
@@ -534,7 +565,17 @@ func (h *ModelHandler) DebugModel(c *gin.Context) {
 		if strings.TrimSpace(opts.SystemPrompt) != "" {
 			messages = append(messages, chat.Message{Role: "system", Content: opts.SystemPrompt})
 		}
-		messages = append(messages, chat.Message{Role: "user", Content: input})
+		message := chat.Message{Role: "user", Content: input}
+		if len(fileBytes) > 0 {
+			message.Content = ""
+			if strings.TrimSpace(input) != "" {
+				message.MultiContent = append(message.MultiContent, chat.MessageContentPart{Type: "text", Text: input})
+			}
+			message.MultiContent = append(message.MultiContent, chat.MessageContentPart{
+				Type: "image_url", ImageURL: &chat.ImageURL{URL: image.DataURI()},
+			})
+		}
+		messages = append(messages, message)
 		chatOpts := &chat.ChatOptions{}
 		if opts.Temperature != nil {
 			chatOpts.Temperature = *opts.Temperature
@@ -575,8 +616,12 @@ func (h *ModelHandler) DebugModel(c *gin.Context) {
 		}
 		writeModelDebugResult(c, started, requestPreview, resp, callErr, observations)
 	case types.ModelTypeEmbedding:
-		if strings.TrimSpace(input) == "" {
-			c.Error(errors.NewBadRequestError("input cannot be empty"))
+		if opts.Similarity {
+			h.debugEmbeddingSimilarity(c, id, input, documents, fileBytes, started, requestPreview, observations)
+			return
+		}
+		if strings.TrimSpace(input) == "" && len(fileBytes) == 0 {
+			_ = c.Error(errors.NewBadRequestError("input cannot be empty"))
 			return
 		}
 		instance, callErr := h.service.GetEmbeddingModel(ctx, id)
@@ -584,17 +629,60 @@ func (h *ModelHandler) DebugModel(c *gin.Context) {
 			writeModelDebugResult(c, started, requestPreview, nil, callErr, observations)
 			return
 		}
+		if len(fileBytes) > 0 {
+			if strings.TrimSpace(input) != "" {
+				_ = c.Error(errors.NewBadRequestError("test either text or an image for embedding"))
+				return
+			}
+			imageModel, ok := embedding.AsImageEmbedder(instance)
+			if !ok {
+				_ = c.Error(errors.NewBadRequestError(embedding.ErrImagesUnsupported.Error()))
+				return
+			}
+			prepared, prepErr := imageprep.Prepare(fileBytes, imageModel.ImageLimits())
+			if prepErr != nil {
+				_ = c.Error(errors.NewBadRequestError(prepErr.Error()))
+				return
+			}
+			vectors, callErr := imageModel.BatchEmbedImages(ctx, []embedding.Image{prepared})
+			observations["result_count"] = len(vectors)
+			if len(vectors) > 0 {
+				observations["dimension"] = len(vectors[0])
+			}
+			writeModelDebugResult(c, started, requestPreview, vectors, callErr, observations)
+			return
+		}
 		vector, callErr := instance.Embed(ctx, input)
 		observations["dimension"] = len(vector)
 		writeModelDebugResult(c, started, requestPreview, vector, callErr, observations)
 	case types.ModelTypeRerank:
-		if strings.TrimSpace(input) == "" || len(documents) == 0 {
-			c.Error(errors.NewBadRequestError("query and documents cannot be empty"))
+		if strings.TrimSpace(input) == "" || (len(documents) == 0 && len(fileBytes) == 0) {
+			_ = c.Error(errors.NewBadRequestError("query and documents cannot be empty"))
 			return
 		}
 		instance, callErr := h.service.GetRerankModel(ctx, id)
 		if callErr != nil {
 			writeModelDebugResult(c, started, requestPreview, nil, callErr, observations)
+			return
+		}
+		if len(fileBytes) > 0 {
+			if len(documents) > 0 {
+				_ = c.Error(errors.NewBadRequestError("test either text documents or an image for reranking"))
+				return
+			}
+			imageModel, ok := rerank.AsImageReranker(instance)
+			if !ok {
+				_ = c.Error(errors.NewBadRequestError(rerank.ErrImagesUnsupported.Error()))
+				return
+			}
+			prepared, prepErr := imageprep.Prepare(fileBytes, imageModel.ImageLimits())
+			if prepErr != nil {
+				_ = c.Error(errors.NewBadRequestError(prepErr.Error()))
+				return
+			}
+			results, callErr := imageModel.RerankImages(ctx, input, []rerank.Image{prepared})
+			observations["result_count"] = len(results)
+			writeModelDebugResult(c, started, requestPreview, results, callErr, observations)
 			return
 		}
 		results, callErr := instance.Rerank(ctx, input, documents)
@@ -653,7 +741,7 @@ type UpdateModelRequest struct {
 // @Produce      json
 // @Param        id       path      string              true  "模型ID"
 // @Param        request  body      UpdateModelRequest  true  "更新信息"
-// @Success      200      {object}  map[string]interface{}  "更新后的模型"
+// @Success      200      {object}  handler.DataResponse{data=dto.ModelResponse}  "更新后的模型"
 // @Failure      404      {object}  errors.AppError         "模型不存在"
 // @Security     Bearer
 // @Security     ApiKeyAuth
@@ -786,7 +874,7 @@ func (h *ModelHandler) UpdateModel(c *gin.Context) {
 // @Accept       json
 // @Produce      json
 // @Param        id   path      string  true  "模型ID"
-// @Success      200  {object}  map[string]interface{}  "删除成功"
+// @Success      200  {object}  handler.MessageResponse  "删除成功"
 // @Failure      400  {object}  errors.AppError         "模型仍被知识库、智能体或长期记忆引用"
 // @Failure      404  {object}  errors.AppError         "模型不存在"
 // @Security     Bearer

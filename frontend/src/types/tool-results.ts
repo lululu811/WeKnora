@@ -31,6 +31,7 @@ export type DisplayType =
     | 'write_sandbox_file'
     | 'edit_sandbox_file'
     | 'read_skill'
+    | 'image_view'
     | 'mcp_discovery'
     | 'mcp_call'
     | 'kline_picks';
@@ -490,6 +491,21 @@ export interface KlineStudioData {
     warnings?: string[];
 }
 
+/** An image read by read_file: a sandbox image file, or images of an attachment. */
+export interface ImageViewData {
+    display_type?: 'image_view';
+    path?: string;
+    file_name?: string;
+    total_images?: number;
+    first_image?: number;
+    returned?: number;
+    image_numbers?: number[];
+    /** Aligned with image_numbers; present when a vision model described the images. */
+    image_descriptions?: string[];
+    image_errors?: string[];
+    next_path?: string;
+}
+
 // Union type for all wiki edit data
 export type WikiEditData = WikiWritePageData | WikiReplaceTextData | WikiRenamePageData | WikiDeletePageData;
 
@@ -515,7 +531,8 @@ export type ToolResultData =
     | ShellExecData
     | ListSandboxFilesData
     | ReadSkillData
-    | KlineStudioData;
+    | KlineStudioData
+    | ImageViewData;
 
 // Action data (from index.vue)
 export interface ActionData {

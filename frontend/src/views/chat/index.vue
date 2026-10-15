@@ -163,6 +163,7 @@
                             <t-icon name="chevron-down" size="18px" />
                         </div>
                     </transition>
+                    <PendingPromptDock :embedded-mode="embeddedMode" />
                     <InputField ref="inputFieldRef" :auto-focus="focusComposerOnMount" :compact="!embeddedMode"
                         @send-msg="(query, modelId, mentionedItems, imageFiles, attachmentFiles, options) => sendMsg(query, modelId, mentionedItems, imageFiles, attachmentFiles, options)"
                         @steer-msg="(query, mentionedItems, delivery) => handleSteerMsg(query, mentionedItems, delivery)"
@@ -210,7 +211,7 @@
 <script setup>
 import { makeSteerClientId } from '@/utils/steerId';
 import { storeToRefs } from 'pinia';
-import { ref, onMounted, onBeforeMount, onUnmounted, nextTick, watch, reactive, computed } from 'vue';
+import { ref, onMounted, onBeforeMount, onUnmounted, nextTick, watch, reactive, computed, provide } from 'vue';
 import { useRoute, useRouter, onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router';
 import InputField from '../../components/Input-field.vue';
 import botmsg from './components/botmsg.vue';
@@ -225,6 +226,7 @@ import { deleteTemporaryAttachment, uploadTemporaryAttachment } from '@/api/chat
 import { useStream } from '../../api/chat/streame'
 import { listSteerSession, promoteSteerSession, removeSteerSession, steerSession } from '@/api/chat/steer';
 import { persistedAssistantId, previewSteerMessage, discardSteerPreview, reconcileSteerMessageId } from '@/utils/steerStreamFork';
+import { resumeSuspendedRunKey } from '@/utils/suspendedRun';
 import { useMenuStore } from '@/stores/menu';
 import { useSettingsStore } from '@/stores/settings';
 import { useBrowserConnectionStore } from '@/stores/browserConnection';
@@ -233,7 +235,7 @@ import { useI18n } from 'vue-i18n';
 import { useUIStore } from '@/stores/ui';
 import KnowledgeBaseEditorModal from '@/views/knowledge/KnowledgeBaseEditorModal.vue';
 import { useKnowledgeBaseCreationNavigation } from '@/hooks/useKnowledgeBaseCreationNavigation';
-import { useChatStreamHandler } from '@/composables/useChatStreamHandler';
+import { useChatStreamHandler, isAwaitingInput, isPromptCard } from '@/composables/useChatStreamHandler';
 import { useStickyBottomOnResize } from '@/composables/useStickyBottomOnResize';
 import { clearCitationChunkCache } from '@/utils/citationChunkCache';
 import ChatReferencesDrawer from '@/components/ChatReferencesDrawer.vue';
@@ -268,6 +270,8 @@ import {
     useFinanceChatIntegration,
 } from '@/finance';
 import BrowserTaskPreview from './components/BrowserTaskPreview.vue';
+import PendingPromptDock from './components/PendingPromptDock.vue';
+import { providePromptDock } from '@/composables/usePromptDock';
 import { collectSessionArtifacts, markSessionArtifactDeleted } from '@/utils/sessionArtifacts';
 import { isCollectingSkillArtifacts } from '@/utils/skillArtifacts';
 const referencesDrawer = provideChatReferencesDrawer();
@@ -376,6 +380,7 @@ const inputFieldRef = ref();
 const created_at = ref('');
 const limit = ref(20);
 const messagesList = reactive([]);
+providePromptDock(messagesList);
 
 function forkAffordanceOf(messageId) {
     if (!messageId) return { canFork: false }
@@ -623,6 +628,9 @@ watch([activitySessionId, isReplying, isImRecovering, currentAssistantMessageId]
     sessionActivity.update(activitySessionId.value, isReplying.value || isImRecovering.value, currentAssistantMessageId.value);
 }, { flush: 'sync' });
 const historyLoading = ref(true);
+watch(activitySessionId, (id) => {
+    if (!props.embeddedMode) sessionActivity.setViewing(id);
+}, { flush: 'sync' });
 const historyLoadingMore = ref(false);
 const hasMoreHistory = ref(true);
 
@@ -780,6 +788,7 @@ const loadFollowUpSuggestions = async (message, ensure = false, regenerate = fal
     const messageId = resolveAssistantMessageId(message);
     const targetSessionId = session_id.value;
     if (!messageId || !targetSessionId || message.suggestionsDismissed) return;
+    if (isAwaitingInput(message)) return;
     message.suggestionLoading = true;
     try {
         let response = ensure
@@ -994,6 +1003,7 @@ const {
     handleMsgList,
     processStreamChunk,
     prepareForNewOutgoingMessage,
+    prepareResumedMessage,
     markInFlightAssistantStopped,
 } = useChatStreamHandler({
     messagesList,
@@ -1385,7 +1395,7 @@ const attachSteerFollowUp = async (completedAssistantId) => {
             if (sessionChanged()) return;
             const batch = res?.data || [];
             const newAssistant = [...batch].reverse().find((m) =>
-                m.role === 'assistant' && !m.is_completed && m.id && m.id !== completedAssistantId
+                m.role === 'assistant' && !m.is_completed && !isAwaitingInput(m) && m.id && m.id !== completedAssistantId
             );
             if (newAssistant) {
                 // The follow-up run persists its query under its own
@@ -1699,8 +1709,48 @@ const recoverIncompleteMessage = () => {
 };
 
 // Watch for stream errors and show message
+// Answering a suspended prompt resumes its run on the server; follow it on
+// the same assistant message. The resumed stream may not exist yet when the
+// answer returns, so attaching retries briefly.
+let attachingResumedRun = false;
+const resumeSuspendedRun = async (pendingId) => {
+    const sessionId = session_id.value;
+    const message = findLastMessage((m) => m.role === 'assistant' && (m.agentEventStream || []).some(
+        (e) => isPromptCard(e) && e.pending_id === pendingId,
+    ));
+    if (!message || !sessionId || isReplying.value) return;
+    const resumeId = persistedAssistantId(message);
+    prepareResumedMessage(message, pendingId);
+    isReplying.value = true;
+    currentAssistantMessageId.value = resumeId;
+    attachingResumedRun = true;
+    try {
+        for (let attempt = 0; attempt < 10; attempt++) {
+            await new Promise((resolve) => setTimeout(resolve, 500));
+            if (session_id.value !== sessionId) return;
+            await startStream({
+                session_id: sessionId,
+                query: resumeId,
+                method: 'GET',
+                url: '/api/v1/sessions/continue-stream',
+            });
+            if (!error.value) return;
+        }
+    } finally {
+        attachingResumedRun = false;
+    }
+    if (error.value && session_id.value === sessionId) {
+        MessagePlugin.error(error.value);
+        isReplying.value = false;
+        loading.value = false;
+        currentAssistantMessageId.value = '';
+    }
+};
+provide(resumeSuspendedRunKey, resumeSuspendedRun);
+
 watch(error, (newError) => {
     if (!newError) return;
+    if (attachingResumedRun) return;
     // A failed attach to an in-flight IM reply isn't a real error — the answer is
     // produced on the IM side and never streams here. Recover quietly by polling to
     // completion instead of flashing a "stream failed" toast. Web/api replies fall
@@ -2249,13 +2299,54 @@ onBeforeRouteUpdate((to, from, next) => {
 
 <style lang="less">
 .chat-rewind-popconfirm {
-    max-width: 260px;
+    .t-popconfirm__content {
+        width: 280px;
+        max-width: calc(100vw - 24px);
+        padding: 14px 16px 12px;
+        box-sizing: border-box;
+    }
 
-    .t-popconfirm__content,
-    .t-popup__content {
-        max-width: 260px;
+    .t-popconfirm__body {
+        gap: 8px;
+    }
+
+    .t-popconfirm__body > .t-icon {
+        flex-shrink: 0;
+        margin: 0;
+        padding: 3px 0 0;
+        font-size: var(--app-text-xl);
+    }
+
+    .t-popconfirm__inner {
+        flex: 1;
+        min-width: 0;
+        max-width: none;
         white-space: normal;
-        line-height: 1.5;
+    }
+
+    .chat-rewind-confirm__title {
+        font-size: var(--app-text-base);
+        font-weight: 500;
+        line-height: 22px;
+        color: var(--td-text-color-primary);
+    }
+
+    .chat-rewind-confirm__body {
+        margin-top: 2px;
+        font-size: var(--app-text-md);
+        line-height: 20px;
+        color: var(--td-text-color-secondary);
+    }
+
+    .t-popconfirm__buttons {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        margin-top: 12px;
+
+        .t-popconfirm__confirm {
+            margin-left: 0;
+        }
     }
 }
 

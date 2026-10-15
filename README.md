@@ -82,6 +82,10 @@ OPENAI_BASE_URL=https://api.deepseek.com/v1
 
 # 或用本地 Ollama（先 `ollama serve`）：
 OLLAMA_BASE_URL=http://127.0.0.1:11434
+
+# Set WEKNORA_VERSION in .env to the target release (e.g. 0.8.3), or keep latest
+docker compose pull     # Pull images matching WEKNORA_VERSION
+docker compose up -d    # Recreate containers with new images
 ```
 
 | 想要 | 配置 |
@@ -90,6 +94,9 @@ OLLAMA_BASE_URL=http://127.0.0.1:11434
 | 换向量库 | `RETRIEVE_DRIVER=sqlite`（默认，零依赖）/ `milvus` / `qdrant` 等 |
 | 换存储 | `STORAGE_TYPE=local`（默认）/ `minio` / `s3` |
 | 加检索后端 | `docker compose --profile full up -d` |
+
+> [!NOTE]
+> `docker compose up -d` alone reuses locally cached images and may leave the UI version out of sync with the release you downloaded. Read the [upgrade notes](https://weknora.weixin.qq.com/docs/07-releases/v0.8.3#upgrade-notes) before upgrading. Deployments older than v0.8.2 should also read the [v0.8.2 notes](https://weknora.weixin.qq.com/docs/07-releases/v0.8.2#upgrade-notes).
 
 ---
 

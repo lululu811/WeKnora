@@ -91,6 +91,7 @@
                                         :item="row"
                                         :batch-mode="batchMode"
                                         :running="Boolean(activityById[row.id])"
+                                        :unread="Boolean(unreadById[row.id])"
                                         :active-path="activeSessionPath"
                                         :selected-ids="selectedIds"
                                         :menu-options="buildMenuOptions(row)"
@@ -160,6 +161,8 @@ const props = defineProps<{
   revealedSessionId: string;
   /** 运行中会话表（来自 sessionActivity store）。 */
   activityById: Record<string, unknown>;
+  /** 未读会话表（来自 sessionActivity store）。 */
+  unreadById: Record<string, unknown>;
   /** 行菜单项构造（留在 menu.vue，避免 t() 与图标状态分叉）。 */
   buildMenuOptions: (row: SessionRowView) => SessionMenuOption[];
 }>();
