@@ -76,3 +76,39 @@ func TestSplitTopLevelKeepsFunctionCallsIntact(t *testing.T) {
 	assert.Equal(t, "close", got[1])
 	assert.Equal(t, "cast(a AS VARCHAR) AS v", got[2])
 }
+
+// TestWholeResultPassthroughRecognisesThePattern pins the other half of the
+// "is this column really read" question.
+//
+// Some tools do not pick fields out of the returned rows; they serialise the
+// whole result set and hand it to the model, which then reads the columns.
+// The Go code never names those columns, so the "named in the surrounding Go"
+// test alone reports every one of them as dead — a false alarm on each
+// finding, and the same class of lie this package's doc comment refuses to
+// tell.
+//
+// The exemption must be narrow: a tool that picks fields out of the rows is
+// NOT a passthrough, and a column nothing reads there is still dead.
+func TestWholeResultPassthroughRecognisesThePattern(t *testing.T) {
+	passthrough := "package x\n" +
+		"func f() {\n" +
+		"  rows, err := hithink_finance.QueryDuckDBParams(ctx, cfg, \"indicators\", query, code)\n" +
+		"  if err != nil { return err }\n" +
+		"  output := map[string]interface{}{\"thscode\": code, \"data\": rows}\n" +
+		"  _ = output\n" +
+		"}\n"
+	picking := "package x\n" +
+		"func f() {\n" +
+		"  rows, err := hithink_finance.QueryDuckDBParams(ctx, cfg, \"indicators\", query, code)\n" +
+		"  if err != nil { return err }\n" +
+		"  output := map[string]interface{}{\"close\": rows[0][\"close\"]}\n" +
+		"  _ = output\n" +
+		"}\n"
+
+	assert.True(t, wholeResultPassthrough(passthrough),
+		"a query result placed into the payload untouched is read by the model")
+	assert.False(t, wholeResultPassthrough(picking),
+		"a tool that picks one field out of the rows is not a passthrough")
+	assert.False(t, wholeResultPassthrough("package x\nfunc f() { _ = 1 }\n"),
+		"a file with no query at all is not a passthrough")
+}

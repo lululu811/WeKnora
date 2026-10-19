@@ -210,6 +210,28 @@ var capabilityRegisteredTools = map[string]string{
 		"capability-scoped, not a tenant-selectable builtin (definitions.go)",
 	tools.ToolDiscoverMCPTools: "registerMCPTools (agent_service.go) / tools.RegisterMCPTools: " +
 		"capability-scoped, not a tenant-selectable builtin (definitions.go)",
+	tools.ToolFindOperations: "registerAssistantCapabilityTools (agent_service.go:526): " +
+		"the assistant's operation catalog; gated by the assistant access level, " +
+		"absent from AvailableToolDefinitions (definitions.go)",
+	tools.ToolRunOperation: "registerAssistantCapabilityTools (agent_service.go:534): " +
+		"the assistant's operation dispatcher; gated by the assistant access level, " +
+		"absent from AvailableToolDefinitions (definitions.go)",
+	tools.ToolOpenPage: "registerAssistantCapabilityTools (agent_service.go:536): " +
+		"page link for the assistant; absent from AvailableToolDefinitions (definitions.go)",
+	tools.ToolViewPage: "registerAssistantCapabilityTools (agent_service.go:539): " +
+		"page viewing for the assistant; absent from AvailableToolDefinitions (definitions.go)",
+	tools.ToolReadPage: "registerAssistantCapabilityTools (agent_service.go:540): " +
+		"page reads for the assistant; absent from AvailableToolDefinitions (definitions.go)",
+	tools.ToolSelectTab: "registerAssistantCapabilityTools (agent_service.go:541): " +
+		"page tab selection for the assistant; absent from AvailableToolDefinitions (definitions.go)",
+	tools.ToolFillPage: "registerAssistantCapabilityTools (agent_service.go:543): " +
+		"form filling for the assistant; absent from AvailableToolDefinitions (definitions.go)",
+	tools.ToolSearchWeKnoraDocs: "registerAssistantCapabilityTools (agent_service.go:563): " +
+		"bundled product documentation search for the assistant; " +
+		"absent from AvailableToolDefinitions (definitions.go)",
+	tools.ToolReadWeKnoraDoc: "registerAssistantCapabilityTools (agent_service.go:564): " +
+		"bundled product documentation reader for the assistant; " +
+		"absent from AvailableToolDefinitions (definitions.go)",
 }
 
 // acceptedUnreachableTools are registered tools that are deliberately offered

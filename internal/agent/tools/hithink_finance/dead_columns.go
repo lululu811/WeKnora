@@ -2,9 +2,19 @@ package hithink_finance
 
 import (
 	"io/fs"
+	"regexp"
 	"sort"
 	"strings"
 )
+
+// queryResultVarRe matches the variable a query call returns its rows into:
+// `rows, err := hithink_finance.QueryDuckDBParams(...)`.
+var queryResultVarRe = regexp.MustCompile(`(\w+)\s*,\s*\w+\s*:?=\s*[^\n=]*Query`)
+
+// payloadValueRe matches a composite-literal value that is a bare
+// identifier: `"data": rows,`. A query result that appears this way goes into
+// the payload untouched.
+var payloadValueRe = regexp.MustCompile(`:\s*(\w+)\s*[,}]`)
 
 // DeadColumn is an indicator column that a hardcoded tool SQL selects but
 // nothing ever reads.
@@ -58,8 +68,17 @@ func DeadColumns() []DeadColumn {
 		// What the SQL itself consumes: function arguments and the text
 		// after FROM.
 		inSQL := readColumnsInSource(src)
+		// A tool that hands the model the whole result set is using every
+		// column it selected — the model reads them, not the Go code.
+		passthrough := wholeResultPassthrough(stripSpans(src, spans))
 
 		for _, sql := range sqls {
+			if passthrough {
+				for out := range selectOutputs(sql) {
+					live[out] = true
+				}
+				continue
+			}
 			for out, source := range selectOutputs(sql) {
 				// A column is read if the surrounding Go code references
 				// the name this query actually produces, or if the SQL
@@ -92,6 +111,40 @@ func DeadColumns() []DeadColumn {
 	}
 	sort.Slice(out, func(a, b int) bool { return out[a].Column < out[b].Column })
 	return out
+}
+
+// wholeResultPassthrough reports whether the tool hands its query result to
+// the model as a whole.
+//
+// Most tools pick fields out of the returned rows (`r["obv"]`), so a selected
+// column that no Go identifier names really is dead. Some tools instead
+// serialise the entire result set and hand it to the model, which then reads
+// the columns — the model is the reader, not the Go code. The "named in the
+// surrounding Go" test cannot see that, so without this rule every column of
+// such a tool reads as dead.
+//
+// The signal is the shape of the payload: the variable a query call returns
+// into appears as a value in a composite literal (`"data": rows`), meaning
+// the rows go out untouched.
+//
+// Scope is the file. A file that mixes a passthrough tool with a
+// field-picking one would have the latter's columns excused too; that trade
+// is deliberate, because the alternative — a false alarm on every passthrough
+// tool — is exactly the lie this check's own doc comment refuses to tell.
+func wholeResultPassthrough(goCode string) bool {
+	resultVars := map[string]bool{}
+	for _, m := range queryResultVarRe.FindAllStringSubmatch(goCode, -1) {
+		resultVars[m[1]] = true
+	}
+	if len(resultVars) == 0 {
+		return false
+	}
+	for _, m := range payloadValueRe.FindAllStringSubmatch(goCode, -1) {
+		if resultVars[m[1]] {
+			return true
+		}
+	}
+	return false
 }
 
 // selectOutputs maps the name each SELECT element produces to the underlying
