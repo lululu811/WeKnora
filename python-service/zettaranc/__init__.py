@@ -12,6 +12,15 @@ from .pattern import analyze_chart_pattern
 from .levels import analyze_levels
 from .signals import detect_signals, summarize_signals
 from .scan import scan_patterns
-# 四块砖：2026-10-01 从工作台前端搬到此处。此前只有 indicators.ts 算得出，
-# 服务端取不到，所以 agent 对"四块砖什么状态"一律被要求回答"算不出来"。
 from .four_bricks import analyze_four_bricks, four_bricks
+
+# 重剑无锋交易框架 2026 体系模块
+from .micro_volume import analyze_micro_volume
+from .ma518 import analyze_ma518
+from .resampler import resample_bars, evaluate_monthly_gate, evaluate_weekly_dual_up5
+from .macro_volume import analyze_macro_volume
+from .td_setup import analyze_td_setup
+from .sun_moon import analyze_sun_moon
+from .systems import classify_trading_system, evaluate_bottom_fishing_conditions
+from .guardrail import evaluate_risk_guardrail
+from .annotator import annotator

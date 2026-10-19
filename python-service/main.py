@@ -1425,6 +1425,66 @@ async def zettaranc_analyze(request: AnalyzeRequest) -> Dict[str, Any]:
         result["levels"] = None
         skipped.append(f"levels: {exc}")
 
+    # 2026 重剑无锋战法全套指标体系与风控总闸门评估
+    if len(rows) >= 5:
+        bars_asc = list(reversed(rows))
+        try:
+            from zettaranc import (
+                analyze_micro_volume,
+                analyze_ma518,
+                evaluate_monthly_gate,
+                evaluate_weekly_dual_up5,
+                analyze_macro_volume,
+                analyze_td_setup,
+                analyze_sun_moon,
+                classify_trading_system,
+                evaluate_bottom_fishing_conditions,
+                evaluate_risk_guardrail,
+            )
+            mv_res = analyze_micro_volume(bars_asc)
+            ma518_res = analyze_ma518(bars_asc)
+            monthly_gate_res = evaluate_monthly_gate(bars_asc)
+            weekly_dual_res = evaluate_weekly_dual_up5(bars_asc)
+            macro_vol_res = analyze_macro_volume(bars_asc) if len(bars_asc) >= 30 else None
+            td_res = analyze_td_setup(bars_asc)
+            sun_moon_res = analyze_sun_moon(bars_asc)
+            system_res = classify_trading_system(
+                bars_asc,
+                ma518_result=ma518_res,
+                micro_vol_result=mv_res,
+                monthly_gate=monthly_gate_res,
+                weekly_dual=weekly_dual_res,
+                sun_moon_result=sun_moon_res,
+                macro_vol_result=macro_vol_res,
+            )
+            bf_res = evaluate_bottom_fishing_conditions(bars_asc, ma518_result=ma518_res, td_result=td_res)
+            guardrail_res = evaluate_risk_guardrail(
+                bars_asc,
+                monthly_gate=monthly_gate_res,
+                ma518_result=ma518_res,
+                sun_moon_result=sun_moon_res,
+                system_result=system_res,
+            )
+
+            result["heavy_sword"] = {
+                "micro_volume": mv_res,
+                "ma518_system": ma518_res,
+                "monthly_gate": monthly_gate_res,
+                "weekly_dual_up5": weekly_dual_res,
+                "macro_volume": macro_vol_res,
+                "td_setup": td_res,
+                "sun_moon": sun_moon_res,
+                "trading_system": system_res,
+                "bottom_fishing": bf_res,
+                "guardrail": guardrail_res,
+            }
+        except Exception as exc:
+            result["heavy_sword"] = None
+            skipped.append(f"heavy_sword: {exc}")
+    else:
+        result["heavy_sword"] = None
+        skipped.append(f"heavy_sword: 需要至少 5 根 K 线，仅 {len(rows)} 根")
+
     result["insufficient_data"] = skipped
     result["complete"] = not skipped
 
@@ -2073,11 +2133,14 @@ async def get_quotes(
 async def get_annotations(
     symbol: str = Query(..., description="股票代码，如 600519.SH"),
     days: int = Query(120, ge=10, le=1000, description="回溯天数"),
-    patterns: str = Query("b1,key_k,s1,violent_k", description="形态类型，逗号分隔"),
+    patterns: str = Query(
+        "b1,key_k,s1,violent_k,pole_yang,pile_yang,capping_yin,fake_yin,rebound_trap",
+        description="形态类型，逗号分隔 (b1,key_k,s1,violent_k,pole_yang,pile_yang,capping_yin,fake_yin,rebound_trap)",
+    ),
     adjust: str = Query("forward", description="复权类型: none | forward | backward"),
 ):
     """
-    形态标注计算接口 — 识别指定股票的买卖形态 (B1建仓波, S1, 关键K, 暴力K)
+    形态标注计算接口 — 识别指定股票的买卖形态 (B1建仓波, S1, 关键K, 暴力K, 以及重剑无锋立杆阳/打桩阳/灌顶阴/伪阴线/回光返照)
     注意：这里的 B1 是 K 线**形态标注**（建仓波后第一次缩量回调、J<13），
     和选股策略 oversold_combo（超卖信号组合）不是一回事，别混用。
     """
@@ -3384,6 +3447,214 @@ async def market_basis():
     return await board.index_futures_basis(
         registry.get("futures"), registry.get("index")
     )
+
+
+@app.get("/api/market/commodities")
+async def market_commodities():
+    """期股联动 —— 核心大宗商品期货最新行情与关联 A 股板块提示。"""
+    from datasources import registry
+    from finance_panel import board
+
+    return await board.list_commodities(registry.get("futures"))
+
+
+@app.get("/api/market/fund-holdings")
+async def market_fund_holdings(
+    thscode: str = Query(..., description="股票同花顺代码，如 600519.SH"),
+    limit: int = Query(20, ge=1, le=100, description="返回数量限制"),
+):
+    """个股公募与 ETF 机构重仓穿透明细。"""
+    from datasources import registry
+    from finance_panel import board
+
+    return await board.get_stock_fund_holdings(
+        registry.get("fund"), thscode, limit=limit
+    )
+
+
+@app.get("/api/market/ladder-detail")
+async def market_ladder_detail(
+    min_board: int = Query(2, ge=1, le=10, description="最低连板数"),
+    limit: int = Query(50, ge=1, le=100, description="最多返回条数"),
+):
+    """连板梯队详情 —— 空间板高度标杆与各板位个股清单、封单金额、封板时间。"""
+    from datasources import registry
+    from finance_panel import board
+
+    return await board.get_limit_ladder_detail(
+        registry.get("special"), min_board=min_board, limit=limit
+    )
+
+
+@app.get("/api/market/anomaly-reasons")
+async def market_anomaly_reasons(
+    thscode: Optional[str] = Query(None, description="同花顺股票代码，空则返回全市场最新异动"),
+    limit: int = Query(10, ge=1, le=50, description="返回条数限制"),
+):
+    """个股大涨/大跌异动归因分析与关键词列表。"""
+    from datasources import registry
+    from finance_panel import board
+
+    return await board.get_stock_anomaly_reasons(
+        registry.get("special"), thscode=thscode, limit=limit
+    )
+
+
+@app.get("/api/market/limit-break-down")
+async def market_limit_break_down(
+    limit: int = Query(20, ge=1, le=100, description="返回条数限制"),
+):
+    """炸板池与跌停池 —— 盘中开板砸盘回落与跌停核按钮亏钱效应。"""
+    from datasources import registry
+    from finance_panel import board
+
+    return await board.get_limit_break_and_down(
+        registry.get("special"), limit=limit
+    )
+
+
+@app.get("/api/market/dividend-calendar")
+async def market_dividend_calendar(
+    thscode: Optional[str] = Query(None, description="股票代码，如 600519.SH"),
+    start_date: Optional[str] = Query(None, description="起始除权日 YYYY-MM-DD"),
+    end_date: Optional[str] = Query(None, description="截止除权日 YYYY-MM-DD"),
+    min_dividend: float = Query(0.0, ge=0, description="最低每股派现金额"),
+    min_bonus: float = Query(0.0, ge=0, description="最低每股送转股比例"),
+    sort_by: str = Query("date", description="排序方式: date | yield | bonus | dividend"),
+    limit: int = Query(50, ge=1, le=200, description="返回条数限制"),
+):
+    """除权除息与分红送转事件日历 —— 派息金额、送转比例与预估股息率。"""
+    from datasources import registry
+    from finance_panel import board
+
+    return await board.get_dividend_calendar(
+        registry.get("market"),
+        thscode=thscode,
+        start_date=start_date,
+        end_date=end_date,
+        min_dividend=min_dividend,
+        min_bonus=min_bonus,
+        sort_by=sort_by,
+        limit=limit,
+    )
+
+
+@app.get("/api/market/hot-stocks")
+async def market_hot_stocks(
+    mode: str = Query("skyrocket", description="榜单模式：skyrocket (飙升黑马榜) | rank (人气总榜)"),
+    limit: int = Query(50, ge=1, le=100, description="返回条数限制"),
+):
+    """全市场热度与飙升雷达 —— 资金关注度突增黑马与综合人气龙头。"""
+    from datasources import registry
+    from finance_panel import board
+
+    return await board.get_hot_stocks(
+        registry.get("special"),
+        mode=mode,
+        limit=limit,
+    )
+
+
+@app.get("/api/market/hot-stock-trend")
+async def market_hot_stock_trend(
+    thscode: str = Query(..., description="股票代码，如 600519.SH、600418.SH"),
+    limit: int = Query(30, ge=1, le=100, description="历史天数限制"),
+):
+    """个股人气排名历史趋势 —— 捕捉关注度升温与退潮。"""
+    from datasources import registry
+    from finance_panel import board
+
+    return await board.get_hot_stock_trend(
+        registry.get("special"),
+        thscode=thscode,
+        limit=limit,
+    )
+
+
+@app.get("/api/market/futures-warehouse")
+async def market_futures_warehouse(
+    thscode: Optional[str] = Query(None, description="期货合约代码，如 AL2611.SHF"),
+    limit: int = Query(30, ge=1, le=100, description="返回条数限制"),
+):
+    """期货注册仓单库存与日增减 —— 现货紧缺去库与累库滞销预警。"""
+    from datasources import registry
+    from finance_panel import board
+
+    return await board.get_futures_warehouse_receipts(
+        registry.get("futures"),
+        thscode=thscode,
+        limit=limit,
+    )
+
+
+@app.get("/api/market/futures-basis-rate")
+async def market_futures_basis_rate(
+    thscode: Optional[str] = Query(None, description="期货合约代码，如 CU2611.SHF"),
+    limit: int = Query(30, ge=1, le=100, description="返回条数限制"),
+):
+    """期货现货基差与升贴水率 —— Contango/Backwardation 与期现套利窗口。"""
+    from datasources import registry
+    from finance_panel import board
+
+    return await board.get_futures_basis_rate(
+        registry.get("futures"),
+        thscode=thscode,
+        limit=limit,
+    )
+
+
+@app.get("/api/market/etf-holders")
+async def market_etf_holders(
+    thscode: str = Query(..., description="基金/ETF 代码，如 158000.SZ 或 510300.SH"),
+    limit: int = Query(10, ge=1, le=20, description="返回前十大持有人数量"),
+):
+    """ETF/基金持有人结构（机构vs散户）与前十大持有人穿透明细。"""
+    from datasources import registry
+    from finance_panel import board
+
+    return await board.get_etf_holders_detail(
+        registry.get("fund"),
+        fund_thscode=thscode,
+        limit=limit,
+    )
+
+
+@app.get("/api/market/etf-institutional-ranking")
+async def market_etf_institutional_ranking(
+    order_by: str = Query("institution", description="排序依据：institution (机构占比) 或 retail (散户占比)"),
+    limit: int = Query(30, ge=1, le=100, description="返回条数限制"),
+):
+    """全市场基金/ETF 机构投资者占比排行与散户聚集度排行。"""
+    from datasources import registry
+    from finance_panel import board
+
+    return await board.get_etf_institutional_ranking(
+        registry.get("fund"),
+        order_by=order_by,
+        limit=limit,
+    )
+
+
+@app.get("/api/market/squeeze-status")
+async def market_squeeze_status(
+    thscode: str = Query(..., description="股票代码，如 000001.SZ 或 600519.SH"),
+    limit: int = Query(30, ge=1, le=100, description="回看天数"),
+):
+    """TTM Squeeze 波动挤压突破与超级趋势 Supertrend 顺势追踪。"""
+    from datasources import registry
+    from finance_panel import board
+
+    return await board.get_squeeze_status(
+        registry.get("indicators"),
+        thscode=thscode,
+        limit=limit,
+    )
+
+
+
+
+
+
 
 
 class IndustryMapRequest(BaseModel):

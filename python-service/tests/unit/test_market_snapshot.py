@@ -323,3 +323,469 @@ def test_snapshot_never_raises_when_a_source_explodes(fake_registry):
 
     assert out["code"] == 0
     assert "special" in out["unavailable"]
+
+
+# --------------------------------------------------------------------------
+# 大宗商品期股联动
+# --------------------------------------------------------------------------
+
+def test_commodities_returns_items_with_change_pct_and_linked_stocks(fake_registry):
+    """大宗商品接口返回涨跌幅、关联股票列表及品类。"""
+    rows = [
+        {
+            "variety_code": "CU",
+            "name": "沪铜主力",
+            "thscode": "CU2611.SHF",
+            "close_price": 80500.0,
+            "prev_close": 80000.0,
+            "change_pct": 0.625,
+            "volume": 50000.0,
+            "turnover": 4025000000.0,
+            "trade_date": dt.date(2026, 10, 12),
+        },
+        {
+            "variety_code": "AU",
+            "name": "沪金主力",
+            "thscode": "AU2612.SHF",
+            "close_price": 600.0,
+            "prev_close": 606.0,
+            "change_pct": -0.99,
+            "volume": 20000.0,
+            "turnover": 1200000000.0,
+            "trade_date": dt.date(2026, 10, 12),
+        },
+    ]
+    fake_registry({
+        "futures": FakeSource([(r"FROM v_futures_latest", rows)]),
+    })
+
+    out = _run(svc.market_commodities())
+    assert out["ok"] is True
+    assert len(out["items"]) == 2
+
+    cu = next(i for i in out["items"] if i["variety"] == "CU")
+    assert cu["name"] == "沪铜"
+    assert cu["category"] == "有色金属"
+    assert cu["change_pct"] == 0.625
+    assert "紫金矿业" in cu["linked_stocks"]
+
+    au = next(i for i in out["items"] if i["variety"] == "AU")
+    assert au["name"] == "沪金"
+    assert au["change_pct"] == -0.99
+    assert "山东黄金" in au["linked_stocks"]
+
+
+def test_commodities_handles_missing_futures_source(fake_registry):
+    """futures 源不可用时优雅降级。"""
+    fake_registry({})
+    out = _run(svc.market_commodities())
+    assert out["ok"] is False
+    assert "futures" in out["unavailable"]
+
+
+# --------------------------------------------------------------------------
+# 个股公募与 ETF 机构持仓穿透
+# --------------------------------------------------------------------------
+
+def test_fund_holdings_returns_summary_and_items(fake_registry):
+    """个股机构重仓穿透接口返回汇总指标与明细。"""
+    detail_rows = [
+        {
+            "fund_thscode": "159163.SZ",
+            "fund_name": "有色ETF泰康",
+            "fund_category": "ETF",
+            "manager_name": None,
+            "hold_ratio": 8.56,
+            "position_count": 653200.0,
+            "security_market_value_rate_pct": 0.086,
+            "period_increase_rate_pct": -0.7,
+            "investment_rank": 1,
+        },
+        {
+            "fund_thscode": "000001.OF",
+            "fund_name": "华夏成长混合",
+            "fund_category": "主动权益",
+            "manager_name": "王经理",
+            "hold_ratio": 4.2,
+            "position_count": 320000.0,
+            "security_market_value_rate_pct": 0.042,
+            "period_increase_rate_pct": 1.5,
+            "investment_rank": 3,
+        },
+    ]
+    summary_rows = [
+        {
+            "total_funds": 2,
+            "total_hold_ratio": 12.76,
+            "avg_nav_ratio": 0.064,
+            "increase_count": 1,
+            "decrease_count": 1,
+            "unchanged_count": 0,
+        }
+    ]
+    fake_registry({
+        "fund": FakeSource([
+            (r"ORDER BY h\.hold_ratio DESC", detail_rows),
+            (r"SELECT COUNT\(\*\) AS total_funds", summary_rows),
+        ]),
+    })
+
+    out = _run(svc.market_fund_holdings(thscode="601899.SH", limit=10))
+    assert out["ok"] is True
+    assert out["stock_thscode"] == "601899.SH"
+    assert out["summary"]["total_funds"] == 2
+    assert out["summary"]["total_hold_ratio"] == 12.76
+    assert out["summary"]["increase_count"] == 1
+    assert out["summary"]["decrease_count"] == 1
+    assert len(out["items"]) == 2
+    assert out["items"][0]["fund_name"] == "有色ETF泰康"
+    assert out["items"][0]["fund_category"] == "ETF"
+    assert out["items"][1]["manager_name"] == "王经理"
+
+
+def test_fund_holdings_handles_missing_fund_source(fake_registry):
+    """fund 源缺失时返回标准错误结构。"""
+    fake_registry({})
+    out = _run(svc.market_fund_holdings(thscode="601899.SH"))
+    assert out["ok"] is False
+    assert "fund" in out["unavailable"]
+
+
+# --------------------------------------------------------------------------
+# 连板梯队详情、异动归因与炸板跌停监控
+# --------------------------------------------------------------------------
+
+def test_ladder_detail_returns_max_board_and_grouped_items(fake_registry):
+    """连板梯队详情接口返回最高板及按板位分组的股票。"""
+    rows = [
+        {
+            "trade_date": dt.date(2026, 10, 12),
+            "continue_day_cnt": 6,
+            "thscode": "002242.SZ",
+            "name": "九阳股份",
+            "last_price": 16.64,
+            "limit_up_time": "09:25",
+            "seal_money": 59186816.0,
+        },
+        {
+            "trade_date": dt.date(2026, 10, 12),
+            "continue_day_cnt": 2,
+            "thscode": "605287.SH",
+            "name": "德才股份",
+            "last_price": 44.2,
+            "limit_up_time": "09:25",
+            "seal_money": 239409300.0,
+        },
+    ]
+    fake_registry({
+        "special": FakeSource([(r"FROM v_limit_up_pool", rows)]),
+    })
+
+    out = _run(svc.market_ladder_detail(min_board=2, limit=50))
+    assert out["ok"] is True
+    assert out["max_board"] == 6
+    assert out["total_count"] == 2
+    assert "6板" in out["by_level"]
+    assert "2板" in out["by_level"]
+    assert out["by_level"]["6板"][0]["name"] == "九阳股份"
+
+
+def test_anomaly_reasons_returns_content_and_keywords(fake_registry):
+    """异动归因接口解析关键词与事实陈述。"""
+    rows = [
+        {
+            "capture_date": dt.date(2026, 10, 12),
+            "thscode": "000002.SZ",
+            "stock_name": "万科A",
+            "tag_name": "大跌",
+            "analysis_content": "1、房地产板块下跌；2、亏损扩大。",
+            "keyword_list": '["房地产板块下跌", "亏损扩大"]',
+        }
+    ]
+    fake_registry({
+        "special": FakeSource([(r"FROM v_anomaly_list", rows)]),
+    })
+
+    out = _run(svc.market_anomaly_reasons(thscode="000002.SZ", limit=5))
+    assert out["ok"] is True
+    assert out["count"] == 1
+    item = out["items"][0]
+    assert item["stock_name"] == "万科A"
+    assert item["tag_name"] == "大跌"
+    assert item["keywords"] == ["房地产板块下跌", "亏损扩大"]
+
+
+def test_limit_break_down_returns_both_pools(fake_registry):
+    """炸板与跌停池接口返回两个列表。"""
+    break_rows = [
+        {
+            "trade_date": dt.date(2026, 10, 12),
+            "thscode": "600127.SH",
+            "name": "金健米业",
+            "last_price": 13.9,
+            "open_times": 7,
+            "price_change_ratio": -8.43,
+        }
+    ]
+    down_rows = [
+        {
+            "trade_date": dt.date(2026, 10, 12),
+            "thscode": "002285.SZ",
+            "name": "世联行",
+            "last_price": 2.94,
+            "price_change_ratio": -10.09,
+            "first_limit_time": "09:50",
+            "last_limit_time": "14:49",
+        }
+    ]
+    fake_registry({
+        "special": FakeSource([
+            (r"FROM v_limit_break_pool", break_rows),
+            (r"FROM v_limit_down_pool", down_rows),
+        ]),
+    })
+
+    out = _run(svc.market_limit_break_down(limit=20))
+    assert out["ok"] is True
+    assert out["break_count"] == 1
+    assert out["down_count"] == 1
+    assert out["break_pool"][0]["open_times"] == 7
+    assert out["down_pool"][0]["name"] == "世联行"
+
+
+def test_dividend_calendar_returns_items_and_yield(fake_registry):
+    """分红日历接口返回除息事件与预估股息率。"""
+    div_rows = [
+        {
+            "thscode": "600519.SH",
+            "name": "贵州茅台",
+            "ex_date": dt.date(2026, 6, 26),
+            "dividend_per_share": 28.02,
+            "per_share_bonus": 0.0,
+            "allotment_ratio": 0.0,
+            "close": 1500.0,
+            "div_yield_pct": 1.87,
+        },
+        {
+            "thscode": "002763.SZ",
+            "name": "汇洁股份",
+            "ex_date": dt.date(2026, 5, 15),
+            "dividend_per_share": 0.8,
+            "per_share_bonus": 0.0,
+            "allotment_ratio": 0.0,
+            "close": 7.48,
+            "div_yield_pct": 10.70,
+        },
+    ]
+    fake_registry({
+        "market": FakeSource([
+            (r"FROM raw_adjustment_events", div_rows),
+        ]),
+    })
+
+    out = _run(svc.market_dividend_calendar(sort_by="yield", limit=10))
+    assert out["ok"] is True
+    assert out["count"] == 2
+    assert out["items"][0]["thscode"] == "600519.SH"
+    assert out["items"][0]["dividend_per_share"] == 28.02
+    assert out["items"][1]["dividend_yield"] == 10.70
+
+
+def test_dividend_calendar_handles_missing_market(fake_registry):
+    """market 库缺失时返回标准降级结构。"""
+    fake_registry({})
+    out = _run(svc.market_dividend_calendar())
+    assert out["ok"] is False
+    assert "market" in out["unavailable"]
+
+
+def test_hot_stocks_returns_skyrocket_and_rank_items(fake_registry):
+    """热度榜接口返回飙升黑马标的与排名异动。"""
+    rows = [
+        {
+            "capture_date": dt.date(2026, 10, 13),
+            "period": "day",
+            "rank": 29,
+            "thscode": "600391.SH",
+            "ticker": "600391",
+            "name": "航发科技",
+            "heat": 18970.4,
+            "rank_change": 28,
+            "rank_trend": "up",
+        }
+    ]
+    fake_registry({
+        "special": FakeSource([
+            (r"FROM v_skyrocket", rows),
+        ]),
+    })
+
+    out = _run(svc.market_hot_stocks(mode="skyrocket", limit=10))
+    assert out["ok"] is True
+    assert out["count"] == 1
+    assert out["items"][0]["thscode"] == "600391.SH"
+    assert out["items"][0]["rank_change"] == 28
+
+
+def test_hot_stock_trend_returns_time_series(fake_registry):
+    """个股人气排名趋势接口返回按时间正序排列的走势。"""
+    trend_rows = [
+        {"thscode": "600418.SH", "trend_date": dt.date(2026, 10, 12), "date_ms": 1728691200000, "rank": 2},
+        {"thscode": "600418.SH", "trend_date": dt.date(2026, 10, 11), "date_ms": 1728604800000, "rank": 1},
+    ]
+    fake_registry({
+        "special": FakeSource([
+            (r"FROM v_hot_stock_rank_trend", trend_rows),
+        ]),
+    })
+
+    out = _run(svc.market_hot_stock_trend(thscode="600418.SH", limit=10))
+    assert out["ok"] is True
+    assert out["count"] == 2
+    # 验证反转为正序（从前到后）
+    assert out["items"][0]["date"] == "2026-10-11"
+    assert out["items"][1]["date"] == "2026-10-12"
+
+
+def test_futures_warehouse_returns_inventory_changes(fake_registry):
+    """期货仓单接口返回注册仓单与增减量。"""
+    rows = [
+        {"trade_date": dt.date(2026, 10, 13), "thscode": "HC2701.SHF", "amount": 228527.0, "amount_change": 33564.0, "equivalent_lots": 22852.0},
+        {"trade_date": dt.date(2026, 10, 13), "thscode": "AL2611.SHF", "amount": 95305.0, "amount_change": -4987.0, "equivalent_lots": 19061.0},
+    ]
+    fake_registry({
+        "futures": FakeSource([
+            (r"FROM raw_futures_warehouse_receipts", rows),
+        ]),
+    })
+
+    out = _run(svc.market_futures_warehouse(limit=10))
+    assert out["ok"] is True
+    assert out["count"] == 2
+    assert out["items"][0]["thscode"] == "HC2701.SHF"
+    assert out["items"][1]["amount_change"] == -4987.0
+
+
+def test_futures_basis_rate_returns_contango_backwardation(fake_registry):
+    """期货基差接口返回现货价、期货价与基差率。"""
+    rows = [
+        {"trade_date": dt.date(2026, 10, 13), "thscode": "CU2611.SHF", "spot_price": 76800.0, "close_price": 76200.0, "close_basis": 600.0, "close_basis_rate": 0.78},
+    ]
+    fake_registry({
+        "futures": FakeSource([
+            (r"FROM raw_futures_basis", rows),
+        ]),
+    })
+
+    out = _run(svc.market_futures_basis_rate(limit=10))
+    assert out["ok"] is True
+    assert out["count"] == 1
+    assert out["items"][0]["close_basis"] == 600.0
+    assert out["items"][0]["close_basis_rate"] == 0.78
+
+
+def test_etf_holders_detail_returns_structure_and_top_holders(fake_registry):
+    """ETF持有人详情接口返回持有人结构与前十大持有人。"""
+    struct_rows = [
+        {
+            "fund_thscode": "159113.SZ",
+            "fund_name": "科创债ETF大成",
+            "merge_scope": "separate",
+            "report_date_ms": 1782748800000,
+            "ins_position": 99.97,
+            "holder_amount": 265,
+            "avg_holder_share": 367231.08,
+            "psnl_rate": 0.03,
+            "mgmt_staff_hold_rate": None,
+        }
+    ]
+    top_rows = [
+        {
+            "fund_thscode": "159113.SZ",
+            "holder_name": "国投证券股份有限公司",
+            "holder_type": "券商",
+            "holder_code": "015003",
+            "rank": 1,
+            "hold_share": 904.43,
+            "hold_rate_pct": 7.32,
+            "report_date_ms": 1782748800000,
+            "publish_date_ms": 1783008000000,
+        }
+    ]
+    fake_registry({
+        "fund": FakeSource([
+            (r"FROM v_fund_holders", struct_rows),
+            (r"FROM v_fund_top_holders", top_rows),
+        ]),
+    })
+
+    out = _run(svc.market_etf_holders(thscode="159113.SZ", limit=10))
+    assert out["ok"] is True
+    assert out["fund_thscode"] == "159113.SZ"
+    assert out["structure"]["ins_position"] == 99.97
+    assert out["structure"]["psnl_rate"] == 0.03
+    assert out["count"] == 1
+    assert out["top_holders"][0]["holder_name"] == "国投证券股份有限公司"
+    assert out["top_holders"][0]["holder_type"] == "券商"
+
+
+def test_etf_institutional_ranking_returns_ordered_list(fake_registry):
+    """全市场机构持仓排行接口返回机构控盘度榜单。"""
+    rows = [
+        {
+            "fund_thscode": "159113.SZ",
+            "fund_name": "科创债ETF大成",
+            "merge_scope": "separate",
+            "report_date_ms": 1782748800000,
+            "ins_position": 99.97,
+            "holder_amount": 265,
+            "avg_holder_share": 367231.08,
+            "psnl_rate": 0.03,
+        }
+    ]
+    fake_registry({
+        "fund": FakeSource([
+            (r"FROM v_fund_holders", rows),
+        ]),
+    })
+
+    out = _run(svc.market_etf_institutional_ranking(order_by="institution", limit=10))
+    assert out["ok"] is True
+    assert out["count"] == 1
+    assert out["items"][0]["fund_thscode"] == "159113.SZ"
+    assert out["items"][0]["ins_position"] == 99.97
+
+
+def test_squeeze_status_detects_squeeze_and_supertrend(fake_registry):
+    """TTM Squeeze 接口识别布林带收缩在肯特纳通道内及 Supertrend 顺势牛。"""
+    rows = [
+        {
+            "date": dt.date(2026, 10, 13),
+            "volatility_bbands_20_2_0_upper": 11.75,
+            "volatility_bbands_20_2_0_lower": 11.24,
+            "volatility_bbands_20_2_0_middle": 11.50,
+            "volatility_kc_20_2_upper": 11.91,
+            "volatility_kc_20_2_lower": 11.07,
+            "volatility_kc_20_2_middle": 11.49,
+            "trend_supertrend_10_3_0_trend": 11.05,
+            "trend_supertrend_10_3_0_direction": 1.0,
+            "trend_supertrend_10_3_0_long": 11.05,
+            "trend_supertrend_10_3_0_short": None,
+            "momentum_macd_12_26_9_hist": 0.0071,
+            "statistics_beta_20": 0.85,
+        }
+    ]
+    fake_registry({
+        "indicators": FakeSource([
+            (r"FROM v_indicators_daily", rows),
+        ]),
+    })
+
+    out = _run(svc.market_squeeze_status(thscode="000001.SZ", limit=10))
+    assert out["ok"] is True
+    assert out["thscode"] == "000001.SZ"
+    assert out["is_squeezing"] is True
+    assert out["squeeze_status"] == "on"
+    assert out["supertrend_direction"] == 1
+    assert out["supertrend_level"] == 11.05
+    assert out["momentum_hist"] == 0.0071

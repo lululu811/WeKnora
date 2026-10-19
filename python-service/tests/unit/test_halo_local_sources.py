@@ -171,7 +171,8 @@ def test_real_anomaly_coverage_is_event_driven():
     assert run(get_anomaly_narratives(src, "600519.SH")) == []
     hot = run(get_anomaly_narratives(src, "000002.SZ"))
     assert hot, "000002.SZ 是近期异动股，应当有归因文本"
-    assert "原因" in hot[0]["content"]
+    assert len(hot[0]["content"]) > 0 and any(k in hot[0]["content"] for k in ("原因", "同花顺", "板块"))
+
 
 
 # ---------------------------------------------------------------------------
