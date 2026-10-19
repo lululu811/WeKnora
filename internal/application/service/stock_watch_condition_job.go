@@ -4,11 +4,13 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/robfig/cron/v3"
 
+	"github.com/Tencent/WeKnora/internal/alertnotify"
 	"github.com/Tencent/WeKnora/internal/logger"
 	"github.com/Tencent/WeKnora/internal/runtime"
 	"github.com/Tencent/WeKnora/internal/types"
@@ -68,6 +70,10 @@ type StockWatchConditionJob struct {
 
 	// grading is nil when the grading feature is not wired. Runs after diary.
 	grading func(ctx context.Context) error
+
+	// gate 回答「这次该不该推」。判定与投递是分开的：投递失败是网络问题，
+	// 判定不通过是策略问题，两者在日志与审计行里必须说得清区别。
+	gate *alertnotify.Gate
 
 	cron    *cron.Cron
 	mu      sync.Mutex
@@ -140,6 +146,7 @@ func NewStockWatchConditionJob(
 		notifications: notifications,
 		quotes:        quotes,
 		notifier:      notifier,
+		gate:          alertnotify.NewGate(alertnotify.ConditionPolicy()),
 		cron: cron.New(
 			cron.WithSeconds(),
 			cron.WithLocation(loc),
@@ -318,11 +325,31 @@ func (j *StockWatchConditionJob) runConditionsOnce(ctx context.Context) error {
 		return nil
 	}
 
+	// 判定在前，投递在后：不该推的消息连 webhook 都不碰。
+	//
+	// 去重键用「提醒日期 + scope 集合」：同一天同一批条件再触发一次是同一件事，
+	// 不该推第二遍。用时间戳做键等于没有去重。
+	scopeKeys := make([]string, 0, len(firingScopes))
+	for _, sc := range firingScopes {
+		scopeKeys = append(scopeKeys, fmt.Sprintf("%d/%s", sc.TenantID, sc.UserID))
+	}
+	dedupKey := alertDate(allFirings) + "|" + strings.Join(scopeKeys, ",")
+	if d := j.gate.Decide(time.Now(), dedupKey); !d.Allow {
+		logger.Infof(ctx,
+			"[StockWatchConditions] 按推送策略跳过：%s；触发事件仍在页面上", d.Reason)
+		j.recordNotifications(ctx, firingScopes, message, 0,
+			fmt.Errorf("skipped by push policy: %s", d.Reason))
+		return nil
+	}
+
 	attempts, sendErr := j.notifier.Send(ctx, message)
 	if sendErr != nil {
 		logger.Warnf(ctx,
 			"[StockWatchConditions] push failed after %d attempt(s); trigger events remain on the page: %v",
 			attempts, sendErr)
+	} else {
+		// 只有真送出去了才占额度：投递失败不该吃掉当天的额度。
+		j.gate.Record(time.Now(), dedupKey)
 	}
 	j.recordNotifications(ctx, firingScopes, message, attempts, sendErr)
 	return nil
