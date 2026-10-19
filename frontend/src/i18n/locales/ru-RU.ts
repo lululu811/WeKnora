@@ -9433,7 +9433,7 @@ export default {
     radar: {
       openExternal: 'Открыть в новом окне',
       reload: 'Обновить',
-      offlineHint: 'Не удалось подключиться к службе (http://127.0.0.1:5030/biz)',
+      offlineHint: 'Не удалось подключиться к службе ({url})',
       retry: 'Повторить попытку'
     },
     tabs: {

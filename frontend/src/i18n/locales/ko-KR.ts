@@ -9433,7 +9433,7 @@ export default {
     radar: {
       openExternal: '새 창에서 열기',
       reload: '새로고침',
-      offlineHint: '공식 계정 서비스에 연결할 수 없습니다 (http://127.0.0.1:5030/biz)',
+      offlineHint: '공식 계정 서비스에 연결할 수 없습니다 ({url})',
       retry: '다시 시도'
     },
     tabs: {

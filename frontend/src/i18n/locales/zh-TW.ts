@@ -9431,7 +9431,7 @@ export default {
     radar: {
       openExternal: 'Open in new window',
       reload: 'Reload',
-      offlineHint: 'Could not connect to WeChat service (http://127.0.0.1:5030/biz)',
+      offlineHint: '無法連線到公众号服務 ({url})',
       retry: 'Retry connection'
     },
     tabs: {

@@ -9431,7 +9431,7 @@ export default {
     radar: {
       openExternal: '独立窗口打开',
       reload: '刷新',
-      offlineHint: '未连接到公众号服务 (http://127.0.0.1:5030/biz)',
+      offlineHint: '未连接到公众号服务 ({url})',
       retry: '重试连接'
     },
     tabs: {

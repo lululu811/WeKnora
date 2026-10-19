@@ -9433,7 +9433,7 @@ export default {
     radar: {
       openExternal: '別ウィンドウで開く',
       reload: '再読み込み',
-      offlineHint: '公式アカウントサービスに接続できません (http://127.0.0.1:5030/biz)',
+      offlineHint: '公式アカウントサービスに接続できません ({url})',
       retry: '再試行'
     },
     tabs: {
