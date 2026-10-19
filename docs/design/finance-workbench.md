@@ -113,17 +113,22 @@ K 线上的形态标注是**描述层**：它说的是「这里长成了某个�
 
 按优先级（详细清单在 `docs/tech-debt/frontend.md` 与 `docs/tech-debt/go-data-layer.md`）：
 
-1. **K 线双外壳**：`KLineWorkspace.vue`（2561 行，重工具）与
-   `WatchDetailPanel.vue` + `WatchKLineChart.vue`（轻量）各有一套图表绘制。
-   `core-chart.ts` 已经是共享内核，但两个外壳各自长出了工具栏与指标口径 ——
-   同一只票在两处画两套图，指标口径可能不一致。目标：收敛到「一个内核 + 两套外壳配置」。
+1. **K 线双外壳的数据路径与指标集**：`KLineWorkspace.vue`（重工具）与
+   `WatchDetailPanel.vue` + `WatchKLineChart.vue`（轻量）现在**共用同一个
+   建图内核**（`core-chart.ts` 的 `coreChartOptions`，2026-10-20 收敛，
+   画布配色仍各自给 —— 重的固定深色、轻的跟随主题）。
+   剩下没统一的是**数据路径与指标集**：轻量图取 120 根 bar、只要 MA + 成交量，
+   重工作台走 datafeed 的 5000 根、有完整图层体系。
+   这两个差异是**外壳的设计**而非重复 —— 统一它们是行为改动，
+   得先答「侧栏到底该多轻」。
 2. **视图层测试**：21k 行 Vue 组件目前只有纯函数测试（`core-chart.test.ts` 这类），
    组件级为 0。需要 DOM 环境的用例（`useModalShell.test.ts`）曾长期红，
    2026-10-19 补了运行环境替身后已绿。
-3. **组件规模**：`Watchlist.vue` 2594 / `KLineWorkspace.vue` 2561 /
-   `WatchDetailPanel.vue` 1989 / `MarketDashboard.vue` 1765。
+3. **组件规模**：`Watchlist.vue` 2594 / `KLineWorkspace.vue` 2586 /
+   `WatchDetailPanel.vue` 1990 / `MarketDashboard.vue` 1765。
    原则：**拆正在写的，不拆正在稳定使用的** —— 这几个文件刚被改动过，
    等各自稳定一轮再动。
-4. **上游特性待移植**：2026-10-19 合并上游后，本 fork 尚未移植
-   「知识库文件夹三层文档计数」与「嵌入态草稿保留 / steer 资源域」，
-   对应的上游用例已挂起（`test.skip`）并写明原因。
+4. **上游特性**：2026-10-19 合并上游带进来的「知识库文件夹三层文档计数」
+   与「嵌入态用宿主模型 / 路由切换保留草稿 / steer 不越资源范围」
+   已于 2026-10-20 移植（见 `finance-workbench-decisions.md` 的 Q16 与
+   移植提交）。
