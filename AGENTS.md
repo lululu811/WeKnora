@@ -69,6 +69,37 @@ Local dev loop: `make dev-start` (docker-compose.dev.yml infra) → `make dev-ap
 Two locally-maintained stacks sit on top of the RAG core. Both are forked/private; treat their
 invariants as load-bearing.
 
+### 金融工作台（`frontend/src/finance/`）—— 桌面端专用，不是响应式
+
+工作台有四个入口，共享「收盘后扫一眼」的心智：**大盘预览大屏**（`/dashboard`，全屏一屏
+无滚动）、**个股追踪**（`/platform/watchlist`，四个 tab：大盘/自选/谁在动/权重 ETF）、
+**K 线工作台**（弹层，重工具）、**公众号工作台**（`/wechat`，iframe 嵌 chatlog）。
+
+**它只在桌面上用。** 整个 `frontend/src/finance/` 只有 1 个宽度断点
+（`MarketDashboard.vue` 的 1200px），其余 20 多个组件是零断点的固定多列。
+这是**有意的**，不是没做完：工作台的价值是收盘后坐下来一屏扫完，不是路上看的。
+新增组件不要顺手加响应式断点；要给移动端做东西，走 `miniprogram/` 那条线。
+
+四条不能违反的不变量：
+
+- **口径只有一份。** 前端走 python-service（FastAPI → 本地 DuckDB），agent 走 Go 的
+  `hithink_finance` 工具。同一张表两套 SQL 两套口径，所以共享口径要有机器可校验的
+  契约（`testdata/schema.json` + `schema_contract_test.go`），不要各自写死。
+- **注册 ≠ 可用。** Go 工具进了代码不等于模型能调：`allowed_tools` 白名单决定它
+  是否进 tool schema。`internal/agent/tools/zettaranc/whitelist_test.go` 与
+  `internal/healthcheck/reachability.go` 守着这条 —— 加工具必须同步加白名单，
+  否则健康检查会报「注册了却没人认领」。
+- **形态 ≠ 信号。** K 线上的形态标注是描述层，不是买卖建议。判据矩阵没有 edge
+  证据的形态一律不进通知/建议通道，且必须披露确认延迟。档位与判据见
+  [`docs/design/signal-admission.md`](docs/design/signal-admission.md)。
+- **推送有统一判定。** 「什么值得推」（频率上限 / 去重 / 静默时段 / 渠道档位）
+  集中在 `internal/alertnotify/policy.go`，各消费者不自己写。新增推送渠道时
+  先在那个文件里加一条渠道策略。
+
+工作台全貌与本轮决策记录见
+[`docs/design/finance-workbench.md`](docs/design/finance-workbench.md) 与
+[`docs/design/finance-workbench-decisions.md`](docs/design/finance-workbench-decisions.md)。
+
 ### `hithink_finance` — Go tools over a read-only local DuckDB
 
 `internal/agent/tools/hithink_finance/**` are thin, parameterised SQL over

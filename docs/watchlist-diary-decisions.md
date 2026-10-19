@@ -272,8 +272,12 @@ verdict 的结构化标签和颜色全丢。与 `alertnotify/feishu.go:3-7` 的�
 
 ### Q18 —— 迁移如何落地？
 
-`migrations/` 下有**两套并行体系**：`migrations/versioned/`（000120–000126，PG）和
-`migrations/sqlite/`（000038–000045，Lite）。每个 stock_watch 特性都是**成对**的两条。
+`migrations/` 下有**两套并行体系**：`migrations/versioned/`（PG）与
+`migrations/sqlite/`（Lite）。每个 stock_watch 特性都是**成对**的两条。
+
+> 迁移编号会被上游合并推着走：本地那批每次都重编号到「上游 max + 1」。
+> 2026-10-19 合并上游 v0.8.4 后，SQLite 那批在 000045–000052、PG 那批在
+> 000128–000134。**引用编号前先看磁盘**，别照抄这里的数字。
 
 - **A（已选）**：四条都写（两套 × up/down），照抄现有互指注释风格；
   **PG 侧的 `note` 改用 `TEXT`**

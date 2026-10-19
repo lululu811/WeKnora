@@ -318,3 +318,45 @@
 | 用 `@vue/test-utils` 真正 mount SFC 的 | **0**（该依赖未安装） |
 | 17 个巨型 SFC 中零测试的 | 6（`WikiBrowser` / `FAQEntryManager` / `doc-content` / `ModelEditorDialog` / `ApiIntegrationSettings` / `TenantMembers`） |
 | 真正跑过并通过的 i18n 门禁 | `localeKeyAudit.test.ts` 13/13（但覆盖方向错，见 S2 第 3 条） |
+
+---
+
+## 2026-10-19 复查：金融工作台专项
+
+本节只记**工作台**（`frontend/src/finance/`）这一块，复查于 2026-10-19。
+上文是全前端审计；两处数字口径不同（这里按工作台单算），不要混读。
+
+### 本轮已清
+
+| 债 | 处理 |
+|---|---|
+| nginx 反代白名单比路由清单少 13 条（生产下静默 401 → 页面按空态渲染） | 补齐 + 新增 `proxyRoutes.test.ts` 守住三份清单一致 |
+| 4 个 `--app-*` 令牌在 `theme.css` 从未定义却用了 33 次（深色主题下浅字压深底） | 映射到同目录兄弟组件在用的 TDesign 语义令牌，33 处硬编码兜底色一并去掉 |
+| `LadderHeat` 的 tooltip 显示原始 i18n 键 | 改走 `t()` |
+| 3 组 tab 有 `role="tablist"` 但按钮不是 tab；4 个纯图标按钮无 `aria-label` | 补齐角色与可及名 |
+| 6 个工作台组件 60 余处硬编码中文 | 抽成 i18n 键，6 个语言包各 +166 键；`dividend` / `kline.layers` / `watchlist.*` / `kline.patterns.*` 等命名空间补齐 |
+| 公众号工作台地址硬编码、无 token、postMessage 用 `'*'`、服务不通只有空白 | 地址/令牌改环境变量；token 走 chatlog 支持的 `?token=`；origin 钉死；探不通时给可读提示 + 重试 |
+| iframe 化后没人用的原生实现 683 行 + 19 个孤儿 i18n 键 | 删除（引用关系核实后） |
+| 形态标注没有区分「描述」与「建议」 | `PATTERN_CONFIG` 带准入档位与确认延迟；B1 标注的 metadata 带 `confirm_delay_bars` / `detectable_at` / `admission` |
+
+### 仍在
+
+| 债 | 规模 | 判断 |
+|---|---|---|
+| **K 线双外壳** | `KLineWorkspace.vue` 2561 行 与 `WatchDetailPanel.vue` + `WatchKLineChart.vue` 各一套绘制 | 同一只票在两处画两套图，指标口径可能不一致。`core-chart.ts` 已是共享内核，但两个外壳各自长出工具栏。**本轮没动** —— 收敛是行为改动（会改渲染结果），要单独做 |
+| **巨型 SFC** | `Watchlist.vue` 2594 / `KLineWorkspace.vue` 2561 / `WatchDetailPanel.vue` 1989 / `MarketDashboard.vue` 1765 / `StockCitationFloat.vue` 1087 | 原则：**拆正在写的，不拆正在稳定使用的**。这几个刚被改动过，等各自稳定一轮 |
+| **组件级测试为 0** | 21k 行 Vue 只有纯函数测试 | 需要 DOM 环境的用例曾长期红，2026-10-19 补了运行环境替身（`src/test/viteGlobals.ts`）后已绿。真正 mount SFC 的仍为 0（`@vue/test-utils` 未安装） |
+| **响应式** | 全目录 1 个断点 | **有意的**（desktop-only），已写进 `AGENTS.md`。不是待办 |
+| **上游特性待移植** | 知识库文件夹三层文档计数 / 嵌入态草稿保留与 steer 资源域 | 2026-10-19 合并上游带进来的，本 fork 尚未移植；对应上游用例已 `test.skip` 并写明原因 |
+| 动态 i18n 键 | `system.globalSettings.sections.*.tab` 5 个 | 审计测不到（键是拼出来的），留给系统设置页 |
+
+### 数字
+
+| 指标 | 数值 |
+|---|---|
+| 工作台代码量 | `frontend/src/finance/` 31,031 行 / 83 文件（含本轮前后变动） |
+| 巨型 SFC（> 1,700 行） | 4 个 |
+| 宽度断点 | 1 个（`MarketDashboard.vue` 的 1200px）—— 有意为之 |
+| 硬编码中文（本轮前） | 60 余处集中在 6 个组件；本轮清零 |
+| 语言包一致性 | 6 个语言包键集一致；`npm run check-i18n` 16/16 绿 |
+| 动态 i18n 键缺口 | 5 个（全在 `SystemSettings.vue`，不在工作台） |
