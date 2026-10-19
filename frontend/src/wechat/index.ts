@@ -22,7 +22,3 @@ registerModule({
 });
 
 export { default as WechatWorkbench } from './views/WechatWorkbench.vue';
-export { useWechatWorkbench } from './composables/useWechatWorkbench';
-export { useDocumentChat } from './composables/useDocumentChat';
-export * from './utils/vaultAssets';
-export * from './api';

@@ -9422,41 +9422,10 @@ export default {
     }
   },
   wechat: {
-    openOriginal: 'View original ↗',
-    send: 'Ask',
-    clear: 'Clear',
-    loading: 'Loading…',
-    pickHintClosed: 'List is collapsed — use “Show list” at the top right to pick an article',
-    pickHint: 'Pick an article on the left',
     radar: {
       openExternal: 'Open in new window',
-      reload: 'Reload',
       offlineHint: '無法連線到公众号服務 ({url})',
-      retry: 'Retry connection'
-    },
-    tabs: {
-      radar: 'Dynamic Radar',
-      study: 'Deep Reading'
-    },
-    chat: {
-      empty: 'Ask about this article, or switch to the whole knowledge base for cross-article search.',
-      placeholder: 'Ask about this article. Enter to send'
-    },
-    scope: {
-      doc: 'This article',
-      kb: 'Whole knowledge base'
-    },
-    item: {
-      indexing: 'indexing'
-    },
-    list: {
-      show: 'Show list',
-      hide: 'Hide list',
-      loading: 'Loading articles…',
-      empty: 'No WeChat articles in this knowledge base'
-    },
-    vault: {
-      off: 'Vault not configured — images may not load'
+      retry: 'Retry connection',
     }
   },
   dividend: {

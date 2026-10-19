@@ -9422,41 +9422,10 @@ export default {
     }
   },
   wechat: {
-    openOriginal: '查看原文 ↗',
-    send: '提问',
-    clear: '清空',
-    loading: '载入中…',
-    pickHintClosed: '列表已收起，点右上角「显示列表」选择文章',
-    pickHint: '从左侧选择一篇文章',
     radar: {
       openExternal: '独立窗口打开',
-      reload: '刷新',
       offlineHint: '未连接到公众号服务 ({url})',
-      retry: '重试连接'
-    },
-    tabs: {
-      radar: '动态雷达',
-      study: '精读问答'
-    },
-    chat: {
-      empty: '就这篇文章提问，或切到「问整个知识库」做跨篇检索。',
-      placeholder: '针对这篇文章提问，Enter 发送'
-    },
-    scope: {
-      doc: '只问这一篇',
-      kb: '问整个知识库'
-    },
-    item: {
-      indexing: '索引中'
-    },
-    list: {
-      show: '显示列表',
-      hide: '隐藏列表',
-      loading: '载入文章…',
-      empty: '该知识库还没有公众号文章'
-    },
-    vault: {
-      off: '未配置 vault，图片可能无法显示'
+      retry: '重试连接',
     }
   },
   dividend: {

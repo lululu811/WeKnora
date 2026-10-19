@@ -1,40 +1,9 @@
 export default {
   wechat: {
-    openOriginal: 'View original ↗',
-    send: 'Ask',
-    clear: 'Clear',
-    loading: 'Loading…',
-    pickHintClosed: 'List is collapsed — use “Show list” at the top right to pick an article',
-    pickHint: 'Pick an article on the left',
-    vault: {
-      off: 'Vault not configured — images may not load'
-    },
-    list: {
-      show: 'Show list',
-      hide: 'Hide list',
-      loading: 'Loading articles…',
-      empty: 'No WeChat articles in this knowledge base'
-    },
-    item: {
-      indexing: 'indexing'
-    },
-    scope: {
-      doc: 'This article',
-      kb: 'Whole knowledge base'
-    },
-    chat: {
-      empty: 'Ask about this article, or switch to the whole knowledge base for cross-article search.',
-      placeholder: 'Ask about this article. Enter to send'
-    },
-    tabs: {
-      radar: 'Dynamic Radar',
-      study: 'Deep Reading'
-    },
     radar: {
       openExternal: 'Open in new window',
-      reload: 'Reload',
       offlineHint: 'Could not connect to WeChat service ({url})',
-      retry: 'Retry connection'
+      retry: 'Retry connection',
     }
   },
   halo: {

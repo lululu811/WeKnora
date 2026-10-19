@@ -9424,41 +9424,10 @@ export default {
     }
   },
   wechat: {
-    openOriginal: '元の記事を開く ↗',
-    send: '質問',
-    clear: 'クリア',
-    loading: '読み込み中…',
-    pickHintClosed: 'リストは折りたたまれています。右上の「リストを表示」から記事を選んでください',
-    pickHint: '左から記事を選択してください',
     radar: {
       openExternal: '別ウィンドウで開く',
-      reload: '再読み込み',
       offlineHint: '公式アカウントサービスに接続できません ({url})',
-      retry: '再試行'
-    },
-    tabs: {
-      radar: '動的レーダー',
-      study: '精読・質疑'
-    },
-    chat: {
-      empty: 'この記事について質問するか、「ナレッジベース全体」に切り替えて横断検索。',
-      placeholder: 'この記事について質問（Enter で送信）'
-    },
-    scope: {
-      doc: 'この記事のみ',
-      kb: 'ナレッジベース全体'
-    },
-    item: {
-      indexing: '索引中'
-    },
-    list: {
-      show: 'リストを表示',
-      hide: 'リストを隠す',
-      loading: '記事を読み込み中…',
-      empty: 'このナレッジベースには WeChat 記事がありません'
-    },
-    vault: {
-      off: 'vault が未設定のため画像が表示されない場合があります'
+      retry: '再試行',
     }
   },
   dividend: {
