@@ -33,6 +33,7 @@ interface ContractEntry {
   ts_interface: string | null
   fields?: string[]
   backend_only?: string[]
+  degraded_only?: string[]
   query?: Record<string, unknown>
   body?: Record<string, unknown>
 }
@@ -105,16 +106,27 @@ test('前端声明的字段与契约一致', () => {
     const declared = new Set(interfaces.get(name) ?? [])
     const contractFields = new Set(entry.fields ?? [])
     const backendOnly = new Set(entry.backend_only ?? [])
+    const degradedOnly = new Set(entry.degraded_only ?? [])
 
-    // 危险方向：前端要、后端不发。
-    const missing = [...declared].filter(f => !contractFields.has(f))
+    // 危险方向：前端要、后端不发。契约里的 fields 是后端健康形态实际发的，
+    // backend_only 是「发了但前端不读」的那几个（已在契约里写明）。
+    const missing = [...declared].filter(
+      f => !contractFields.has(f) && !degradedOnly.has(f),
+    )
     if (missing.length) {
       problems.push(`${path}（${name}）前端要用但契约里没有：${missing.join(', ')}`)
     }
-    // 无害方向：后端发、前端没声明 —— 必须记进 backend_only 并写明原因。
+    // 后端发了、前端没声明 —— 必须是 backend_only 里的那一个（已写明原因）。
     const extra = [...contractFields].filter(f => !declared.has(f) && !backendOnly.has(f))
     if (extra.length) {
       problems.push(`${path}（${name}）契约里有但前端没声明：${extra.join(', ')}（应记进 backend_only）`)
+    }
+    // 前端多声明的字段只能是降级形态才有的那些。
+    const stray = [...declared].filter(
+      f => !contractFields.has(f) && !degradedOnly.has(f),
+    )
+    if (stray.length) {
+      problems.push(`${path}（${name}）前端多声明了非降级形态的字段：${stray.join(', ')}`)
     }
   }
   assert.deepEqual(problems, [], `\n${problems.join('\n')}`)

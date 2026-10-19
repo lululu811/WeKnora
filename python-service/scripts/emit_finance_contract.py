@@ -77,13 +77,6 @@ CASES: list[dict[str, Any]] = [
      "ts_interface": None, "fields": ["code", "data"]},
 ]
 
-# 后端多发、但前端确实用不到的字段。写在这里是为了让差异**看得见**，
-# 而不是让契约悄悄多出一堆「前端没声明」的键 —— 那样用例会一直红，
-# 红久了就没人看了。
-BACKEND_ONLY: dict[str, list[str]] = {
-    "/api/market/snapshot": ["sources"],
-}
-
 # 组件里的类型常常不是 export 的（`interface AuctionResponse {`），
 # 所以两种写法都认。
 INTERFACE_RE = re.compile(r"^(?:export\s+)?interface\s+(\w+)\s*\{", re.M)
@@ -125,8 +118,15 @@ def read_interfaces() -> dict[str, list[str]]:
     return out
 
 
-def probe(case: dict[str, Any]) -> dict[str, Any] | None:
-    """打一次端点，返回 healthy 时的顶层键；降级或失败返回 None。"""
+def probe_all(cases: list[dict[str, Any]]) -> dict[str, dict[str, Any] | None]:
+    """打一遍所有端点，返回 {路径: healthy 时的顶层键}；降级或失败是 None。
+
+    **必须**用 with：TestClient 不进上下文就不会跑 lifespan，数据源一个都没注册
+    —— 每个端点都会答「数据源未就绪」，探到的就不是真实形状而是一层降级壳。
+
+    也**只开一次**客户端：lifespan 每跑一次就往注册表里再注册一遍数据源，
+    而注册表是进程级单例，第二次注册会报「数据源 'index' 已存在」。
+    """
     from fastapi.testclient import TestClient
 
     # 脚本住在 scripts/ 下，服务根目录不在 sys.path 里，import main 会失败。
@@ -135,24 +135,39 @@ def probe(case: dict[str, Any]) -> dict[str, Any] | None:
 
     import main  # noqa: PLC0415 — 放在函数里：import main 会把整个服务拉起来
 
-    client = TestClient(main.app)
-    method = case["method"]
-    if method == "POST":
-        resp = client.post(case["path"], json=case.get("body", {}))
-    else:
-        resp = client.get(case["path"], params=case.get("query", {}))
-    if resp.status_code != 200:
-        return None
-    body = resp.json()
-    if not isinstance(body, dict):
-        return None
-    # 降级壳：ok 明确为 false，或者带 unavailable 且没有载荷
-    if body.get("ok") is False:
-        return None
-    return {"keys": sorted(body.keys()), "body": body}
+    out: dict[str, dict[str, Any] | None] = {}
+    with TestClient(main.app) as client:
+        for case in cases:
+            method = case["method"]
+            if method == "POST":
+                resp = client.post(case["path"], json=case.get("body", {}))
+            else:
+                resp = client.get(case["path"], params=case.get("query", {}))
+            try:
+                body = resp.json()
+            except Exception:  # noqa: BLE001 — 非 JSON 响应也是被测对象
+                body = {}
+            if not isinstance(body, dict) or body.get("ok") is False:
+                out[case["path"]] = None
+                continue
+            out[case["path"]] = {"keys": sorted(body.keys()), "body": body}
+    return out
 
 
-def build_contract() -> dict[str, Any]:
+def build_contract(probed: dict[str, dict[str, Any] | None] | None = None) -> dict[str, Any]:
+    """拼出契约。
+
+    **字段以��端实际发的为准**（探针结果），前端声明只用来分三类：
+
+      fields         健康形态下后端发的字段（真相）
+      backend_only   健康形态下后端发了、但前端没声明的（前端不读，但要知道它存在）
+      degraded_only  前端声明了、但只在降级形态下才出现的
+                     （降级壳是 {ok:false, reason, unavailable}，reason 就属于这一类）
+
+    为什么要分三处：接口类型写的是**两种形态的并集** —— 同一个
+    SectorResponse，健康时没有 reason，降级时才有 reason。笼统地比一套
+    字段集，要么误报（健康形态少一个字段），要么漏报（降级形态多一个）。
+    """
     interfaces = read_interfaces()
     endpoints: dict[str, Any] = {}
     for case in CASES:
@@ -166,15 +181,23 @@ def build_contract() -> dict[str, Any]:
             entry["query"] = case["query"]
         if case.get("body"):
             entry["body"] = case["body"]
+
         declared = interfaces.get(ts_iface or "", [])
-        if case.get("fields"):
-            # 手写覆盖：类型是内联的（没有具名 interface）时用。
-            entry["fields"] = list(case["fields"])
-        elif declared:
-            entry["fields"] = declared
-        extra = BACKEND_ONLY.get(path, [])
-        if extra:
-            entry["backend_only"] = extra
+        result = (probed or {}).get(path)
+        if result is not None:
+            actual = set(result["keys"])
+        elif case.get("fields"):
+            actual = set(case["fields"])       # 手写覆盖（内联类型）
+        else:
+            actual = set(declared)
+
+        entry["fields"] = sorted(actual)
+        backend_only = sorted(actual - set(declared))
+        degraded_only = sorted(set(declared) - actual)
+        if backend_only:
+            entry["backend_only"] = backend_only
+        if degraded_only:
+            entry["degraded_only"] = degraded_only
         endpoints[path] = entry
     return {
         "version": 1,
@@ -193,7 +216,13 @@ def main() -> int:
     parser.add_argument("--check", action="store_true", help="只比对，不写文件")
     args = parser.parse_args()
 
-    contract = build_contract()
+    probed: dict[str, dict[str, Any] | None] = {}
+    try:
+        probed = probe_all(CASES)
+    except Exception as exc:  # noqa: BLE001 — 探不到就退回用前端声明生成
+        print(f"（探针失败，契约退回前端声明为准：{type(exc).__name__}: {exc}）", file=sys.stderr)
+
+    contract = build_contract(probed)
     text = json.dumps(contract, ensure_ascii=False, indent=2, sort_keys=False) + "\n"
 
     if args.check:
@@ -214,18 +243,15 @@ def main() -> int:
 
     # 顺带报一次漂移：后端多发的字段（前端没声明）。
     try:
-        for case in CASES:
-            probed = probe(case)
-            if probed is None:
+        probed = probe_all(CASES)
+        for path, result in probed.items():
+            if result is None:
+                print(f"  - {path} 本机探不到（数据未就绪），未参与漂移比对")
                 continue
-            path = case["path"]
             entry = contract["endpoints"][path]
-            declared = set(entry.get("fields", []))
-            if not declared:
-                continue
-            extra = sorted(set(probed["keys"]) - declared - set(entry.get("backend_only", [])))
+            extra = sorted(set(result["keys"]) - set(entry.get("fields", [])))
             if extra:
-                print(f"  ! {path} 后端多发、前端未声明：{extra}")
+                print(f"  ! {path} 后端多发、契约里没有：{extra}")
     except Exception as exc:  # noqa: BLE001 — 探针失败不该让生成失败
         print(f"（漂移探测跳过：{type(exc).__name__}: {exc}）", file=sys.stderr)
     return 0

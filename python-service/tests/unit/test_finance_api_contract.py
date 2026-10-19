@@ -21,6 +21,7 @@
 
 from __future__ import annotations
 
+import gc
 import json
 import sys
 from pathlib import Path
@@ -57,11 +58,28 @@ def probe(client: Any, path: str, entry: dict[str, Any]) -> tuple[int, dict[str,
 
 @pytest.fixture(scope="module")
 def client() -> Any:
+    """带 lifespan 的客户端。
+
+    **必须**用 `with`：不进上下文就不会跑 startup 事件，数据源一个都没注册，
+    每个端点都答「数据源未就绪」—— 那时候这个用例只是在验降级壳，
+    真实形状一个都没验到。
+    """
     from fastapi.testclient import TestClient
 
     import main
 
-    return TestClient(main.app)
+    with TestClient(main.app) as c:
+        yield c
+
+    # 关掉连接之后还要把注册表清空。注册表是进程级单例，它攥着数据源对象，
+    # 而 duckdb 的文件锁要到连接对象被回收才释放 —— 不清的话，后面直接
+    # duckdb.connect 同一文件的其他用例会撞上
+    # 「Can't open a connection to same database file with a different configuration」。
+    from datasources import registry
+
+    for name in list(registry.list_sources().keys()):
+        registry.unregister(name)
+    gc.collect()
 
 
 def test_contract_covers_the_finance_endpoints() -> None:
@@ -74,8 +92,12 @@ def test_contract_covers_the_finance_endpoints() -> None:
         assert entry.get("method") in ("GET", "POST"), f"{path} 的 method 不对"
         assert entry.get("fields"), f"{path} 没有记录字段"
         assert len(entry["fields"]) == len(set(entry["fields"])), f"{path} 的字段有重复"
-        overlap = set(entry["fields"]) & set(entry.get("backend_only", []))
-        assert not overlap, f"{path} 的字段同时出现在 fields 与 backend_only：{overlap}"
+        # backend_only 是 fields 的子集（后端发了、前端不读的那些）
+        assert set(entry.get("backend_only", [])) <= set(entry["fields"]), \
+            f"{path} 的 backend_only 不是 fields 的子集"
+        # degraded_only 与 fields 不相交（只在降级形态出现的字段）
+        overlap = set(entry["fields"]) & set(entry.get("degraded_only", []))
+        assert not overlap, f"{path} 的字段同时出现在 fields 与 degraded_only：{overlap}"
 
 
 def test_backend_responses_match_the_contract(client: Any) -> None:
@@ -86,15 +108,16 @@ def test_backend_responses_match_the_contract(client: Any) -> None:
         if status != 200:
             pytest.skip(f"{path} 在本机返回 {status}（数据未就绪），跳过键比对")
         if body.get("ok") is False:
-            # 降级壳：字段天然不一样，只要求它是契约键的子集。
-            allowed = set(entry["fields"]) | set(entry.get("backend_only", []))
+            # 降级壳：字段天然不一样（多一个 reason），只要求它是契约键的子集。
+            allowed = (set(entry["fields"]) | set(entry.get("backend_only", []))
+                       | set(entry.get("degraded_only", [])))
             extra = sorted(set(body.keys()) - allowed)
             assert not extra, f"{path} 降级响应多出契约外的字段：{extra}"
             continue
 
-        allowed = set(entry["fields"]) | set(entry.get("backend_only", []))
+        # 健康形态：实际键必须与契约逐字相同。
         actual = set(body.keys())
-        missing = sorted(allowed - actual)
-        extra = sorted(actual - allowed)
+        missing = sorted(set(entry["fields"]) - actual)
+        extra = sorted(actual - set(entry["fields"]))
         assert not missing, f"{path} 契约里有、实际没发：{missing}"
         assert not extra, f"{path} 实际多发、契约里没有：{extra}"

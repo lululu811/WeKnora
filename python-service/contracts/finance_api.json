@@ -11,12 +11,13 @@
       },
       "fields": [
         "code",
-        "trade_date",
-        "indices",
-        "tickers",
-        "sentiment",
         "etfs",
+        "indices",
         "market_state",
+        "sentiment",
+        "sources",
+        "tickers",
+        "trade_date",
         "unavailable"
       ],
       "backend_only": [
@@ -31,9 +32,9 @@
       },
       "fields": [
         "code",
-        "trade_date",
         "count",
-        "data"
+        "data",
+        "trade_date"
       ]
     },
     "/api/market/sectors": {
@@ -43,12 +44,14 @@
         "limit": 5
       },
       "fields": [
-        "ok",
-        "trade_date",
         "items",
-        "total",
-        "unavailable",
+        "ok",
         "sort_rule",
+        "total",
+        "trade_date",
+        "unavailable"
+      ],
+      "degraded_only": [
         "reason"
       ]
     },
@@ -59,9 +62,11 @@
         "days": 30
       },
       "fields": [
-        "ok",
         "days",
-        "unavailable",
+        "ok",
+        "unavailable"
+      ],
+      "degraded_only": [
         "reason"
       ]
     },
@@ -69,13 +74,15 @@
       "method": "GET",
       "ts_interface": "BasisResponse",
       "fields": [
-        "ok",
         "basis_date",
         "futures_latest",
-        "spot_latest",
         "items",
-        "unavailable",
         "note",
+        "ok",
+        "spot_latest",
+        "unavailable"
+      ],
+      "degraded_only": [
         "reason"
       ]
     },
@@ -83,10 +90,12 @@
       "method": "GET",
       "ts_interface": "CommoditiesResponse",
       "fields": [
+        "items",
         "ok",
         "trade_date",
-        "items",
-        "unavailable",
+        "unavailable"
+      ],
+      "degraded_only": [
         "reason"
       ]
     },
@@ -98,12 +107,14 @@
         "limit": 20
       },
       "fields": [
+        "count",
+        "items",
         "ok",
         "stock_thscode",
         "summary",
-        "items",
-        "count",
-        "unavailable",
+        "unavailable"
+      ],
+      "degraded_only": [
         "reason"
       ]
     },
@@ -114,13 +125,15 @@
         "limit": 20
       },
       "fields": [
-        "ok",
-        "trade_date",
-        "max_board",
-        "total_count",
-        "items",
         "by_level",
-        "unavailable",
+        "items",
+        "max_board",
+        "ok",
+        "total_count",
+        "trade_date",
+        "unavailable"
+      ],
+      "degraded_only": [
         "reason"
       ]
     },
@@ -132,11 +145,13 @@
         "limit": 10
       },
       "fields": [
+        "count",
+        "items",
         "ok",
         "thscode",
-        "items",
-        "count",
-        "unavailable",
+        "unavailable"
+      ],
+      "degraded_only": [
         "reason"
       ]
     },
@@ -147,13 +162,15 @@
         "limit": 20
       },
       "fields": [
+        "break_count",
+        "break_pool",
+        "down_count",
+        "down_pool",
         "ok",
         "trade_date",
-        "break_pool",
-        "down_pool",
-        "break_count",
-        "down_count",
-        "unavailable",
+        "unavailable"
+      ],
+      "degraded_only": [
         "reason"
       ]
     },
@@ -161,10 +178,12 @@
       "method": "GET",
       "ts_interface": "DividendCalendarResponse",
       "fields": [
-        "ok",
-        "items",
         "count",
-        "unavailable",
+        "items",
+        "ok",
+        "unavailable"
+      ],
+      "degraded_only": [
         "reason"
       ]
     },
@@ -176,12 +195,14 @@
         "limit": 50
       },
       "fields": [
-        "ok",
-        "mode",
-        "trade_date",
-        "items",
         "count",
-        "unavailable",
+        "items",
+        "mode",
+        "ok",
+        "trade_date",
+        "unavailable"
+      ],
+      "degraded_only": [
         "reason"
       ]
     },
@@ -193,11 +214,13 @@
         "limit": 30
       },
       "fields": [
+        "count",
+        "items",
         "ok",
         "thscode",
-        "items",
-        "count",
-        "unavailable",
+        "unavailable"
+      ],
+      "degraded_only": [
         "reason"
       ]
     },
@@ -208,11 +231,13 @@
         "limit": 20
       },
       "fields": [
+        "count",
+        "items",
         "ok",
         "trade_date",
-        "items",
-        "count",
-        "unavailable",
+        "unavailable"
+      ],
+      "degraded_only": [
         "reason"
       ]
     },
@@ -223,11 +248,13 @@
         "limit": 20
       },
       "fields": [
+        "count",
+        "items",
         "ok",
         "trade_date",
-        "items",
-        "count",
-        "unavailable",
+        "unavailable"
+      ],
+      "degraded_only": [
         "reason"
       ]
     },
@@ -239,12 +266,14 @@
         "limit": 10
       },
       "fields": [
-        "ok",
+        "count",
         "fund_thscode",
+        "ok",
         "structure",
         "top_holders",
-        "count",
-        "unavailable",
+        "unavailable"
+      ],
+      "degraded_only": [
         "reason"
       ]
     },
@@ -255,11 +284,13 @@
         "limit": 20
       },
       "fields": [
+        "count",
+        "items",
         "ok",
         "order_by",
-        "items",
-        "count",
-        "unavailable",
+        "unavailable"
+      ],
+      "degraded_only": [
         "reason"
       ]
     },
@@ -271,18 +302,20 @@
         "limit": 30
       },
       "fields": [
-        "ok",
-        "thscode",
+        "beta",
+        "count",
         "is_squeezing",
-        "squeeze_status",
+        "items",
         "latest_date",
+        "momentum_hist",
+        "ok",
+        "squeeze_status",
         "supertrend_direction",
         "supertrend_level",
-        "momentum_hist",
-        "beta",
-        "items",
-        "count",
-        "unavailable",
+        "thscode",
+        "unavailable"
+      ],
+      "degraded_only": [
         "reason"
       ]
     },
@@ -290,21 +323,27 @@
       "method": "GET",
       "ts_interface": "AuctionResponse",
       "fields": [
-        "ok",
-        "date",
-        "stage",
-        "breadth",
         "benchmark",
-        "movers",
-        "thscode",
-        "name",
-        "auction_pct",
-        "volume_ratio",
-        "turnover_pct",
-        "float_market_cap",
+        "breadth",
+        "date",
         "min_float_cap",
-        "unavailable",
-        "reason"
+        "movers",
+        "note",
+        "ok",
+        "stage",
+        "unavailable"
+      ],
+      "backend_only": [
+        "note"
+      ],
+      "degraded_only": [
+        "auction_pct",
+        "float_market_cap",
+        "name",
+        "reason",
+        "thscode",
+        "turnover_pct",
+        "volume_ratio"
       ]
     },
     "/api/market/technicals": {
@@ -316,13 +355,15 @@
         ]
       },
       "fields": [
-        "ok",
         "as_of",
         "backend",
         "items",
         "missing",
-        "unavailable",
         "note",
+        "ok",
+        "unavailable"
+      ],
+      "degraded_only": [
         "reason"
       ]
     },
@@ -335,6 +376,10 @@
         ]
       },
       "fields": [
+        "code",
+        "data"
+      ],
+      "backend_only": [
         "code",
         "data"
       ]

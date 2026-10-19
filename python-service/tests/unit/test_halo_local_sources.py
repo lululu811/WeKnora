@@ -13,6 +13,8 @@ from halo.industry_map import (
 )
 from halo.store import FactStore
 
+from datasources.duckdb_source import _duckdb_config
+
 INDEX_PDF_DUCKDB = os.path.expanduser("~/.hithink-finance/index.duckdb")
 SPECIAL_DUCKDB = os.path.expanduser("~/.hithink-finance/special.duckdb")
 
@@ -130,7 +132,12 @@ def test_anomaly_drops_empty_content():
 @requires_index
 def test_real_industry_coverage():
     import duckdb
-    con = duckdb.connect(INDEX_PDF_DUCKDB, read_only=True)
+    # 必须用服务自己的连接配置：duckdb_source._duckdb_config() 的注释写着
+    # 「所有 duckdb.connect 都必须走这里，不能各写各的」——
+    # 同一个库用不同配置打开，duckdb 会直接拒绝：
+    # "Can't open a connection to same database file with a different configuration"。
+    # 这个用例之前没踩到，是因为没有别的用例先打开过这些库。
+    con = duckdb.connect(INDEX_PDF_DUCKDB, read_only=True, config=_duckdb_config())
 
     class Real:
         async def execute(self, q, p=None):
@@ -157,7 +164,7 @@ def test_real_anomaly_coverage_is_event_driven():
     别的表接错了。
     """
     import duckdb
-    con = duckdb.connect(SPECIAL_DUCKDB, read_only=True)
+    con = duckdb.connect(SPECIAL_DUCKDB, read_only=True, config=_duckdb_config())
 
     class Real:
         async def execute(self, q, p=None):
