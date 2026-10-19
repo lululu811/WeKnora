@@ -20,6 +20,12 @@
                 <sup v-if="isLiteEdition" class="lite-badge">Lite</sup>
             </div>
             <div class="logo_actions">
+                <t-tooltip v-if="showAssistant" :content="assistantName" placement="bottom">
+                    <div class="header-icon-btn" :class="{ 'is-active': assistantActive }"
+                        :aria-label="assistantName" @click="$emit('toggle-assistant')">
+                        <t-icon name="compass" size="18px" />
+                    </div>
+                </t-tooltip>
                 <t-tooltip placement="bottom">
                     <template #content>
                         <span class="cmdk-tip">
@@ -41,8 +47,20 @@
             </div>
         </div>
 
+        <!-- 折叠态：助手入口 + 展开按钮 -->
+        <t-tooltip v-if="collapsed && showAssistant" :content="assistantName" placement="right">
+            <div class="menu_item menu_item--cmdk" :class="{ 'menu_item_active': assistantActive }"
+                :aria-label="assistantName" @click="$emit('toggle-assistant')">
+                <div class="menu_item-box">
+                    <div class="menu_icon">
+                        <t-icon name="compass" size="18px" />
+                    </div>
+                </div>
+            </div>
+        </t-tooltip>
+
         <!-- 折叠态：展开按钮 -->
-        <t-tooltip v-else :content="t('menu.expandSidebar')" placement="right">
+        <t-tooltip v-if="collapsed" :content="t('menu.expandSidebar')" placement="right">
             <div class="menu_item sidebar-toggle-item" @click="$emit('toggle')">
                 <div class="menu_item-box">
                     <div class="menu_icon">
@@ -110,12 +128,19 @@ defineProps<{
   collapsedWidth: number;
   /** 宽度上限。 */
   maxWidth: number;
+  /** 是否展示助手入口（由上层按 assistantStore.entry 决定）。 */
+  showAssistant: boolean;
+  /** 助手显示名。 */
+  assistantName: string;
+  /** 助手面板当前是否展开。 */
+  assistantActive: boolean;
 }>();
 
 defineEmits<{
   (e: 'toggle'): void;
   (e: 'open-search'): void;
   (e: 'go-home'): void;
+  (e: 'toggle-assistant'): void;
   (e: 'resize-start'): void;
   (e: 'resize', delta: number, keyboard: boolean): void;
   (e: 'resize-end'): void;

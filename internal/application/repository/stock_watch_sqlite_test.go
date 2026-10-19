@@ -22,7 +22,7 @@ import (
 // watchlistTestDDL 拼出 watchlist 家族**全部**的 up 迁移。
 //
 // 用通配符扫 `*stock_watch*.up.sql`，而不是手写文件名列表。理由是
-// stock_watch_events 被本目录多个测试共用：**只要有人给它加一列**（例如 000041 加了
+// stock_watch_events 被本目录多个测试共用：**只要有人给它加一列**（例如 000048 加了
 // eval_date），每一个手写列表都要跟着改，漏一个就表现为 sibling 测试以
 // "table stock_watch_events has no column named ..." 失败 —— 这件事已经真实发生过两次。
 // 通配符让"新增一条家族迁移"自动生效；文件名里的 6 位补零序号保证拼接顺序即执行顺序。

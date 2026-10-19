@@ -14,6 +14,7 @@ import (
 	ginSwagger "github.com/swaggo/gin-swagger"
 	"go.uber.org/dig"
 
+	"github.com/Tencent/WeKnora/internal/agent/operations"
 	"github.com/Tencent/WeKnora/internal/application/service"
 	"github.com/Tencent/WeKnora/internal/config"
 	"github.com/Tencent/WeKnora/internal/handler"
@@ -97,6 +98,7 @@ type RouterParams struct {
 	// diary handler's contract above: a deployment without the finance stack
 	// must boot without it.
 	HaloHandler                  *handler.HaloHandler
+	GraphSearchHandler           *handler.GraphSearchHandler
 	SkillHandler                 *handler.SkillHandler
 	OrganizationHandler          *handler.OrganizationHandler
 	IMHandler                    *handler.IMHandler
@@ -115,7 +117,8 @@ type RouterParams struct {
 	// HealthInspector serves the readiness/degraded signal. Optional: a nil
 	// inspector simply means the route is not registered, which is why the
 	// liveness path above never depends on it.
-	HealthInspector *healthcheck.Inspector
+	HealthInspector     *healthcheck.Inspector
+	OperationDispatcher *operations.HandlerDispatcher
 }
 
 // NewRouter 创建新的路由
@@ -367,6 +370,7 @@ func NewRouter(params RouterParams) *gin.Engine {
 			rbacGuards.apiKeyRoute(v1, http.MethodPost, "/halo/archive",
 				apiKeyIngest(apiKeyFullAccess()), params.HaloHandler.ArchiveHaloReport)
 		}
+		RegisterGraphSearchRoutes(v1, params.GraphSearchHandler, rbacGuards)
 		RegisterFAQRoutes(v1, params.FAQHandler, rbacGuards)
 		RegisterChunkRoutes(v1, params.ChunkHandler, rbacGuards)
 		RegisterSessionRoutes(v1, params.SessionHandler, params.MessageSuggestionHandler, rbacGuards)
@@ -409,6 +413,11 @@ func NewRouter(params RouterParams) *gin.Engine {
 		// stale template would silently 403 every API key on that route,
 		// so we panic at startup instead of shipping a dead policy.
 		rbacGuards.assertAPIKeyPoliciesMatchRoutes(r)
+	}
+
+	if params.OperationDispatcher != nil {
+		assertOperationRoutesExist(r, operations.Builtin())
+		params.OperationDispatcher.Bind(r)
 	}
 
 	return r

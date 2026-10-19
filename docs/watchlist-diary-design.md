@@ -1,7 +1,7 @@
 # 个股追踪增强设计：入池理由 / K线 / 每日观察日记
 
 > **状态：已实现（2026-10-02）。** 本文档记录 2026-10-02 设计讨论的结论。
-> 落地位置：迁移 `000124`/`000125`（PG）、`000042`/`000043`（SQLite）；
+> 落地位置：迁移 `000132`/`000133`（PG）、`000049`/`000050`（SQLite）；
 > 类型 `internal/types/stock_watch_diary.go`；服务
 > `internal/application/service/stock_watch_diary*.go`；前端
 > `frontend/src/components/watchlist/`。
@@ -227,7 +227,7 @@ cron 跑在 `context.Background()` 里，因此日记作业**必须逐 scope 重
 - **一次批量调用**整批；**单票解析失败只丢那一票**
   （抄 `memory/extract.go` 「one bad entry must not discard the rest of the run」）
 - **整次调用失败**：当天不写任何行，但在 `stock_watch_notifications` 记一条
-  （表已存在，`migrations/sqlite/000040`）——否则「那天没日记」和「那天没跑」永远分不开
+  （表已存在，`migrations/sqlite/000047`）——否则「那天没日记」和「那天没跑」永远分不开
 
 ### 4.6 `holding` 行的特殊语义
 
@@ -300,8 +300,8 @@ SELECT DISTINCT user_id, tenant_id FROM stock_watches
 
 | 方言 | 路径 | 现状 |
 |---|---|---|
-| PostgreSQL | `migrations/versioned/` | 000120–000126 |
-| SQLite | `migrations/sqlite/` | 000038–000045 |
+| PostgreSQL | `migrations/versioned/` | 000128–000134 |
+| SQLite | `migrations/sqlite/` | 000045–000052 |
 
 `note` 宽度变更与日记建表**分属两条迁移**（理由见 2.3），
 每条在两套体系下都有 up/down，共八条文件：
@@ -316,8 +316,8 @@ SELECT DISTINCT user_id, tenant_id FROM stock_watches
 PG 侧 `ALTER COLUMN note TYPE TEXT` 的先例见 `000058_expand_knowledge_source`、
 `000066_expand_knowledge_span_name`。
 
-互指注释是既定惯例，照抄 `migrations/sqlite/000039` 那份
-「SQLite twin of versioned migration 000121」的写法。
+互指注释是既定惯例，照抄 `migrations/sqlite/000046` 那份
+「SQLite twin of versioned migration 000129」的写法。
 
 `watchlistTestDDL` 用 `Glob("*stock_watch*.up.sql")` 扫 sqlite 目录
 （`internal/application/repository/stock_watch_sqlite_test.go:31`），

@@ -18,7 +18,11 @@
             :display-width="uiStore.sidebarDisplayWidth"
             :collapsed-width="SIDEBAR_COLLAPSED_WIDTH"
             :max-width="SIDEBAR_MAX_WIDTH"
+            :show-assistant="assistantStore.entry === 'sidebar'"
+            :assistant-name="assistantName"
+            :assistant-active="assistantStore.visible"
             @toggle="onToggleSidebar"
+            @toggle-assistant="assistantStore.toggle()"
             @open-search="commandPaletteStore.openPalette('')"
             @go-home="router.push('/platform/knowledge-bases')"
             @resize-start="startSidebarResize"
@@ -161,6 +165,7 @@ import { TOOLBOX_ITEMS, canAccessToolboxSection } from '@/config/toolbox';
 import { useBrowserConnectionStore } from '@/stores/browserConnection';
 import { useOrganizationStore } from '@/stores/organization';
 import { useUIStore } from '@/stores/ui';
+import { useAssistantStore } from '@/stores/assistant';
 import { useCommandPaletteStore } from '@/stores/commandPalette';
 import { MessagePlugin, DialogPlugin, Icon as TIcon } from "tdesign-vue-next";
 import { useI18n } from 'vue-i18n';
@@ -214,6 +219,8 @@ const toolboxPreview = computed(() => TOOLBOX_ITEMS.filter((item) => canAccessTo
 })));
 const orgStore = useOrganizationStore();
 const uiStore = useUIStore();
+const assistantStore = useAssistantStore();
+const assistantName = computed(() => assistantStore.displayName || t('assistant.title'));
 const browserConnection = useBrowserConnectionStore();
 const browserStackStatus = computed(() => {
     if (!uiStore.sidebarBrowserStatus) return '';

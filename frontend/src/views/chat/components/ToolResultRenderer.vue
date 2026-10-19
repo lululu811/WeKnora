@@ -84,6 +84,18 @@
       :data="toolData as KlineStudioData"
     />
 
+    <OperationsResult
+      v-else-if="displayType === 'find_operations' || displayType === 'run_operation'"
+      :mode="displayType === 'run_operation' ? 'run' : 'find'"
+      :output="output" :data="toolData" :success="success"
+    />
+
+    <WeKnoraDocResult
+      v-else-if="displayType === 'search_weknora_docs' || displayType === 'read_weknora_doc'"
+      :mode="displayType === 'read_weknora_doc' ? 'read' : 'search'"
+      :output="output" :data="toolData" :success="success"
+    />
+
     <!-- Fallback: Display raw output -->
     <div v-else class="fallback-output">
       <div class="fallback-header">
@@ -143,6 +155,8 @@ import ReadSkillResult from './tool-results/ReadSkillResult.vue';
 import McpToolResult from './tool-results/McpToolResult.vue';
 import KLineStudioResult from './tool-results/KLineStudioResult.vue';
 import ImageViewResult from './tool-results/ImageViewResult.vue';
+import OperationsResult from './tool-results/OperationsResult.vue';
+import WeKnoraDocResult from './tool-results/WeKnoraDocResult.vue';
 
 interface Props {
   success?: boolean;

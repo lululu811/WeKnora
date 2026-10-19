@@ -1,6 +1,7 @@
 import { MessagePlugin } from "tdesign-vue-next";
 import i18n from '@/i18n';
 import { shouldRejectKnowledgeFileType } from "./fileTypeVerification";
+import { importMetaEnv } from './importMetaEnv'
 
 // 声明全局运行时配置类型
 declare global {
@@ -21,7 +22,7 @@ function positiveMegabytes(value: unknown, fallback: number): number {
 // 从运行时配置获取最大文件大小(MB)，支持 Docker 环境动态配置
 // 优先级：运行时配置 > 构建时环境变量 > 默认值 50MB
 export const MAX_FILE_SIZE_MB = positiveMegabytes(
-  window.__RUNTIME_CONFIG__?.MAX_FILE_SIZE_MB ?? import.meta.env.VITE_MAX_FILE_SIZE_MB,
+  window.__RUNTIME_CONFIG__?.MAX_FILE_SIZE_MB ?? importMetaEnv.VITE_MAX_FILE_SIZE_MB,
   50,
 )
 export const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
@@ -33,7 +34,7 @@ export const MAX_SKILL_BUNDLE_SIZE_MB = Math.min(
   Math.max(
     positiveMegabytes(
       window.__RUNTIME_CONFIG__?.MAX_SKILL_BUNDLE_SIZE_MB
-        ?? import.meta.env.VITE_MAX_SKILL_BUNDLE_SIZE_MB,
+        ?? importMetaEnv.VITE_MAX_SKILL_BUNDLE_SIZE_MB,
       256,
     ),
     MAX_FILE_SIZE_MB,

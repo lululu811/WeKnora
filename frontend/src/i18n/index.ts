@@ -8,6 +8,13 @@ import zhTW from './locales/zh-TW.ts'
 import { BUILT_IN_DEFAULT, resolveDefaultLocale } from './resolveDefaultLocale.ts'
 import { injectAppName } from './injectAppName.ts'
 import { APP_NAME } from '@/config/appIdentity'
+import { pluralRules } from './pluralizationRules.ts'
+
+// import.meta.env 是 Vite 构建期的注入，裸 node（tsx --test）下不存在，
+// 直接读会抛 "Cannot read properties of undefined"。这里做一次安全取值：
+// Vite 构建下 import.meta.env 一定存在，行为与原来完全一致；
+// 非 Vite 环境退化成空对象，落到下面的默认值分支。
+const importMetaEnv = (import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {}
 
 const messages = {
   'zh-CN': zhCN,
@@ -25,7 +32,7 @@ injectAppName(messages, APP_NAME)
 // User's explicit past choice wins; otherwise use the deployment default.
 const savedLocale = localStorage.getItem('locale') || resolveDefaultLocale(
   window.__RUNTIME_CONFIG__?.DEFAULT_LOCALE,
-  import.meta.env.VITE_DEFAULT_LOCALE,
+  importMetaEnv.VITE_DEFAULT_LOCALE,
 )
 
 const i18n = createI18n({
@@ -33,6 +40,7 @@ const i18n = createI18n({
   locale: savedLocale,
   fallbackLocale: BUILT_IN_DEFAULT,
   globalInjection: true,
+  pluralRules,
   // Some translations intentionally embed `<strong>` markup (e.g. agent step summaries).
   // We render them via v-html with our own sanitization, so silence vue-i18n's HTML warning
   // to avoid flooding the console and slowing renders during history loads.

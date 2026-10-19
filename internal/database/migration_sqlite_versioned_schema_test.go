@@ -43,6 +43,8 @@ var versionedSQLiteTables = []string{
 	"stock_watch_events",
 	"stock_watch_conditions",
 	"stock_watch_notifications",
+	"agent_collaborations",
+	"agent_grants",
 }
 
 // versionedSQLiteColumns maps each existing table to the columns that the
@@ -58,18 +60,19 @@ var versionedSQLiteColumns = map[string][]string{
 	// 000034/085/097/105/119
 	"messages": {"attachments", "usage", "sandbox_checkpoint", "context_checkpoint", "run_state"},
 	"sessions": {
+		"kind",
 		"parent_session_id", "forked_from_message_id", "fork_bootstrap", // 000097
 		"sandbox_config_tenant_id", // 000027
 		"host_workspace_dir",       // 000029
 	},
-	"tenant_invitations": {"token", "accepted_count"},        // 000054
-	"embed_channels":     {"allow_memory"},                   // 000060
-	"im_channels":        {"locale"},                         // 000030
-	"chunks":             {"source_locators"},                // 000033
-	"mcp_oauth_tokens":   {"principal_type", "principal_id"}, // 000064
-	"mcp_tool_approvals": {"enabled"},                        // 000091
-	"mcp_services":       {"usage_instructions"},             // 000092
-	"message_artifacts":  {"deleted_at"},                     // 000107
+	"tenant_invitations": {"token", "accepted_count"},          // 000054
+	"embed_channels":     {"allow_memory"},                     // 000060
+	"im_channels":        {"locale"},                           // 000030
+	"chunks":             {"source_locators"},                  // 000033
+	"mcp_oauth_tokens":   {"principal_type", "principal_id"},   // 000064
+	"mcp_tool_approvals": {"enabled", "risk", "observed_risk"}, // 000091, 000126
+	"mcp_services":       {"usage_instructions"},               // 000092
+	"message_artifacts":  {"deleted_at"},                       // 000107
 	"tenant_skills": {
 		"envs", "served", "catalog_id", "install_session_id", "install_message_id",
 	}, // 000028
@@ -77,9 +80,9 @@ var versionedSQLiteColumns = map[string][]string{
 	"tenant_user_env_vars": {
 		"principal_type", "principal_id", "sandbox_config_id", "skill_id", "name", "value",
 	}, // 000028
-	"stock_watches":       {"state", "note"},                 // 000039
-	"stock_watch_events":  {"eval_date"},                     // 000041
-	"stock_watch_diaries": {"final_score", "rank", "scores"}, // 000045
+	"stock_watches":       {"state", "note"},                 // 000046
+	"stock_watch_events":  {"eval_date"},                     // 000048
+	"stock_watch_diaries": {"final_score", "rank", "scores"}, // 000052
 }
 
 // expectedSQLiteMigrationVersion is the version every SQLite migration run must
@@ -97,11 +100,12 @@ var versionedSQLiteColumns = map[string][]string{
 // and still the thing the assertions below compare against); what changes is
 // that drifting from disk now fails loudly and names the number to write.
 //
-// The 2026-10-15 upstream merge renumbered the local SQLite migrations to
-// "upstream max + 1", because upstream shipped 000034..000037 of its own:
-// the local stock-watch and tenant-members migrations now occupy
-// 000038..000045, which makes 45 the high-water mark on disk.
-const expectedSQLiteMigrationVersion = 45
+// The local SQLite migrations are renumbered to "upstream max + 1" at every
+// upstream merge, because upstream keeps shipping its own tail. After the
+// 2026-10-19 merge upstream reached 000044, so the local stock-watch and
+// tenant-members migrations now occupy 000045..000052, which makes 52 the
+// high-water mark on disk.
+const expectedSQLiteMigrationVersion = 52
 
 func TestSQLiteMigrationsCreateVersionedSchema(t *testing.T) {
 	repoRoot := sqliteRepoRoot(t)
@@ -491,4 +495,41 @@ func copySQLiteMigrationsThrough(t *testing.T, repoRoot string, maxVersion int) 
 	}
 	require.Greater(t, copied, 0)
 	return dest
+}
+
+func TestSQLiteSessionKindBackfillAndRollback(t *testing.T) {
+	repoRoot := sqliteRepoRoot(t)
+	chdirAndRestore(t, copySQLiteMigrationsThrough(t, repoRoot, 38))
+	dbPath := filepath.Join(t.TempDir(), "session-kind.db")
+	require.NoError(t, RunMigrationsWithOptions("sqlite3://unused", MigrationOptions{SQLiteDBPath: dbPath}))
+	db := openSQLiteDB(t, dbPath)
+	configs := []any{
+		nil, "invalid JSON", `{"agent_id":"builtin-weknora-assistant"}`, `{}`, `null`, `[]`,
+		`{"agent_id":"another-agent"}`, `{"agent_id":`,
+	}
+	for i, config := range configs {
+		_, err := db.Exec("INSERT INTO sessions (id, tenant_id, agent_config) VALUES (?, 1, ?)", fmt.Sprint(i), config)
+		require.NoError(t, err)
+	}
+	chdirAndRestore(t, repoRoot)
+	require.NoError(t, RunMigrationsWithOptions("sqlite3://unused", MigrationOptions{SQLiteDBPath: dbPath}))
+	for i := range configs {
+		var kind string
+		require.NoError(t, db.QueryRow("SELECT kind FROM sessions WHERE id = ?", fmt.Sprint(i)).Scan(&kind))
+		if i == 2 {
+			require.Equal(t, "assistant", kind)
+		} else {
+			require.Empty(t, kind)
+		}
+	}
+	require.True(t, sqliteIndexExists(t, db, "idx_sessions_tenant_kind_user_updated"))
+	down, err := os.ReadFile(filepath.Join(repoRoot, "migrations/sqlite/000039_session_kind.down.sql"))
+	require.NoError(t, err)
+	_, err = db.Exec(string(down))
+	require.NoError(t, err)
+	require.False(t, sqliteColumnExists(t, db, "sessions", "kind"))
+	require.False(t, sqliteIndexExists(t, db, "idx_sessions_tenant_kind_user_updated"))
+	var count int
+	require.NoError(t, db.QueryRow("SELECT COUNT(*) FROM sessions").Scan(&count))
+	require.Equal(t, len(configs), count)
 }

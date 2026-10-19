@@ -16,6 +16,13 @@
 
   &.is-embedded {
     justify-content: flex-end;
+
+    /* 嵌入模式：宿主宽度不确定，模型触发器要能收缩到 0，
+       否则长模型名会把整行挤到第二行。 */
+    .model-selector-trigger {
+      min-width: 0;
+      max-width: 100%;
+    }
   }
 }
 

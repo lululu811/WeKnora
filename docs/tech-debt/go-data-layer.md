@@ -112,8 +112,8 @@
 
   ```
   Go 模型          stock_watch.go:44   Note string `gorm:"type:varchar(200);not null;default:''"`
-  Postgres 迁移    000124 (up)         ALTER TABLE stock_watches ALTER COLUMN note TYPE TEXT;
-  SQLite 迁移      000042 (up)         note VARCHAR(500) NOT NULL DEFAULT ''
+  Postgres 迁移    000132 (up)         ALTER TABLE stock_watches ALTER COLUMN note TYPE TEXT;
+  SQLite 迁移      000049 (up)         note VARCHAR(500) NOT NULL DEFAULT ''
   ```
 
   且两个迁移的**文件名也不同**（`stock_watch_note_text` vs `stock_watch_note_widen`），无法按 topic 名做配对校验。真实约束在应用层：`stock_watch.go:108` `const MaxStockWatchNoteLen = 500`。

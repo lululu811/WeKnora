@@ -1,6 +1,10 @@
 <template>
   <div ref="rootElement" class="agent-stream-display" :class="{ 'is-embedded': embeddedMode, 'is-rag-mode': ragMode, 'is-steer-prefix': session?.steerForked }">
 
+    <t-drawer v-if="selectedChild && !childAgentTabs" attach="body" :close-btn="true" :z-index="2000" :visible="true" :header="selectedChild.displayName" size="min(680px, 95vw)" :footer="false" @close="selectedChildId = ''">
+      <ChildAgentStream :key="selectedChild.id + ':' + selectedChild.runId" :task="selectedChild" />
+    </t-drawer>
+
     <!-- Collapsed intermediate steps (tree root) -->
     <div v-if="shouldShowCollapsedSteps" class="tree-container">
       <div class="tool-event">
@@ -28,9 +32,11 @@
         />
         <template v-for="(event, index) in visibleIntermediateEvents" :key="getEventKey(event, index)">
           <div v-if="event && event.type" class="tree-child"
-            :class="{ 'tree-child-last': !isSegmentDone && index === visibleIntermediateEvents.length - 1 }">
+            :class="{ 'tree-child-last': !isSegmentDone && index === visibleIntermediateEvents.length - 1, 'tree-child-progress': event.type === 'child_task' }">
             <div class="tree-branch"></div>
             <div class="tree-child-content">
+              <CollaborationTasks v-if="event.type === 'child_task'" :task="event.task" :disabled="!!embedToken" :tool-label="getLocalizedToolName" @open="openChildTask" />
+
               <!-- Plan Task Change Event -->
               <div v-if="event.type === 'plan_task_change'" class="plan-task-change-event">
                 <div class="plan-task-change-card">
@@ -62,6 +68,9 @@
               <!-- Thinking Event (streaming / merged). When a round's retracted
                    preamble was folded in, it becomes the card title and the
                    reasoning is the expandable body. -->
+              <ProgressUpdates v-if="event.type === 'progress' && event.content"
+                :content="event.content" :history="event.progress_history" />
+
               <div v-if="event.type === 'thinking'" class="tool-event">
                 <div class="action-card thinking-event-card"
                   :class="{ 'action-pending': isThinkingActive(event.event_id) }">
@@ -113,10 +122,10 @@
 
               <!-- MCP tool human approval (issue #1173) -->
               <div v-else-if="event.type === 'tool_approval_required'" class="tool-event">
-                <ToolApprovalCard :pending-id="event.pending_id" :service-name="event.service_name || ''"
+                <ToolApprovalCard :pending-id="event.pending_id" :delegated-task="event.delegated_task" :service-name="event.service_name || ''"
                   :mcp-tool-name="event.mcp_tool_name || ''" :description="event.description"
-                  :args-json="event.args_json" :timeout-seconds="event.timeout_seconds"
-                  :requested-at="event.requested_at" :resolved="event.resolved" :approved="event.approved"
+                  :args-json="event.args_json" :grant-scope="event.grant_scope" :grant-lapsed="event.grant_lapsed" :timeout-seconds="event.timeout_seconds"
+                  :requested-at="event.requested_at" :resolved="event.resolved" :approved="event.approved" :canceled="event.canceled"
                   :resolve-reason="event.resolve_reason" :suspendable="event.suspendable"
                   :hot-wait-seconds="event.hot_wait_seconds" :suspended="event.suspended"
                   :expires-at="event.expires_at" :abandoned="event.abandoned" v-bind="embedAuthProps" />
@@ -159,6 +168,7 @@
                     :class="{ 'no-results': !hasActionResult(event) }">
                     <div class="action-title">
                       <BrowserIcon v-if="event.tool_name === 'local_browser'" class="action-title-icon browser-tool-icon" />
+                      <span v-else-if="isCollaborationTool(event.tool_name)" class="action-title-icon icon-mask" :style="maskIconStyle(agentIcon)" aria-hidden="true" />
                       <t-icon v-else-if="event.tool_name" class="action-title-icon"
                         :name="getToolIconName(event.tool_name)" />
                       <t-tooltip v-if="event.tool_name === 'todo_write' && event.tool_data?.steps"
@@ -216,6 +226,12 @@
                     <div class="results-summary-text" v-html="getKnowledgeChunksSummary(event.tool_data)"></div>
                   </div>
 
+                  <OpenPageCard v-if="showPageLinkInStep(event)" :link="event.tool_data" />
+                  <PageEditCard v-if="showPageEditInStep(event)" :fill="event.tool_data" :tool-call-id="event.tool_call_id" />
+                  <div v-if="isPageReadEvent(event)" class="search-results-summary-fixed">
+                    <div class="results-summary-text">{{ t('agentStream.pageAccess.viewed', { location: event.tool_data.location }) }}</div>
+                  </div>
+
                   <SandboxCommandProgress
                     v-if="event.tool_name === 'shell_exec' && event.pending && event.command_output && !event.command_output.done"
                     :progress="event.command_output"
@@ -231,7 +247,7 @@
                     <BrowserToolDetails v-if="event.tool_name === 'local_browser'" :event="event" />
                     <div v-else-if="resolveToolDisplayType(event)" class="tool-result-wrapper">
                       <ToolResultRenderer :display-type="resolveToolDisplayType(event)" :tool-data="event.tool_data"
-                        :output="mcpToolResultOutput(event)" :arguments="event.arguments" :success="event.success" />
+                        :output="toolResultOutput(event)" :arguments="event.arguments" :success="event.success" />
                     </div>
                     <div v-else-if="event.output" class="tool-output-wrapper">
                       <div class="fallback-header">
@@ -255,7 +271,7 @@
               <div class="action-header no-results">
                 <div class="action-title">
                   <t-icon class="action-title-icon" name="check-circle" />
-                  <span class="action-name">{{ t('common.finish') }}</span>
+                  <span class="action-name">{{ t(wasUserStopped ? 'input.messages.stopSuccess' : 'common.finish') }}</span>
                 </div>
               </div>
             </div>
@@ -265,9 +281,8 @@
     </div>
 
     <!-- Event Stream (non-tree mode: before answer starts, or answer events) -->
-    <div v-if="displayEvents.length > 0 || showMemoryRow || showAgentActivityIndicator" ref="streamingStepsContainer"
+    <div v-if="displayEvents.length > 0 || showMemoryRow || showAgentActivityIndicator || childActivity"
       class="streaming-steps-container" :class="{
-        'streaming-steps-constrained': !answerEverStarted && !isSegmentDone,
         'is-streaming-timeline': showStreamingTimeline
       }">
       <!-- Recalled memory leads the timeline: it is what the turn knew before it
@@ -287,12 +302,15 @@
         <div v-if="event && event.type" class="event-item" :class="{
           'event-answer': event.type === 'answer',
           'tree-child': isStreamingTimelineEvent(event),
-          'tree-child-last': isStreamingTimelineEvent(event) && !showAgentActivityIndicator && index === lastStreamingTimelineEventIndex
+          'tree-child-progress': event.type === 'child_task',
+          'tree-child-last': isStreamingTimelineEvent(event) && !showAgentActivityIndicator && !childActivity && index === lastStreamingTimelineEventIndex
         }">
           <div v-if="isStreamingTimelineEvent(event)" class="tree-branch"></div>
           <div :class="{ 'tree-child-content': isStreamingTimelineEvent(event) }">
 
-            <!-- Plan Task Change Event -->
+            <CollaborationTasks v-if="event.type === 'child_task'" :task="event.task" :disabled="!!embedToken" :tool-label="getLocalizedToolName" @open="openChildTask" />
+
+              <!-- Plan Task Change Event -->
             <div v-if="event.type === 'plan_task_change'" class="plan-task-change-event">
               <div class="plan-task-change-card">
                 <div class="plan-task-change-content">
@@ -323,6 +341,9 @@
             <!-- Thinking Event (streaming / merged). A folded preamble (retracted
              from the answer area) is shown as the card title; the reasoning is
              the expandable body. -->
+            <ProgressUpdates v-if="event.type === 'progress' && event.content"
+                :content="event.content" :history="event.progress_history" />
+
             <div v-if="event.type === 'thinking'" class="tool-event">
               <div class="action-card thinking-event-card"
                 :class="{ 'action-pending': isThinkingActive(event.event_id) }">
@@ -350,10 +371,10 @@
 
             <!-- MCP tool human approval -->
             <div v-else-if="event.type === 'tool_approval_required'" class="tool-event">
-              <ToolApprovalCard :pending-id="event.pending_id" :service-name="event.service_name || ''"
+              <ToolApprovalCard :pending-id="event.pending_id" :delegated-task="event.delegated_task" :service-name="event.service_name || ''"
                 :mcp-tool-name="event.mcp_tool_name || ''" :description="event.description" :args-json="event.args_json"
-                :timeout-seconds="event.timeout_seconds" :requested-at="event.requested_at" :resolved="event.resolved"
-                :approved="event.approved" :resolve-reason="event.resolve_reason" :suspendable="event.suspendable"
+                :grant-scope="event.grant_scope" :grant-lapsed="event.grant_lapsed" :timeout-seconds="event.timeout_seconds" :requested-at="event.requested_at" :resolved="event.resolved"
+                :approved="event.approved" :canceled="event.canceled" :resolve-reason="event.resolve_reason" :suspendable="event.suspendable"
                 :hot-wait-seconds="event.hot_wait_seconds" :suspended="event.suspended" :expires-at="event.expires_at"
                 :abandoned="event.abandoned" v-bind="embedAuthProps" />
             </div>
@@ -406,11 +427,17 @@
                 <div v-stable-html="renderAnswerContent(event === activeAnswerEventRef ? typedAnswer : event.content)">
                 </div>
               </div>
-              <div v-if="answerFullyRendered && event.done && event.content && event.content.trim() && !embeddedMode"
-                class="answer-toolbar">
+              <div v-if="event === pinnedAnswerEvent && (pinnedPageLinks.length > 0 || pinnedPageEdits.length > 0)"
+                class="answer-page-links">
+                <OpenPageCard v-for="link in pinnedPageLinks" :key="link.tool_call_id" :link="link.tool_data" />
+                <PageEditCard v-for="edit in pinnedPageEdits" :key="edit.tool_call_id" :fill="edit.tool_data"
+                  :tool-call-id="edit.tool_call_id" />
+              </div>
+              <div v-if="answerFullyRendered && event.done && event.content && event.content.trim()"
+                class="answer-toolbar" :class="{ 'answer-toolbar--persistent': hasArtifacts || artifactsCollecting }">
                 <t-tooltip v-if="canFork" :content="forkTooltip">
                   <t-button size="small" variant="outline" shape="round" @click.stop="emitFork">
-                    <t-icon name="git-branch" />
+                    <ChatActionIcon name="git-branch" />
                   </t-button>
                 </t-tooltip>
                 <t-popconfirm
@@ -429,48 +456,47 @@
                   </template>
                   <t-tooltip :content="rewindTooltip">
                     <t-button size="small" variant="outline" shape="round" @click.stop>
-                      <t-icon name="rollback" />
+                      <ChatActionIcon name="rollback" />
                     </t-button>
                   </t-tooltip>
                 </t-popconfirm>
                 <t-button size="small" variant="outline" shape="round" @click.stop="handleCopyAnswer(event)"
-                  :title="$t('agent.copy')">
-                  <t-icon name="copy" />
+                  :title="$t('agent.copy')" :aria-label="$t('agent.copy')">
+                  <ChatActionIcon name="copy" />
                 </t-button>
-                <t-button size="small" variant="outline" shape="round" @click.stop="handleAddToKnowledge(event)"
+                <t-button v-if="!embeddedMode" size="small" variant="outline" shape="round" @click.stop="handleAddToKnowledge(event)"
                   :title="$t('agent.addToKnowledgeBase')">
-                  <t-icon name="bookmark-add" />
+                  <ChatActionIcon name="bookmark-add" />
                 </t-button>
-                <!-- Skill artifact download: only shown when the persisted
-                     assistant message recorded any generated files. Agent
-                     mode is the primary path for skills, so this is where
-                     the button is most likely to appear. -->
+                <!-- Includes files delivered by child agents. Embedded assistants
+                     use the same entry and open the artifact drawer. -->
                 <span v-if="hasArtifacts || artifactsCollecting" class="answer-toolbar__artifact"
                   :class="{ 'is-collecting': artifactButtonCollecting, 'is-arrived': artifactArrived }"
                   @animationend="onArtifactArriveEnd">
                   <t-button size="small" variant="outline" shape="round"
                     :disabled="artifactButtonCollecting"
                     :title="hasArtifacts ? $t('agent.artifactDrawer.buttonTitle') : $t('agent.artifactDrawer.collecting')"
+                    :aria-label="hasArtifacts ? $t('agent.artifactDrawer.buttonTitle') : $t('agent.artifactDrawer.collecting')"
                     @click.stop="openArtifactDrawer()">
                     <t-icon v-if="artifactButtonCollecting" name="loading" class="answer-toolbar__artifact-spinner" />
-                    <t-icon v-else name="folder" />
+                    <ChatActionIcon v-else name="folder" />
                   </t-button>
                   <span v-if="hasArtifacts" class="answer-toolbar__artifact-count" aria-hidden="true">{{ artifactCount }}</span>
                 </span>
-                <t-tooltip v-if="event.is_fallback" :content="$t('chat.fallbackHint')" placement="top">
+                <t-tooltip v-if="!embeddedMode && event.is_fallback" :content="$t('chat.fallbackHint')" placement="top">
                   <t-button size="small" variant="outline" shape="round" class="fallback-icon-btn">
-                    <t-icon name="info-circle" />
+                    <ChatActionIcon name="info-circle" />
                   </t-button>
                 </t-tooltip>
-                <t-tooltip v-if="event.truncated" :content="$t('chat.truncatedHint')" placement="top">
+                <t-tooltip v-if="!embeddedMode && event.truncated" :content="$t('chat.truncatedHint')" placement="top">
                   <t-button size="small" variant="outline" shape="round" class="fallback-icon-btn">
-                    <t-icon name="info-circle" />
+                    <ChatActionIcon name="info-circle" />
                   </t-button>
                 </t-tooltip>
                 <ChatRequestInfoButton v-if="showRequestInfo && isConversationDone" :session="session"
                   :session-id="sessionId" />
                 <transition name="follow-up-toolbar-loading">
-                  <span v-if="followUpLoading" class="answer-toolbar__follow-up-loading" role="status"
+                  <span v-if="!embeddedMode && followUpLoading" class="answer-toolbar__follow-up-loading" role="status"
                     aria-live="polite">
                     <t-icon name="lightbulb" />
                     <span class="answer-toolbar__follow-up-label">{{ t('chat.followUpQuestionsLoading') }}</span>
@@ -496,6 +522,7 @@
                   :class="{ 'no-results': !hasActionResult(event) }">
                   <div class="action-title">
                     <BrowserIcon v-if="event.tool_name === 'local_browser'" class="action-title-icon browser-tool-icon" />
+                    <span v-else-if="isCollaborationTool(event.tool_name)" class="action-title-icon icon-mask" :style="maskIconStyle(agentIcon)" aria-hidden="true" />
                     <t-icon v-else-if="event.tool_name" class="action-title-icon" :name="getToolIconName(event.tool_name)" />
                     <t-tooltip v-if="event.tool_name === 'todo_write' && event.tool_data?.steps"
                       :content="t('agent.updatePlan')" placement="top">
@@ -554,6 +581,12 @@
                   <div class="results-summary-text" v-html="getKnowledgeChunksSummary(event.tool_data)"></div>
                 </div>
 
+                <OpenPageCard v-if="showPageLinkInStep(event)" :link="event.tool_data" />
+                <PageEditCard v-if="showPageEditInStep(event)" :fill="event.tool_data" :tool-call-id="event.tool_call_id" />
+                <div v-if="isPageReadEvent(event)" class="search-results-summary-fixed">
+                  <div class="results-summary-text">{{ t('agentStream.pageAccess.viewed', { location: event.tool_data.location }) }}</div>
+                </div>
+
                 <SandboxCommandProgress
                   v-if="event.tool_name === 'shell_exec' && event.pending && event.command_output && !event.command_output.done"
                   :progress="event.command_output"
@@ -569,7 +602,7 @@
                   <BrowserToolDetails v-if="event.tool_name === 'local_browser'" :event="event" />
                     <div v-else-if="resolveToolDisplayType(event)" class="tool-result-wrapper">
                     <ToolResultRenderer :display-type="resolveToolDisplayType(event)" :tool-data="event.tool_data"
-                      :output="mcpToolResultOutput(event)" :arguments="event.arguments" :success="event.success" />
+                      :output="toolResultOutput(event)" :arguments="event.arguments" :success="event.success" />
                   </div>
 
                   <div v-else-if="event.output" class="tool-output-wrapper">
@@ -591,27 +624,28 @@
       <div v-if="showRequestInfo && isConversationDone && !hasDoneAnswerContent" class="answer-toolbar">
         <ChatRequestInfoButton :session="session" :session-id="sessionId" />
       </div>
-      <!-- Loading Indicator (inside container so it scrolls into view) -->
-      <div v-if="showAgentActivityIndicator" class="tree-child tree-child-last streaming-loading-node">
+      <!-- One live tail node shares the timeline trunk, icon alignment and shimmer. -->
+      <div v-if="showAgentActivityIndicator || childActivity" class="tree-child tree-child-last streaming-loading-node" role="status" aria-live="polite">
         <div class="tree-branch"></div>
         <div class="tree-child-content">
           <div class="action-card action-pending">
             <div class="action-header no-results">
               <div class="action-title">
-                <t-icon class="action-title-icon" name="lightbulb" />
-                <span class="action-name">{{ t('chat.thinkingAlt') }}</span>
+                <span class="action-title-icon icon-mask" :style="maskIconStyle(thinkingIcon)" aria-hidden="true" />
+                <span class="action-name">{{ t(childActivity === 'approval' ? 'agentStream.collaboration.status.waiting' : childActivity ? 'agentStream.collaboration.waiting' : 'chat.thinkingAlt') }}</span>
               </div>
             </div>
           </div>
         </div>
       </div>
     </div>
+
   </div>
   <!-- 引用 hover 浮层（与历史消息共用同一组件） -->
   <ChatCitationFloat :float="citationFloat" :on-enter="cancelCitationClose" :on-leave="scheduleCitationClose" />
 
   <!-- Image Preview -->
-  <picturePreview :reviewImg="imagePreviewVisible" :reviewUrl="imagePreviewUrl" @closePreImg="closeImagePreview" />
+  <picturePreview v-if="imagePreviewVisible" :reviewImg="imagePreviewVisible" :reviewUrl="imagePreviewUrl" @closePreImg="closeImagePreview" />
 
   <!-- Wiki Page Detail Drawer -->
   <!-- Mount on demand: a hidden TDesign drawer steals focus when each response mounts. -->
@@ -646,7 +680,7 @@
     </template>
   </t-drawer>
   <ChatArtifactsDrawer
-    v-if="hasArtifacts && embeddedMode && sessionIdForArtifacts && messageIdForArtifacts"
+    v-if="hasArtifacts && useArtifactDrawer && sessionIdForArtifacts && messageIdForArtifacts"
     v-model:visible="showArtifactDrawer"
     :session-id="sessionIdForArtifacts"
     :message-id="messageIdForArtifacts"
@@ -659,15 +693,28 @@
 import { readDocumentReferences } from '@/utils/readDocumentReferences';
 import { isAssistantTurnComplete } from '@/utils/steerStreamFork';
 import { isAwaitingInput } from '@/composables/useChatStreamHandler';
-import { ref, computed, watch, onMounted, onBeforeUnmount, onUpdated, nextTick } from 'vue';
+import { inject, ref, computed, watch, onMounted, onBeforeUnmount, onUpdated, nextTick } from 'vue';
+import { chatReadingHistoryKey, useDeferredTimelineCompletion } from '@/composables/useChatScrollFollow';
 import { useRouter, useRoute } from 'vue-router';
 import { marked } from 'marked';
 import 'katex/dist/katex.min.css';
 import SandboxCommandProgress from '@/components/SandboxCommandProgress.vue';
 import ToolResultRenderer from './ToolResultRenderer.vue';
+import CollaborationTasks from './CollaborationTasks.vue';
+import { childAgentTabsKey, childAgentTaskLookupKey } from '@/composables/useChildAgentTabs';
+import { useChildAgentViewer } from '@/composables/useChildAgentViewer';
+import { defineAsyncComponent } from 'vue';
+const ChildAgentStream = defineAsyncComponent(() => import('./ChildAgentStream.vue'));
+import ProgressUpdates from './ProgressUpdates.vue';
+import { foldProgressIntoThinking, groupProgressUpdates } from '@/utils/agentTimelinePresentation';
+import { isUnresolvedCollaborationPrompt, collaborationActivity, collaborationWaitState, collaborationTimeline, collaborationTasks, countToolCalls } from '@/utils/collaborationDisplay';
 import ToolApprovalCard from './ToolApprovalCard.vue';
 import McpOAuthCard from './McpOAuthCard.vue';
+import OpenPageCard from './OpenPageCard.vue';
+import PageEditCard from './PageEditCard.vue';
+import { isAssistantPageLink } from '@/utils/assistantPageLink';
 import AskUserCard from './AskUserCard.vue';
+import ChatActionIcon from '@/components/ChatActionIcon.vue';
 import ChatRequestInfoButton from '@/components/ChatRequestInfoButton.vue';
 import ChatCitationFloat from '@/components/ChatCitationFloat.vue';
 import picturePreview from '@/components/picture-preview.vue';
@@ -700,11 +747,13 @@ import {
   artifactIndexFromEventTarget,
   hydrateArtifactImages,
   renderArtifactReference,
+  installArtifactLinkRenderer,
 } from '@/utils/sandboxArtifactRefs';
 import type { ProtectedFileAccessContext } from '@/utils/protectedFileAccess';
 import { unwrapFinalAnswerWrappers, thinkingEqualsAnswer } from '@/utils/finalAnswer';
-import { getAgentToolIconName } from '@/utils/agent-tool-icons';
+import { getAgentToolIconName, isCollaborationTool } from '@/utils/agent-tool-icons';
 import { getMcpToolDisplayType, getMcpToolTitle, mcpToolResultOutput } from '@/utils/mcpToolDisplay';
+import { getCatalogToolDisplayType, getCatalogToolTitle } from '@/utils/catalogToolDisplay';
 import { getQueryText, getWikiPageText } from '@/utils/agent-tool-display';
 import {
   formatToolTitleWithDetail,
@@ -750,6 +799,7 @@ import { browserToolTitle } from '@/utils/browserToolDisplay';
 import BrowserIcon from '@/components/icons/BrowserIcon.vue';
 const getToolIconName = getAgentToolIconName;
 
+const readingHistory = inject(chatReadingHistoryKey, ref(false));
 const router = useRouter();
 const route = useRoute();
 const uiStore = useUIStore();
@@ -804,6 +854,21 @@ const TOOL_NAME_KEYS: Record<string, string> = {
   data_analysis: 'agentStream.tools.dataAnalysis',
   data_schema: 'agentStream.tools.dataSchema',
   database_query: 'agentStream.tools.databaseQuery',
+  find_operations: 'agentStream.tools.findOperations',
+  run_operation: 'agentStream.tools.runOperation',
+  spawn_agent: 'agentStream.tools.spawn_agent',
+  list_agents: 'agentStream.tools.list_agents',
+  send_message: 'agentStream.tools.send_message',
+  followup_task: 'agentStream.tools.followup_task',
+  interrupt_agent: 'agentStream.tools.interrupt_agent',
+  wait_agent: 'agentStream.tools.wait_agent',
+  open_page: 'agentStream.tools.openPage',
+  view_page: 'agentStream.tools.viewPage',
+  read_page: 'agentStream.tools.readPage',
+  select_tab: 'agentStream.tools.selectTab',
+  fill_page: 'agentStream.tools.fillPage',
+  search_weknora_docs: 'agentStream.tools.searchWeKnoraDocs',
+  read_weknora_doc: 'agentStream.tools.readWeKnoraDoc',
 };
 
 const getLocalizedToolName = (toolName?: string | null): string => {
@@ -878,7 +943,6 @@ function escapeHtml(value: string): string {
     .replace(/'/g, '&#39;');
 }
 
-const streamingStepsContainer = ref<HTMLElement | null>(null);
 
 // 图片预览状态
 const imagePreviewVisible = ref(false);
@@ -1011,6 +1075,7 @@ const props = defineProps<{
   sessionId?: string;
   userQuery?: string;
   embeddedMode?: boolean;
+  artifactsInDrawer?: boolean;
   embedChannelId?: string;
   embedToken?: string;
   embedSessionSig?: string;
@@ -1085,9 +1150,12 @@ const protectedFileAccess = computed<ProtectedFileAccessContext | undefined>(() 
 // -----------------------------------------------------------------------------
 // Same contract as botmsg.vue: only render the button when the persisted
 // assistant message actually recorded files, then open the sandbox panel's
-// artifacts tab (or ChatArtifactsDrawer in embedded mode).
+// artifacts tab, or a session-local drawer for embedded/child conversations.
 const showArtifactDrawer = ref(false);
 const sandboxPanel = useChatSandboxPanel();
+// A child inherits the parent's injection, but that panel belongs to a different
+// session. Use the same routing condition for opening and rendering the drawer.
+const useArtifactDrawer = computed(() => props.artifactsInDrawer || props.embeddedMode || !sandboxPanel);
 const artifactList = computed(() => {
   const list = ((props.session?.artifacts as any[]) || []);
   return list.map((a, i) => ({ index: i, ...a }));
@@ -1111,7 +1179,7 @@ const messageIdForArtifacts = computed(() =>
 const artifactPreviewIndex = ref<number | null>(null);
 function openArtifactDrawer(previewIndex: number | null = null) {
   if (!hasArtifacts.value) return;
-  if (sandboxPanel && !props.embeddedMode) {
+  if (sandboxPanel && !useArtifactDrawer.value) {
     if (previewIndex == null) {
       sandboxPanel.toggleArtifacts(messageIdForArtifacts.value);
     } else {
@@ -1216,9 +1284,18 @@ const formatToolResultContent = (value: unknown): string => {
 
 const isMcpTool = (toolName?: string | null): boolean => String(toolName || '').startsWith('mcp_');
 
+const toolResultOutput = (event: any): string | undefined => {
+  if (getMcpToolDisplayType(event?.tool_name) || getCatalogToolDisplayType(event?.tool_name)) {
+    return event?.output || event?.error
+  }
+  return mcpToolResultOutput(event)
+}
+
 const resolveToolDisplayType = (event: any): DisplayType | undefined => {
   const mcpType = getMcpToolDisplayType(event?.tool_name)
   if (mcpType) return mcpType
+  const catalogType = getCatalogToolDisplayType(event?.tool_name)
+  if (catalogType) return catalogType
   if (event?.display_type) return event.display_type as DisplayType
   if (event?.tool_name === 'shell_exec' || event?.tool_name === 'execute_skill_script') {
     return 'shell_exec'
@@ -1465,6 +1542,17 @@ configureMarkedForChatMarkdown();
 
 // Event stream
 const eventStream = computed(() => props.session?.agentEventStream || []);
+const childAgentTabs = inject(childAgentTabsKey, null);
+const lookupChildTask = inject(childAgentTaskLookupKey, null);
+const openChildTask = (task: ReturnType<typeof collaborationTasks>[number]) => {
+  if (childAgentTabs) childAgentTabs.open(task, () => lookupChildTask
+    ? lookupChildTask(task)
+    : collaborationTasks(props.session.collaborationStatus).find(item => item.id === task.id));
+  else selectedChildId.value = task.id;
+};
+const selectedChildId = useChildAgentViewer();
+const selectedChild = computed(() => collaborationTasks(props.session.collaborationStatus).find(task => task.id === selectedChildId.value));
+const hasCollaborationTasks = computed(() => !props.ragMode && collaborationTasks(props.session.collaborationStatus).length > 0);
 
 // Expanded events tracking (for tool calls and thinking events)
 const expandedEvents = ref<Set<string>>(new Set());
@@ -1480,8 +1568,10 @@ const isThinkingActive = (eventId: string): boolean => {
   return activeThinkingIds.value.has(eventId);
 };
 
+const deferredThinkingFolds = new Set<string>();
+
 // Watch event stream to auto-expand thinking events and auto-collapse when non-thinking follows
-watch(eventStream, (stream) => {
+watch([eventStream, readingHistory], ([stream]) => {
   if (!stream || !Array.isArray(stream)) return;
 
   // Scan stream to find thinking events to expand and collapse
@@ -1508,36 +1598,20 @@ watch(eventStream, (stream) => {
 
   // Collapse thinking events that were active before but are no longer trailing
   for (const oldId of activeThinkingIds.value) {
-    if (!newActiveIds.has(oldId)) {
-      expandedEvents.value.delete(oldId);
-    }
+    if (!newActiveIds.has(oldId)) deferredThinkingFolds.add(oldId);
   }
-
+  if (!readingHistory.value) {
+    for (const id of deferredThinkingFolds) {
+      if (!newActiveIds.has(id)) expandedEvents.value.delete(id);
+    }
+    deferredThinkingFolds.clear();
+  }
   activeThinkingIds.value = newActiveIds;
   activeThinkingVersion.value++;
 
   nextTick(async () => {
     await hydrateProtectedFileImages(rootElement.value, protectedFileAccess.value);
     await enhanceMarkdownContainer(rootElement.value);
-    // Auto-scroll thinking detail content to bottom during streaming
-    if (newActiveIds.size > 0 && rootElement.value) {
-      const els = rootElement.value.querySelectorAll('.thinking-detail-content');
-      els.forEach((el: Element) => {
-        const htmlEl = el as HTMLElement;
-        if (htmlEl.scrollHeight > htmlEl.clientHeight) {
-          htmlEl.scrollTop = htmlEl.scrollHeight;
-        }
-      });
-    }
-    // Auto-scroll the steps container to the bottom while it is still height-
-    // capped (steps-only phase). Once answer text appears the cap is released
-    // and the container grows with the page, so internal scrolling is moot.
-    if (!answerEverStarted.value && streamingStepsContainer.value) {
-      const el = streamingStepsContainer.value;
-      if (el.scrollHeight > el.clientHeight) {
-        el.scrollTop = el.scrollHeight;
-      }
-    }
   });
 }, { immediate: true, deep: true });
 
@@ -1554,18 +1628,6 @@ const hasAnswerStarted = computed(() => {
   const stream = eventStream.value;
   if (!stream || !Array.isArray(stream)) return false;
   return stream.some((e: any) => e.type === 'answer' && !e.superseded && e.content && e.content.trim());
-});
-
-// Whether ANY answer text has ever appeared this turn — including a preamble
-// that was later superseded (its content stays in the stream). Used to release
-// the live container's height cap. Unlike hasAnswerStarted this is monotonic:
-// it does not flip back when a preamble is retracted, so the container does not
-// shrink back to the capped height (which would look like a jump). Once the
-// model starts producing answer-style text, give it full height to breathe.
-const answerEverStarted = computed(() => {
-  const stream = eventStream.value;
-  if (!stream || !Array.isArray(stream)) return false;
-  return stream.some((e: any) => e.type === 'answer' && e.content && e.content.trim());
 });
 
 const agentDurationMs = ref<number>(0);
@@ -1588,7 +1650,10 @@ watch(eventStream, (stream) => {
 const isConversationDone = computed(
   () => isAssistantTurnComplete(props.session) && !isAwaitingInput(props.session),
 );
+const timelineCompleted = useDeferredTimelineCompletion(isConversationDone, readingHistory);
 const isSegmentDone = computed(() => Boolean(props.session?.steerForked) || isConversationDone.value);
+const collaborationWait = computed(() => collaborationWaitState(eventStream.value, isSegmentDone.value));
+const childActivity = computed(() => props.ragMode ? undefined : collaborationActivity(eventStream.value, props.session.collaborationStatus, isSegmentDone.value));
 
 const streamingMermaidSvgCache = ref<string[]>([]);
 let streamingMermaidRenderTask: Promise<void> | null = null;
@@ -1681,6 +1746,8 @@ watch(answerFullyRendered, (ready) => {
   });
 }, { immediate: true });
 
+const wasUserStopped = computed(() => eventStream.value.some((e: any) => e.type === 'stop'));
+
 // Whether any currently visible step is actively pending (a running tool, or a
 // blocking approval/OAuth prompt). A pending step shimmers on its own, so we
 // don't stack a placeholder on top of it.
@@ -1694,11 +1761,7 @@ const hasPendingStreamingActivity = computed(() => {
     ) {
       return true;
     }
-    return (
-      event.type === 'tool_approval_required' ||
-      event.type === 'mcp_oauth_required' ||
-      event.type === 'agent_prompt_required'
-    );
+    return isUnresolvedCollaborationPrompt(event);
   });
 });
 
@@ -1711,6 +1774,7 @@ const hasPendingStreamingActivity = computed(() => {
 const showAgentActivityIndicator = computed(() => {
   if (isSegmentDone.value) return false;
   if (props.ragMode || hasAnswerStarted.value) return false;
+  if (collaborationWait.value === 'waiting') return false;
   return !hasPendingStreamingActivity.value;
 });
 
@@ -1719,7 +1783,7 @@ const isStreamingTimelineEvent = (event: any): boolean => {
 };
 
 const showStreamingTimeline = computed(() => {
-  return displayEvents.value.some((event: any) => isStreamingTimelineEvent(event)) || showAgentActivityIndicator.value;
+  return displayEvents.value.some((event: any) => isStreamingTimelineEvent(event)) || showAgentActivityIndicator.value || Boolean(childActivity.value);
 });
 
 const lastStreamingTimelineEventIndex = computed(() => {
@@ -1792,11 +1856,11 @@ const finalContent = computed(() => {
 
 // Count intermediate steps (after merging consecutive thinking events, matching what user sees in tree)
 const intermediateStepsCount = computed(() => {
-  if (!hasAnswerStarted.value && !isSegmentDone.value) return 0;
+  if (!hasAnswerStarted.value && !isSegmentDone.value && !hasCollaborationTasks.value) return 0;
   // Count only thinking and tool_call events (exclude plan_task_change, etc.);
   // a question card stands in for its ask_user call.
   return intermediateEvents.value.filter(
-    (e: any) => e.type === 'thinking' || e.type === 'tool_call' || e.type === 'agent_prompt_required'
+    (e: any) => e.type === 'thinking' || e.type === 'progress' || e.type === 'tool_call' || e.type === 'child_task' || e.type === 'agent_prompt_required'
   ).length;
 });
 
@@ -1805,15 +1869,13 @@ const intermediateStepsCount = computed(() => {
 // over-counts what the user perceives as agent loops (a single loop emits one
 // thinking card plus its tool calls).
 const reasoningRoundsCount = computed(() => {
-  if (!hasAnswerStarted.value && !isSegmentDone.value) return 0;
+  if (!hasAnswerStarted.value && !isSegmentDone.value && !hasCollaborationTasks.value) return 0;
   return intermediateEvents.value.filter((e: any) => e.type === 'thinking').length;
 });
 
 const toolCallsCount = computed(() => {
-  if (!hasAnswerStarted.value && !isSegmentDone.value) return 0;
-  return intermediateEvents.value.filter(
-    (e: any) => e.type === 'tool_call' || e.type === 'agent_prompt_required'
-  ).length;
+  if (!hasAnswerStarted.value && !isSegmentDone.value && !hasCollaborationTasks.value) return 0;
+  return countToolCalls(eventStream.value);
 });
 
 const intermediateStepsSummary = computed(() => {
@@ -1857,7 +1919,7 @@ const intermediateStepsSummaryHtml = computed(() => {
 const shouldShowCollapsedSteps = computed(() => {
   if (props.ragMode) return false
   const hasSteps = intermediateStepsCount.value > 0;
-  return hasSteps && isConversationDone.value;
+  return hasSteps && timelineCompleted.value;
 });
 
 // Once the steps collapse, the memory row travels with them into the tree —
@@ -1870,7 +1932,7 @@ const showMemoryRow = computed(
 // Memory leads the timeline, so it is only the last node while nothing has
 // followed it yet — and a lone node has no trunk line to draw below it.
 const memoryIsLast = computed(
-  () => lastStreamingTimelineEventIndex.value === -1 && !showAgentActivityIndicator.value,
+  () => lastStreamingTimelineEventIndex.value === -1 && !showAgentActivityIndicator.value && !childActivity.value,
 );
 
 // Check if event is a "deep thinking" type (either streaming thinking or thinking tool call)
@@ -1912,11 +1974,8 @@ const buildFullEventList = (stream: any[]) => {
       .filter((e: any) => e?.type === 'agent_prompt_required' && e.tool_call_id)
       .map((e: any) => e.tool_call_id),
   );
-  const validStream = stream.filter(
-    (e: any) =>
-      e && typeof e === 'object' && e.type &&
-      !(e.type === 'tool_call' && askedCalls.has(e.tool_call_id)),
-  );
+  // Retain tool boundaries until reasoning and progress have been associated.
+  const validStream = stream.filter((e: any) => e && typeof e === 'object' && e.type);
   let lastTask: string | null = null;
   const result: any[] = [];
 
@@ -1977,47 +2036,24 @@ const buildFullEventList = (stream: any[]) => {
     result.push(event);
   }
 
-  // Relocate each retracted (superseded) answer — a tool round's optimistic
-  // preamble that was pulled out of the answer area — into that round's
-  // thinking card as its TITLE, with the reasoning as the body (one card per
-  // round). A lone preamble (model has no separate reasoning channel) becomes a
-  // title-only thinking card. Non-superseded answers stay as `answer` and are
-  // rendered in the answer area, never here.
-  const folded: any[] = [];
-  for (const e of result) {
-    if (e.type === 'answer' && e.superseded) {
-      const preambleText = typeof e.content === 'string' ? e.content : '';
-      const prev = folded[folded.length - 1];
-      if (prev && prev.type === 'thinking' && !prev.title) {
-        folded[folded.length - 1] = { ...prev, title: preambleText };
-        continue;
-      }
-      // No reasoning channel: title-only thinking card (same chrome as merged
-      // rounds). Rounds with reasoning_content merge preamble into prev.title.
-      folded.push({
-        type: 'thinking',
-        event_id: e.event_id,
-        title: preambleText,
-        content: '',
-        thinking: false,
-        timestamp: e.timestamp,
-      });
-      continue;
-    }
-    folded.push(e);
-  }
+  // Progress is the visible label; the preceding reasoning remains expandable.
+  // This projection never changes the stored event types or final answers.
+  const folded = collaborationTimeline(foldProgressIntoThinking(result), props.session.collaborationStatus, isSegmentDone.value).filter(
+    (e: any) =>
+      !(e.type === 'tool_call' && askedCalls.has(e.tool_call_id)),
+  );
 
   // Drop thinking cards that are entirely empty (no title and no body). Some
   // models emit "\n\n" before a tool call (e.g. qwen3 blank lines between
   // [assistant] and tool_calls), which would otherwise show an empty "思考"
   // card. Keep cards that carry a title (a relocated preamble) even with no
   // reasoning body.
-  return folded.filter((e: any) => {
+  return groupProgressUpdates(folded.filter((e: any) => {
     if (e.type !== 'thinking') return true;
     const content = typeof e.content === 'string' ? e.content : '';
     const title = typeof e.title === 'string' ? e.title : '';
     return content.trim().length > 0 || title.trim().length > 0;
-  });
+  }));
 };
 
 // IDs of thinking events that should NOT be rendered in the intermediate-
@@ -2121,14 +2157,15 @@ const displayEvents = computed(() => {
 
   // Keep the active reasoning event inline with tool activity. It uses the same
   // compact timeline card and is auto-collapsed when a tool or answer follows.
-  if (!isConversationDone.value) {
+  if (!timelineCompleted.value) {
     return result;
   }
 
-  // Done: the steps live in the collapsed tree; show only the answer here.
-  const answerEvents = result.filter((e: any) => e.type === 'answer');
-  if (answerEvents.length > 0) {
-    return answerEvents;
+  // All completed steps, including child task entry points, belong to the
+  // collapsible timeline. Only the final answer remains outside it.
+  const foregroundEvents = result.filter((e: any) => e.type === 'answer');
+  if (foregroundEvents.length > 0) {
+    return foregroundEvents;
   }
 
   // If the intermediate-steps tree is active, all thinking/tool_call events
@@ -2167,6 +2204,47 @@ const displayEvents = computed(() => {
 
   return result;
 });
+
+const isPageLinkEvent = (event: any): boolean =>
+  event?.type === 'tool_call' && (event.tool_name === 'open_page' || event.tool_name === 'view_page') && !event.pending &&
+  event.success !== false && isAssistantPageLink(event.tool_data);
+
+// Once the steps fold away, the page buttons move under the final answer:
+// they are what the user acts on next.
+const pinnedAnswerEvent = computed(() => {
+  if (!isConversationDone.value) return null;
+  const events = displayEvents.value;
+  for (let i = events.length - 1; i >= 0; i--) {
+    if (events[i]?.type === 'answer') return events[i];
+  }
+  return null;
+});
+
+const pinnedPageLinks = computed(() => {
+  if (!pinnedAnswerEvent.value) return [];
+  return eventStream.value.filter(isPageLinkEvent);
+});
+
+const showPageLinkInStep = (event: any): boolean =>
+  isPageLinkEvent(event) && pinnedPageLinks.value.length === 0;
+
+const isPageEditEvent = (event: any): boolean =>
+  event?.type === 'tool_call' && event.tool_name === 'fill_page' && !event.pending &&
+  event.success !== false && Array.isArray(event.tool_data?.applied) && !!event.tool_call_id;
+
+// What the assistant typed is still unsaved, so its card stays in view with
+// the page buttons.
+const pinnedPageEdits = computed(() => {
+  if (!pinnedAnswerEvent.value) return [];
+  return eventStream.value.filter(isPageEditEvent);
+});
+
+const showPageEditInStep = (event: any): boolean =>
+  isPageEditEvent(event) && pinnedPageEdits.value.length === 0;
+
+const isPageReadEvent = (event: any): boolean =>
+  event?.type === 'tool_call' && (event.tool_name === 'read_page' || event.tool_name === 'select_tab') &&
+  !event.pending && event.success !== false && !!event.tool_data?.location;
 
 // Get unique key for event
 const getEventKey = (event: any, index: number): string => {
@@ -2240,6 +2318,11 @@ const isReferenceDrawerTool = (toolName?: string | null): boolean =>
 
 const hasExpandableResults = (event: any): boolean => {
   if (isReferenceDrawerTool(event?.tool_name)) return false;
+  // Its card is the result.
+  if ((event?.tool_name === 'open_page' || event?.tool_name === 'view_page') && event.success !== false) return false;
+  if (event?.tool_name === 'fill_page' && event.success !== false) return false;
+  // The snapshot is page text for the model, not something to read here.
+  if ((event?.tool_name === 'read_page' || event?.tool_name === 'select_tab') && event.success !== false) return false;
   return hasResults(event);
 };
 
@@ -2588,6 +2671,13 @@ agentRenderer.image = function agentImageRenderer(token) {
   return defaultImageRenderer.call(this, token);
 };
 
+installArtifactLinkRenderer(agentRenderer, () => ({
+  artifacts: artifactList.value,
+  labels: artifactRefLabels.value,
+  context: artifactRefContext.value,
+  streaming: !isSegmentDone.value,
+}));
+
 const hasCachedMermaidSvg = (cached: CachedMermaidSvgHtml): boolean => {
   if (!cached) return false;
   if (typeof cached === 'string') return cached.length > 0;
@@ -2880,6 +2970,8 @@ const getToolTitle = (event: any): string => {
   if (event.tool_name === 'local_browser') return browserToolTitle(t, event);
   const mcpTitle = getMcpToolTitle(t, event)
   if (mcpTitle) return mcpTitle
+  const catalogTitle = getCatalogToolTitle(t, event)
+  if (catalogTitle) return catalogTitle
   if (event.pending) {
     if (event.tool_name === 'image_analysis') {
       return t('agentStream.toolStatus.imageAnalyzing');
@@ -3190,6 +3282,8 @@ const handleAddToKnowledge = (answerEvent: any) => {
 </script>
 
 <style lang="less" scoped>
+
+
 @import '../../../components/css/chat-markdown.less';
 @import '../../../components/css/chat-message-shared.less';
 @import '../../../components/css/chat-citations.less';
@@ -3230,34 +3324,13 @@ const handleAddToKnowledge = (answerEvent: any) => {
   }
 }
 
-// Streaming steps container
+// Keep one outer scroll viewport through reasoning, progress and answer phases.
+// A height cap here would release on the first answer token and jump the page.
 .streaming-steps-container {
   position: relative;
 
   &.is-streaming-timeline {
     margin-top: 8px;
-  }
-
-  &.streaming-steps-constrained {
-    max-height: 400px;
-    overflow-y: auto;
-
-    &::-webkit-scrollbar {
-      width: 4px;
-    }
-
-    &::-webkit-scrollbar-track {
-      background: transparent;
-    }
-
-    &::-webkit-scrollbar-thumb {
-      background: var(--td-bg-color-component-disabled);
-      border-radius: 2px;
-
-      &:hover {
-        background: var(--td-text-color-placeholder);
-      }
-    }
   }
 }
 
@@ -3337,6 +3410,9 @@ const handleAddToKnowledge = (answerEvent: any) => {
     border-left: 1px solid var(--agent-step-line-color);
   }
 
+  // Narration has no icon, so its trunk must cover the usual icon gap.
+  &.tree-child-progress::before { top: 0; }
+
   // horizontal branch connector
   .tree-branch {
     display: none;
@@ -3403,6 +3479,17 @@ const handleAddToKnowledge = (answerEvent: any) => {
 
   .answer-toolbar {
     margin-top: 10px;
+  }
+
+  .answer-page-links {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 12px;
+
+    :deep(.open-page-card) {
+      margin-top: 0;
+    }
   }
 }
 
