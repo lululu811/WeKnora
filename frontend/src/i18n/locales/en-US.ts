@@ -9169,8 +9169,27 @@ export default {
     keyLevels: 'Key Levels',
     requestRejected: 'Server explicitly rejected this request',
     retryWontHelp: 'Retrying will not yield different results',
-    fetchPathIssue: 'This is a data fetch path issue'
-  },
+    fetchPathIssue: 'This is a data fetch path issue',
+      patterns: {
+      disclosure: {
+        descriptive: 'Pattern description only — not a buy/sell signal',
+        delay: 'Confirmed {n} bars after the pattern appears'
+      },
+      b1: {
+        label: 'B1 Build Wave',
+        desc: 'First pullback after a build wave on shrinking volume, J < 13',
+        basis: 'Verdict: no edge in a full-sample replay (40–43% win rate)'
+      },
+      keyK: { label: 'Key K', desc: 'Doji plus a turn on shrinking volume' },
+      s1: { label: 'S1 Warning', desc: 'Long upper shadow on expanding volume at the highs' },
+      violentK: { label: 'Violent K', desc: 'Double-volume breakout — long or short candle' },
+      poleYang: { label: 'Pole Yang', desc: 'Large yang line at the start of a swing, anchored with a line' },
+      pileYang: { label: 'Pile Yang', desc: 'Gap down plus engulfing plus retest — strong short-to-long flip' },
+      cappingYin: { label: 'Capping Yin', desc: 'Gap up then a heavy-volume decline, 80% bearish' },
+      fakeYin: { label: 'Fake Yin', desc: 'Holding the new high and the 5-day line — a shakeout' },
+      reboundTrap: { label: 'False Dawn', desc: 'Weak bounce without volume under a 5-1-8 death cross — wave C continues' }
+    },
+},
   stockCitation: {
     noChangeData: 'No change data',
     analyzing: 'Analyzing strategy indicators and quantitative structure...',

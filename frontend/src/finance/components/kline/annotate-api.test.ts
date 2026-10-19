@@ -53,7 +53,12 @@ test('PATTERN_CONFIG 覆盖算法侧的全部九种形态', () => {
   ]
   for (const key of allKeys) {
     assert.ok(PATTERN_CONFIG[key], `缺少形态配置: ${key}`)
-    assert.ok(PATTERN_CONFIG[key].label.length > 0)
-    assert.ok(PATTERN_CONFIG[key].desc.length > 0)
+    assert.ok(PATTERN_CONFIG[key].labelKey.length > 0)
+    assert.ok(PATTERN_CONFIG[key].descKey.length > 0)
+    // 准入档位必须有：没有档位就没有「能不能进建议通道」的答案
+    assert.ok(
+      PATTERN_CONFIG[key].admission === 'descriptive' || PATTERN_CONFIG[key].admission === 'signal',
+      `${key} 的准入档位不合法`,
+    )
   }
 })

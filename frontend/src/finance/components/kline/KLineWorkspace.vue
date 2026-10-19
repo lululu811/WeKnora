@@ -469,7 +469,7 @@ import { getKlineChartTheme } from './theme';
 import KLineCompareBar from './KLineCompareBar.vue';
 import { registerZettarancIndicators } from './indicators';
 import { MAIN_PRESETS, SUB_PRESETS } from './indicator-meta';
-import { fetchAnnotations, type Annotation, PATTERN_CONFIG } from './annotate-api';
+import { fetchAnnotations, type Annotation, PATTERN_CONFIG, type PatternMeta } from './annotate-api';
 import { setGlobalOverlayConfig } from './overlay-drawer';
 import LayerFilterDropdown from './LayerFilterDropdown.vue';
 // HALO 年报报告面板。它按当前标的取 /api/v1/halo/report（Go 侧代理，因为
@@ -592,11 +592,33 @@ watch(outlineSelection, (v) => { saveSelection('outline', v); syncOutline(v); },
  * 现在既然后端识别（TA-Lib），类型清单也跟着从**后端目录**来（`candle_catalog`）：
  * 前端自己抄一份的话，后端点新增一种、前端不知道，用户就永远勾不到它。
  */
+/**
+ * 形态的悬浮说明 = 形态定义 + 准入披露。
+ *
+ * 披露有两层，缺一不可：
+ *   · 档位：descriptive 的形态只说明「这里长成某个样子」，不构成买卖建议；
+ *   · 延迟：确认要 N 根 bar 之后才成立的形态（B1 是 3），必须写出来 ——
+ *     否则看到图上标记的人会以为当天就能依据它做判断。
+ */
+function patternDesc(meta: PatternMeta): string {
+  const parts = [t(meta.descKey)];
+  if (meta.admission === 'descriptive') {
+    parts.push(t('kline.patterns.disclosure.descriptive'));
+  }
+  if (meta.confirmDelayBars) {
+    parts.push(t('kline.patterns.disclosure.delay', { n: meta.confirmDelayBars }));
+  }
+  if (meta.basisKey) {
+    parts.push(t(meta.basisKey));
+  }
+  return parts.join(' · ');
+}
+
 const bubbleOptions = computed<LayerOption[]>(() => [
   ...Object.entries(PATTERN_CONFIG).map(([value, meta]) => ({
     value,
-    label: meta.label,
-    desc: meta.desc,
+    label: t(meta.labelKey),
+    desc: patternDesc(meta),
     group: t('kline.groupTactics'),
   })),
   ...candleCatalog.value.map((c) => ({

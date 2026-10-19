@@ -132,6 +132,16 @@ class ZettarancAnnotator:
                                     "wave_gain": round(wave_gain, 2),
                                     "j_value": round(j_val, 2),
                                     "yang_count": yang_count,
+                                    # 确认延迟：上面的循环是 range(25, len(bars)-3)，
+                                    # 也就是最后 3 根 bar 不参与判定 —— 形态要到
+                                    # D+3 才可确认。这件事必须随标注一起走，否则
+                                    # 看到图上有个 B1 的人会以为当天就能依据它
+                                    # 做判断，而实际上它在当天根本还不存在。
+                                    # 判据见 scripts/watchlist-replay/REPORT.md：
+                                    # 36,362 个事件全样本回放，没有 edge。
+                                    "confirm_delay_bars": 3,
+                                    "detectable_at": str(bars[i + 3]["date"]),
+                                    "admission": "descriptive",
                                 },
                             })
         return patterns

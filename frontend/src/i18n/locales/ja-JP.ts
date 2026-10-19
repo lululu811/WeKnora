@@ -344,8 +344,27 @@ export default {
     keyLevels: 'Key Levels',
     requestRejected: 'Server explicitly rejected this request',
     retryWontHelp: 'Retrying will not yield different results',
-    fetchPathIssue: 'This is a data fetch path issue'
-  },
+    fetchPathIssue: 'This is a data fetch path issue',
+      patterns: {
+      disclosure: {
+        descriptive: '形態の説明のみ。売買のシグナルではない',
+        delay: 'この形態は {n} 本後に確定'
+      },
+      b1: {
+        label: 'B1 建倉波',
+        desc: '建倉波後の最初の調整が縮小量、J < 13',
+        basis: '判定：全サンプル再生で edge なし（勝率 40〜43%）'
+      },
+      keyK: { label: 'キーK', desc: '十字星 + 縮小量の転換' },
+      s1: { label: 'S1 警告', desc: '高値圏での出来高を伴う長い上ひげ' },
+      violentK: { label: 'ボイルドK', desc: '低値圏での2倍量のブレイク（長陽/長陰）' },
+      poleYang: { label: 'ポール陽', desc: '波段の始まりとなる大型陽線、水平線で固定' },
+      pileYang: { label: 'パイル陽', desc: '下からの反包 + 押し戻し — 強い空→多転換' },
+      cappingYin: { label: 'キッピング陰', desc: '高値からの出来高を伴う大陰線、80% 看空' },
+      fakeYin: { label: '偽陰線', desc: '高値圏で新高値と5日線を維持 — 洗え' },
+      reboundTrap: { label: '幻の戻り', desc: '5-1-8 死亡交差下の出来高のない弱い反発 — C波継続' }
+    },
+},
   // 観察属性の表示文言。属性名で索引し、ここでは翻訳のみを担当します。
   // 属性名のドットはアンダースコアにエスケープします（contain.text → contain_text）——
   // vue-i18n はキーをドットで辿るため、リテラルの 'contain.text' は解決できません。

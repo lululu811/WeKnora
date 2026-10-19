@@ -51,16 +51,94 @@ export interface AnnotationResponse {
 // color 字段是**历史残留**：全仓只有 Object.keys() 读过这个对象，形态气泡真正
 // 上色在 overlay-drawer.ts（走 palette）。这里保留字面量只为类型完整——改它
 // 不会有任何视觉变化，要调色请改 palette。
-export const PATTERN_CONFIG: Record<string, { label: string; color: string; desc: string }> = {
-  b1: { label: 'B1 建仓波', color: '#10b981', desc: '建仓波后第一次回调缩量，J<13' },
-  key_k: { label: '关键K', color: '#3b82f6', desc: '十字星 + 缩量转折' },
-  s1: { label: 'S1 预警', color: '#ef4444', desc: '高位放量长上影线' },
-  violent_k: { label: '暴力K', color: '#f59e0b', desc: '低位倍量突破长阳/长阴' },
-  pole_yang: { label: '立杆阳', color: '#e11d48', desc: '波段起点大阳线，划横线锚定' },
-  pile_yang: { label: '打桩阳', color: '#059669', desc: '低开+反包+回踩三合一强空翻多' },
-  capping_yin: { label: '灌顶阴', color: '#dc2626', desc: '高开低走放量大阴，80%看空' },
-  fake_yin: { label: '伪阴线', color: '#8b5cf6', desc: '高位承接新高不破5日线震仓' },
-  rebound_trap: { label: '回光返照', color: '#d97706', desc: '518死叉下无量弱反，C浪中继' },
+/**
+ * 形态的准入档位。
+ *
+ * `descriptive` = 描述层：只说明「这里长成了某个样子」，**不构成买卖建议**。
+ * `signal` = 信号层：判据矩阵里有 edge 证据，可以进通知/建议通道。
+ *
+ * 档位不是随手标的：每个形态都要有一条判据，判据结论是 0/N 的就只能是
+ * 描述层。清单与判据出处见 docs/design/signal-admission.md。
+ */
+export type AdmissionKind = 'descriptive' | 'signal';
+
+export interface PatternMeta {
+  /** 展示名的 i18n 键（文案要走 t()，不能写死，否则切不了语言）。 */
+  labelKey: string;
+  /** 悬浮说明的 i18n 键。 */
+  descKey: string;
+  /** 颜色：全仓只有 Object.keys() 读过这个对象，形态气泡真正上色在
+   *  overlay-drawer.ts（走 palette）。要调色请改 palette。 */
+  color: string;
+  /** 准入档位。 */
+  admission: AdmissionKind;
+  /**
+   * 确认延迟（bar 数）：形态要 N 根 bar 之后才可判定。
+   *
+   * B1 是 3 —— 判据循环留着最后 3 根 bar 不参与判定，也就是形态在出现当天
+   * 还不成立。图上看到它的人若不知道这一层，会当成当天就能依据它做判断。
+   */
+  confirmDelayBars?: number;
+  /** 判据结论的 i18n 键（有 edge 证据的形态才需要）。 */
+  basisKey?: string;
+}
+
+export const PATTERN_CONFIG: Record<string, PatternMeta> = {
+  b1: {
+    labelKey: 'kline.patterns.b1.label',
+    descKey: 'kline.patterns.b1.desc',
+    color: '#10b981',
+    admission: 'descriptive',
+    confirmDelayBars: 3,
+  },
+  key_k: {
+    labelKey: 'kline.patterns.keyK.label',
+    descKey: 'kline.patterns.keyK.desc',
+    color: '#3b82f6',
+    admission: 'descriptive',
+  },
+  s1: {
+    labelKey: 'kline.patterns.s1.label',
+    descKey: 'kline.patterns.s1.desc',
+    color: '#ef4444',
+    admission: 'descriptive',
+  },
+  violent_k: {
+    labelKey: 'kline.patterns.violentK.label',
+    descKey: 'kline.patterns.violentK.desc',
+    color: '#f59e0b',
+    admission: 'descriptive',
+  },
+  pole_yang: {
+    labelKey: 'kline.patterns.poleYang.label',
+    descKey: 'kline.patterns.poleYang.desc',
+    color: '#e11d48',
+    admission: 'descriptive',
+  },
+  pile_yang: {
+    labelKey: 'kline.patterns.pileYang.label',
+    descKey: 'kline.patterns.pileYang.desc',
+    color: '#059669',
+    admission: 'descriptive',
+  },
+  capping_yin: {
+    labelKey: 'kline.patterns.cappingYin.label',
+    descKey: 'kline.patterns.cappingYin.desc',
+    color: '#dc2626',
+    admission: 'descriptive',
+  },
+  fake_yin: {
+    labelKey: 'kline.patterns.fakeYin.label',
+    descKey: 'kline.patterns.fakeYin.desc',
+    color: '#8b5cf6',
+    admission: 'descriptive',
+  },
+  rebound_trap: {
+    labelKey: 'kline.patterns.reboundTrap.label',
+    descKey: 'kline.patterns.reboundTrap.desc',
+    color: '#d97706',
+    admission: 'descriptive',
+  },
 };
 
 export async function fetchAnnotations(symbol: string, days = 120): Promise<AnnotationResponse> {

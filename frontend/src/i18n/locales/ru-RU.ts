@@ -344,8 +344,27 @@ export default {
     keyLevels: 'Key Levels',
     requestRejected: 'Server explicitly rejected this request',
     retryWontHelp: 'Retrying will not yield different results',
-    fetchPathIssue: 'This is a data fetch path issue'
-  },
+    fetchPathIssue: 'This is a data fetch path issue',
+      patterns: {
+      disclosure: {
+        descriptive: 'Только описание паттерна — не сигнал на покупку/продажу',
+        delay: 'Подтверждается через {n} бар(ов) после появления паттерна'
+      },
+      b1: {
+        label: 'B1 — волна построения',
+        desc: 'Первая коррекция после волны построения на снижении объёма, J < 13',
+        basis: 'Вердикт: на полной выборке edge нет (win rate 40–43%)'
+      },
+      keyK: { label: 'Ключевой K', desc: 'Доджи + разворот на снижении объёма' },
+      s1: { label: 'S1 — предупреждение', desc: 'Длинная верхняя тень на растущем объёме у максимумов' },
+      violentK: { label: 'Жестокий K', desc: 'Прорыв на двойном объёме — длинная свеча вверх или вниз' },
+      poleYang: { label: 'Столб-йан', desc: 'Большая свеча вверх в начале волны, закреплена линией' },
+      pileYang: { label: 'Свайный янь', desc: 'Пробой вниз + поглощение + ретест — разворот шорта в лонг' },
+      cappingYin: { label: 'Кэппинг-инь', desc: 'Гэп вверх и падение на объёме, 80% медвежье' },
+      fakeYin: { label: 'Ложный инь', desc: 'Удержание нового максимума и 5-дневной линии — вымывание' },
+      reboundTrap: { label: 'Ложный рассвет', desc: 'Слабый отскок без объёма под 5-1-8 death cross — продолжение волны C' }
+    },
+},
   // Тексты для наблюдаемых атрибутов изображения, с ключом по имени атрибута.
   // Точки в имени атрибута экранируются подчёркиванием (contain.text → contain_text):
   // vue-i18n разбирает ключ по точкам, поэтому литеральный ключ 'contain.text'

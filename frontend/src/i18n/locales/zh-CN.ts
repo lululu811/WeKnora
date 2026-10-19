@@ -344,8 +344,27 @@ export default {
     keyLevels: '关键位',
     requestRejected: '服务端明确拒绝了这次请求',
     retryWontHelp: '重试不会有不同结果',
-    fetchPathIssue: '这是取数链路的问题'
-  },
+    fetchPathIssue: '这是取数链路的问题',
+      patterns: {
+      disclosure: {
+        descriptive: '仅形态说明，不构成买卖建议',
+        delay: '此形态要 D+{n} 才可判定'
+      },
+      b1: {
+        label: 'B1 建仓波',
+        desc: '建仓波后第一次回调缩量，J<13',
+        basis: '判据：全样本回放无 edge（胜率 40~43%）'
+      },
+      keyK: { label: '关键K', desc: '十字星 + 缩量转折' },
+      s1: { label: 'S1 预警', desc: '高位放量长上影线' },
+      violentK: { label: '暴力K', desc: '低位倍量突破长阳/长阴' },
+      poleYang: { label: '立杆阳', desc: '波段起点大阳线，划横线锚定' },
+      pileYang: { label: '打桩阳', desc: '低开+反包+回踩三合一强空翻多' },
+      cappingYin: { label: '灌顶阴', desc: '高开低走放量大阴，80%看空' },
+      fakeYin: { label: '伪阴线', desc: '高位承接新高不破5日线震仓' },
+      reboundTrap: { label: '回光返照', desc: '518死叉下无量弱反，C浪中继' }
+    },
+},
   // 图片属性的展示文案，按属性名索引（后端注册表给出属性名，这里只做翻译）。
   // 注意：属性名里的点号要转义成下划线（contain.text → contain_text）——vue-i18n 按点号
   // 逐段下钻，写成字面量 'contain.text' 的键永远取不到。

@@ -344,8 +344,27 @@ export default {
     keyLevels: 'Key Levels',
     requestRejected: 'Server explicitly rejected this request',
     retryWontHelp: 'Retrying will not yield different results',
-    fetchPathIssue: 'This is a data fetch path issue'
-  },
+    fetchPathIssue: 'This is a data fetch path issue',
+      patterns: {
+      disclosure: {
+        descriptive: '형태 설명일 뿐, 매매 신호가 아님',
+        delay: '이 형태는 {n}봉 뒤에 확정'
+      },
+      b1: {
+        label: 'B1 건창파(建倉波)',
+        desc: '건창파 후 첫 조정에서 거래량 감소, J < 13',
+        basis: '판정: 전 표본 재생에서 edge 없음(승률 40~43%)'
+      },
+      keyK: { label: '핵심 K', desc: '십자성 + 거래량 감소 전환' },
+      s1: { label: 'S1 경보', desc: '고점에서 거래량 증가 장대상단' },
+      violentK: { label: '폭력 K', desc: '저점에서 2배 거래량 돌파 (장양/장음)' },
+      poleYang: { label: '기둥양(立杆陽)', desc: '파동 시작의 대형 양선, 수평선으로 고정' },
+      pileYang: { label: '말뚝양(打桩陽)', desc: '하단 개방 + 반포함 + 되돌림 — 강한 공→매 전환' },
+      cappingYin: { label: '마천음(灌頂陰)', desc: '상단 개방 후 거래량 증가 대음선, 80% 약세' },
+      fakeYin: { label: '가음선(僞陰線)', desc: '고점에서 신고가와 5일선 유지 — 세탁' },
+      reboundTrap: { label: '허무한 되돌림', desc: '5-1-8 데스크로스 아래 무량 반등 — C파 지속' }
+    },
+},
   // 관찰 속성의 표시 문구. 속성 이름으로 색인하며 여기서는 번역만 담당합니다.
   // 속성 이름의 점은 밑줄로 이스케이프합니다(contain.text → contain_text) —— vue-i18n 은
   // 키를 점 단위로 순회하므로 리터럴 'contain.text' 키는 해석되지 않습니다.

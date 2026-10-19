@@ -344,8 +344,27 @@ export default {
     keyLevels: 'Key Levels',
     requestRejected: 'Server explicitly rejected this request',
     retryWontHelp: 'Retrying will not yield different results',
-    fetchPathIssue: 'This is a data fetch path issue'
-  },
+    fetchPathIssue: 'This is a data fetch path issue',
+      patterns: {
+      disclosure: {
+        descriptive: '僅形態說明，不構成買賣建議',
+        delay: '此形態要 D+{n} 才可判定'
+      },
+      b1: {
+        label: 'B1 建倉波',
+        desc: '建倉波後第一次回調縮量，J<13',
+        basis: '判據：全樣本回放無 edge（勝率 40~43%）'
+      },
+      keyK: { label: '關鍵K', desc: '十字星 + 縮量轉折' },
+      s1: { label: 'S1 預警', desc: '高位放量長上影線' },
+      violentK: { label: '暴力K', desc: '低位倍量突破長陽/長陰' },
+      poleYang: { label: '立桿陽', desc: '波段起點大陽線，劃橫線錨定' },
+      pileYang: { label: '打樁陽', desc: '低開+反包+回踩三合一強空翻多' },
+      cappingYin: { label: '灌頂陰', desc: '高開低走放量大陰，80%看空' },
+      fakeYin: { label: '偽陰線', desc: '高位承接新高不破5日線震倉' },
+      reboundTrap: { label: '回光返照', desc: '518死叉下無量弱反，C浪中繼' }
+    },
+},
   // 图片属性的展示文案，按属性名索引（后端注册表给出属性名，这里只做翻译）。
   // 注意：属性名里的点号要转义成下划线（contain.text → contain_text）——vue-i18n 按点号
   // 逐段下钻，写成字面量 'contain.text' 的键永远取不到。

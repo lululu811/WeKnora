@@ -124,3 +124,56 @@ def test_annotate_all_dispatch():
     annos = ZettarancAnnotator.annotate_all(bars)
     for a in annos:
         assert a.get("source") == "algorithm"
+
+
+
+def _b1_triggering_bars():
+    """造一段能触发 B1 的序列：建仓波涨 30%，随后缩量回调到 J < 13。"""
+    bars = []
+    for i in range(0, 5):  # 横盘
+        bars.append({
+            "date": f"2026-01-{i + 1:02d}", "open": 10.0, "high": 10.1,
+            "low": 9.9, "close": 10.0, "volume": 1000.0,
+        })
+    for i in range(5, 25):  # 建仓波：10.0 → 13.0，其中 4 根大阳
+        step = 10.0 + (i - 5) * 0.1
+        if i in (5, 10, 15, 20):
+            close, vol = step + 0.5, 3000.0
+        else:
+            close, vol = step + 0.1, 1500.0
+        bars.append({
+            "date": f"2026-01-{i + 1:02d}", "open": step, "high": close + 0.05,
+            "low": step - 0.05, "close": close, "volume": vol,
+        })
+    for k, i in enumerate(range(25, 30)):  # 回调缩量：13.0 → 11.0
+        close = 13.0 - 0.4 * (k + 1)
+        bars.append({
+            "date": f"2026-02-{i - 24:02d}", "open": close + 0.3, "high": close + 0.35,
+            "low": close - 0.1, "close": close, "volume": 300.0,
+        })
+    for k, i in enumerate(range(30, 34)):  # B1 低点 + 其后 3 根（可判定日要用到）
+        close = 10.6 + 0.1 * k
+        bars.append({
+            "date": f"2026-02-{i - 24:02d}", "open": close - 0.1, "high": close + 0.2,
+            "low": close - 0.3, "close": close, "volume": 800.0,
+        })
+    return bars
+
+
+def test_build_wave_b1_discloses_confirm_delay():
+    """B1 标注必须说清「它要 D+3 才可判定」。
+
+    判据循环是 range(25, len(bars)-3)：最后 3 根 bar 不参与判定，所以形态在
+    出现当天还不成立。看不到这一层的人会把图上的 B1 当成当天可依据的信号。
+    延迟随标注一起走，才不会变成误导。
+
+    判据本身见 scripts/watchlist-replay/REPORT.md：36,362 个事件全样本回放，
+    没有 edge（胜率 40~43%）。所以它只能留在描述层。
+    """
+    patterns = ZettarancAnnotator.detect_build_wave_b1(_b1_triggering_bars())
+    assert patterns, "构造的序列必须能触发 B1，否则这个用例什么都没验"
+
+    meta = patterns[0]["metadata"]
+    assert meta["confirm_delay_bars"] == 3
+    assert meta["admission"] == "descriptive", "没有 edge 证据的形态只能当描述层"
+    assert meta["detectable_at"] > patterns[0]["date"], "可判定日必须晚于形态日"
