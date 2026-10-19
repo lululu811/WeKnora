@@ -107,6 +107,15 @@ export type FinanceProxyRoute = (typeof FINANCE_PROXY_ROUTES)[number];
  * 2026-10-09：market 分支新增 sectors / basis / limit-up-ladder / industry-map。
  * 少同步一条的表现是**前端静默少一块数据**（该请求 404、组件按空态渲染），
  * 不会报错 —— 所以改这里之后要顺手核对 nginx.conf 那一行。
+ *
+ * 2026-10-19：补齐 2026-10-15 那批本地新增的 13 个端点（ladder-detail、
+ * anomaly-reasons、limit-break-down、dividend-calendar、hot-stocks、
+ * hot-stock-trend、futures-warehouse、futures-basis-rate、etf-holders、
+ * etf-institutional-ranking、squeeze-status、commodities、fund-holdings）。
+ * 之前 nginx.conf 与本常量都缺这 13 条，生产 nginx 下这些请求会落到通用
+ * /api/ 规则、被 Go 后端鉴权拦成 401，而 python-service 根本没收到请求。
+ * 现在三份清单（数组 / 本常量 / nginx.conf）由 proxyRoutes.test.ts 守住，
+ * 以后再漂会直接红在 CI 上。
  */
 export const FINANCE_PROXY_ROUTES_REGEX =
-  '^/api/(kline|annotate|indicators|symbols|stock-profile|quotes|chart-pattern|market/(snapshot|dragon-tiger|sectors|basis|limit-up-ladder|industry-map|technicals|auction|commodities|fund-holdings)|finance)(/.*)?$';
+  '^/api/(kline|annotate|indicators|symbols|stock-profile|quotes|chart-pattern|market/(snapshot|dragon-tiger|sectors|basis|limit-up-ladder|industry-map|technicals|auction|commodities|fund-holdings|ladder-detail|anomaly-reasons|limit-break-down|dividend-calendar|hot-stocks|hot-stock-trend|futures-warehouse|futures-basis-rate|etf-holders|etf-institutional-ranking|squeeze-status)|finance)(/.*)?$';
