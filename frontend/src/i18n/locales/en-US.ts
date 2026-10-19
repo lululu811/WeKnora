@@ -696,6 +696,8 @@ export default {
     columns: {
       code: 'Code',
       name: 'Name',
+      industry: 'Industry',
+      signals: 'Signals',
       state: 'State',
       note: 'Note',
       price: 'Price',
@@ -705,6 +707,8 @@ export default {
       actions: 'Actions',
       score: 'Score'
     },
+    allIndustries: 'All Industries',
+    board: 'Board',
     backtestBadgeText: 'Backtest Win Rate {winRate}% ({wins}/{total}, avg max gain +{maxGain}%)',
     backtestBadgeTitle: 'Backtest statistics based on historical buy signals',
     commonPresets: 'Common Presets',
@@ -8532,6 +8536,7 @@ export default {
     }
   },
   kline: {
+    layers: 'Layers',
     picksBar: 'Watchlist ({count})',
     picksHint: '[↑/↓] keys to switch stocks',
     searchSwitch: 'Click to search and switch stock',
@@ -8776,5 +8781,16 @@ export default {
       empty: 'No events in the coming days',
       failed: 'Calendar unavailable, the main panel is unaffected'
     }
+  },
+  dividend: {
+    title: 'Ex-Dividend Calendar & Bonus Shares',
+    tabAll: 'All Calendar',
+    tabYield: 'High Yield (Cash Cows)',
+    tabBonus: 'High Bonus Shares',
+    expand: 'Expand All',
+    failed: 'Dividend data unavailable',
+    statCount: 'Stocks Found',
+    statAvgYield: 'Average Yield',
+    statTopBonus: 'Top Bonus Share'
   }
 }

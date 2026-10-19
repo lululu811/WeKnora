@@ -62,48 +62,191 @@
 
     <p v-if="groupNote" class="etf-ws__note">{{ groupNote }}</p>
 
-    <div v-if="loading" class="etf-ws__empty">{{ $t('common.loading') }}</div>
-    <p v-else-if="!visible.length" class="etf-ws__empty">{{ $t('marketDashboard.noData') }}</p>
+    <!-- ── 机构控盘排行模式 ── -->
+    <div v-if="group === 'institutional'">
+      <div v-if="instLoading" class="etf-ws__empty">{{ $t('common.loading') }}</div>
+      <p v-else-if="!instItems.length" class="etf-ws__empty">{{ $t('marketDashboard.noData') }}</p>
+      <div v-else class="etf-ws__card">
+        <div class="etf-ws__table">
+          <div class="etf-ws__tr etf-ws__tr--head etf-ws__tr--inst">
+            <span class="etf-ws__col-name">基金名称 / 代码</span>
+            <span class="is-center">机构投资者占比</span>
+            <span class="is-num">个人散户占比</span>
+            <span class="is-num">持有人户数</span>
+            <span class="is-num">户均份额</span>
+            <span class="is-center">操作</span>
+          </div>
 
-    <div v-else class="etf-ws__table">
-      <div class="etf-ws__tr etf-ws__tr--head">
-        <span>{{ $t('tracking.etf.col.name') }}</span>
-        <span class="is-num">{{ $t('tracking.etf.col.price') }}</span>
-        <span class="is-num">{{ $t('tracking.etf.col.share') }}</span>
-        <span class="is-num">{{ $t('tracking.etf.col.multiple') }}</span>
-        <span>{{ $t('tracking.etf.col.signal') }}</span>
-        <span class="is-num">{{ $t('tracking.etf.col.observed') }}</span>
-      </div>
+          <div
+            v-for="row in instItems"
+            :key="row.fund_thscode"
+            class="etf-ws__tr etf-ws__tr--inst"
+            @click="openHoldersDrawer(row.fund_thscode, row.fund_name || row.fund_thscode)"
+          >
+            <span class="etf-ws__name">
+              <span class="etf-ws__label" :title="row.fund_name || ''">{{ row.fund_name || row.fund_thscode }}</span>
+              <span class="etf-ws__code">{{ row.fund_thscode }}</span>
+            </span>
 
-      <div
-        v-for="row in visible"
-        :key="row.it.thscode"
-        class="etf-ws__tr"
-        :class="{ 'is-signalled': row.it.signal }"
-      >
-        <span class="etf-ws__name">
-          <span v-if="row.it.signal" class="etf-ws__dot" :title="$t('tracking.etf.signalTitle')" />
-          {{ row.it.name }}
-          <span class="etf-ws__code">{{ row.it.thscode }}</span>
-        </span>
-        <span class="is-num etf-ws__num">{{ priceOf(row.it) }}</span>
-        <!--
-          份额变动是这张表的主角。null 显示「—」，**绝不显示 0%** ——
-          0% 是"这个季度没动"这个结论，null 是"没有上一观测点可比"。
-          没有份额观测点时退回近 5 日涨跌，并把口径标出来，不混为一谈。
-        -->
-        <span class="is-num etf-ws__num" :class="trendClass(row.primary.value)">
-          {{ fmtPct(row.primary.value) }}<template v-if="row.primary.basis === 'price'">*</template>
-        </span>
-        <span class="is-num etf-ws__num">{{ multipleOf(row.it) }}</span>
-        <span class="etf-ws__signal">{{ row.it.signal ? $t('marketDashboard.etf.signal') : '—' }}</span>
-        <span class="is-num etf-ws__num etf-ws__date">{{ row.it.trade_date ?? '—' }}</span>
+            <span class="is-center etf-ws__inst-bar-col">
+              <div class="etf-ws__ratio-bar-wrap">
+                <div class="etf-ws__ratio-bar-inner" :style="{ width: `${row.ins_position ?? 0}%` }" />
+              </div>
+              <span class="etf-ws__ratio-pct">{{ row.ins_position ? row.ins_position.toFixed(2) + '%' : '—' }}</span>
+            </span>
+
+            <span class="is-num etf-ws__num">{{ row.psnl_rate ? row.psnl_rate.toFixed(2) + '%' : '—' }}</span>
+            <span class="is-num etf-ws__num">{{ row.holder_amount?.toLocaleString() ?? '—' }} 户</span>
+            <span class="is-num etf-ws__num">{{ fmtShare(row.avg_holder_share) }}</span>
+            <span class="is-center">
+              <button
+                type="button"
+                class="etf-ws__holder-btn"
+                @click.stop="openHoldersDrawer(row.fund_thscode, row.fund_name || row.fund_thscode)"
+              >
+                十大持有人穿透
+              </button>
+            </span>
+          </div>
+        </div>
       </div>
     </div>
 
-    <p v-if="visible.some((r) => r.primary.basis === 'price')" class="etf-ws__foot">
-      * {{ $t('tracking.etf.footPriceFallback') }}
-    </p>
+    <!-- ── 宽基 / 行业普通模式 ── -->
+    <div v-else>
+      <div v-if="loading" class="etf-ws__empty">{{ $t('common.loading') }}</div>
+      <p v-else-if="!visible.length" class="etf-ws__empty">{{ $t('marketDashboard.noData') }}</p>
+
+      <div v-else class="etf-ws__card">
+        <div class="etf-ws__table">
+          <div class="etf-ws__tr etf-ws__tr--head">
+            <span class="etf-ws__col-name">{{ $t('tracking.etf.col.name') }}</span>
+            <span class="is-num">{{ $t('tracking.etf.col.price') }}</span>
+            <span class="is-num">{{ $t('tracking.etf.col.share') }}</span>
+            <span class="is-num">{{ $t('tracking.etf.col.multiple') }}</span>
+            <span class="is-center">{{ $t('tracking.etf.col.signal') }}</span>
+            <span class="is-num">{{ $t('tracking.etf.col.observed') }}</span>
+            <span class="is-center">筹码穿透</span>
+          </div>
+
+          <div
+            v-for="row in visible"
+            :key="row.it.thscode"
+            class="etf-ws__tr"
+            :class="{ 'is-signalled': row.it.signal }"
+            @click="openHoldersDrawer(row.it.thscode, row.it.name)"
+          >
+            <span class="etf-ws__name">
+              <span v-if="row.it.signal" class="etf-ws__dot" :title="$t('tracking.etf.signalTitle')" />
+              <span class="etf-ws__label" :title="row.it.name">{{ row.it.name }}</span>
+              <span class="etf-ws__code">{{ row.it.thscode }}</span>
+            </span>
+            <span class="is-num etf-ws__num">{{ priceOf(row.it) }}</span>
+            <span class="is-num etf-ws__num">
+              <span class="etf-ws__pct-pill" :class="trendClass(row.primary.value)">
+                {{ fmtPct(row.primary.value) }}<template v-if="row.primary.basis === 'price'">*</template>
+              </span>
+            </span>
+            <span class="is-num etf-ws__num etf-ws__mult">{{ multipleOf(row.it) }}</span>
+            <span class="is-center etf-ws__signal">
+              <span v-if="row.it.signal" class="etf-ws__signal-badge">{{ $t('marketDashboard.etf.signal') }}</span>
+              <span v-else class="etf-ws__muted">—</span>
+            </span>
+            <span class="is-num etf-ws__num etf-ws__date">{{ row.it.trade_date ?? '—' }}</span>
+            <span class="is-center">
+              <button
+                type="button"
+                class="etf-ws__holder-btn"
+                @click.stop="openHoldersDrawer(row.it.thscode, row.it.name)"
+              >
+                持有人
+              </button>
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <p v-if="visible.some((r) => r.primary.basis === 'price')" class="etf-ws__foot">
+        * {{ $t('tracking.etf.footPriceFallback') }}
+      </p>
+    </div>
+
+    <!-- ── ETF 持有人穿透 Drawer ── -->
+    <t-drawer
+      v-model:visible="drawerVisible"
+      :header="drawerTitle"
+      size="540px"
+      :footer="false"
+    >
+      <div v-if="drawerLoading" class="etf-drawer__loading">{{ $t('common.loading') }}</div>
+      <div v-else-if="!holdersDetail" class="etf-drawer__empty">{{ $t('marketDashboard.noData') }}</div>
+      <div v-else class="etf-drawer__content">
+        <!-- 机构 vs 散户结构 -->
+        <div v-if="holdersDetail.structure" class="etf-drawer__struct-card">
+          <div class="etf-drawer__struct-head">
+            <span class="etf-drawer__struct-title">持有人结构 · 筹码分布</span>
+            <span class="etf-drawer__struct-date">{{ holdersDetail.structure.report_date || '最新期' }}</span>
+          </div>
+
+          <!-- 双色比例条 -->
+          <div class="etf-drawer__bar-container">
+            <div
+              class="etf-drawer__bar-ins"
+              :style="{ width: `${holdersDetail.structure.ins_position ?? 50}%` }"
+              :title="`机构占比: ${holdersDetail.structure.ins_position ?? '—'}%`"
+            />
+            <div
+              class="etf-drawer__bar-psnl"
+              :style="{ width: `${holdersDetail.structure.psnl_rate ?? 50}%` }"
+              :title="`散户占比: ${holdersDetail.structure.psnl_rate ?? '—'}%`"
+            />
+          </div>
+
+          <div class="etf-drawer__legend-row">
+            <div class="etf-drawer__legend-item">
+              <span class="etf-drawer__dot is-ins" />
+              <span>机构投资者: <b>{{ holdersDetail.structure.ins_position ?? '—' }}%</b></span>
+            </div>
+            <div class="etf-drawer__legend-item">
+              <span class="etf-drawer__dot is-psnl" />
+              <span>个人散户: <b>{{ holdersDetail.structure.psnl_rate ?? '—' }}%</b></span>
+            </div>
+          </div>
+
+          <div class="etf-drawer__stat-grid">
+            <div class="etf-drawer__stat-cell">
+              <span class="etf-drawer__stat-k">持有人户数</span>
+              <span class="etf-drawer__stat-v">{{ holdersDetail.structure.holder_amount?.toLocaleString() ?? '—' }} 户</span>
+            </div>
+            <div class="etf-drawer__stat-cell">
+              <span class="etf-drawer__stat-k">户均持仓</span>
+              <span class="etf-drawer__stat-v">{{ fmtShare(holdersDetail.structure.avg_holder_share) }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 前十大持有人穿透 -->
+        <div class="etf-drawer__top-section">
+          <h4 class="etf-drawer__sub-title">前十大持有人穿透 (国家队/险资/券商/银行)</h4>
+          <div v-if="!holdersDetail.top_holders.length" class="etf-drawer__empty-hint">暂无持有人穿透数据</div>
+          <div v-else class="etf-drawer__holder-list">
+            <div v-for="h in holdersDetail.top_holders" :key="h.rank + h.holder_name" class="etf-drawer__holder-row">
+              <span class="etf-drawer__holder-rank">#{{ h.rank }}</span>
+              <div class="etf-drawer__holder-info">
+                <div class="etf-drawer__holder-top">
+                  <span class="etf-drawer__holder-name" :title="h.holder_name">{{ h.holder_name }}</span>
+                  <span class="etf-drawer__holder-badge" :class="holderBadgeClass(h.holder_type)">{{ h.holder_type }}</span>
+                </div>
+                <div class="etf-drawer__holder-bottom">
+                  <span>持有占比: <b>{{ h.hold_rate_pct ? h.hold_rate_pct.toFixed(2) + '%' : '—' }}</b></span>
+                  <span v-if="h.hold_share">持仓份额: {{ fmtShare(h.hold_share) }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </t-drawer>
   </section>
 </template>
 
@@ -112,6 +255,8 @@ import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getEtfFlow } from '@/finance/api/pulse'
 import type { EtfFlowItem } from '@/finance/api/pulse'
+import { getEtfHoldersDetail, getEtfInstitutionalRanking } from '@/finance/api/market'
+import type { EtfHoldersResponse, EtfInstitutionalRankingItem } from '@/finance/api/market'
 
 const props = withDefaults(
   defineProps<{
@@ -124,7 +269,7 @@ const props = withDefaults(
 
 const { t } = useI18n()
 
-type GroupKey = 'broad' | 'sector'
+type GroupKey = 'broad' | 'sector' | 'institutional'
 type SortKey = 'signal' | 'share' | 'signalCount'
 
 const group = ref<GroupKey>('broad')
@@ -135,6 +280,63 @@ const SORTS: Array<{ key: SortKey; labelKey: string }> = [
   { key: 'share', labelKey: 'tracking.etf.sort.share' },
   { key: 'signalCount', labelKey: 'tracking.etf.sort.multiple' },
 ]
+
+// ── 机构控盘 & 持有人穿透状态 ──────────────────────────────────────────
+const drawerVisible = ref(false)
+const drawerLoading = ref(false)
+const drawerTitle = ref('')
+const holdersDetail = ref<EtfHoldersResponse | null>(null)
+
+const instItems = ref<EtfInstitutionalRankingItem[]>([])
+const instLoading = ref(false)
+
+async function loadInstitutional() {
+  instLoading.value = true
+  try {
+    const res = await getEtfInstitutionalRanking({ limit: 30 })
+    instItems.value = res.items || []
+  } catch (err) {
+    console.error('Failed to load institutional ranking', err)
+  } finally {
+    instLoading.value = false
+  }
+}
+
+async function openHoldersDrawer(thscode: string, name: string) {
+  drawerTitle.value = `${name} (${thscode}) 持仓穿透`
+  drawerVisible.value = true
+  drawerLoading.value = true
+  holdersDetail.value = null
+  try {
+    const res = await getEtfHoldersDetail(thscode)
+    holdersDetail.value = res
+  } catch (err) {
+    console.error('Failed to load holders detail', err)
+  } finally {
+    drawerLoading.value = false
+  }
+}
+
+function fmtShare(v: number | null | undefined): string {
+  if (v === null || v === undefined || Number.isNaN(v)) return '—'
+  if (Math.abs(v) >= 1e8) return `${(v / 1e8).toFixed(2)} 亿`
+  if (Math.abs(v) >= 1e4) return `${(v / 1e4).toFixed(2)} 万`
+  return v.toLocaleString()
+}
+
+function holderBadgeClass(type: string): string {
+  if (!type) return 'is-other'
+  if (type.includes('国家队') || type.includes('汇金') || type.includes('社保') || type.includes('证金')) return 'is-state'
+  if (type.includes('险') || type.includes('保')) return 'is-insurance'
+  if (type.includes('券商') || type.includes('证券')) return 'is-broker'
+  if (type.includes('银行')) return 'is-bank'
+  if (type.includes('信托')) return 'is-trust'
+  if (type.includes('QFII') || type.includes('外资')) return 'is-qfii'
+  if (type.includes('个人')) return 'is-personal'
+  return 'is-other'
+}
+
+void loadInstitutional()
 
 // ── 取数 ────────────────────────────────────────────────────────────────
 // 自己取的路径只在"没有传 items"时走；传入的可能是大盘面板正在加载中的 null，
@@ -184,6 +386,11 @@ const groups = computed(() => {
       key: 'sector' as const,
       label: t('tracking.etf.group.sector'),
       count: all.filter((i) => groupOf(i) === 'sector').length,
+    },
+    {
+      key: 'institutional' as const,
+      label: '机构控盘排行',
+      count: instItems.value.length || 30,
     },
   ]
 })
@@ -277,23 +484,22 @@ function trendClass(v: number | null): string {
 </script>
 
 <style scoped lang="less">
-/* 沿用大盘预览的暖米色纸张体系与涨跌色（--md-up 红 / --md-down 绿随主题切换），
+/* 沿用大盘预览的暖米色纸张体系与涨跌色（--app-quote-up 红 / --app-quote-down 绿随主题切换），
    不新造一套设计变量 —— 这张表和大盘那张卡是同一件东西的两种尺寸。 */
 .etf-ws {
-  --md-up: #dc2626;
-  --md-down: #047857;
   display: flex;
   flex-direction: column;
   gap: 10px;
+  /* 不加这行，flex item 的 min-width:auto 会让本块按表格 min-content 撑开，
+     把最后一列（观测日）顶出视口。 */
+  min-width: 0;
 }
 
-:global(:root[theme-mode='dark']) .etf-ws {
-  --md-up: #f87171;
-  --md-down: #34d399;
-}
 
-.is-up { color: var(--md-up); }
-.is-down { color: var(--md-down); }
+
+
+.is-up { color: var(--app-quote-up); }
+.is-down { color: var(--app-quote-down); }
 .is-flat { color: var(--td-text-color-placeholder); }
 
 .etf-ws__head {
@@ -329,27 +535,43 @@ function trendClass(v: number | null): string {
   flex-wrap: wrap;
 }
 
-.etf-ws__seg { display: flex; gap: 4px; }
+.etf-ws__seg,
+.etf-ws__sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px;
+  background: var(--td-bg-color-secondarycontainer);
+  border: 1px solid var(--td-component-stroke);
+  border-radius: var(--app-radius-sm, 6px);
+}
 
 .etf-ws__seg-btn,
 .etf-ws__sort-btn {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  border: 1px solid var(--td-component-border);
-  border-radius: var(--td-radius-small);
-  background: var(--td-bg-color-container);
+  gap: 5px;
+  padding: 3px 10px;
+  border: 0;
+  border-radius: var(--app-radius-xs, 4px);
+  background: transparent;
   color: var(--td-text-color-secondary);
-  font-size: var(--app-text-sm);
+  font-size: var(--app-text-xs);
   cursor: pointer;
+  transition: all var(--app-motion-fast) ease;
+
+  &:hover {
+    color: var(--td-text-color-primary);
+    background: var(--td-bg-color-container-hover);
+  }
 }
 
 .etf-ws__seg-btn.is-active,
 .etf-ws__sort-btn.is-active {
-  background: var(--td-text-color-primary);
-  border-color: var(--td-text-color-primary);
-  color: var(--td-bg-color-container);
+  background: var(--td-bg-color-container);
+  color: var(--td-brand-color);
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
 /* 0 只的分组置灰而不是隐藏：让"扩池了但这组是空的"这件事本身可见。 */
@@ -358,8 +580,17 @@ function trendClass(v: number | null): string {
   cursor: not-allowed;
 }
 
-.etf-ws__seg-n { font-size: var(--app-text-xs); opacity: 0.7; }
-.etf-ws__sort { display: flex; gap: 4px; }
+.etf-ws__seg-n {
+  font-size: var(--app-text-2xs);
+  padding: 0 4px;
+  border-radius: var(--app-radius-pill);
+  background: color-mix(in srgb, var(--td-text-color-secondary) 12%, transparent);
+}
+
+.etf-ws__seg-btn.is-active .etf-ws__seg-n {
+  background: color-mix(in srgb, var(--td-brand-color) 12%, transparent);
+  color: var(--td-brand-color);
+}
 
 .etf-ws__note {
   margin: 0;
@@ -385,27 +616,94 @@ function trendClass(v: number | null): string {
       全部余量（实测 1500px 视口下它能涨到 700px+），而"上证50ETF华夏"只有
       十几字宽，一大片空白全落在它右边，读起来是空的不是从容。
 */
+.etf-ws__card {
+  background: var(--td-bg-color-container);
+  border: 1px solid var(--td-component-stroke);
+  border-radius: var(--app-radius-md, 8px);
+  padding: 8px 16px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.02);
+  width: 100%;
+  max-width: 1080px;
+}
+
 .etf-ws__table {
   display: flex;
   flex-direction: column;
-  max-width: 1040px;
+  width: 100%;
 }
 
 .etf-ws__tr {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 96px 128px 96px 80px 116px;
-  gap: 10px;
-  align-items: baseline;
-  padding: 8px 0;
-  border-bottom: 1px solid var(--td-bg-color-container-hover);
+  grid-template-columns: minmax(180px, 2fr) minmax(75px, 0.9fr) minmax(100px, 1fr) minmax(80px, 0.9fr) minmax(70px, 0.8fr) minmax(95px, 1fr) minmax(70px, 0.8fr);
+  gap: 12px;
+  align-items: center;
+  padding: 9px 8px;
+  border-bottom: 1px solid var(--td-component-stroke);
   font-size: var(--app-text-sm);
+  transition: background var(--app-motion-fast) ease;
+
+  &:hover:not(.etf-ws__tr--head) {
+    background: var(--td-bg-color-container-hover);
+    border-radius: var(--app-radius-xs, 4px);
+  }
+}
+
+.etf-ws__tr--inst {
+  grid-template-columns: minmax(180px, 2fr) minmax(160px, 1.6fr) minmax(90px, 1fr) minmax(100px, 1.1fr) minmax(100px, 1.1fr) minmax(110px, 1.1fr);
+  cursor: pointer;
+}
+
+.etf-ws__inst-bar-col {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.etf-ws__ratio-bar-wrap {
+  flex: 1;
+  height: 6px;
+  background: var(--td-bg-color-secondarycontainer);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.etf-ws__ratio-bar-inner {
+  height: 100%;
+  background: var(--td-brand-color);
+  border-radius: 3px;
+}
+
+.etf-ws__ratio-pct {
+  font-family: var(--app-font-family-mono);
+  font-size: var(--app-text-xs);
+  min-width: 45px;
+  text-align: right;
+}
+
+.etf-ws__holder-btn {
+  padding: 2px 8px;
+  font-size: var(--app-text-xs);
+  border-radius: var(--app-radius-xs, 4px);
+  border: 1px solid var(--td-brand-color);
+  color: var(--td-brand-color);
+  background: transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all var(--app-motion-fast) ease;
+
+  &:hover {
+    background: var(--td-brand-color);
+    color: #fff;
+  }
 }
 
 .etf-ws__tr--head {
   font-size: var(--app-text-xs);
+  font-weight: 600;
   color: var(--td-text-color-secondary);
-  padding-bottom: 6px;
-  border-bottom-color: var(--td-component-stroke);
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--td-border-level-2-color);
 }
 
 .is-num {
@@ -414,35 +712,317 @@ function trendClass(v: number | null): string {
   text-align: right;
 }
 
+.is-center {
+  text-align: center;
+}
+
 .etf-ws__tr--head .is-num { text-align: right; }
+.etf-ws__tr--head .is-center { text-align: center; }
+
+.etf-ws__pct-pill {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: var(--app-radius-xs, 4px);
+  font-family: var(--app-font-family-mono);
+  font-weight: 600;
+  font-size: var(--app-text-xs);
+  text-align: right;
+
+  &.is-up {
+    background: color-mix(in srgb, var(--app-quote-up) 12%, transparent);
+    color: var(--app-quote-up);
+  }
+  &.is-down {
+    background: color-mix(in srgb, var(--app-quote-down) 12%, transparent);
+    color: var(--app-quote-down);
+  }
+  &.is-flat {
+    color: var(--td-text-color-placeholder);
+  }
+}
+
+.etf-ws__signal-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: var(--app-radius-xs, 4px);
+  font-size: 11px;
+  font-weight: 600;
+  background: color-mix(in srgb, var(--td-brand-color) 12%, transparent);
+  color: var(--td-brand-color);
+}
+
+.etf-ws__muted {
+  color: var(--td-text-color-placeholder);
+}
 
 .etf-ws__name {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 6px;
   min-width: 0;
+}
+
+.etf-ws__label {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+  color: var(--td-text-color-primary);
+}
+
+.etf-ws__dot,
+.etf-ws__code {
+  flex: 0 0 auto;
 }
 
 .etf-ws__code {
   font-family: var(--app-font-family-mono);
   font-size: var(--app-text-xs);
-  color: var(--td-text-color-placeholder);
+  color: var(--td-text-color-secondary);
 }
 
 .etf-ws__dot {
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: var(--md-up);
+  background: var(--app-quote-up);
   flex: 0 0 auto;
 }
 
-.etf-ws__signal { font-size: var(--app-text-xs); color: var(--td-text-color-secondary); }
+.etf-ws__signal { font-size: var(--app-text-xs); }
 .etf-ws__date { font-size: var(--app-text-xs); color: var(--td-text-color-secondary); }
 
 .etf-ws__foot {
   margin: 0;
   font-size: var(--app-text-xs);
   color: var(--td-text-color-placeholder);
+}
+
+/* ── 持有人穿透 Drawer 样式 ── */
+.etf-drawer__loading,
+.etf-drawer__empty {
+  padding: 32px 16px;
+  text-align: center;
+  color: var(--td-text-color-placeholder);
+  font-size: var(--app-text-sm);
+}
+
+.etf-drawer__content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 4px 0 24px;
+}
+
+.etf-drawer__struct-card {
+  background: var(--td-bg-color-secondarycontainer);
+  border-radius: var(--app-radius-md, 8px);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.etf-drawer__struct-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.etf-drawer__struct-title {
+  font-weight: 600;
+  font-size: var(--app-text-sm);
+  color: var(--td-text-color-primary);
+}
+
+.etf-drawer__struct-date {
+  font-size: var(--app-text-xs);
+  color: var(--td-text-color-secondary);
+}
+
+.etf-drawer__bar-container {
+  display: flex;
+  height: 10px;
+  border-radius: 5px;
+  overflow: hidden;
+  background: var(--td-bg-color-component);
+}
+
+.etf-drawer__bar-ins {
+  background: var(--td-brand-color);
+  transition: width var(--app-motion-normal) ease;
+}
+
+.etf-drawer__bar-psnl {
+  background: var(--td-warning-color, #e37318);
+  transition: width var(--app-motion-normal) ease;
+}
+
+.etf-drawer__legend-row {
+  display: flex;
+  gap: 20px;
+  font-size: var(--app-text-xs);
+}
+
+.etf-drawer__legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.etf-drawer__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+
+  &.is-ins { background: var(--td-brand-color); }
+  &.is-psnl { background: var(--td-warning-color, #e37318); }
+}
+
+.etf-drawer__stat-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--td-component-stroke);
+}
+
+.etf-drawer__stat-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.etf-drawer__stat-k {
+  font-size: var(--app-text-xs);
+  color: var(--td-text-color-secondary);
+}
+
+.etf-drawer__stat-v {
+  font-family: var(--app-font-family-mono);
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+  color: var(--td-text-color-primary);
+}
+
+.etf-drawer__top-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.etf-drawer__sub-title {
+  margin: 0;
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+  color: var(--td-text-color-primary);
+}
+
+.etf-drawer__empty-hint {
+  padding: 16px;
+  text-align: center;
+  color: var(--td-text-color-placeholder);
+  font-size: var(--app-text-xs);
+}
+
+.etf-drawer__holder-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.etf-drawer__holder-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: var(--app-radius-sm, 6px);
+  background: var(--td-bg-color-container);
+  border: 1px solid var(--td-component-stroke);
+  transition: border-color var(--app-motion-fast) ease;
+
+  &:hover {
+    border-color: var(--td-brand-color-light);
+  }
+}
+
+.etf-drawer__holder-rank {
+  font-family: var(--app-font-family-mono);
+  font-weight: 700;
+  font-size: var(--app-text-sm);
+  color: var(--td-text-color-secondary);
+  width: 24px;
+}
+
+.etf-drawer__holder-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.etf-drawer__holder-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.etf-drawer__holder-name {
+  font-weight: 500;
+  font-size: var(--app-text-sm);
+  color: var(--td-text-color-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.etf-drawer__holder-badge {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: var(--app-radius-xs, 4px);
+  white-space: nowrap;
+
+  &.is-state {
+    background: color-mix(in srgb, var(--app-quote-up) 14%, transparent);
+    color: var(--app-quote-up);
+    font-weight: 600;
+  }
+  &.is-insurance {
+    background: color-mix(in srgb, var(--td-brand-color) 14%, transparent);
+    color: var(--td-brand-color);
+  }
+  &.is-broker {
+    background: color-mix(in srgb, #9333ea 14%, transparent);
+    color: #9333ea;
+  }
+  &.is-bank {
+    background: color-mix(in srgb, #0284c7 14%, transparent);
+    color: #0284c7;
+  }
+  &.is-qfii {
+    background: color-mix(in srgb, #059669 14%, transparent);
+    color: #059669;
+  }
+  &.is-other, &.is-trust, &.is-personal {
+    background: var(--td-bg-color-secondarycontainer);
+    color: var(--td-text-color-secondary);
+  }
+}
+
+.etf-drawer__holder-bottom {
+  display: flex;
+  gap: 16px;
+  font-size: var(--app-text-xs);
+  color: var(--td-text-color-secondary);
+
+  b {
+    color: var(--td-text-color-primary);
+    font-family: var(--app-font-family-mono);
+  }
 }
 </style>

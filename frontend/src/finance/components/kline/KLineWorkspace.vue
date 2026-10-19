@@ -247,8 +247,20 @@
 
       <!-- 图层开关：把特性开关收进下拉菜单，避免 19 个按钮平铺导致横向滚动。
            原来 4 个独立按钮（九转、气泡、轮廓、关键位）+ 画线 5 个 = 9 个，
-           收进两个下拉菜单后工具栏从 19 个降到 12 个元素，多数屏幕不用滚动了。 -->
-      <t-dropdown :options="layerOptions" trigger="click" placement="bottom-left" attach="body">
+           收进两个下拉菜单后工具栏从 19 个降到 12 个元素，多数屏幕不用滚动了。
+
+           max-height 必须显式给（默认 300px）：两层列表各限高 460px 内部滚动，
+           下拉整体不能超过视口 —— 实测之前设 720 时面板底部超出视口 74px，
+           「轮廓」层与「关键位」开关整个落在屏幕外点不到。
+           TDesign 把它写成**内联 style** (`style="max-height:300px"`)，CSS 覆盖不了，
+           只能走这个 prop。取 560：两层头部 + 各自列表滚动区都在这个数内。 -->
+      <t-dropdown
+        :options="layerOptions"
+        trigger="click"
+        placement="bottom-left"
+        attach="body"
+        :max-height="560"
+      >
         <button
           type="button"
           class="toolbar__btn toolbar__dropdown-btn"
@@ -427,6 +439,7 @@
 
 <script setup lang="ts">
 import { ref, shallowRef, computed, watch, onMounted, onUnmounted, nextTick, h } from 'vue';
+import { Switch as TSwitch } from 'tdesign-vue-next';
 import { useI18n } from 'vue-i18n';
 import type { Chart } from 'klinecharts';
 import { useAgentWorkspace } from '@/finance/composables/useAgentWorkspace';
@@ -609,39 +622,92 @@ const outlineOnCount = computed(() => enabledCount(outlineOptions.value, outline
 // 图层下拉菜单选项
 const hasActiveLayers = computed(() => isTD9Enabled.value || isPatternsEnabled.value || isChartPatternsEnabled.value || isLevelsEnabled.value);
 
+/** 把勾选结果推给绘制层。两个图层各写各的键，互不覆盖。 */
+const syncBubbleTypes = (sel: LayerSelection) => {
+  setGlobalOverlayConfig({ hiddenPatternTypes: sel.disabled });
+  repaintOverlay();
+};
+
+const syncOutline = (sel: LayerSelection) => {
+  setGlobalOverlayConfig({
+    patternGeometry: isChartPatternsEnabled.value
+      ? chartPatternGeometry.value.filter((p) => isOptionEnabled(sel, p.name))
+      : [],
+  });
+  repaintOverlay();
+};
+
+// 「气泡」与「轮廓」两层的**逐项勾选**处理。
+//
+// 之前 LayerFilterDropdown.vue 与 syncBubbleTypes / syncOutline 都写好了却零调用方
+// —— 下拉里只有一个总开关，面板上写着「气泡 (28/28)」，用户却点不进去逐项关，
+// 只能整层关掉。这里把两者接上：总开关驱动 enabled，逐项勾选驱动 selection，
+// 两者都落到 setGlobalOverlayConfig 并触发重绘。
+const onBubbleToggle = (value: string) => {
+  bubbleSelection.value = toggleOption(bubbleSelection.value, value);
+  saveSelection('bubbles', bubbleSelection.value);
+  syncBubbleTypes(bubbleSelection.value);
+};
+const onBubbleSetAll = (selectAll: boolean) => {
+  bubbleSelection.value = selectAll ? selectAllOptions() : clearAllOptions(bubbleOptions.value);
+  saveSelection('bubbles', bubbleSelection.value);
+  syncBubbleTypes(bubbleSelection.value);
+};
+const onOutlineToggle = (value: string) => {
+  outlineSelection.value = toggleOption(outlineSelection.value, value);
+  saveSelection('outline', outlineSelection.value);
+  syncOutline(outlineSelection.value);
+};
+const onOutlineSetAll = (selectAll: boolean) => {
+  outlineSelection.value = selectAll ? selectAllOptions() : clearAllOptions(outlineOptions.value);
+  saveSelection('outline', outlineSelection.value);
+  syncOutline(outlineSelection.value);
+};
+
 const layerOptions = computed(() => [
   {
     content: h('div', { class: 'layer-menu' }, [
       h('div', { class: 'layer-menu__item' }, [
         h('span', { class: 'layer-menu__label' }, t('kline.td9')),
-        h('t-switch', {
+        h(TSwitch, {
           modelValue: isTD9Enabled.value,
           size: 'small',
-          onChange: (val: boolean) => { isTD9Enabled.value = val; toggleTD9(); },
+          onChange: (val: any) => { isTD9Enabled.value = Boolean(val); },
         }),
       ]),
-      h('div', { class: 'layer-menu__item' }, [
-        h('span', { class: 'layer-menu__label' }, `${t('kline.patternBubbleLabel')} (${bubbleOnCount.value}/${bubbleOptions.value.length})`),
-        h('t-switch', {
-          modelValue: isPatternsEnabled.value,
-          size: 'small',
-          onChange: (val: boolean) => { isPatternsEnabled.value = val; },
-        }),
-      ]),
-      h('div', { class: 'layer-menu__item' }, [
-        h('span', { class: 'layer-menu__label' }, `${t('kline.patternOutlineLabel')} (${outlineOnCount.value}/${outlineOptions.value.length})`),
-        h('t-switch', {
-          modelValue: isChartPatternsEnabled.value,
-          size: 'small',
-          onChange: (val: boolean) => { isChartPatternsEnabled.value = val; },
-        }),
-      ]),
+      // 气泡层：总开关 + 逐项勾选。inline 必须开 —— 组件默认是自带 popup 的独立弹层，
+      // 套进 t-dropdown 的 content 里就变成了"popup 套 popup + 没有触发器"，面板整个不渲染。
+      h(LayerFilterDropdown, {
+        title: `${t('kline.patternBubbleLabel')} (${bubbleOnCount.value}/${bubbleOptions.value.length})`,
+        options: bubbleOptions.value,
+        selection: bubbleSelection.value,
+        emptyText: t('kline.noPatternDetected'),
+        enabled: isPatternsEnabled.value,
+        open: false,
+        inline: true,
+        'onUpdate:enabled': (v: boolean) => { isPatternsEnabled.value = v; },
+        onToggle: onBubbleToggle,
+        onSetAll: onBubbleSetAll,
+      }),
+      // 轮廓层：总开关 + 逐项勾选
+      h(LayerFilterDropdown, {
+        title: `${t('kline.patternOutlineLabel')} (${outlineOnCount.value}/${outlineOptions.value.length})`,
+        options: outlineOptions.value,
+        selection: outlineSelection.value,
+        emptyText: t('kline.noPatternDetected'),
+        enabled: isChartPatternsEnabled.value,
+        open: false,
+        inline: true,
+        'onUpdate:enabled': (v: boolean) => { isChartPatternsEnabled.value = v; },
+        onToggle: onOutlineToggle,
+        onSetAll: onOutlineSetAll,
+      }),
       h('div', { class: 'layer-menu__item' }, [
         h('span', { class: 'layer-menu__label' }, t('kline.levelsLabel')),
-        h('t-switch', {
+        h(TSwitch, {
           modelValue: isLevelsEnabled.value,
           size: 'small',
-          onChange: (val: boolean) => { isLevelsEnabled.value = val; toggleLevels(); },
+          onChange: (val: any) => { isLevelsEnabled.value = Boolean(val); },
         }),
       ]),
     ]),
@@ -690,21 +756,6 @@ const drawingOptions = computed(() => [
     ]),
   },
 ]);
-
-/** 把勾选结果推给绘制层。两个图层各写各的键，互不覆盖。 */
-const syncBubbleTypes = (sel: LayerSelection) => {
-  setGlobalOverlayConfig({ hiddenPatternTypes: sel.disabled });
-  repaintOverlay();
-};
-
-const syncOutline = (sel: LayerSelection) => {
-  setGlobalOverlayConfig({
-    patternGeometry: isChartPatternsEnabled.value
-      ? chartPatternGeometry.value.filter((p) => isOptionEnabled(sel, p.name))
-      : [],
-  });
-  repaintOverlay();
-};
 
 // 股票搜索状态
 const showSearchModal = ref(false);
@@ -794,12 +845,15 @@ const switchSubMode = (mode: SubIndicatorMode) => {
   swapIndicators(chartInstance.value, getMainIndicators(), getSubIndicators());
 };
 
-const toggleLevels = () => {
-  isLevelsEnabled.value = !isLevelsEnabled.value;
-  // 关键位是 overlay（不是 canvas 自绘），开关后要重画一次：
-  // 关掉时把已有的线清掉，打开时按当前数据重新算。
+// 关键位（支撑/阻力）总开关。
+//
+// 同样不能写成 `isLevelsEnabled.value = val; toggleLevels()`：toggleLevels 内部会
+// 再翻一次 `!isLevelsEnabled`，两次抵消 → 开关拨过去又弹回来。
+// 关键位是 overlay（不是 canvas 自绘），变化后要 redrawOverlays 重新按当前数据算：
+// 关掉时清掉已有的线，打开时重新画。
+watch(isLevelsEnabled, () => {
   redrawOverlays(chartInstance.value);
-};
+});
 
 // 让主图重画一次。
 //
@@ -812,11 +866,15 @@ const repaintOverlay = () => {
   chartInstance.value?.resize();
 };
 
-const toggleTD9 = () => {
-  isTD9Enabled.value = !isTD9Enabled.value;
-  setGlobalOverlayConfig({ showTD9: isTD9Enabled.value });
+// 九转总开关。由下拉里的 t-switch 直接给目标值，这里只负责把变化推给绘制层。
+//
+// 不要写成 `isTD9Enabled.value = val; toggleTD9()`：toggleTD9 内部会再翻一次
+// `!isTD9Enabled`，两次翻转互相抵消 —— 开关拨过去，值弹回原处，界面上"点了没反应"。
+// 与下面 isPatternsEnabled / isChartPatternsEnabled 的 watch 保持同一种写法。
+watch(isTD9Enabled, (on) => {
+  setGlobalOverlayConfig({ showTD9: on });
   repaintOverlay();
-};
+});
 
 // 图层总开关由下拉面板里的「显示本层」驱动（v-model:enabled），这里只负责
 // 把变化推给绘制层。
@@ -1483,20 +1541,15 @@ onUnmounted(() => {
 <style lang="less" scoped>
 .kline-workspace {
   /*
-   * A 股红涨绿跌。
-   *
-   * 之前这里是裸的 `#ef4444` / `#10b981`（Tailwind 色阶），与
-   * WatchDetailPanel 和 MarketDashboard 的 `#dc2626` / `#047857`
-   * 不同色相 —— 三个页面并排时颜色会跳。统一到同一对值 + 走变量，
-   * 深色模式下整体提亮（此前这个文件的涨跌色没有任何深色适配）。
+   * A 股红涨绿跌。色值已收敛到全局令牌（theme.css 的 --app-quote-*），
+   * 这里只处理本文件特有的一条：`.is-dark` 这个类开关能脱离
+   * `theme-mode` 单独把工作区切成深色（画布要重绘），所以它需要
+   * 显式取暗色那一档，而不是跟着主题走。
    * 深色选择器与本文件既有的双机制一致：`:root[theme-mode="dark"]` + `.is-dark`。
    */
-  --wl-up: #dc2626;
-  --wl-down: #047857;
-
   &.is-dark {
-    --wl-up: #f87171;
-    --wl-down: #34d399;
+    --app-quote-up: var(--app-quote-up-dark);
+    --app-quote-down: var(--app-quote-down-dark);
   }
 
   display: flex;
@@ -1561,9 +1614,11 @@ onUnmounted(() => {
   padding: 6px 12px;
   background: rgba(0, 0, 0, 0.03);
   border-bottom: 1px solid var(--td-component-stroke);
-  overflow-x: auto;
+  /* 原来整条 overflow-x:auto，于是「候选池 (12)」和「[↑/↓] 键快速切股」
+     这两块固定信息会被一起滚走 —— 列表一长，快捷键提示就消失了，
+     而它恰恰是告诉你列表还能继续翻的线索。
+     改成整条不滚，只有下面的 .picks-bar__list 自己滚。 */
   flex-shrink: 0;
-  scrollbar-width: none;
 
   /* 候选池条与工具栏、容器根共用同一个深色面。之前这里是 #161b24，夹在
      #11141a 的工具栏和 #11141a 的容器之间，横条之间会露出一道色差接缝——
@@ -1571,6 +1626,12 @@ onUnmounted(() => {
   .is-dark & {
     background: #11141a;
     border-bottom-color: #232a36;
+  }
+
+  /* 标签与快捷键提示固定不缩，只有中间的列表滚动 */
+  .picks-bar__label,
+  .picks-bar__hint {
+    flex: 0 0 auto;
   }
 
   .picks-bar__label {
@@ -1587,6 +1648,9 @@ onUnmounted(() => {
     display: flex;
     gap: 6px;
     flex: 1;
+    /* 不加 min-width:0，flex 子项的 min-width:auto 会让这一块不肯收缩，
+       把右侧的快捷键提示挤出可视区。 */
+    min-width: 0;
     overflow-x: auto;
     scrollbar-width: thin;
     scrollbar-color: rgba(148, 163, 184, 0.25) transparent;
@@ -1714,6 +1778,21 @@ onUnmounted(() => {
 
   /* 周期/复权控件：跟着行情条走的小号分段按钮。沿用 toolbar__btn 的 6px 圆角
      与 12px 字号，让它看起来和工具栏是同一套控件，只是尺寸小一号。 */
+  /* 战法状态胶囊：整条行情概览里唯一允许收缩的一块。
+     它和左侧报价、右侧成交量/成交额原本都是 flex-shrink:0，四块加起来
+     超过一行宽度时，最右边的成交量被弹窗裁掉（截图里只剩「成交量 1.0」）。
+     状态胶囊是"当前形态"的说明，滚一下就能看完；而成交量/成交额是读数，
+     钉在右侧不该动。 */
+  .quote-strip__zstatus {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
   .quote-strip__right {
     display: flex;
     align-items: center;
@@ -1833,10 +1912,10 @@ onUnmounted(() => {
     font-family: monospace;
 
     &.is-up {
-      color: var(--wl-up);
+      color: var(--app-quote-up);
     }
     &.is-down {
-      color: var(--wl-down);
+      color: var(--app-quote-down);
     }
   }
 
@@ -1848,22 +1927,18 @@ onUnmounted(() => {
     border-radius: var(--app-radius-xs);
 
     &.is-up {
-      background: rgba(239, 68, 68, 0.18);
-      color: var(--wl-up);
+      background: color-mix(in srgb, var(--app-quote-up) 18%, transparent);
+      color: var(--app-quote-up);
     }
     &.is-down {
-      background: rgba(16, 185, 129, 0.18);
-      color: var(--wl-down);
+      background: color-mix(in srgb, var(--app-quote-down) 18%, transparent);
+      color: var(--app-quote-down);
     }
   }
 
-  .quote-strip__zstatus {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    flex-shrink: 0;
-    white-space: nowrap;
-  }
+  /* .quote-strip__zstatus 的布局见上面合并后的定义（含收缩与横滚）。
+     这里原本还有一份重复规则（flex-shrink:0 + nowrap），会把上面那份覆盖掉，
+     已删除。 */
 
   .status-pill {
     display: inline-flex;
@@ -1878,14 +1953,14 @@ onUnmounted(() => {
     border: 1px solid transparent;
 
     &.is-bull {
-      background: rgba(239, 68, 68, 0.14);
-      color: var(--wl-up);
-      border-color: rgba(239, 68, 68, 0.3);
+      background: color-mix(in srgb, var(--app-quote-up) 14%, transparent);
+      color: var(--app-quote-up);
+      border-color: color-mix(in srgb, var(--app-quote-up) 30%, transparent);
     }
     &.is-bear {
-      background: rgba(16, 185, 129, 0.14);
-      color: var(--wl-down);
-      border-color: rgba(16, 185, 129, 0.3);
+      background: color-mix(in srgb, var(--app-quote-down) 14%, transparent);
+      color: var(--app-quote-down);
+      border-color: color-mix(in srgb, var(--app-quote-down) 30%, transparent);
     }
     &.is-neutral {
       background: rgba(107, 114, 128, 0.14);
@@ -1916,8 +1991,8 @@ onUnmounted(() => {
           height: 7px;
           border-radius: 1px;
 
-          &.b-up { background: var(--wl-up); }
-          &.b-down { background: var(--wl-down); }
+          &.b-up { background: var(--app-quote-up); }
+          &.b-down { background: var(--app-quote-down); }
         }
       }
     }
@@ -2012,7 +2087,7 @@ onUnmounted(() => {
     transition: background var(--app-motion-fast) ease;
 
     &:hover {
-      background: rgba(59, 130, 246, 0.15);
+      background: color-mix(in srgb, var(--td-brand-color) 15%, transparent);
     }
 
     // 名称 + 可选的「板块」标签。用 space-between 排的是这一组与右侧代码，
@@ -2030,7 +2105,7 @@ onUnmounted(() => {
 
     .search-item__code {
       font-family: monospace;
-      color: var(--td-text-color-placeholder);
+      color: var(--td-text-color-secondary);
       font-size: var(--app-text-xs);
     }
 
@@ -2143,9 +2218,9 @@ onUnmounted(() => {
       }
 
       &.is-active {
-        background: rgba(59, 130, 246, 0.2);
-        border-color: rgba(59, 130, 246, 0.6);
-        color: #60a5fa;
+        background: color-mix(in srgb, var(--td-brand-color) 20%, transparent);
+        border-color: color-mix(in srgb, var(--td-brand-color) 60%, transparent);
+        color: var(--td-brand-color);
       }
 
       .feature-count {
@@ -2189,9 +2264,9 @@ onUnmounted(() => {
     }
 
     &.has-active {
-      background: rgba(59, 130, 246, 0.12);
-      border-color: rgba(59, 130, 246, 0.4);
-      color: #3b82f6;
+      background: color-mix(in srgb, var(--td-brand-color) 12%, transparent);
+      border-color: color-mix(in srgb, var(--td-brand-color) 40%, transparent);
+      color: var(--td-brand-color);
     }
   }
 
@@ -2363,16 +2438,16 @@ onUnmounted(() => {
     font-size: var(--app-text-xs);
     border-radius: var(--app-radius-xl);
     border: 1px solid var(--td-brand-color);
-    background: rgba(0, 82, 217, 0.08);
+    background: color-mix(in srgb, var(--td-brand-color) 8%, transparent);
     color: var(--td-brand-color);
     cursor: pointer;
     white-space: nowrap;
     transition: all var(--app-motion-fast) ease;
 
     .is-dark & {
-      border-color: #3b82f6;
-      background: rgba(59, 130, 246, 0.15);
-      color: #93c5fd;
+      border-color: var(--td-brand-color);
+      background: color-mix(in srgb, var(--td-brand-color) 15%, transparent);
+      color: var(--td-brand-color);
     }
 
     &:hover {
@@ -2380,7 +2455,7 @@ onUnmounted(() => {
       color: #ffffff;
 
       .is-dark & {
-        background: #3b82f6;
+        background: var(--td-brand-color);
         color: #ffffff;
       }
     }
@@ -2427,12 +2502,12 @@ onUnmounted(() => {
 
       &:hover {
         border-color: var(--td-brand-color);
-        background: rgba(0, 82, 217, 0.08);
+        background: color-mix(in srgb, var(--td-brand-color) 8%, transparent);
         color: var(--td-brand-color);
 
         .is-dark & {
-          background: rgba(59, 130, 246, 0.15);
-          color: #93c5fd;
+          background: color-mix(in srgb, var(--td-brand-color) 15%, transparent);
+          color: var(--td-brand-color);
         }
       }
 
@@ -2451,7 +2526,10 @@ onUnmounted(() => {
 <style lang="less">
 .layer-menu {
   padding: 6px 0;
-  min-width: 180px;
+  // 图层下拉内嵌「气泡 / 轮廓」两层的逐项勾选。组内已经分两列，宽度必须跟上：
+  // 单列 28 项要 720px 高才排得下，两列则 400px 宽就够，宽高比才正常。
+  width: 400px;
+  max-width: 92vw;
 
   &__item {
     display: flex;
@@ -2463,13 +2541,13 @@ onUnmounted(() => {
     transition: background var(--app-motion-fast) ease;
 
     &:hover {
-      background: rgba(0, 82, 217, 0.08);
+      background: color-mix(in srgb, var(--td-brand-color) 8%, transparent);
     }
 
     &--danger {
       color: var(--td-error-color);
       &:hover {
-        background: rgba(239, 68, 68, 0.1);
+        background: color-mix(in srgb, var(--app-quote-up) 10%, transparent);
       }
     }
   }

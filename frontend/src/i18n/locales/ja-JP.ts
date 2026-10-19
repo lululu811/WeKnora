@@ -165,6 +165,7 @@ export default {
     yellowDegraded: '黄ライン劣化'
   },
   kline: {
+    layers: 'レイヤー',
     picksBar: 'Watchlist ({count})',
     picksHint: '[↑/↓] keys to switch stocks',
     searchSwitch: 'Click to search and switch stock',
@@ -8164,6 +8165,8 @@ export default {
     columns: {
       code: 'コード',
       name: '名称',
+      industry: '業種',
+      signals: 'シグナル',
       state: 'ステータス',
       note: 'メモ',
       price: '現在値',
@@ -8172,7 +8175,9 @@ export default {
       date: '直近取引日',
       actions: '操作',
       score: 'スコア'
-    }
+    },
+    allIndustries: '全業種',
+    board: '板'
   },
   tracking: {
     openFullscreen: '全画面表示',
@@ -8770,5 +8775,16 @@ export default {
     vault: {
       off: 'vault が未設定のため画像が表示されない場合があります'
     }
+  },
+  dividend: {
+    title: '除権除息カレンダー · 高配当と株式配当',
+    tabAll: 'すべて',
+    tabYield: '高配当 (キャッシュカウ)',
+    tabBonus: '大型株式配当',
+    expand: 'すべて展開',
+    failed: '除権カレンダーのデータを読み込めません',
+    statCount: '該当銘柄数',
+    statAvgYield: '平均配当利回り',
+    statTopBonus: '最大の株式配当銘柄'
   }
 }

@@ -1,5 +1,11 @@
 <template>
-  <aside class="wl-detail" :style="{ width: `${panelWidth}px` }">
+  <!--
+    原来这里是 `:style="{ width: `${panelWidth}px` }"`。但 `panelWidth` 是个
+    从未被父组件传入的 prop，运行时是 undefined，内联样式渲染成
+    `width: undefinedpx` 被浏览器忽略 —— 纯死代码，且一旦有人补上传参就会
+    绕开 CSS 里的宽度约束（和 max-width 抢）。宽度统一交给样式表。
+  -->
+  <aside class="wl-detail">
     <header class="wl-detail__head">
       <div class="wl-detail__title">
         <span class="wl-detail__name">{{ displayName }}</span>
@@ -116,6 +122,212 @@
         </t-button>
       </div>
       <p class="wl-detail__hint">{{ t('halo.entryHint') }}</p>
+    </section>
+
+    <!-- 盘中异动归因：大涨大跌逻辑依据 (special.duckdb) -->
+    <section v-if="anomalyRecords.length" class="wl-detail__section wl-detail__anomaly">
+      <div class="wl-detail__section-head">
+        <h3 class="wl-detail__h3">
+          <t-icon name="chart-bubble" size="14px" style="margin-right: 4px;" />
+          异动归因 · 驱动分析
+        </h3>
+        <span
+          class="wl-anomaly__tag"
+          :class="anomalyRecords[0].tag_name === '大跌' ? 'is-down' : 'is-up'"
+        >
+          {{ anomalyRecords[0].tag_name }} · {{ anomalyRecords[0].capture_date }}
+        </span>
+      </div>
+      <div class="wl-anomaly__card">
+        <div v-if="anomalyRecords[0].keywords && anomalyRecords[0].keywords.length" class="wl-anomaly__kws">
+          <span v-for="kw in anomalyRecords[0].keywords" :key="kw" class="wl-anomaly__kw-pill">
+            #{{ kw }}
+          </span>
+        </div>
+        <div class="wl-anomaly__body">
+          {{ anomalyRecords[0].analysis_content }}
+        </div>
+      </div>
+    </section>
+
+    <!-- 机构筹码：公募与 ETF 重仓穿透 (fund.duckdb) -->
+    <section class="wl-detail__section wl-detail__fund">
+      <div class="wl-detail__section-head">
+        <h3 class="wl-detail__h3">
+          <t-icon name="usergroup" size="14px" style="margin-right: 4px;" />
+          机构筹码 · 公募与 ETF 重仓
+        </h3>
+        <span v-if="fundHoldings.length" class="wl-fund__count-badge">
+          {{ fundSummary?.total_funds ?? fundHoldings.length }} 只重仓
+        </span>
+      </div>
+
+      <!-- 机构集中度与增减仓风向标 -->
+      <div v-if="fundSummary && fundHoldings.length" class="wl-fund__summary-bar">
+        <div class="wl-fund__stat">
+          <span class="wl-fund__stat-lbl">持股集中度</span>
+          <span class="wl-fund__stat-val">{{ fundSummary.total_hold_ratio ? fundSummary.total_hold_ratio.toFixed(2) + '%' : '—' }}</span>
+        </div>
+        <div class="wl-fund__stat">
+          <span class="wl-fund__stat-lbl">持仓机构数</span>
+          <span class="wl-fund__stat-val">{{ fundSummary.total_funds }} 家</span>
+        </div>
+        <div class="wl-fund__stat">
+          <span class="wl-fund__stat-lbl">增减仓动向</span>
+          <span class="wl-fund__stat-val wl-fund__stat-flow">
+            <span class="is-up">增 {{ fundSummary.increase_count }}</span>
+            <span class="wl-fund__sep">/</span>
+            <span class="is-down">减 {{ fundSummary.decrease_count }}</span>
+          </span>
+        </div>
+      </div>
+
+      <p v-if="fundLoading" class="wl-detail__hint">正在穿透公募基金持仓数据...</p>
+      <div v-else-if="!fundHoldings.length" class="wl-detail__empty">
+        <p class="wl-detail__empty-hint">暂无公募重仓持股披露数据</p>
+      </div>
+      <div v-else class="wl-fund__list">
+        <div v-for="(fh, idx) in fundHoldings" :key="fh.fund_thscode" class="wl-fund__item">
+          <div class="wl-fund__item-rank" :class="{ 'is-top': idx < 3 }">
+            #{{ idx + 1 }}
+          </div>
+          <div class="wl-fund__item-main">
+            <div class="wl-fund__name-row">
+              <span class="wl-fund__type-badge" :class="fh.fund_category === 'ETF' ? 'is-etf' : 'is-active'">
+                {{ fh.fund_category || '公募' }}
+              </span>
+              <span class="wl-fund__name" :title="fh.fund_name">{{ fh.fund_name }}</span>
+            </div>
+            <div class="wl-fund__meta-row">
+              <span class="wl-fund__code">{{ fh.fund_thscode }}</span>
+              <span v-if="fh.manager_name" class="wl-fund__mgr">{{ fh.manager_name }}</span>
+            </div>
+          </div>
+          <div class="wl-fund__item-stats">
+            <span class="wl-fund__ratio" title="持仓占该基金净值比">
+              持仓比 <b>{{ fh.hold_ratio ? fh.hold_ratio.toFixed(2) + '%' : '—' }}</b>
+            </span>
+            <span
+              v-if="fh.period_increase_rate_pct !== null && fh.period_increase_rate_pct !== undefined"
+              class="wl-fund__chg"
+              :class="fh.period_increase_rate_pct >= 0 ? 'is-up' : 'is-down'"
+              title="较上期持股变动幅度"
+            >
+              季变动 {{ fh.period_increase_rate_pct >= 0 ? '+' : '' }}{{ fh.period_increase_rate_pct.toFixed(2) }}%
+            </span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 分红送转历史 (market.duckdb -> raw_adjustment_events) -->
+    <section v-if="dividendRecords.length" class="wl-detail__section wl-detail__dividends">
+      <div class="wl-detail__section-head">
+        <h3 class="wl-detail__h3">
+          <t-icon name="money-circle" size="14px" style="margin-right: 4px;" />
+          分红送转历史
+        </h3>
+        <span class="wl-dividend__count-badge">
+          近 {{ dividendRecords.length }} 次分红
+        </span>
+      </div>
+      <div class="wl-dividend__list">
+        <div v-for="d in dividendRecords" :key="d.ex_date || ''" class="wl-dividend__item">
+          <div class="wl-dividend__top">
+            <span class="wl-dividend__date">{{ d.ex_date }}</span>
+            <span v-if="d.dividend_yield" class="wl-dividend__yield">股息率 {{ d.dividend_yield.toFixed(2) }}%</span>
+          </div>
+          <div class="wl-dividend__details">
+            <span v-if="(d.dividend_per_share ?? 0) > 0" class="wl-dividend__cash">
+              派息 ¥{{ (d.dividend_per_share ?? 0).toFixed(2) }}/股
+            </span>
+            <span v-if="(d.per_share_bonus ?? 0) > 0" class="wl-dividend__bonus">
+              10转{{ ((d.per_share_bonus ?? 0) * 10).toFixed(1) }}股
+            </span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 资金关注度与热度走势 (special.duckdb -> v_hot_stock_rank_trend) -->
+    <section v-if="hotTrend.length" class="wl-detail__section wl-detail__hot-trend">
+      <div class="wl-detail__section-head">
+        <h3 class="wl-detail__h3">
+          <t-icon name="fire" size="14px" style="margin-right: 4px;" />
+          关注热度 · 位次轨迹
+        </h3>
+        <span class="wl-hot__badge">
+          最新位次 #{{ hotTrend[hotTrend.length - 1].rank }}
+        </span>
+      </div>
+      <div class="wl-hot__trend-box">
+        <div class="wl-hot__trend-points">
+          <div v-for="pt in hotTrend.slice(-6)" :key="pt.date || ''" class="wl-hot__pt">
+            <span class="wl-hot__pt-rank">#{{ pt.rank }}</span>
+            <span class="wl-hot__pt-date">{{ pt.date?.slice(5) }}</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 高阶量化：TTM Squeeze 波动挤压与超级趋势 (indicators.duckdb) -->
+    <section v-if="squeezeData && squeezeData.squeeze_status !== 'no_data' && squeezeData.squeeze_status !== 'unavailable'" class="wl-detail__section wl-detail__squeeze">
+      <div class="wl-detail__section-head">
+        <h3 class="wl-detail__h3">
+          <t-icon name="dashboard" size="14px" style="margin-right: 4px;" />
+          量化特征 · 波动挤压 & 超级趋势
+        </h3>
+        <span class="wl-squeeze__date">{{ squeezeData.latest_date || '最新' }}</span>
+      </div>
+
+      <div class="wl-squeeze__card">
+        <!-- 核心状态双列看板 -->
+        <div class="wl-squeeze__status-row">
+          <!-- TTM Squeeze 状态 -->
+          <div class="wl-squeeze__col">
+            <span class="wl-squeeze__col-lbl">TTM Squeeze 状态</span>
+            <div class="wl-squeeze__status-pill" :class="squeezePillClass">
+              <span class="wl-squeeze__dot" />
+              <span>{{ squeezeLabel }}</span>
+            </div>
+            <span class="wl-squeeze__sub-hint">{{ squeezeSubHint }}</span>
+          </div>
+
+          <!-- Supertrend 超级趋势追踪 -->
+          <div class="wl-squeeze__col">
+            <span class="wl-squeeze__col-lbl">Supertrend 趋势轨</span>
+            <div class="wl-squeeze__status-pill" :class="supertrendPillClass">
+              <t-icon :name="squeezeData.supertrend_direction === 1 ? 'arrow-up' : 'arrow-down'" size="14px" />
+              <span>{{ supertrendLabel }}</span>
+            </div>
+            <span class="wl-squeeze__sub-hint">
+              动态止损线: ¥{{ squeezeData.supertrend_level ? squeezeData.supertrend_level.toFixed(2) : '—' }}
+            </span>
+          </div>
+        </div>
+
+        <!-- 动量与风险系数指标网格 -->
+        <div class="wl-squeeze__metric-grid">
+          <div class="wl-squeeze__metric-cell">
+            <span class="wl-squeeze__m-k">动量柱 (Momentum)</span>
+            <span
+              class="wl-squeeze__m-v"
+              :class="(squeezeData.momentum_hist ?? 0) >= 0 ? 'is-up' : 'is-down'"
+            >
+              {{ (squeezeData.momentum_hist ?? 0) >= 0 ? '+' : '' }}{{ squeezeData.momentum_hist?.toFixed(3) ?? '—' }}
+            </span>
+          </div>
+          <div class="wl-squeeze__metric-cell">
+            <span class="wl-squeeze__m-k">20日 Beta 弹性系数</span>
+            <span class="wl-squeeze__m-v">
+              {{ squeezeData.beta?.toFixed(2) ?? '—' }}
+              <span class="wl-squeeze__beta-tag" :class="betaTagClass">
+                {{ betaDesc }}
+              </span>
+            </span>
+          </div>
+        </div>
+      </div>
     </section>
 
     <!-- K 线。选行即看图是本面板存在的理由，所以它常驻在日记上面。 -->
@@ -311,13 +523,160 @@ import {
 import { getTradeTarget, saveTradeTarget, type TradeTarget } from '@/finance/utils/tradeTargets'
 import { computeDiaryOutcomes } from '@/finance/utils/diaryBacktest'
 import type { KLineData } from '@/finance/components/kline/types'
+import {
+  getStockFundHoldings,
+  getStockAnomalyReasons,
+  getDividendCalendar,
+  getHotStockTrend,
+  getSqueezeStatus,
+  type FundHoldingItem,
+  type FundHoldingsSummary,
+  type AnomalyReasonItem,
+  type DividendEventItem,
+  type HotStockTrendPoint,
+  type SqueezeStatusResponse,
+} from '@/finance/api/market'
+
+const fundHoldings = ref<FundHoldingItem[]>([])
+const fundSummary = ref<FundHoldingsSummary | null>(null)
+const fundLoading = ref(false)
+
+const anomalyRecords = ref<AnomalyReasonItem[]>([])
+
+async function loadFundHoldings() {
+  if (!props.thscode) return
+  fundLoading.value = true
+  try {
+    const res = await getStockFundHoldings(props.thscode, 10)
+    fundHoldings.value = res?.items || []
+    fundSummary.value = res?.summary || null
+  } catch {
+    fundHoldings.value = []
+    fundSummary.value = null
+  } finally {
+    fundLoading.value = false
+  }
+}
+
+async function loadAnomalyReasons() {
+  if (!props.thscode) {
+    anomalyRecords.value = []
+    return
+  }
+  try {
+    const res = await getStockAnomalyReasons(props.thscode, 2)
+    anomalyRecords.value = res?.items || []
+  } catch {
+    anomalyRecords.value = []
+  }
+}
+
+const dividendRecords = ref<DividendEventItem[]>([])
+
+async function loadDividends() {
+  if (!props.thscode) {
+    dividendRecords.value = []
+    return
+  }
+  try {
+    const res = await getDividendCalendar({ thscode: props.thscode, limit: 5 })
+    dividendRecords.value = res?.items || []
+  } catch {
+    dividendRecords.value = []
+  }
+}
+
+const hotTrend = ref<HotStockTrendPoint[]>([])
+
+async function loadHotTrend() {
+  if (!props.thscode) {
+    hotTrend.value = []
+    return
+  }
+  try {
+    const res = await getHotStockTrend(props.thscode, 10)
+    hotTrend.value = res?.items || []
+  } catch {
+    hotTrend.value = []
+  }
+}
+
+// ── TTM Squeeze 波动挤压 & Supertrend 超级趋势 ────────────────────────
+const squeezeData = ref<SqueezeStatusResponse | null>(null)
+const squeezeLoading = ref(false)
+
+async function loadSqueeze() {
+  if (!props.thscode) {
+    squeezeData.value = null
+    return
+  }
+  squeezeLoading.value = true
+  try {
+    const res = await getSqueezeStatus(props.thscode, 30)
+    squeezeData.value = res
+  } catch {
+    squeezeData.value = null
+  } finally {
+    squeezeLoading.value = false
+  }
+}
+
+const squeezeLabel = computed(() => {
+  const s = squeezeData.value?.squeeze_status
+  if (s === 'on') return '挤压蓄势中 (Squeeze ON)'
+  if (s === 'fired') return '突破释放 (Squeeze Fired)'
+  return '常态波动 (Squeeze OFF)'
+})
+
+const squeezePillClass = computed(() => {
+  const s = squeezeData.value?.squeeze_status
+  if (s === 'on') return 'is-squeeze-on'
+  if (s === 'fired') return 'is-squeeze-fired'
+  return 'is-squeeze-off'
+})
+
+const squeezeSubHint = computed(() => {
+  const s = squeezeData.value?.squeeze_status
+  if (s === 'on') return '布林带收缩进肯特纳通道，变盘临界点'
+  if (s === 'fired') return '挤压解除，波动率扩张，单边趋势加速'
+  return '通道未受压，处于宽幅常态震荡'
+})
+
+const supertrendLabel = computed(() => {
+  const dir = squeezeData.value?.supertrend_direction
+  if (dir === 1) return '多头顺势 (Bullish)'
+  if (dir === -1) return '空头防守 (Bearish)'
+  return '趋势中性'
+})
+
+const supertrendPillClass = computed(() => {
+  const dir = squeezeData.value?.supertrend_direction
+  if (dir === 1) return 'is-up'
+  if (dir === -1) return 'is-down'
+  return 'is-neutral'
+})
+
+const betaDesc = computed(() => {
+  const b = squeezeData.value?.beta
+  if (b == null) return '—'
+  if (b >= 1.2) return '高弹性 (进攻型)'
+  if (b <= 0.8) return '低弹性 (防御型)'
+  return '基准弹性 (同步大盘)'
+})
+
+const betaTagClass = computed(() => {
+  const b = squeezeData.value?.beta
+  if (b == null) return ''
+  if (b >= 1.2) return 'is-high-beta'
+  if (b <= 0.8) return 'is-low-beta'
+  return 'is-mid-beta'
+})
 
 const props = defineProps<{
   thscode: string
   name?: string
   quote?: Quote
   conditions?: WatchCondition[]
-  panelWidth?: number
 }>()
 
 const emit = defineEmits<{
@@ -607,11 +966,21 @@ function askAiAboutDiary(d: WatchDiary) {
 onMounted(() => {
   loadDiaries()
   refreshTradeTarget()
+  loadFundHoldings()
+  loadAnomalyReasons()
+  loadDividends()
+  loadHotTrend()
+  loadSqueeze()
 })
-// 换一只票就换一份日记与操盘位。
+// 换一只票就换一份日记与操盘位、机构重仓及异动归因。
 watch(() => props.thscode, () => {
   loadDiaries()
   refreshTradeTarget()
+  loadFundHoldings()
+  loadAnomalyReasons()
+  loadDividends()
+  loadHotTrend()
+  loadSqueeze()
 })
 const expandedScorecards = ref<Set<string>>(new Set())
 function toggleScorecard(tradeDate: string) {
@@ -715,11 +1084,16 @@ function qScoreClass(score: number): string {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  flex: none;
-  border-left: 1px solid var(--td-component-stroke);
-  padding-left: 12px;
+  background: var(--td-bg-color-container);
+  border: 1px solid var(--td-component-stroke);
+  border-radius: var(--app-radius-md, 8px);
+  padding: 14px;
   overflow-y: auto;
-  min-width: 360px;
+  flex: 0 0 460px;
+  width: 460px;
+  min-width: 420px;
+  max-width: 480px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
 }
 
 .wl-detail__head {
@@ -743,29 +1117,11 @@ function qScoreClass(score: number): string {
 .wl-detail__date { margin-left: auto; opacity: 0.6; font-size: var(--app-text-sm); }
 
 /*
- * A 股红涨绿跌。
- *
- * 之前这里是 `var(--wl-up)` —— 但 `--wl-up` **谁都没定义过**
- * （注释说"见 Watchlist.vue 的 --wl-up/--wl-down"，而那个文件里并没有），
- * 所以永远走 fallback 硬编码。后果有两个：
- *   1. 深色模式下暗红 #dc2626 配深背景基本看不见（这个面板深色适配原本是 0 处）
- *   2. 想改涨跌色要改 6 个 var() 里的 6 个字面量
- *
- * 现在在根类上定义变量，深色模式整体提亮一档。
- * 浅色与 MarketDashboard.vue 的 --md-up/--md-down 取同一对值，两处一致。
+ * 涨跌色已收敛到全局令牌（theme.css 的 --app-quote-up/--app-quote-down，
+ * 随主题自动切换），本文件不再定义本地变量，也不再需要暗色覆盖块。
  */
-.wl-detail {
-  --wl-up: #dc2626;
-  --wl-down: #047857;
-}
-
-:global(:root[theme-mode='dark']) .wl-detail {
-  --wl-up: #f87171;
-  --wl-down: #34d399;
-}
-
-.is-up { color: var(--wl-up); }
-.is-down { color: var(--wl-down); }
+.is-up { color: var(--app-quote-up); }
+.is-down { color: var(--app-quote-down); }
 
 .wl-detail__section { display: flex; flex-direction: column; gap: 6px; }
 .wl-detail__section-head {
@@ -809,8 +1165,8 @@ function qScoreClass(score: number): string {
 }
 /* 建议买入偏红、建议移除偏绿，与 A 股涨跌色相反是有意的：
    这里说的是「该做什么」而不是「今天涨没涨」。 */
-.wl-diary__verdict.is-buy, .wl-diary__verdict.is-keep { color: var(--wl-up); }
-.wl-diary__verdict.is-sell, .wl-diary__verdict.is-exit { color: var(--wl-down); }
+.wl-diary__verdict.is-buy, .wl-diary__verdict.is-keep { color: var(--app-quote-up); }
+.wl-diary__verdict.is-sell, .wl-diary__verdict.is-exit { color: var(--app-quote-down); }
 .wl-diary__verdict.is-tighten { color: #b45309; }
 .wl-diary__verdict.is-hold, .wl-diary__verdict.is-none { color: #475569; }
 
@@ -818,9 +1174,9 @@ function qScoreClass(score: number): string {
 .wl-diary__actions { display: flex; gap: 8px; margin-top: 8px; }
 
 .wl-targets-card {
-  padding: 8px 10px;
-  border: 1px dashed var(--td-border-level-2-color);
-  border-radius: var(--app-radius-sm);
+  padding: 10px 12px;
+  border: 1px solid var(--td-component-stroke);
+  border-radius: var(--app-radius-sm, 6px);
   background: var(--td-bg-color-secondarycontainer);
 }
 
@@ -1048,8 +1404,8 @@ function qScoreClass(score: number): string {
       font-weight: 600;
       font-variant-numeric: tabular-nums;
 
-      &.is-high { color: var(--wl-up); }
-      &.is-low { color: var(--wl-down); }
+      &.is-high { color: var(--app-quote-up); }
+      &.is-low { color: var(--app-quote-down); }
       &.is-mid { color: var(--td-brand-color); }
     }
   }
@@ -1102,10 +1458,10 @@ function qScoreClass(score: number): string {
 
   &.is-bull-all .wl-resonance-card__badge {
     background: rgba(220, 38, 38, 0.12);
-    color: var(--wl-up);
+    color: var(--app-quote-up);
   }
   &.is-bull-pullback .wl-resonance-card__badge {
-    background: rgba(0, 82, 217, 0.12);
+    background: color-mix(in srgb, var(--td-brand-color) 12%, transparent);
     color: var(--td-brand-color);
   }
   &.is-bear-bounce .wl-resonance-card__badge {
@@ -1114,10 +1470,10 @@ function qScoreClass(score: number): string {
   }
   &.is-bear-all .wl-resonance-card__badge {
     background: rgba(4, 120, 87, 0.12);
-    color: var(--wl-down);
+    color: var(--app-quote-down);
   }
   &.is-mixed-up .wl-resonance-card__badge {
-    background: rgba(0, 82, 217, 0.08);
+    background: color-mix(in srgb, var(--td-brand-color) 8%, transparent);
     color: var(--td-brand-color);
   }
   &.is-mixed-down .wl-resonance-card__badge {
@@ -1149,12 +1505,12 @@ function qScoreClass(score: number): string {
     }
 
     &.is-bull {
-      .matrix-dot { background: var(--wl-up); }
-      .matrix-status { color: var(--wl-up); font-weight: 600; margin-left: auto; }
+      .matrix-dot { background: var(--app-quote-up); }
+      .matrix-status { color: var(--app-quote-up); font-weight: 600; margin-left: auto; }
     }
     &.is-bear {
-      .matrix-dot { background: var(--wl-down); }
-      .matrix-status { color: var(--wl-down); font-weight: 600; margin-left: auto; }
+      .matrix-dot { background: var(--app-quote-down); }
+      .matrix-status { color: var(--app-quote-down); font-weight: 600; margin-left: auto; }
     }
   }
 
@@ -1163,6 +1519,471 @@ function qScoreClass(score: number): string {
     font-size: 11px;
     color: var(--td-text-color-secondary);
     line-height: 1.4;
+  }
+}
+
+.wl-fund {
+  &__count-badge {
+    font-size: 11px;
+    color: var(--td-brand-color);
+    background: rgba(var(--td-brand-color-rgb, 0, 82, 217), 0.08);
+    padding: 1px 6px;
+    border-radius: 10px;
+    margin-left: auto;
+  }
+  &__summary-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 10px;
+    background: var(--td-bg-color-secondarycontainer);
+    border-radius: var(--td-radius-small);
+    border: 1px solid var(--td-component-stroke);
+    margin-top: 4px;
+  }
+  &__stat {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+  &__stat-lbl {
+    font-size: 10px;
+    color: var(--td-text-color-placeholder);
+  }
+  &__stat-val {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--td-text-color-primary);
+  }
+  &__stat-flow {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+  }
+  &__sep {
+    color: var(--td-text-color-placeholder);
+    font-size: 10px;
+  }
+  &__list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 6px;
+    max-height: 240px;
+    overflow-y: auto;
+  }
+  &__item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    background: var(--td-bg-color-container-hover);
+    border-radius: var(--td-radius-small);
+    border: 1px solid var(--td-component-stroke);
+    font-size: var(--app-text-xs);
+  }
+  &__item-rank {
+    font-family: var(--app-font-display);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--td-text-color-placeholder);
+    flex: none;
+    width: 20px;
+    text-align: center;
+
+    &.is-top {
+      color: var(--td-brand-color);
+    }
+  }
+  &__item-main {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1;
+    min-width: 0;
+  }
+  &__name-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+  }
+  &__meta-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  &__type-badge {
+    font-size: 9px;
+    padding: 0 4px;
+    border-radius: 2px;
+    flex: none;
+    line-height: 1.4;
+
+    &.is-etf {
+      background: rgba(var(--td-brand-color-rgb, 0, 82, 217), 0.12);
+      color: var(--td-brand-color);
+      font-weight: 500;
+    }
+    &.is-active {
+      background: var(--td-bg-color-secondarycontainer);
+      color: var(--td-text-color-secondary);
+    }
+  }
+  &__name {
+    font-weight: 500;
+    color: var(--td-text-color-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  &__code {
+    font-size: 10px;
+    color: var(--td-text-color-placeholder);
+  }
+  &__item-stats {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 2px;
+    flex: none;
+  }
+  &__ratio {
+    color: var(--td-text-color-secondary);
+    font-size: 11px;
+    b { color: var(--td-brand-color); font-weight: 600; }
+  }
+  &__chg {
+    font-size: 10px;
+    font-family: var(--app-font-display);
+    font-weight: 500;
+  }
+  &__mgr {
+    font-size: 10px;
+    color: var(--td-text-color-placeholder);
+  }
+}
+
+.wl-detail__anomaly {
+  background: var(--td-bg-color-secondarycontainer);
+  border: 1px solid var(--td-component-stroke);
+  border-radius: var(--td-radius-small);
+  padding: 8px 10px;
+}
+
+.wl-anomaly {
+  &__tag {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 3px;
+
+    &.is-up {
+      color: var(--app-quote-up);
+      background: rgba(227, 77, 89, 0.1);
+    }
+    &.is-down {
+      color: var(--app-quote-down);
+      background: rgba(43, 164, 113, 0.1);
+    }
+  }
+
+  &__card {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 6px;
+  }
+
+  &__kws {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  &__kw-pill {
+    font-size: 10px;
+    color: var(--td-brand-color);
+    background: rgba(var(--td-brand-color-rgb, 0, 82, 217), 0.08);
+    padding: 1px 6px;
+    border-radius: 3px;
+  }
+
+  &__body {
+    font-size: 11px;
+    line-height: 1.5;
+    color: var(--td-text-color-primary);
+    white-space: pre-line;
+    max-height: 120px;
+    overflow-y: auto;
+  }
+}
+
+.wl-detail__dividends {
+  .wl-dividend__count-badge {
+    font-size: 11px;
+    color: var(--td-brand-color, #0052d9);
+    background: rgba(var(--td-brand-color-rgb, 0, 82, 217), 0.08);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-weight: 500;
+  }
+
+  .wl-dividend__list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 6px;
+  }
+
+  .wl-dividend__item {
+    background: var(--app-bg-secondary, rgba(0, 0, 0, 0.02));
+    border: 1px solid var(--app-border, rgba(0, 0, 0, 0.06));
+    border-radius: 4px;
+    padding: 6px 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .wl-dividend__top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .wl-dividend__date {
+    font-size: 11px;
+    font-family: var(--app-font-mono, monospace);
+    color: var(--td-text-color-secondary);
+  }
+
+  .wl-dividend__yield {
+    font-size: 10px;
+    font-family: var(--app-font-mono, monospace);
+    font-weight: 600;
+    color: #059669;
+    background: rgba(16, 185, 129, 0.1);
+    padding: 0 4px;
+    border-radius: 3px;
+  }
+
+  .wl-dividend__details {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+  }
+
+  .wl-dividend__cash {
+    color: var(--td-text-color-primary);
+    font-family: var(--app-font-mono, monospace);
+  }
+
+  .wl-dividend__bonus {
+    color: #b45309;
+    font-family: var(--app-font-mono, monospace);
+    font-weight: 500;
+  }
+}
+
+.wl-detail__hot-trend {
+  .wl-hot__badge {
+    font-size: 11px;
+    font-family: var(--app-font-mono, monospace);
+    color: #ef4444;
+    background: rgba(239, 68, 68, 0.08);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-weight: 600;
+  }
+
+  .wl-hot__trend-box {
+    background: var(--app-bg-secondary, rgba(0, 0, 0, 0.02));
+    border: 1px solid var(--app-border, rgba(0, 0, 0, 0.06));
+    border-radius: 4px;
+    padding: 8px 10px;
+    margin-top: 6px;
+  }
+
+  .wl-hot__trend-points {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+  }
+
+  .wl-hot__pt {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+  }
+
+  .wl-hot__pt-rank {
+    font-size: 11px;
+    font-family: var(--app-font-mono, monospace);
+    font-weight: 700;
+    color: #ef4444;
+  }
+
+  .wl-hot__pt-date {
+    font-size: 9px;
+    font-family: var(--app-font-mono, monospace);
+    color: var(--td-text-color-secondary);
+  }
+}
+
+.wl-detail__squeeze {
+  .wl-squeeze__date {
+    font-size: 11px;
+    font-family: var(--app-font-mono, monospace);
+    color: var(--td-text-color-secondary);
+  }
+
+  .wl-squeeze__card {
+    background: var(--app-bg-secondary, rgba(0, 0, 0, 0.02));
+    border: 1px solid var(--app-border, rgba(0, 0, 0, 0.06));
+    border-radius: 6px;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .wl-squeeze__status-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .wl-squeeze__col {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .wl-squeeze__col-lbl {
+    font-size: 11px;
+    color: var(--td-text-color-secondary);
+  }
+
+  .wl-squeeze__status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    width: fit-content;
+
+    &.is-squeeze-on {
+      background: color-mix(in srgb, #e11d48 14%, transparent);
+      color: #e11d48;
+      border: 1px solid color-mix(in srgb, #e11d48 30%, transparent);
+
+      .wl-squeeze__dot {
+        background: #e11d48;
+        box-shadow: 0 0 6px #e11d48;
+      }
+    }
+
+    &.is-squeeze-fired {
+      background: color-mix(in srgb, #059669 14%, transparent);
+      color: #059669;
+      border: 1px solid color-mix(in srgb, #059669 30%, transparent);
+
+      .wl-squeeze__dot {
+        background: #059669;
+        box-shadow: 0 0 6px #059669;
+      }
+    }
+
+    &.is-squeeze-off {
+      background: var(--td-bg-color-secondarycontainer);
+      color: var(--td-text-color-secondary);
+      border: 1px solid var(--td-component-stroke);
+
+      .wl-squeeze__dot {
+        background: var(--td-text-color-placeholder);
+      }
+    }
+
+    &.is-up {
+      background: color-mix(in srgb, var(--app-quote-up) 12%, transparent);
+      color: var(--app-quote-up);
+    }
+
+    &.is-down {
+      background: color-mix(in srgb, var(--app-quote-down) 12%, transparent);
+      color: var(--app-quote-down);
+    }
+
+    &.is-neutral {
+      background: var(--td-bg-color-secondarycontainer);
+      color: var(--td-text-color-secondary);
+    }
+  }
+
+  .wl-squeeze__dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+  }
+
+  .wl-squeeze__sub-hint {
+    font-size: 10px;
+    color: var(--td-text-color-placeholder);
+    line-height: 1.3;
+  }
+
+  .wl-squeeze__metric-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    padding-top: 8px;
+    border-top: 1px dashed var(--td-component-stroke);
+  }
+
+  .wl-squeeze__metric-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .wl-squeeze__m-k {
+    font-size: 10px;
+    color: var(--td-text-color-secondary);
+  }
+
+  .wl-squeeze__m-v {
+    font-size: 12px;
+    font-family: var(--app-font-mono, monospace);
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .wl-squeeze__beta-tag {
+    font-size: 10px;
+    font-weight: normal;
+    padding: 1px 4px;
+    border-radius: 3px;
+
+    &.is-high-beta {
+      background: color-mix(in srgb, #9333ea 12%, transparent);
+      color: #9333ea;
+    }
+    &.is-low-beta {
+      background: color-mix(in srgb, #0284c7 12%, transparent);
+      color: #0284c7;
+    }
+    &.is-mid-beta {
+      background: var(--td-bg-color-secondarycontainer);
+      color: var(--td-text-color-secondary);
+    }
   }
 }
 </style>

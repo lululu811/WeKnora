@@ -126,23 +126,19 @@ const caption = computed(() => {
 </script>
 
 <style scoped lang="less">
-/* 沿用大盘预览的暖米色纸张体系与涨跌色（--md-up 红 / --md-down 绿随主题切换）。 */
+/* 沿用大盘预览的暖米色纸张体系与涨跌色（--app-quote-up 红 / --app-quote-down 绿随主题切换）。 */
 .sec {
-  --md-up: #dc2626;
-  --md-down: #047857;
   background: var(--td-bg-color-container);
   border: 1px solid var(--td-component-stroke);
   border-radius: var(--td-radius-medium);
   padding: 12px 14px;
 }
 
-:global(:root[theme-mode='dark']) .sec {
-  --md-up: #f87171;
-  --md-down: #34d399;
-}
 
-.is-up { color: var(--md-up); }
-.is-down { color: var(--md-down); }
+
+
+.is-up { color: var(--app-quote-up); }
+.is-down { color: var(--app-quote-down); }
 .is-flat { color: var(--td-text-color-placeholder); }
 
 .sec__head {
@@ -173,9 +169,10 @@ const caption = computed(() => {
 }
 
 .sec__seg-btn.is-active {
-  background: var(--td-text-color-primary);
-  border-color: var(--td-text-color-primary);
-  color: var(--td-bg-color-container);
+  /* 与 EtfWorkspace 的分段器保持一致：选中态用品牌色，不用近黑 */
+  background: var(--td-brand-color);
+  border-color: var(--td-brand-color);
+  color: var(--td-text-color-anti);
 }
 
 .sec__empty {
@@ -214,11 +211,11 @@ const caption = computed(() => {
 }
 
 .sec__name { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
-.sec__code { font-family: var(--app-font-family-mono); font-size: var(--app-text-xs); color: var(--td-text-color-placeholder); }
+.sec__code { font-family: var(--app-font-family-mono); font-size: var(--app-text-xs); color: var(--td-text-color-secondary); }
 
 /* 有涨停的板块才强调：0 只是常态，强调 0 只会让每个数字都在喊。 */
 .sec__lu { color: var(--td-text-color-placeholder); }
-.sec__lu.has-lu { color: var(--md-up); font-weight: 600; }
+.sec__lu.has-lu { color: var(--app-quote-up); font-weight: 600; }
 
 .sec__foot { margin: 8px 0 0; font-size: var(--app-text-xs); color: var(--td-text-color-placeholder); }
 </style>

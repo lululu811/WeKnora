@@ -165,6 +165,7 @@ export default {
     yellowDegraded: '황선 저하'
   },
   kline: {
+    layers: '레이어',
     picksBar: 'Watchlist ({count})',
     picksHint: '[↑/↓] keys to switch stocks',
     searchSwitch: 'Click to search and switch stock',
@@ -8164,6 +8165,8 @@ export default {
     columns: {
       code: '코드',
       name: '이름',
+      industry: '업종',
+      signals: '신호',
       state: '상태',
       note: '메모',
       price: '현재가',
@@ -8172,7 +8175,9 @@ export default {
       date: '최근 거래일',
       actions: '작업',
       score: '점수'
-    }
+    },
+    allIndustries: '전체 업종',
+    board: '섹터'
   },
   tracking: {
     openFullscreen: '전체 화면',
@@ -8770,5 +8775,16 @@ export default {
     vault: {
       off: 'vault 미설정 — 이미지가 표시되지 않을 수 있습니다'
     }
+  },
+  dividend: {
+    title: '배당락일 캘린더 · 고배당과 무상증자',
+    tabAll: '전체 캘린더',
+    tabYield: '고배당 (현금우)',
+    tabBonus: '대규모 무상증자',
+    expand: '모두 펼치기',
+    failed: '배당 캘린더 데이터를 불러오지 못했습니다',
+    statCount: '관련 종목 수',
+    statAvgYield: '평균 배당수익률',
+    statTopBonus: '최대 무상증자 종목'
   }
 }

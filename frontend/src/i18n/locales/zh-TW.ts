@@ -165,6 +165,7 @@ export default {
     yellowDegraded: 'Yellow line degraded'
   },
   kline: {
+    layers: '圖層',
     picksBar: 'Watchlist ({count})',
     picksHint: '[↑/↓] keys to switch stocks',
     searchSwitch: 'Click to search and switch stock',
@@ -8164,6 +8165,8 @@ export default {
     columns: {
       code: 'Code',
       name: 'Name',
+      industry: '行業',
+      signals: '訊號',
       state: 'State',
       note: 'Note',
       price: 'Price',
@@ -8172,7 +8175,9 @@ export default {
       date: 'Last trade date',
       actions: 'Actions',
       score: 'Score'
-    }
+    },
+    allIndustries: '全部行業',
+    board: '板塊'
   },
   tracking: {
     openFullscreen: '展開全螢幕',
@@ -8770,5 +8775,16 @@ export default {
     vault: {
       off: 'Vault not configured — images may not load'
     }
+  },
+  dividend: {
+    title: '除權除息日曆 · 高股息與送轉',
+    tabAll: '全部日曆',
+    tabYield: '高股息率 (現金乳牛)',
+    tabBonus: '高比例送轉',
+    expand: '展開全部',
+    failed: '除權日曆資料未就緒',
+    statCount: '涉及股票',
+    statAvgYield: '平均股息率',
+    statTopBonus: '最高送轉標的'
   }
 }

@@ -55,7 +55,16 @@
     </header>
 
     <!-- ══════ 加载中 ══════ -->
-    <t-loading v-if="loading && !pulse" :loading="true" :show-overlay="false" class="wp-loading" />
+    <!--
+      用自己的包裹层而不是直接给 t-loading 加样式：t-loading 的根元素
+      (.t-loading__parent) 布局由组件内部决定，scoped 样式压不干净。
+      包裹层给确定高度并居中，不依赖 .wp-page → .trk-panel 的 flex 链
+      能否解析出高度，页面结构变了也不会退回"spinner 悬在顶部"。
+    -->
+    <div v-if="loading && !pulse" class="wp-loading">
+      <t-loading :loading="true" :show-overlay="false" />
+      <p class="wp-loading__text">{{ $t('common.loading') }}</p>
+    </div>
 
     <!-- ══════ 自选为空 → 引导，不发请求 ══════ -->
     <EmptyState
@@ -548,10 +557,6 @@ onMounted(() => {
 .wp-page {
   // A 股约定：红涨绿跌。同一对色值与 Watchlist.vue 的 --wl-up/--wl-down 一致，
   // 两个页面不能各定一套，否则同一个涨跌在两处显示成两种颜色。
-  --wp-up: #dc2626;
-  --wp-down: #047857;
-  --wp-up-soft: rgba(220, 38, 38, 0.16);
-  --wp-down-soft: rgba(4, 120, 87, 0.16);
 
   display: flex;
   flex-direction: column;
@@ -590,8 +595,24 @@ onMounted(() => {
   gap: 8px;
 }
 
+/* 加载态：整块居中，且带一行文案。
+   原来只有一个孤零零的 spinner 顶在上方，下面几百像素全白 ——
+   读起来像"页面坏了"，而不是"正在加载"。给确定高度而不是靠 flex 链撑满，
+   避免上层高度解析失败时退回原状。 */
 .wp-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 320px;
   padding: 32px 0;
+}
+
+.wp-loading__text {
+  margin: 0;
+  font-size: var(--app-text-sm);
+  color: var(--td-text-color-secondary);
 }
 
 .wp-empty {
@@ -670,7 +691,10 @@ onMounted(() => {
   margin-top: 16px;
   padding: 12px 14px;
   border-radius: var(--td-radius-medium, 6px);
-  background: var(--td-error-color-light, var(--wp-down-soft));
+  /* fallback 不能用涨跌色：涨跌绿是"下跌"，错误红是"出错"，
+     两套语义不同。原 fallback 指向 --app-quote-down-soft（绿色），
+     万一 --td-error-color-light 缺失就会把错误框染绿。 */
+  background: var(--td-error-color-light, color-mix(in srgb, var(--td-error-color) 12%, transparent));
   color: var(--td-text-color-primary);
 }
 
@@ -724,7 +748,7 @@ onMounted(() => {
 
 .wp-row__code {
   font-size: var(--app-text-xs, 12px);
-  color: var(--td-text-color-placeholder);
+  color: var(--td-text-color-secondary);
   font-family: var(--app-font-mono, ui-monospace, monospace);
 }
 
@@ -823,19 +847,19 @@ onMounted(() => {
 // 价格方向染色（红涨绿跌）。**只染价格**，量能强弱靠标签 —— 见文件头约束 1。
 .wp-row.is-up {
   .wp-bar {
-    background: var(--wp-up);
+    background: var(--app-quote-up);
   }
   .wp-stat {
-    color: var(--wp-up);
+    color: var(--app-quote-up);
   }
 }
 
 .wp-row.is-down {
   .wp-bar {
-    background: var(--wp-down);
+    background: var(--app-quote-down);
   }
   .wp-stat {
-    color: var(--wp-down);
+    color: var(--app-quote-down);
   }
 }
 

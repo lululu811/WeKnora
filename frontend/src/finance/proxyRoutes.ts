@@ -53,6 +53,32 @@ export const FINANCE_PROXY_ROUTES = [
   '/api/market/technicals',
   // 大盘工作台：集合竞价（高开低开分布 + 短线风向标 + 异动榜）
   '/api/market/auction',
+  // 大盘工作台：期股联动 —— 核心大宗商品最新行情
+  '/api/market/commodities',
+  // 机构筹码：个股公募基金与 ETF 重仓穿透
+  '/api/market/fund-holdings',
+  // 连板梯队详情（最高板空间标杆、各连板档位个股清单）
+  '/api/market/ladder-detail',
+  // 个股大涨大跌盘中异动深度归因与逻辑关键词
+  '/api/market/anomaly-reasons',
+  // 炸板池与跌停池核按钮监控
+  '/api/market/limit-break-down',
+  // 除权除息与分红送转事件日历
+  '/api/market/dividend-calendar',
+  // 人气总榜与飙升黑马雷达
+  '/api/market/hot-stocks',
+  // 个股人气排名历史趋势
+  '/api/market/hot-stock-trend',
+  // 期货注册仓单去库/累库雷达
+  '/api/market/futures-warehouse',
+  // 期货基差与升贴水率
+  '/api/market/futures-basis-rate',
+  // ETF 持有人结构穿透与前十大持有人
+  '/api/market/etf-holders',
+  // ETF 机构控盘度与散户占比排行
+  '/api/market/etf-institutional-ranking',
+  // TTM Squeeze 波动挤压突破与超级趋势
+  '/api/market/squeeze-status',
   // 「今天谁在动」：量价异动 /pulse + 财经日历 /calendar
   // 前缀级白名单（见文件头与 FINANCE_PROXY_ROUTES_REGEX 的说明）。
   '/api/finance',
@@ -83,4 +109,4 @@ export type FinanceProxyRoute = (typeof FINANCE_PROXY_ROUTES)[number];
  * 不会报错 —— 所以改这里之后要顺手核对 nginx.conf 那一行。
  */
 export const FINANCE_PROXY_ROUTES_REGEX =
-  '^/api/(kline|annotate|indicators|symbols|stock-profile|quotes|chart-pattern|market/(snapshot|dragon-tiger|sectors|basis|limit-up-ladder|industry-map|technicals|auction)|finance)(/.*)?$';
+  '^/api/(kline|annotate|indicators|symbols|stock-profile|quotes|chart-pattern|market/(snapshot|dragon-tiger|sectors|basis|limit-up-ladder|industry-map|technicals|auction|commodities|fund-holdings)|finance)(/.*)?$';

@@ -157,15 +157,15 @@ function formatPct(pct: number | null): string {
 }
 
 /**
- * sparkline 的描边色。SVG 属性拿 `var(--wl-up)` 不可靠（不保证所有渲染路径
+ * sparkline 的描边色。SVG 属性拿 `var(--app-quote-up)` 不可靠（不保证所有渲染路径
  * 都解析自定义属性），所以这里读根元素上的**计算值**——主题切换时
- * `--wl-up` 变亮，这里跟着变，不需要再写一份深色分支。
+ * `--app-quote-up` 变亮，这里跟着变，不需要再写一份深色分支。
  */
 function sparkColor(row: BarRow): string {
   const dir = changeDirection(row.pctChange);
   if (dir === 'flat') return 'var(--td-text-color-placeholder, #94a3b8)'
   const root = typeof document !== 'undefined' ? document.querySelector('.compare-bar') : null
-  const name = dir === 'up' ? '--wl-up' : '--wl-down'
+  const name = dir === 'up' ? '--app-quote-up' : '--app-quote-down'
   const fallback = dir === 'up' ? '#dc2626' : '#047857'
   if (!root) return fallback
   const v = getComputedStyle(root).getPropertyValue(name).trim()
@@ -186,13 +186,9 @@ watch(picksKey, () => { void loadAll(); }, { immediate: true });
    否则新代码会凭空抬高基线，让那条棘轮失去意义。 */
 .compare-bar {
   /* A 股红涨绿跌 —— 与其余金融页同一对色值（见 KLineWorkspace.vue 的说明） */
-  --wl-up: #dc2626;
-  --wl-down: #047857;
 
-  :root[theme-mode="dark"] & {
-    --wl-up: #f87171;
-    --wl-down: #34d399;
-  }
+
+
 
   border-bottom: 1px solid var(--td-component-stroke);
   background: var(--td-bg-color-secondarycontainer);
@@ -291,7 +287,7 @@ watch(picksKey, () => { void loadAll(); }, { immediate: true });
   flex-shrink: 0;
   font-family: var(--td-font-family-mono);
   font-size: var(--app-text-2xs);
-  color: var(--td-text-color-placeholder);
+  color: var(--td-text-color-secondary);
 }
 
 .compare-row__price,
@@ -303,8 +299,8 @@ watch(picksKey, () => { void loadAll(); }, { immediate: true });
 .compare-row__pct {
   font-weight: 600;
 
-  &.is-up { color: var(--wl-up); }
-  &.is-down { color: var(--wl-down); }
+  &.is-up { color: var(--app-quote-up); }
+  &.is-down { color: var(--app-quote-down); }
   &.is-flat,
   &.is-unknown { color: var(--td-text-color-placeholder); }
 }

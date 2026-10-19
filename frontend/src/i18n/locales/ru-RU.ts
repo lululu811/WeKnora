@@ -165,6 +165,7 @@ export default {
     yellowDegraded: 'Желтая линия деградирована'
   },
   kline: {
+    layers: 'Слои',
     picksBar: 'Watchlist ({count})',
     picksHint: '[↑/↓] keys to switch stocks',
     searchSwitch: 'Click to search and switch stock',
@@ -8164,6 +8165,8 @@ export default {
     columns: {
       code: 'Код',
       name: 'Название',
+      industry: 'Отрасль',
+      signals: 'Сигналы',
       state: 'Статус',
       note: 'Заметка',
       price: 'Цена',
@@ -8172,7 +8175,9 @@ export default {
       date: 'Последняя сделка',
       actions: 'Действия',
       score: 'Score'
-    }
+    },
+    allIndustries: 'Все отрасли',
+    board: 'Сектор'
   },
   tracking: {
     openFullscreen: 'На весь экран',
@@ -8770,5 +8775,16 @@ export default {
     vault: {
       off: 'vault не настроен — изображения могут не загрузиться'
     }
+  },
+  dividend: {
+    title: 'Календарь выплат и дивидендов · Высокая доходность и бонусы акциями',
+    tabAll: 'Весь календарь',
+    tabYield: 'Высокая доходность («дойная корова»)',
+    tabBonus: 'Крупные бонусы акциями',
+    expand: 'Развернуть всё',
+    failed: 'Данные календаря выплат недоступны',
+    statCount: 'Задействованных акций',
+    statAvgYield: 'Средняя доходность',
+    statTopBonus: 'Максимальный бонус акциями'
   }
 }

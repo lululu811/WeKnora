@@ -131,21 +131,17 @@ function fmtBb(p: number | null): string {
 
 <style scoped lang="less">
 .tec {
-  --md-up: #dc2626;
-  --md-down: #047857;
   background: var(--td-bg-color-container);
   border: 1px solid var(--td-component-stroke);
   border-radius: var(--td-radius-medium);
   padding: 12px 14px;
 }
 
-:global(:root[theme-mode='dark']) .tec {
-  --md-up: #f87171;
-  --md-down: #34d399;
-}
 
-.is-up { color: var(--md-up); }
-.is-down { color: var(--md-down); }
+
+
+.is-up { color: var(--app-quote-up); }
+.is-down { color: var(--app-quote-down); }
 .is-flat { color: var(--td-text-color-placeholder); }
 
 .tec__head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }

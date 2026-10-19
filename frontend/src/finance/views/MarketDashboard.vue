@@ -31,17 +31,17 @@
       折线渐变（涨跌两色）。必须放在 template 内：SFC 里 `</style>` 之后的第二个
       顶层标签会被 vue-loader 当成 custom block 解析（vite 报 import-analysis 语法错），
       所以渐变定义随模板一起走，不能另起一段顶层 svg。
-      stop-color 用 var(--md-up)/var(--md-down)，随浅/深色主题自动切换。
+      stop-color 用 var(--app-quote-up)/var(--app-quote-down)，随浅/深色主题自动切换。
     -->
     <svg class="md-gradients" width="0" height="0" aria-hidden="true">
       <defs>
         <linearGradient id="mdGradUp" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stop-color="var(--md-up)" stop-opacity=".16" />
-          <stop offset="1" stop-color="var(--md-up)" stop-opacity="0" />
+          <stop offset="0" stop-color="var(--app-quote-up)" stop-opacity=".16" />
+          <stop offset="1" stop-color="var(--app-quote-up)" stop-opacity="0" />
         </linearGradient>
         <linearGradient id="mdGradDown" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stop-color="var(--md-down)" stop-opacity=".16" />
-          <stop offset="1" stop-color="var(--md-down)" stop-opacity="0" />
+          <stop offset="0" stop-color="var(--app-quote-down)" stop-opacity=".16" />
+          <stop offset="1" stop-color="var(--app-quote-down)" stop-opacity="0" />
         </linearGradient>
       </defs>
     </svg>
@@ -244,6 +244,10 @@
           <LadderHeat />
           <BasisStrip />
         </div>
+        <div class="md-full__pair">
+          <HotStockRadar />
+          <DividendCalendar />
+        </div>
       </div>
 
       <!-- ── 自选股 ── -->
@@ -395,6 +399,8 @@ import AuctionStrip from '@/finance/components/market/AuctionStrip.vue'
 import SectorBoard from '@/finance/components/market/SectorBoard.vue'
 import LadderHeat from '@/finance/components/market/LadderHeat.vue'
 import BasisStrip from '@/finance/components/market/BasisStrip.vue'
+import DividendCalendar from '@/finance/components/market/DividendCalendar.vue'
+import HotStockRadar from '@/finance/components/market/HotStockRadar.vue'
 import { useTheme } from '@/composables/useTheme'
 import {
   CHART,
@@ -892,12 +898,8 @@ function watchStateLabel(s: WatchState): string {
 </script>
 
 <style lang="less" scoped>
-/* 涨跌色：唯一一组"新增"变量，值由设计稿定死。
-   深色各提一档的理由见文件头与 design.md「验收重点」。 */
-.md-page {
-  --md-up: #dc2626;
-  --md-down: #047857;
-}
+/* 涨跌色已收敛到全局令牌（--app-quote-up/--app-quote-down，随主题自动切），
+   本文件不再定义本地变量，也不再需要暗色覆盖块。 */
 
 /* 渐变定义容器：零尺寸、绝对定位，不参与布局也不可被鼠标命中 */
 .md-gradients {
@@ -907,19 +909,17 @@ function watchStateLabel(s: WatchState): string {
   pointer-events: none;
 }
 
-:global(:root[theme-mode="dark"]) .md-page {
-  --md-up: #f87171;
-  --md-down: #34d399;
-}
 
-.md-up { color: var(--md-up); }
-.md-down { color: var(--md-down); }
+
+
+.md-up { color: var(--app-quote-up); }
+.md-down { color: var(--app-quote-down); }
 .md-flat { color: var(--td-text-color-placeholder); }
 
-.md-up-stroke { stroke: var(--md-up); }
-.md-down-stroke { stroke: var(--md-down); }
-.md-up-bg { background: color-mix(in srgb, var(--md-up) 11%, transparent); }
-.md-down-bg { background: color-mix(in srgb, var(--md-down) 11%, transparent); }
+.md-up-stroke { stroke: var(--app-quote-up); }
+.md-down-stroke { stroke: var(--app-quote-down); }
+.md-up-bg { background: color-mix(in srgb, var(--app-quote-up) 11%, transparent); }
+.md-down-bg { background: color-mix(in srgb, var(--app-quote-down) 11%, transparent); }
 
 .md-num {
   font-family: var(--app-font-family-mono);
@@ -1142,16 +1142,31 @@ function watchStateLabel(s: WatchState): string {
 }
 .md-index-panel__row { display: flex; align-items: baseline; gap: 8px; }
 
+/* 指数名是这张卡的主标签，绝不收缩；代码是次要信息，挤不下时它先让位。
+   （一开始给两边都加 min-width:0 + ellipsis，结果 name 被压成「上证…」，
+   等于把「折行」换成「读不出名字」——都不对。
+   只给 name 加 nowrap 也只是把折行换成整行横向溢出，同样不对。） */
 .md-index-panel__name {
   font-family: var(--app-font-display);
   font-size: var(--app-text-lg);
   font-weight: 600;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
-.md-index-panel__code { font-size: var(--app-text-2xs); color: var(--td-text-color-placeholder); }
+.md-index-panel__code {
+  font-size: var(--app-text-2xs);
+  color: var(--td-text-color-secondary);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
+/* 20px 的等宽读数本身不许被压扁 */
 .md-index-panel__last {
   margin-left: auto;
+  flex-shrink: 0;
   font-size: var(--app-text-3xl);
   font-weight: 700;
   line-height: 1;
@@ -1164,8 +1179,8 @@ function watchStateLabel(s: WatchState): string {
   border-radius: var(--app-radius-pill);
 }
 
-.md-pill.md-up { background: color-mix(in srgb, var(--md-up) 11%, transparent); }
-.md-pill.md-down { background: color-mix(in srgb, var(--md-down) 11%, transparent); }
+.md-pill.md-up { background: color-mix(in srgb, var(--app-quote-up) 11%, transparent); }
+.md-pill.md-down { background: color-mix(in srgb, var(--app-quote-down) 11%, transparent); }
 
 .md-index-panel__chart {
   flex: 1;
@@ -1225,8 +1240,8 @@ function watchStateLabel(s: WatchState): string {
   box-shadow: 0 0 0 1px var(--td-component-stroke);
 }
 
-.md-rangebar__last.md-up { background: var(--md-up); }
-.md-rangebar__last.md-down { background: var(--md-down); }
+.md-rangebar__last.md-up { background: var(--app-quote-up); }
+.md-rangebar__last.md-down { background: var(--app-quote-down); }
 .md-rangebar__last.md-flat { background: var(--td-text-color-disabled); }
 
 .md-index-panel__legend {
@@ -1294,8 +1309,15 @@ function watchStateLabel(s: WatchState): string {
 }
 
 .md-lu5__bars {
-  flex: 1;
-  min-height: 26px;
+  /* 必须是**确定高度**，不能只写 min-height：柱子用的是 height:X%，
+     父级高度不确定时百分比按 auto 处理，所有柱子塌成 2px，只剩数字悬空。
+     flex-basis 给确定值，百分比才有参照物。 */
+  /* flex-basis 给 72px（确定值）让柱子那个 height:X% 有参照物 ——
+     之前只有 min-height，高度不定时百分比按 auto 处理，所有柱子塌成 2px。
+     但不能写死 0 0：卡片更高时多出来的空间会变成图下方的空白，
+     所以保留 grow，卡片变高时图跟着长高。 */
+  flex: 1 1 72px;
+  min-height: 72px;
   display: flex;
   align-items: flex-end;
   gap: 6px;
@@ -1305,19 +1327,20 @@ function watchStateLabel(s: WatchState): string {
 
 .md-lu5__bar {
   flex: 1;
-  border-radius: 3px 3px 1px 1px;
-  background: color-mix(in srgb, var(--md-up) 32%, transparent);
+  min-height: 2px;
+  border-radius: var(--app-radius-xs) var(--app-radius-xs) 1px 1px;
+  background: color-mix(in srgb, var(--app-quote-up) 32%, transparent);
   position: relative;
 }
 
-.md-lu5__bar.is-last { background: var(--md-up); }
+.md-lu5__bar.is-last { background: var(--app-quote-up); }
 
 .md-lu5__bar b {
   position: absolute;
-  top: -14px;
+  top: -16px;
   left: 50%;
   transform: translateX(-50%);
-  font-size: var(--app-text-4xs);
+  font-size: var(--app-text-2xs);
   font-weight: 400;
   color: var(--td-text-color-placeholder);
 }
@@ -1332,9 +1355,9 @@ function watchStateLabel(s: WatchState): string {
 
 .md-breadth__bar i { display: block; height: 100%; }
 
-.md-breadth__up { background: var(--md-up); }
+.md-breadth__up { background: var(--app-quote-up); }
 .md-breadth__flat { background: var(--td-text-color-disabled); }
-.md-breadth__down { background: var(--md-down); }
+.md-breadth__down { background: var(--app-quote-down); }
 
 .md-breadth__legend {
   display: flex;
@@ -1400,7 +1423,7 @@ function watchStateLabel(s: WatchState): string {
 
 .md-wl-row__code {
   font-size: var(--app-text-4xs);
-  color: var(--td-text-color-placeholder);
+  color: var(--td-text-color-secondary);
   display: block;
 }
 
@@ -1512,13 +1535,13 @@ function watchStateLabel(s: WatchState): string {
 
 .md-etf-row__code {
   font-size: var(--app-text-4xs);
-  color: var(--td-text-color-placeholder);
+  color: var(--td-text-color-secondary);
   display: block;
 }
 
 .md-etf-row__price { font-size: var(--app-text-sm); text-align: right; }
 
-/* 份额列：季频口径。红 = 净流入，沿用本卡 --md-up / --md-down，不另造涨跌色。 */
+/* 份额列：季频口径。红 = 净流入，沿用本卡 --app-quote-up / --app-quote-down，不另造涨跌色。 */
 .md-etf-row__share { font-size: var(--app-text-2xs); text-align: right; }
 
 /* 回退态（etf-flow 未同步）：写「未同步」而不是「—」，两者的意思不同 */

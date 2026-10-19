@@ -59,17 +59,20 @@
         :class="{ 'is-active': activeTab === 'all' }"
         @click="activeTab = 'all'"
       >
-        <span class="wl-metric__label">{{ t('watchlist.metricTotal') }}</span>
+        <svg class="wl-tab__icon" viewBox="0 0 14 14" aria-hidden="true">
+          <path d="M2.5 3.5h9M2.5 7h9M2.5 10.5h6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" />
+        </svg>
+        <span class="wl-metric__label">{{ t('watchlist.tabAll') }}</span>
         <span class="wl-metric__val">{{ rows.length }}</span>
       </button>
 
       <button
         class="wl-metric wl-metric--triggered"
-        :class="{ 'is-active': activeTab === 'triggered', 'is-zero': countTriggered === 0 }"
+        :class="{ 'is-active': activeTab === 'triggered', 'is-zero': countTriggered === 0, 'has-count': countTriggered > 0 }"
         @click="activeTab = 'triggered'"
       >
         <t-icon name="notification-filled" size="13px" />
-        <span class="wl-metric__label">{{ t('watchlist.metricTriggered') }}</span>
+        <span class="wl-metric__label">{{ t('watchlist.tabTriggered') }}</span>
         <span class="wl-metric__val">{{ countTriggered }}</span>
       </button>
 
@@ -79,7 +82,7 @@
         @click="activeTab = 'holding'"
       >
         <span class="wl-state__dot is-holding"></span>
-        <span class="wl-metric__label">{{ t('watchlist.metricHolding') }}</span>
+        <span class="wl-metric__label">{{ t('watchlist.tabHolding') }}</span>
         <span class="wl-metric__val">{{ countHolding }}</span>
       </button>
 
@@ -89,7 +92,7 @@
         @click="activeTab = 'observing'"
       >
         <span class="wl-state__dot is-observing"></span>
-        <span class="wl-metric__label">{{ t('watchlist.metricObserving') }}</span>
+        <span class="wl-metric__label">{{ t('watchlist.tabObserving') }}</span>
         <span class="wl-metric__val">{{ countObserving }}</span>
       </button>
 
@@ -99,7 +102,7 @@
         @click="activeTab = 'dropped'"
       >
         <span class="wl-state__dot is-dropped"></span>
-        <span class="wl-metric__label">{{ t('watchlist.metricDropped') }}</span>
+        <span class="wl-metric__label">{{ t('watchlist.tabDropped') }}</span>
         <span class="wl-metric__val">{{ countDropped }}</span>
       </button>
     </div>
@@ -154,65 +157,8 @@
 
     <EmptyState v-if="!loading && !rows.length" icon="chart-line" :title="t('watchlist.empty')"
       :description="t('watchlist.emptyHint')" />
-    <div v-else class="wl-body">
-      <!--
-        条件挂在**外层**的 .wl-body 上而不是 t-table 自己身上：v-else 必须紧贴
-        上面的 v-if，中间不能插元素（包括注释）。曾经把它挂在 table 上、外面
-        再包一层 div，vue-tsc 不报错，vite 构建时才炸 "v-else has no
-        adjacent v-if"。
-      -->
+    <div v-else class="wl-body" :class="{ 'has-detail': !!selectedRow }">
       <div class="wl-body__table">
-        <div class="watchlist-tabs" v-if="rows.length">
-          <t-radio-group v-model="activeTab" variant="default-filled" size="small">
-            <t-radio-button value="all">
-              <span class="wl-tab">
-                <svg class="wl-tab__icon" viewBox="0 0 14 14" aria-hidden="true">
-                  <path d="M2.5 3.5h9M2.5 7h9M2.5 10.5h6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" />
-                </svg>
-                {{ t('watchlist.tabAll') }} ({{ rows.length }})
-              </span>
-            </t-radio-button>
-            <t-radio-button value="triggered">
-              <!-- has-count 的样式此前根本没有定义，这个高亮一直是死的 -->
-              <span class="wl-tab wl-tab--triggered" :class="{ 'has-count': countTriggered > 0 }">
-                <svg class="wl-tab__icon" viewBox="0 0 14 14" aria-hidden="true">
-                  <circle cx="7" cy="7" r="4.2" stroke="currentColor" stroke-width="1.3" />
-                  <circle cx="7" cy="7" r="1.4" fill="currentColor" />
-                  <path d="M7 .9v2.2M7 10.9v2.2M.9 7h2.2M10.9 7h2.2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" />
-                </svg>
-                {{ t('watchlist.tabTriggered') }} ({{ countTriggered }})
-              </span>
-            </t-radio-button>
-            <t-radio-button value="holding">
-              <span class="wl-tab">
-                <svg class="wl-tab__icon" viewBox="0 0 14 14" aria-hidden="true">
-                  <rect x="1.6" y="3.6" width="10.8" height="8" rx="1.4" stroke="currentColor" stroke-width="1.3" />
-                  <path d="M5.2 3.6V2.8a1 1 0 011-1h1.6a1 1 0 011 1v.8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" />
-                  <path d="M1.6 7.4h10.8" stroke="currentColor" stroke-width="1.3" />
-                </svg>
-                {{ t('watchlist.tabHolding') }} ({{ countHolding }})
-              </span>
-            </t-radio-button>
-            <t-radio-button value="observing">
-              <span class="wl-tab">
-                <svg class="wl-tab__icon" viewBox="0 0 14 14" aria-hidden="true">
-                  <path d="M1.2 7S3.7 3.1 7 3.1 12.8 7 12.8 7 10.3 10.9 7 10.9 1.2 7 1.2 7z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" />
-                  <circle cx="7" cy="7" r="1.8" stroke="currentColor" stroke-width="1.3" />
-                </svg>
-                {{ t('watchlist.tabObserving') }} ({{ countObserving }})
-              </span>
-            </t-radio-button>
-            <t-radio-button value="dropped">
-              <span class="wl-tab">
-                <svg class="wl-tab__icon" viewBox="0 0 14 14" aria-hidden="true">
-                  <rect x="1.6" y="3.2" width="10.8" height="8.4" rx="1.3" stroke="currentColor" stroke-width="1.3" />
-                  <path d="M1.6 5.9h10.8M5.3 3.2v2.7" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" />
-                </svg>
-                {{ t('watchlist.tabDropped') }} ({{ countDropped }})
-              </span>
-            </t-radio-button>
-          </t-radio-group>
-        </div>
         <!-- 持仓资产全景看板 (仅在持仓 Tab 激活且有持仓时呈现) -->
         <div v-if="activeTab === 'holding' && portfolioHoldings.length" class="wl-portfolio-banner">
           <div class="wl-portfolio-banner__item">
@@ -256,7 +202,15 @@
         <template #thscode="{ row }">
         <div class="wl-code">
           <span class="wl-code__code">{{ row.thscode }}</span>
-          <span v-if="row.exchange" class="wl-code__exchange">{{ row.exchange }}</span>
+          <!--
+            thscode 本身已经是 601579.SH 这种带后缀的完整代码，交易所字段
+            只是同一信息再写一遍。之前两行竖排，于是每行都变成 "601579.SH / SH"
+            重复且把行高翻倍。只在代码确实没带后缀时才补一个。
+          -->
+          <span
+            v-if="row.exchange && !row.thscode.endsWith(row.exchange)"
+            class="wl-code__exchange"
+          >{{ row.exchange }}</span>
         </div>
       </template>
 
@@ -1706,10 +1660,6 @@ onUnmounted(() => {
 .watchlist-page {
   // A 股约定：红涨绿跌。与工作台 quote 条用的是同一对色值
   // （见 components/workspace/kline/KLineWorkspace.vue）。
-  --wl-up: #dc2626;
-  --wl-down: #047857;
-  --wl-up-soft: rgba(220, 38, 38, 0.12);
-  --wl-down-soft: rgba(4, 120, 87, 0.12);
 
   display: flex;
   flex-direction: column;
@@ -1736,20 +1686,34 @@ onUnmounted(() => {
 .wl-body {
   display: flex;
   align-items: flex-start;
-  gap: 12px;
+  gap: 16px;
   flex: 1;
   min-height: 0;
+  width: 100%;
 }
 
 .wl-body__table {
-  flex: 1;
+  flex: 1 1 0%;
   min-width: 0;
+  overflow-x: auto;
+  border-radius: var(--app-radius-md, 8px);
+  background: var(--td-bg-color-container);
+  border: 1px solid var(--td-component-stroke);
+  padding: 8px 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+  transition: all var(--app-motion-fast) ease;
+}
+
+/* 详情面板展开时：保持表格主体宽度不低于 440px，右侧详情不挤压表格 */
+.wl-body.has-detail .wl-body__table {
+  flex: 1 1 520px;
+  min-width: 440px;
 }
 
 // 选中行：左侧一条竖线而不是整行底色。整行底色会盖掉 hover 与涨跌色的
 // 可读性，一条竖线只表达"正在看这只"，不与状态色抢注意力。
 :deep(.watchlist-table .is-selected > td:first-child) {
-  box-shadow: inset 3px 0 0 var(--wl-up);
+  box-shadow: inset 3px 0 0 var(--app-quote-up);
 }
 
 .watchlist-title-row {
@@ -1931,11 +1895,11 @@ onUnmounted(() => {
   cursor: help;
 
   &.is-bull {
-    background: rgba(239, 68, 68, 0.12);
+    background: color-mix(in srgb, var(--app-quote-up) 12%, transparent);
   }
 
   &.is-bear {
-    background: rgba(16, 185, 129, 0.12);
+    background: color-mix(in srgb, var(--app-quote-down) 12%, transparent);
   }
 
   &.is-neutral {
@@ -1949,8 +1913,10 @@ onUnmounted(() => {
 
 .wl-code {
   display: flex;
-  flex-direction: column;
-  line-height: 1.3;
+  align-items: baseline;
+  gap: 6px;
+  /* 整串代码不折行：竖排时 "601579.SH" 会在点号处断成两行 */
+  white-space: nowrap;
 }
 
 .wl-code__code {
@@ -1976,11 +1942,11 @@ onUnmounted(() => {
   color: var(--td-text-color-primary);
 
   &.is-up {
-    color: var(--wl-up);
+    color: var(--app-quote-up);
   }
 
   &.is-down {
-    color: var(--wl-down);
+    color: var(--app-quote-down);
   }
 }
 
@@ -1991,11 +1957,11 @@ onUnmounted(() => {
   font-family: monospace;
 
   &.is-up {
-    color: var(--wl-up);
+    color: var(--app-quote-up);
   }
 
   &.is-down {
-    color: var(--wl-down);
+    color: var(--app-quote-down);
   }
 }
 
@@ -2005,11 +1971,11 @@ onUnmounted(() => {
   font-size: var(--app-text-xs);
 
   .is-up & {
-    background: var(--wl-up-soft);
+    background: var(--app-quote-up-soft);
   }
 
   .is-down & {
-    background: var(--wl-down-soft);
+    background: var(--app-quote-down-soft);
   }
 }
 
@@ -2103,8 +2069,8 @@ onUnmounted(() => {
       font-weight: 600;
       color: var(--td-text-color-primary);
 
-      &.is-up { color: var(--wl-up, #dc2626); }
-      &.is-down { color: var(--wl-down, #047857); }
+      &.is-up { color: var(--app-quote-up); }
+      &.is-down { color: var(--app-quote-down); }
 
       small {
         font-size: var(--app-text-xs);
@@ -2113,7 +2079,7 @@ onUnmounted(() => {
     }
 
     &.is-warn .val {
-      color: var(--wl-up, #dc2626);
+      color: var(--app-quote-up);
       font-weight: 700;
     }
   }
@@ -2136,12 +2102,12 @@ onUnmounted(() => {
   white-space: nowrap;
 
   &.is-up {
-    color: var(--wl-up, #dc2626);
+    color: var(--app-quote-up);
     background: rgba(220, 38, 38, 0.08);
   }
 
   &.is-down {
-    color: var(--wl-down, #047857);
+    color: var(--app-quote-down);
     background: rgba(4, 120, 87, 0.08);
   }
 }
@@ -2152,7 +2118,7 @@ onUnmounted(() => {
   padding: 1px 4px;
   border-radius: 2px;
   background: rgba(220, 38, 38, 0.12);
-  color: var(--wl-up, #dc2626);
+  color: var(--app-quote-up);
   font-weight: 600;
   white-space: nowrap;
 }
@@ -2378,54 +2344,93 @@ onUnmounted(() => {
  * 现在压成一行：非 0 加粗上色，0 淡下去，仍然可点（切分类）。
  */
 .watchlist-metrics {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 4px;
-  margin: 14px 0 10px;
-  padding: 3px;
-  border-radius: var(--app-radius-pill);
+  margin: 12px 0 8px;
+  padding: 4px;
+  border-radius: var(--app-radius-md, 8px);
   background: var(--td-bg-color-secondarycontainer);
+  border: 1px solid var(--td-component-stroke);
   width: fit-content;
 }
 
 .wl-metric {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 3px 11px;
+  gap: 6px;
+  padding: 4px 12px;
   border: 0;
-  border-radius: var(--app-radius-pill);
+  border-radius: var(--app-radius-sm, 6px);
   background: transparent;
   cursor: pointer;
   font-size: var(--app-text-sm);
   color: var(--td-text-color-secondary);
-  transition: background var(--app-motion-fast) ease, color var(--app-motion-fast) ease;
+  transition: all var(--app-motion-fast) ease;
 
-  &:hover { background: var(--td-bg-color-container); }
+  .wl-tab__icon {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+    opacity: 0.75;
+  }
+
+  &:hover {
+    background: var(--td-bg-color-container-hover);
+    color: var(--td-text-color-primary);
+  }
 
   &.is-active {
     background: var(--td-bg-color-container);
-    color: var(--td-text-color-primary);
-    box-shadow: var(--td-shadow-1);
+    color: var(--td-brand-color);
+    font-weight: 600;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+
+    .wl-tab__icon {
+      opacity: 1;
+      color: var(--td-brand-color);
+    }
   }
 
-  /* 0 值：淡下去但仍可点。不隐藏 —— 隐藏会让用户忘了这个分类存在。 */
-  &.is-zero { opacity: 0.5; }
+  /* 0 值：淡下去但仍可点 */
+  &.is-zero {
+    opacity: 0.6;
+  }
+
+  &__label {
+    font-size: var(--app-text-xs);
+  }
 
   &__val {
     font-weight: 600;
     font-family: var(--app-font-family-mono);
     color: var(--td-text-color-primary);
     font-variant-numeric: tabular-nums;
+    font-size: var(--app-text-xs);
+    padding: 1px 6px;
+    border-radius: var(--app-radius-pill);
+    background: color-mix(in srgb, var(--td-text-color-secondary) 10%, transparent);
   }
 
-  &.is-zero &__val { font-weight: 400; color: var(--td-text-color-placeholder); }
+  &.is-active &__val {
+    background: color-mix(in srgb, var(--td-brand-color) 12%, transparent);
+    color: var(--td-brand-color);
+  }
 
-  /* 今日触发：唯一需要"叫人"的分类，非 0 时用警示色 */
-  &--triggered:not(.is-zero) {
-    color: var(--td-warning-color);
-    .wl-metric__val { color: var(--td-warning-color); }
+  &.is-zero &__val {
+    font-weight: 400;
+    color: var(--td-text-color-placeholder);
+    background: transparent;
+  }
+
+  /* 今日触发：有预警时高亮 */
+  &--triggered.has-count {
+    color: var(--td-warning-color-6);
+    .wl-metric__val {
+      background: var(--td-warning-color-1);
+      color: var(--td-warning-color-6);
+    }
   }
 }
 
@@ -2452,55 +2457,6 @@ onUnmounted(() => {
 
 /* 「今天没评分」是 null，不是 0 分 —— 显示破折号，别让它看起来像 0。 */
 .wl-score-none { color: var(--td-text-color-placeholder); }
-
-
-.watchlist-tabs {
-  margin-bottom: 12px;
-
-  /* TDesign 的 filled 分段控件给外层 .t-radio-group 上了 padding + 一层底色，
-     而选中态的 __bg-block 又内缩 2px。结果就是整行首尾各漏出一条底色——
-     截图里那两道「白边」。这里把外层 padding 归零、底色透明，让选中底色
-     紧贴按钮边界。 */
-  :deep(.t-radio-group--filled) {
-    padding: 0;
-    background-color: transparent;
-  }
-
-  :deep(.t-radio-group--filled .t-radio-group__bg-block) {
-    left: 0;
-    top: 0;
-    height: 100%;
-  }
-
-  :deep(.t-radio-group--filled .t-radio-button) {
-    border-radius: var(--app-radius-sm);
-  }
-}
-
-/* chip 内部排版：图标随字号走，与文字基线对齐 */
-.wl-tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-
-  &__icon {
-    width: 14px;
-    height: 14px;
-    flex-shrink: 0;
-    opacity: 0.75;
-  }
-
-  /* 今日有触发时给一点警示色。这个 class 一直在模板里绑着，
-     样式却从来没写过——高亮是死的。 */
-  &--triggered.has-count {
-    color: var(--td-warning-color);
-    font-weight: 500;
-
-    .wl-tab__icon {
-      opacity: 1;
-    }
-  }
-}
 
 :deep(.wl-workspace-dialog) {
   .t-dialog__body {
@@ -2604,13 +2560,13 @@ onUnmounted(() => {
   }
 
   &.is-up {
-    color: var(--wl-up);
-    border-color: color-mix(in srgb, var(--wl-up) 35%, transparent);
+    color: var(--app-quote-up);
+    border-color: color-mix(in srgb, var(--app-quote-up) 35%, transparent);
   }
 
   &.is-down {
-    color: var(--wl-down);
-    border-color: color-mix(in srgb, var(--wl-down) 35%, transparent);
+    color: var(--app-quote-down);
+    border-color: color-mix(in srgb, var(--app-quote-down) 35%, transparent);
   }
 }
 

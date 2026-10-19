@@ -56,6 +56,11 @@ export const PATTERN_CONFIG: Record<string, { label: string; color: string; desc
   key_k: { label: '关键K', color: '#3b82f6', desc: '十字星 + 缩量转折' },
   s1: { label: 'S1 预警', color: '#ef4444', desc: '高位放量长上影线' },
   violent_k: { label: '暴力K', color: '#f59e0b', desc: '低位倍量突破长阳/长阴' },
+  pole_yang: { label: '立杆阳', color: '#e11d48', desc: '波段起点大阳线，划横线锚定' },
+  pile_yang: { label: '打桩阳', color: '#059669', desc: '低开+反包+回踩三合一强空翻多' },
+  capping_yin: { label: '灌顶阴', color: '#dc2626', desc: '高开低走放量大阴，80%看空' },
+  fake_yin: { label: '伪阴线', color: '#8b5cf6', desc: '高位承接新高不破5日线震仓' },
+  rebound_trap: { label: '回光返照', color: '#d97706', desc: '518死叉下无量弱反，C浪中继' },
 };
 
 export async function fetchAnnotations(symbol: string, days = 120): Promise<AnnotationResponse> {

@@ -303,3 +303,52 @@ select:-webkit-autofill {
     --z-popover: 3000;
     --z-toast: 5000;
 }
+
+/* ============================================================
+ * 行情涨跌色（A 股约定：红涨绿跌）
+ *
+ * 为什么放在这里：这 4 个色值原先被复制进 9 个组件文件，还分成了
+ * --md-up / --wl-up / --wp-up 三套命名。改一次配色要改 9 处，
+ * 而且三个名字指向同一个语义 —— 典型的"偶然默认值"，不是规范。
+ * 收敛成全局语义角色后，组件只引用，不再自己定义。
+ *
+ * 只用于"价格 / 涨跌幅 / 涨跌家数"这类行情读数。不要拿它表达
+ * 涨跌以外的好恶（例：ETF 份额萎缩不是"跌"，那是资金流向，
+ * 用中性灰，见 finance 模块 etf-ws__flow 的处理）。
+ * ============================================================ */
+:root {
+    /* 原始色板：不要直接用，留给需要脱离主题切换的场景
+       （K 线工作台的 .is-dark 类开关就是这种）。 */
+    --app-quote-up-light: #dc2626;
+    --app-quote-down-light: #047857;
+    --app-quote-up-dark: #f87171;
+    --app-quote-down-dark: #34d399;
+
+    /* 语义别名：日常只用这一层，跟着主题自动切。 */
+    --app-quote-up: var(--app-quote-up-light);
+    --app-quote-down: var(--app-quote-down-light);
+}
+
+:root[theme-mode="dark"] {
+    --app-quote-up: var(--app-quote-up-dark);
+    --app-quote-down: var(--app-quote-down-dark);
+}
+
+/* 浅底：在实色块 / 图表填充上叠一层，需自行指定 alpha。 */
+:root {
+    --app-quote-up-soft: color-mix(in srgb, var(--app-quote-up) 12%, transparent);
+    --app-quote-down-soft: color-mix(in srgb, var(--app-quote-down) 12%, transparent);
+}
+
+/* ============================================================
+ * 键盘焦点环
+ *
+ * 之前全站把 :focus 的 box-shadow 去掉（见上方 .t-input:focus 规则），
+ * 于是键盘用户在这套界面里完全看不到焦点位置。focus-visible 只在
+ * 键盘操作时出现，鼠标点击不打扰，是唯一正确的补法。
+ * ============================================================ */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+    outline: 2px solid var(--app-focus-border);
+    outline-offset: 2px;
+    border-radius: var(--app-radius-xs);
+}

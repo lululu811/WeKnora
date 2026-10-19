@@ -344,3 +344,371 @@ export interface TechnicalsResponse {
 export function fetchTechnicals(thscodes: string[]) {
   return post<TechnicalsResponse>('/api/market/technicals', { thscodes })
 }
+
+export interface CommodityItem {
+  variety: string
+  name: string
+  category: string
+  a_share_hint: string
+  linked_stocks?: string[]
+  thscode: string
+  contract_name: string
+  close_price: number | null
+  prev_close?: number | null
+  change_pct?: number | null
+  volume: number | null
+  turnover: number | null
+  trade_date: string | null
+}
+
+export interface CommoditiesResponse {
+  ok: boolean
+  trade_date: string | null
+  items: CommodityItem[]
+  unavailable: string[]
+  reason?: string
+}
+
+/** 核心大宗商品期货最新行情与关联 A 股板块提示。 */
+export function getCommodities() {
+  return get<CommoditiesResponse>('/api/market/commodities')
+}
+
+export interface FundHoldingsSummary {
+  total_funds: number
+  total_hold_ratio: number | null
+  avg_nav_ratio: number | null
+  increase_count: number
+  decrease_count: number
+  unchanged_count: number
+}
+
+export interface FundHoldingItem {
+  fund_thscode: string
+  fund_name: string
+  fund_category?: string
+  manager_name: string | null
+  hold_ratio: number | null
+  position_count: number | null
+  security_market_value_rate_pct: number | null
+  period_increase_rate_pct: number | null
+  investment_rank: number | null
+}
+
+export interface FundHoldingsResponse {
+  ok: boolean
+  stock_thscode: string
+  summary?: FundHoldingsSummary
+  items: FundHoldingItem[]
+  count: number
+  unavailable: string[]
+  reason?: string
+}
+
+/** 穿透查询持有指定股票的公募基金与 ETF 重仓明细。 */
+export function getStockFundHoldings(thscode: string, limit = 20) {
+  return get<FundHoldingsResponse>('/api/market/fund-holdings', { params: { thscode, limit } })
+}
+
+export interface LadderStockItem {
+  continue_day_cnt: number
+  thscode: string
+  name: string
+  last_price: number | null
+  limit_up_time: string | null
+  seal_money: number | null
+}
+
+export interface LadderDetailResponse {
+  ok: boolean
+  trade_date: string | null
+  max_board: number
+  total_count: number
+  items: LadderStockItem[]
+  by_level: Record<string, LadderStockItem[]>
+  unavailable: string[]
+  reason?: string
+}
+
+/** 连板梯队详情（最高板、连板个股清单与封单金额）。 */
+export function getLadderDetail(params: { min_board?: number; limit?: number } = {}) {
+  return get<LadderDetailResponse>('/api/market/ladder-detail', { params })
+}
+
+export interface AnomalyReasonItem {
+  capture_date: string | null
+  thscode: string
+  stock_name: string
+  tag_name: string
+  analysis_content: string
+  keywords: string[]
+}
+
+export interface AnomalyReasonsResponse {
+  ok: boolean
+  thscode?: string | null
+  items: AnomalyReasonItem[]
+  count: number
+  unavailable: string[]
+  reason?: string
+}
+
+/** 异动归因分析与关键词列表。 */
+export function getStockAnomalyReasons(thscode?: string, limit = 10) {
+  return get<AnomalyReasonsResponse>('/api/market/anomaly-reasons', { params: { thscode, limit } })
+}
+
+export interface LimitBreakItem {
+  thscode: string
+  name: string
+  last_price: number | null
+  open_times: number
+  price_change_ratio: number | null
+}
+
+export interface LimitDownItem {
+  thscode: string
+  name: string
+  last_price: number | null
+  price_change_ratio: number | null
+  first_limit_time: string | null
+  last_limit_time: string | null
+}
+
+export interface LimitBreakDownResponse {
+  ok: boolean
+  trade_date: string | null
+  break_pool: LimitBreakItem[]
+  down_pool: LimitDownItem[]
+  break_count: number
+  down_count: number
+  unavailable: string[]
+  reason?: string
+}
+
+/** 炸板池与跌停池监控。 */
+export function getLimitBreakDown(limit = 20) {
+  return get<LimitBreakDownResponse>('/api/market/limit-break-down', { params: { limit } })
+}
+
+export interface DividendEventItem {
+  thscode: string
+  name: string
+  ex_date: string | null
+  dividend_per_share: number | null
+  per_share_bonus: number | null
+  allotment_ratio: number | null
+  close: number | null
+  dividend_yield: number | null
+}
+
+export interface DividendCalendarResponse {
+  ok: boolean
+  items: DividendEventItem[]
+  count: number
+  unavailable: string[]
+  reason?: string
+}
+
+export interface DividendCalendarParams {
+  thscode?: string
+  start_date?: string
+  end_date?: string
+  min_dividend?: number
+  min_bonus?: number
+  sort_by?: 'date' | 'yield' | 'bonus' | 'dividend'
+  limit?: number
+}
+
+/** 除权除息与分红送转事件日历。 */
+export function getDividendCalendar(params: DividendCalendarParams = {}) {
+  return get<DividendCalendarResponse>('/api/market/dividend-calendar', { params })
+}
+
+export interface HotStockItem {
+  thscode: string
+  ticker?: string
+  name: string
+  rank: number
+  heat: number | null
+  rank_change: number
+  rank_trend: string | null
+}
+
+export interface HotStocksResponse {
+  ok: boolean
+  mode: 'skyrocket' | 'rank'
+  trade_date: string | null
+  items: HotStockItem[]
+  count: number
+  unavailable: string[]
+  reason?: string
+}
+
+export interface HotStockTrendPoint {
+  date: string | null
+  rank: number
+}
+
+export interface HotStockTrendResponse {
+  ok: boolean
+  thscode: string
+  items: HotStockTrendPoint[]
+  count: number
+  unavailable: string[]
+  reason?: string
+}
+
+/** 全市场热度榜与飙升黑马雷达。 */
+export function getHotStocks(params: { mode?: 'skyrocket' | 'rank'; limit?: number } = {}) {
+  return get<HotStocksResponse>('/api/market/hot-stocks', { params })
+}
+
+/** 个股历史人气排名走势。 */
+export function getHotStockTrend(thscode: string, limit = 30) {
+  return get<HotStockTrendResponse>('/api/market/hot-stock-trend', { params: { thscode, limit } })
+}
+
+export interface FuturesWarehouseItem {
+  thscode: string
+  trade_date: string | null
+  amount: number | null
+  amount_change: number | null
+  equivalent_lots: number | null
+}
+
+export interface FuturesWarehouseResponse {
+  ok: boolean
+  trade_date: string | null
+  items: FuturesWarehouseItem[]
+  count: number
+  unavailable: string[]
+  reason?: string
+}
+
+export interface FuturesBasisRateItem {
+  thscode: string
+  trade_date: string | null
+  spot_price: number | null
+  close_price: number | null
+  close_basis: number | null
+  close_basis_rate: number | null
+}
+
+export interface FuturesBasisRateResponse {
+  ok: boolean
+  trade_date: string | null
+  items: FuturesBasisRateItem[]
+  count: number
+  unavailable: string[]
+  reason?: string
+}
+
+/** 期货交易所注册仓单库存与日增减。 */
+export function getFuturesWarehouse(params: { thscode?: string; limit?: number } = {}) {
+  return get<FuturesWarehouseResponse>('/api/market/futures-warehouse', { params })
+}
+
+/** 期货基差与升贴水率。 */
+export function getFuturesBasisRate(params: { thscode?: string; limit?: number } = {}) {
+  return get<FuturesBasisRateResponse>('/api/market/futures-basis-rate', { params })
+}
+
+export interface EtfHolderStructure {
+  fund_thscode: string
+  fund_name: string | null
+  report_date: string | null
+  ins_position: number | null
+  psnl_rate: number | null
+  holder_amount: number | null
+  avg_holder_share: number | null
+  mgmt_staff_hold_rate: number | null
+}
+
+export interface EtfTopHolderItem {
+  fund_thscode: string
+  holder_name: string
+  holder_type: string
+  holder_code?: string | null
+  rank: number
+  hold_share: number | null
+  hold_rate_pct: number | null
+  report_date: string | null
+}
+
+export interface EtfHoldersResponse {
+  ok: boolean
+  fund_thscode: string
+  structure: EtfHolderStructure | null
+  top_holders: EtfTopHolderItem[]
+  count: number
+  unavailable: string[]
+  reason?: string
+}
+
+export interface EtfInstitutionalRankingItem {
+  fund_thscode: string
+  fund_name: string | null
+  report_date: string | null
+  ins_position: number | null
+  psnl_rate: number | null
+  holder_amount: number | null
+  avg_holder_share: number | null
+}
+
+export interface EtfInstitutionalRankingResponse {
+  ok: boolean
+  order_by: 'institution' | 'retail'
+  items: EtfInstitutionalRankingItem[]
+  count: number
+  unavailable: string[]
+  reason?: string
+}
+
+/** 查询 ETF/基金持有人结构（机构vs散户）与前十大持有人穿透。 */
+export function getEtfHoldersDetail(thscode: string, limit = 10) {
+  return get<EtfHoldersResponse>('/api/market/etf-holders', { params: { thscode, limit } })
+}
+
+/** 全市场基金/ETF 机构投资者占比排行与散户聚集度排行。 */
+export function getEtfInstitutionalRanking(params: { order_by?: 'institution' | 'retail'; limit?: number } = {}) {
+  return get<EtfInstitutionalRankingResponse>('/api/market/etf-institutional-ranking', { params })
+}
+
+export interface SqueezePoint {
+  date: string | null
+  bb_upper: number | null
+  bb_lower: number | null
+  bb_middle: number | null
+  kc_upper: number | null
+  kc_lower: number | null
+  kc_middle: number | null
+  is_squeezing: boolean | null
+  momentum_hist: number | null
+  supertrend_trend: number | null
+  supertrend_direction: number | null
+  supertrend_long: number | null
+  supertrend_short: number | null
+  beta: number | null
+}
+
+export interface SqueezeStatusResponse {
+  ok: boolean
+  thscode: string
+  is_squeezing: boolean
+  squeeze_status: 'on' | 'off' | 'fired' | 'no_data' | 'unavailable' | 'error'
+  latest_date: string | null
+  supertrend_direction: number | null
+  supertrend_level: number | null
+  momentum_hist: number | null
+  beta: number | null
+  items: SqueezePoint[]
+  count: number
+  unavailable: string[]
+  reason?: string
+}
+
+/** 查询个股 TTM Squeeze 波动挤压指标与 Supertrend 顺势追踪状态。 */
+export function getSqueezeStatus(thscode: string, limit = 30) {
+  return get<SqueezeStatusResponse>('/api/market/squeeze-status', { params: { thscode, limit } })
+}

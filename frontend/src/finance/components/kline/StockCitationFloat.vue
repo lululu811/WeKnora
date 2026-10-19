@@ -568,13 +568,9 @@ const handleOpenWorkspace = () => {
    * 同一对色值。之前这里是裸的 Tailwind 色（#ef4444 / #10b981），色相与
    * 其余三页不同，浮窗叠在 K 线工作区上时颜色会跳。
    */
-  --wl-up: #dc2626;
-  --wl-down: #047857;
 
-  :root[theme-mode="dark"] & {
-    --wl-up: #f87171;
-    --wl-down: #34d399;
-  }
+
+
 
   position: fixed;
   z-index: 10050;
@@ -653,7 +649,7 @@ const handleOpenWorkspace = () => {
 
   .stock-float__code {
     font-size: var(--app-text-sm);
-    color: var(--td-text-color-placeholder);
+    color: var(--td-text-color-secondary);
     font-family: monospace;
   }
 }
@@ -667,14 +663,14 @@ const handleOpenWorkspace = () => {
 
   .stock-float__price {
     font-size: var(--app-text-base);
-    &.is-up { color: var(--wl-up); }
-    &.is-down { color: var(--wl-down); }
+    &.is-up { color: var(--app-quote-up); }
+    &.is-down { color: var(--app-quote-down); }
   }
 
   .stock-float__change {
     font-size: var(--app-text-sm);
-    &.is-up { color: var(--wl-up); }
-    &.is-down { color: var(--wl-down); }
+    &.is-up { color: var(--app-quote-up); }
+    &.is-down { color: var(--app-quote-down); }
   }
 }
 
@@ -690,7 +686,7 @@ const handleOpenWorkspace = () => {
   .stock-float__spinner {
     width: 14px;
     height: 14px;
-    border: 2px solid rgba(0, 82, 217, 0.2);
+    border: 2px solid color-mix(in srgb, var(--td-brand-color) 20%, transparent);
     border-top-color: var(--td-brand-color);
     border-radius: 50%;
     animation: spin 0.8s linear infinite;
@@ -707,7 +703,7 @@ const handleOpenWorkspace = () => {
   justify-content: space-between;
   padding: 6px 10px;
   border-radius: var(--app-radius-sm);
-  border-left: 3px solid var(--wl-up);
+  border-left: 3px solid var(--app-quote-up);
   background: rgba(0, 0, 0, 0.02);
 
   :root[theme-mode="dark"] & {
@@ -871,7 +867,7 @@ const handleOpenWorkspace = () => {
   }
 
   :root[theme-mode="dark"] & {
-    &.is-up { background: rgba(239, 68, 68, 0.18); color: #fca5a5; }
+    &.is-up { background: color-mix(in srgb, var(--app-quote-up) 18%, transparent); color: #fca5a5; }
     &.is-break,
     &.is-hot { background: rgba(251, 191, 36, 0.16); color: #fcd34d; }
     &.is-dragon { background: rgba(56, 189, 248, 0.16); color: #7dd3fc; }
@@ -960,14 +956,9 @@ const handleOpenWorkspace = () => {
   font-family: monospace;
   font-weight: 600;
 
-  &.is-up { color: #dc2626; }
-  &.is-down { color: #047857; }
+  &.is-up { color: var(--app-quote-up); }
+  &.is-down { color: var(--app-quote-down); }
   &.is-plain { color: inherit; }
-
-  :root[theme-mode="dark"] & {
-    &.is-up { color: var(--wl-up); }
-    &.is-down { color: var(--wl-down); }
-  }
 }
 
 /* 数据可信度：把口径退化写在脸上 */
@@ -1066,7 +1057,7 @@ const handleOpenWorkspace = () => {
     }
 
     &.is-pooled {
-      background: rgba(0, 82, 217, 0.08);
+      background: color-mix(in srgb, var(--td-brand-color) 8%, transparent);
       border-color: var(--td-brand-color);
       color: var(--td-brand-color);
       cursor: default;

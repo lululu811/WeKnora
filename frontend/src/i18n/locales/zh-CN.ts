@@ -165,6 +165,7 @@ export default {
     yellowDegraded: '黄线降级'
   },
   kline: {
+    layers: '图层',
     picksBar: '候选池 ({count})',
     picksHint: '[↑/↓] 键快速切股',
     searchSwitch: '点击搜索切换股票',
@@ -8774,5 +8775,16 @@ export default {
     vault: {
       off: '未配置 vault，图片可能无法显示'
     }
+  },
+  dividend: {
+    title: '除权除息日历 · 高股息与送转',
+    tabAll: '全部日历',
+    tabYield: '高股息率 (现金奶牛)',
+    tabBonus: '大比例送转',
+    expand: '展开全部',
+    failed: '除权日历数据未就绪',
+    statCount: '涉及股票',
+    statAvgYield: '平均股息率',
+    statTopBonus: '最高送转标的'
   }
 }

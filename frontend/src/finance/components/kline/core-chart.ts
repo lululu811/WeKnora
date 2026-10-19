@@ -293,9 +293,15 @@ export function createCoreChart(options: {
     throw new Error('K 线图表初始化失败：容器不可用')
   }
 
-  chart.createIndicator(options.mainIndicators[0] ?? 'MA', false, { id: 'candle_pane' })
-  for (const name of options.mainIndicators.slice(1)) {
-    chart.createIndicator(name, false, { id: 'candle_pane' })
+  // 主图指标全部挂 candle_pane，isStack **必须传 true**。
+  //
+  // klinecharts 的 addInstance 里：`if (!isStack) paneInstances = []` —— 传 false
+  // 会先清空该 pane 已有的全部实例再放这一个。所以循环里每建一个就抹掉上一个，
+  // 主图永远只剩最后一个：Z_MAIN 建完被随后的 Z_DONCHIAN 抹掉，于是「黄白线+BBI」
+  // 整组消失，只剩唐奇安通道。true 才是「追加到同一 pane」。
+  const mainNames = options.mainIndicators.length > 0 ? options.mainIndicators : ['MA']
+  for (const name of mainNames) {
+    chart.createIndicator(name, true, { id: 'candle_pane' })
   }
   // 副图：`createIndicator(name, true)` 会新建一个 pane 并返回该 pane 的 id。
   // 必须立刻记下 paneId —— 后面 `removeIndicator(paneId)` 只认 paneId，不认指标名。
@@ -503,12 +509,13 @@ export function swapIndicators(
   if (!chart) return
   const current = installedIndicators.get(chart) ?? { main: [], sub: [] }
 
-  // 主图：全量重建
+  // 主图：全量重建。isStack 必须 true，否则每次 add 都会清空 candle_pane 里的
+  // 其他主图指标（见上面 createCoreChart 处的注释：!isStack 会先置空整个 pane）。
   for (const name of current.main) {
     chart.removeIndicator('candle_pane', name)
   }
   for (const name of mainIndicators) {
-    chart.createIndicator(name, false, { id: 'candle_pane' })
+    chart.createIndicator(name, true, { id: 'candle_pane' })
   }
 
   // 副图：差集增删，但删除时必须传 paneId 而不是指标名 ——

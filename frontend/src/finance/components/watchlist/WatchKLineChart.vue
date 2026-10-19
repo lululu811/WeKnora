@@ -546,6 +546,10 @@ onBeforeUnmount(() => {
 .wkc__chart-wrap {
   position: relative;
   height: 280px;
+  /* 不加这行，图表会按 canvas 的固有宽度反向撑大父级容器。
+     min-width:0 允许它在窄容器里收缩，width:100% 让它永远跟随父级。 */
+  min-width: 0;
+  width: 100%;
 }
 
 .wkc__chart {

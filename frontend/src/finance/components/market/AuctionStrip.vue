@@ -147,21 +147,17 @@ function fmtCap(v: number | null): string {
 
 <style scoped lang="less">
 .auc {
-  --md-up: #dc2626;
-  --md-down: #047857;
   background: var(--td-bg-color-container);
   border: 1px solid var(--td-component-stroke);
   border-radius: var(--td-radius-medium);
   padding: 12px 14px;
 }
 
-:global(:root[theme-mode='dark']) .auc {
-  --md-up: #f87171;
-  --md-down: #34d399;
-}
 
-.is-up { color: var(--md-up); }
-.is-down { color: var(--md-down); }
+
+
+.is-up { color: var(--app-quote-up); }
+.is-down { color: var(--app-quote-down); }
 .is-flat { color: var(--td-text-color-placeholder); }
 
 .auc__head {
@@ -186,9 +182,9 @@ function fmtCap(v: number | null): string {
 .auc__bar { display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: var(--td-bg-color-container-hover); max-width: 720px; }
 .auc__seg { display: block; height: 100%; }
 /* 红=高开 绿=低开，沿用大盘页「红涨绿跌」，与指数条同一套语义 */
-.auc__seg--up { background: var(--md-up); }
+.auc__seg--up { background: var(--app-quote-up); }
 .auc__seg--flat { background: var(--td-component-stroke); }
-.auc__seg--down { background: var(--md-down); }
+.auc__seg--down { background: var(--app-quote-down); }
 /* 没报价：既不是涨也不是跌，用中性斜纹，不能并进红或绿 */
 .auc__seg--none {
   background: repeating-linear-gradient(45deg,
@@ -197,8 +193,8 @@ function fmtCap(v: number | null): string {
 
 .auc__legend { display: flex; gap: 14px; margin-top: 6px; flex-wrap: wrap; font-size: var(--app-text-xs); }
 .auc__lg { color: var(--td-text-color-secondary); }
-.auc__lg--up { color: var(--md-up); }
-.auc__lg--down { color: var(--md-down); }
+.auc__lg--up { color: var(--app-quote-up); }
+.auc__lg--down { color: var(--app-quote-down); }
 .auc__lg--flat, .auc__lg--none { color: var(--td-text-color-placeholder); }
 
 /* ---- 风向标 ---- */
@@ -224,6 +220,6 @@ function fmtCap(v: number | null): string {
 .auc__tr--head { font-size: var(--app-text-xs); color: var(--td-text-color-secondary); padding-bottom: 4px; }
 .is-num { font-family: var(--app-font-family-mono); font-variant-numeric: tabular-nums; text-align: right; }
 .auc__name { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
-.auc__code { font-family: var(--app-font-family-mono); font-size: var(--app-text-xs); color: var(--td-text-color-placeholder); }
+.auc__code { font-family: var(--app-font-family-mono); font-size: var(--app-text-xs); color: var(--td-text-color-secondary); }
 .auc__foot { margin: 8px 0 0; font-size: var(--app-text-xs); color: var(--td-text-color-placeholder); }
 </style>

@@ -44,10 +44,14 @@ test('前缀是「色觉之外」的区分手段，两种来源的标签必然�
   assert.notEqual(algo, llm)
 })
 
-test('PATTERN_CONFIG 覆盖算法侧的四种形态', () => {
-  // 这四个是后端 annotator 的 dispatch 表里的全部类型；少一个会导致
+test('PATTERN_CONFIG 覆盖算法侧的全部九种形态', () => {
+  // 这九个是后端 annotator 的 dispatch 表里的全部类型；少一个会导致
   // 该形态在工具栏里显示成原始 key。
-  for (const key of ['b1', 'key_k', 's1', 'violent_k']) {
+  const allKeys = [
+    'b1', 'key_k', 's1', 'violent_k',
+    'pole_yang', 'pile_yang', 'capping_yin', 'fake_yin', 'rebound_trap',
+  ]
+  for (const key of allKeys) {
     assert.ok(PATTERN_CONFIG[key], `缺少形态配置: ${key}`)
     assert.ok(PATTERN_CONFIG[key].label.length > 0)
     assert.ok(PATTERN_CONFIG[key].desc.length > 0)
