@@ -1,11 +1,9 @@
 import assert from 'node:assert/strict'
-// ⚠️ 本 fork 暂未移植上游的「知识库变更后的助手上下文刷新」能力，用例整体挂起。
-//
-// 2026-10-19 合并 upstream/main 时，本 fork 的 KnowledgeBase.vue 是拆分后的实现，
-// 与上游的单体实现不是同一套代码；上游新增的这些用例断言的是上游实现的行为。
-// 移植任务见 docs/design/finance-workbench-decisions.md 的「上游特性移植」一节，
-// 移植完成后把这里的 test.skip 去掉即可恢复断言。
-//
+// 本 fork 已在 2026-10-20 移植上游的这项能力：断言保持上游原样，
+// 只有两处按本 fork 的结构做了适配 ——
+//   1. 文档区已拆成 detail/KBDocList.vue，面包屑的断言改看那个文件；
+//   2. 本 fork 的 KBDocList 用 script 里的 t()，上游用模板全局的 $t()，
+//      两种写法都认。
 import test from 'node:test'
 import * as vue from 'vue'
 import * as marked from 'marked'
@@ -13,7 +11,7 @@ import * as literalTilde from '../../utils/markedLiteralTilde.ts'
 import * as sorting from '../../utils/resourceSorting.ts'
 import { change, fixture, flush } from '../../test-utils/vueFixture.ts'
 
-test.skip('refreshes data source controls after assistant changes and stops on unmount', async t => {
+test('refreshes data source controls after assistant changes and stops on unmount', async t => {
   const f = fixture(t)
   const listDataSources = t.mock.fn(async (_id: string) => ({ data: [] }))
   const { close } = f.component(new URL('./settings/DataSourceSettings.vue', import.meta.url), {
@@ -42,7 +40,7 @@ test.skip('refreshes data source controls after assistant changes and stops on u
   assert.equal(listDataSources.mock.callCount(), 1)
 })
 
-test.skip('refreshes the FAQ entries and tags once per burst for its own KB only', async t => {
+test('refreshes the FAQ entries and tags once per burst for its own KB only', async t => {
   const f = fixture(t)
   const listFAQEntries = t.mock.fn(async (_id: string, _params: unknown) => ({ data: { data: [], total: 1 } }))
   const listKnowledgeTags = t.mock.fn(async (_id: string, _params: unknown) => ({ data: { data: [], total: 0 } }))
@@ -80,7 +78,7 @@ test.skip('refreshes the FAQ entries and tags once per burst for its own KB only
   assert.equal((listKnowledgeTags.mock.calls[0].arguments[1] as any).page, 1)
 })
 
-test.skip('refreshes Wiki pages, selected content and statistics for its own KB only', async t => {
+test('refreshes Wiki pages, selected content and statistics for its own KB only', async t => {
   const f = fixture(t)
   const page = { id: 'page', slug: 'page', title: 'Updated title', content: '', version: 2 }
   const getWikiPage = t.mock.fn(async (_id: string, _slug: string) => ({ data: page }))
@@ -120,7 +118,7 @@ test.skip('refreshes Wiki pages, selected content and statistics for its own KB 
   assert.equal(vm.selectedPage.title, 'Updated title')
 })
 
-test.skip('refreshes the mounted KB list with force for knowledge_base changes only', async t => {
+test('refreshes the mounted KB list with force for knowledge_base changes only', async t => {
   const f = fixture(t)
   const fetchKnowledgeBasesForList = t.mock.fn(async (_params: unknown, _force: boolean) => [{ id: 'kb', name: 'Updated KB' }])
   const { vm } = f.component(new URL('./KnowledgeBaseList.vue', import.meta.url), {
@@ -140,6 +138,8 @@ test.skip('refreshes the mounted KB list with force for knowledge_base changes o
     '@/api/knowledge-base': {}, '@/api/organization': {}, '@/config/contextualGuides': {},
     '@/utils/index': {}, '@/utils/kbPermission': {},
     '@/utils/resourceListSearch': {}, '@/utils/card-list-badge': {}, '@/utils/resourceSorting': sorting,
+    // 本 fork 的列表页有卡片依次浮起的动画（方向 A），它引了这个 composable。
+    '@/composables/useMotion': { useStaggerRise: () => ({ rise: () => {} }) },
   })
   await flush()
   fetchKnowledgeBasesForList.mock.resetCalls()

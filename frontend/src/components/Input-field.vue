@@ -534,6 +534,21 @@ const props = defineProps({
     type: Boolean,
     default: false
   },
+  /**
+   * 宿主页选定的模型（嵌入态）。
+   *
+   * 嵌入时助手面板是宿主页的一部分，宿主已经定好了用哪个模型；此时主聊天
+   * 自己选的那个模型与助手无关 —— 拿它发出去就是发错了模型。
+   */
+  modelId: {
+    type: String,
+    default: ''
+  },
+  /** 宿主没有显式挑选时的默认模型。 */
+  defaultModelId: {
+    type: String,
+    default: ''
+  },
   isReplying: {
     type: Boolean,
     required: false
@@ -737,6 +752,21 @@ const getMentionChipClass = (item: MentionItem) => {
 const selectedModelId = computed({
   get: () => settingsStore.conversationModels.selectedChatModelId || '',
   set: (val: string) => settingsStore.updateConversationModels({ selectedChatModelId: val })
+});
+// 嵌入态的模型：宿主挑的（modelId）优先，其次是宿主的默认（defaultModelId）。
+const embeddedPickedModel = computed(() =>
+  props.modelId ? availableModels.value.find(model => model.id === props.modelId) : undefined);
+const embeddedDefaultModel = computed(() =>
+  availableModels.value.find(model => model.id === props.defaultModelId) || availableModels.value[0]);
+// 嵌入态实际生效的模型对象：宿主挑的优先，其次是宿主的默认。
+const composerModel = computed(() => {
+  if (!props.embeddedMode) return undefined;
+  return embeddedPickedModel.value || embeddedDefaultModel.value;
+});
+// 真正发出去的那个模型 id：嵌入态用宿主的，其余用主聊天自己选的。
+const composerModelId = computed(() => {
+  if (!props.embeddedMode) return selectedModelId.value;
+  return composerModel.value?.id || '';
 });
 const modelsLoading = ref(false);
 const showModelSelector = ref(false);
@@ -2091,7 +2121,9 @@ const createSession = async (
       MessagePlugin.warning(t('input.messages.steerHasAttachments'));
       return;
     }
-    const steerMentions: MentionRequestItem[] = allSelectedItems.value.map(item => ({
+    // 嵌入态的 steer 只属于助手会话：主聊天选中的知识库/文件/标签/MCP/技能
+    // 不在助手的资源范围里，带过去就是把别人的范围当成自己的。
+    const steerMentions: MentionRequestItem[] = (props.embeddedMode ? [] : allSelectedItems.value).map(item => ({
       id: item.id,
       name: item.name,
       type: item.type,
@@ -2124,7 +2156,8 @@ const createSession = async (
 
   // Embed 渠道由后端绑定 agent/KB，勿走平台侧 agent 列表与就绪校验
   if (props.embeddedMode) {
-    emit('send-msg', val, selectedModelId.value || '', [], [], [], options);
+    // 嵌入态发的是宿主的模型，不是主聊天选的那个。
+    emit('send-msg', val, composerModelId.value, [], [], [], options);
     clearvalue();
     void focusInput();
     return;
@@ -2716,13 +2749,18 @@ const handleStop = async () => {
 }
 
 onBeforeRouteUpdate((to, from, next) => {
-  clearvalue()
-  clearPendingUploads()
+  // 这条路由属于嵌在页面里的助手。它的草稿与附件属于助手会话，由宿主管 ——
+  // 宿主换页时不该把助手正在写的东西清掉。
+  if (!props.embeddedMode) {
+    clearvalue()
+    clearPendingUploads()
+  }
   next()
 })
 
 defineExpose({
   focusInput,
+  getComposerModelId: () => composerModel.value,
   triggerSend(text: string, options: SendMessageOptions = {}) {
     if (!text.trim()) return;
     query.value = text;

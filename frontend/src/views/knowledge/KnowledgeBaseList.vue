@@ -435,6 +435,7 @@ import { useI18n } from 'vue-i18n'
 import { useListUrlState } from '@/composables/useListUrlState'
 import { useResourcePins } from '@/composables/useResourcePins'
 import { useStaggerRise } from '@/composables/useMotion'
+import { useAssistantDataChange } from '@/utils/assistantDataChange'
 import {
   DEFAULT_RESOURCE_SORT,
   sortResourcesWithinGroups,
@@ -864,6 +865,18 @@ watch(creatorFilter, () => {
 // 只在首屏卡片骨架渲染完成后触发一次，翻页/筛选不重放，避免打断用户。
 const { rise: riseCards } = useStaggerRise({ stagger: 60, duration: 260, displacement: 12 })
 const cardRiseDone = ref(false)
+
+// 助手改了文档或 FAQ，卡片上的计数会变。删除与移动是在后台完成的，
+// 所以过一会儿再看一次。
+let settleTimer: ReturnType<typeof setTimeout> | undefined
+useAssistantDataChange((changes) => {
+  void fetchList(true)
+  if (changes.some(change => ['knowledge.delete', 'knowledge.batch_delete', 'knowledge.move'].includes(change.operation))) {
+    clearTimeout(settleTimer)
+    settleTimer = setTimeout(() => { void fetchList(true) }, 5000)
+  }
+}, { areas: ['knowledge_base', 'knowledge', 'faq'] })
+onUnmounted(() => clearTimeout(settleTimer))
 
 onMounted(() => {
   fetchList().then(() => {

@@ -42,6 +42,7 @@ import {
 } from "@/api/knowledge-base/index";
 import { isBatchDownloadableKnowledge } from './knowledgeDownloadFileName';
 import { waitForKnowledgeDeletion } from '@/utils/knowledgeDeletion';
+import { useAssistantDataChange } from '@/utils/assistantDataChange';
 import { knowledgeSpansPayloadHasTrace } from '@/utils/knowledgeTrace';
 import FAQEntryManager from './components/FAQEntryManager.vue';
 import DocumentListView from './components/DocumentListView.vue';
@@ -72,6 +73,8 @@ import {
   folderBreadcrumbs as buildFolderBreadcrumbs,
   folderPathExists as folderExistsInTree,
   isFilteringDocuments,
+  childFolders,
+  folderDocumentCounts,
   ROOT_FOLDER_PATH,
 } from './folderTree';
 import {
@@ -804,6 +807,49 @@ const isFiltering = computed(() =>
   }),
 );
 // A row's folder is worth showing only when the list can span folders.
+// 浏览某个文件夹时，它的**直属**子文件夹会作为条目排在文档前面（像文件管理器）。
+// 筛选时搜索的是整棵子树，把文件夹条目摆进去就是噪音。
+const visibleSubFolders = computed(() =>
+  isFiltering.value ? [] : childFolders(folderTree.value, selectedFolderPath.value),
+)
+
+// 面包屑报的是这个文件夹**自己装的东西**：列表能显示的文档数 + 直属子文件夹数。
+// 递归总数留在树行和空态里 —— 面包屑放递归数会和页面显示的对不上。
+const folderContentsCount = computed<{ documents: number; folders: number }>(() => ({
+  documents: total.value,
+  folders: visibleSubFolders.value.length,
+}))
+
+// 一个没有子文件夹的文件夹，面包屑会以「/ 0 个文件夹」结尾；那时只说文档数
+// 才是全部真相。
+const showFolderContentsCount = computed(
+  () => !isFiltering.value && folderContentsCount.value.folders > 0,
+)
+
+// vue-i18n 从 count 选复数形式 —— 会变的是「文件夹」这个名词。
+const folderContentsMessage = computed(() => ({
+  documents: folderContentsCount.value.documents,
+  folders: folderContentsCount.value.folders,
+  count: folderContentsCount.value.folders,
+}))
+
+// 选中文件夹**下面**（而不是直接里面）的文档数。这就是「文档都在子文件夹里」
+// 与「这里还什么都没有」的区别 —— 少了这一层，父文件夹会显示成空的，
+// 而文档其实就在下一层。
+const folderSubfolderDocumentCount = computed(() => {
+  const counts = folderDocumentCounts(folderTree.value, selectedFolderPath.value)
+  if (!counts) return 0
+  return Math.max(0, counts.total - counts.direct)
+})
+
+// 文档列表要哪种空态：搜索没结果 / 文档都在子文件夹里 / 真的空文件夹 /
+// 知识库还没有任何文件夹（引导面板）。
+const folderEmptyState = computed<'search' | 'subfolders' | 'folder' | 'none'>(() => {
+  if (isFiltering.value) return 'search'
+  if (folderSubfolderDocumentCount.value > 0) return 'subfolders'
+  return hasFolders.value || selectedFolderPath.value ? 'folder' : 'none'
+})
+
 const showDocumentFolderPath = computed(() => hasFolders.value && isFiltering.value);
 const folderBreadcrumbs = computed(() => buildFolderBreadcrumbs(selectedFolderPath.value));
 
@@ -1092,6 +1138,80 @@ const loadKnowledgeBaseInfo = async (targetKbId: string, force = false) => {
       kbLoading.value = false;
     }
   }
+};
+
+useAssistantDataChange((changes) => {
+  const targetKbId = kbId.value;
+  if (!targetKbId) return;
+  const relevant = changes.filter(change => change.ids.knowledgeBaseIds.includes(targetKbId)
+    || (['knowledge', 'chunk'].includes(change.area) && change.ids.knowledgeIds.some(id =>
+      cardList.value.some(item => item.id === id) || (isCardDetails.value && details.id === id)))
+    // ID-only operations may affect a document outside the loaded folder or page.
+    || (change.area === 'knowledge' && change.ids.knowledgeBaseIds.length === 0));
+  if (!relevant.length) return;
+  if (relevant.some(change => change.operation === 'knowledge_base.delete')) {
+    MessagePlugin.warning(t('knowledgeBase.assistantDeleted'));
+    handleNavigateToKbList();
+    return;
+  }
+  if (isCardDetails.value && relevant.some(change => change.ids.knowledgeIds.includes(details.id))) {
+    if (relevant.some(change => change.ids.knowledgeIds.includes(details.id)
+      && LEAVING_OPERATIONS.includes(change.operation))) {
+      closeDoc();
+    } else {
+      getCardDetails({ id: details.id });
+    }
+  }
+  const reload = () => {
+    if (!isCurrentKb(targetKbId)) return;
+    resetPage();
+    void loadKnowledgeFiles(targetKbId);
+    void loadFolderTree(targetKbId);
+    void loadTags(targetKbId, true);
+  };
+  if (relevant.some(change => change.area === 'knowledge_base')) {
+    resetPage();
+    void loadKnowledgeBaseInfo(targetKbId, true);
+  } else {
+    reload();
+  }
+  // Deletes and moves only start here; the list changes once they finish.
+  const loaded = new Set(cardList.value.map(item => item.id));
+  const leaving = new Set<string>();
+  const arriving = new Set<string>();
+  for (const change of relevant) {
+    if (!LEAVING_OPERATIONS.includes(change.operation) && change.operation !== 'knowledge.move') continue;
+    for (const id of change.ids.knowledgeIds) {
+      if (change.operation === 'knowledge.move' && !loaded.has(id)) arriving.add(id);
+      else leaving.add(id);
+    }
+  }
+  if (leaving.size || arriving.size) void settleThenReload(targetKbId, [...leaving], [...arriving], reload);
+}, { areas: ['knowledge_base', 'knowledge', 'chunk'] });
+
+const LEAVING_OPERATIONS = ['knowledge.delete', 'knowledge.batch_delete', 'knowledge.move'];
+
+const settleThenReload = async (
+  targetKbId: string, leaving: string[], arriving: string[], reload: () => void,
+) => {
+  const isActive = () => isCurrentKb(targetKbId);
+  const fetchRows = async (ids: string[]) => {
+    const query = new URLSearchParams();
+    ids.forEach(id => query.append('ids', id));
+    return await batchQueryKnowledge(query.toString(), targetKbId) as any;
+  };
+  try {
+    if (leaving.length) await waitForKnowledgeDeletion(leaving, fetchRows, { isActive });
+    for (let i = 0; arriving.length && i < 30 && isActive(); i++) {
+      const res = await fetchRows(arriving);
+      const present = new Set(((res?.data ?? []) as KnowledgeCard[]).map(row => row.id));
+      if (arriving.every(id => present.has(id))) break;
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+  } catch {
+    // Reload whatever the server shows now.
+  }
+  reload();
 };
 
 const loadKnowledgeList = async () => {
@@ -2324,6 +2444,9 @@ const handleKBEditorSuccess = (kbIdValue: string) => {
                 :folder-breadcrumbs="folderBreadcrumbs"
                 :total="total"
                 :is-filtering="isFiltering"
+                :folder-contents-count="folderContentsCount"
+                :show-folder-contents-count="showFolderContentsCount"
+                :folder-contents-message="folderContentsMessage"
                 :loading="docListLoading"
                 :active-filter-count="activeFilterCount"
                 :file-type-options="fileTypeOptions"
@@ -2389,9 +2512,10 @@ const handleKBEditorSuccess = (kbIdValue: string) => {
                     </div>
                   </div>
                 </div>
-                <template v-else-if="cardList.length && viewMode === 'grid'">
+                <template v-else-if="(cardList.length || visibleSubFolders.length) && viewMode === 'grid'">
                   <DocumentCardView :kb-id="kbId"
                     :items="cardList"
+                    :sub-folders="visibleSubFolders"
                     :folder-options="folderOptions"
                     :selected-ids="selectedIds"
                     :batch-mode="batchMode"
@@ -2419,8 +2543,9 @@ const handleKBEditorSuccess = (kbIdValue: string) => {
                     @update:move-mode="(mode: any) => moveMode = mode"
                   />
                 </template>
-                <template v-else-if="cardList.length && viewMode === 'list'">
+                <template v-else-if="(cardList.length || visibleSubFolders.length) && viewMode === 'list'">
                   <DocumentListView :kb-id="kbId" :items="cardList" :folder-options="folderOptions"
+                    :sub-folders="visibleSubFolders"
                     :selected-ids="selectedIds"
                     :can-edit="canEdit" :can-download="canDownloadKnowledge" :can-mutate-knowledge="canMutateKnowledge"
                     :trace-visible-ids="traceAvailableById"
@@ -2445,10 +2570,14 @@ const handleKBEditorSuccess = (kbIdValue: string) => {
                 </template>
                 <template v-else-if="!docListLoading">
                   <div class="doc-empty-state">
-                    <p v-if="hasFolders || selectedFolderPath || isFiltering" class="doc-empty-folder">
-                      {{ isFiltering
-                        ? $t('knowledgeBase.folderTree.emptySearch')
-                        : $t('knowledgeBase.folderTree.emptyFolder') }}
+                    <p v-if="folderEmptyState === 'search'" class="doc-empty-folder">
+                      {{ $t('knowledgeBase.folderTree.emptySearch') }}
+                    </p>
+                    <p v-else-if="folderEmptyState === 'subfolders'" class="doc-empty-folder">
+                      {{ $t('knowledgeBase.folderTree.emptyFolderWithSubfolders', { count: folderSubfolderDocumentCount }) }}
+                    </p>
+                    <p v-else-if="folderEmptyState === 'folder'" class="doc-empty-folder">
+                      {{ $t('knowledgeBase.folderTree.emptyFolder') }}
                     </p>
                     <EmptyKnowledge v-else />
                   </div>

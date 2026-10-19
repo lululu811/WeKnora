@@ -21,6 +21,17 @@ const props = defineProps<{
   folderBreadcrumbs: KbDetailFolderCrumb[]
   total: number
   isFiltering: boolean
+  /**
+   * 这个文件夹自己装的东西：列表能显示的文档数 + 直属子文件夹数。
+   *
+   * 不是递归总数 —— 递归总数在树行与空态里，面包屑放递归数会和页面
+   * 显示的对不上。
+   */
+  folderContentsCount: { documents: number; folders: number }
+  /** 面包屑是否显示「N 个文档 / M 个文件夹」；没有子文件夹时只说文档数。 */
+  showFolderContentsCount: boolean
+  /** 复数形式的选择依据：count 是会变的那个名词（文件夹）。 */
+  folderContentsMessage: { documents: number; folders: number; count: number }
   loading: boolean
   // 筛选面板
   activeFilterCount: number
@@ -106,7 +117,17 @@ defineExpose({ uploadSourceRef })
           aria-current="page">{{ crumb.name }}</span>
         <button v-else type="button" class="doc-folder-path__crumb" :title="crumb.name" @click="emit('navigate-folder', crumb.path)">{{ crumb.name }}</button>
       </template>
-      <span v-if="!loading" class="doc-folder-path__count">{{ t(isFiltering ? 'knowledgeBase.folderTree.filteredCount' : 'knowledgeBase.documentCount', { count: total }) }}</span>
+      <span v-if="!loading" class="doc-folder-path__count">
+        <template v-if="isFiltering">
+          {{ t('knowledgeBase.folderTree.filteredCount', { count: folderContentsCount.documents }) }}
+        </template>
+        <template v-else-if="showFolderContentsCount">
+          {{ t('knowledgeBase.folderTree.folderContentsCount', folderContentsMessage) }}
+        </template>
+        <template v-else>
+          {{ t('knowledgeBase.documentCount', { count: folderContentsCount.documents }) }}
+        </template>
+      </span>
       <t-tooltip v-if="showFolderTree && isFiltering" :content="t('knowledgeBase.folderTree.searchingSubtree')">
         <t-icon name="info-circle" class="doc-folder-path__sep" />
       </t-tooltip>

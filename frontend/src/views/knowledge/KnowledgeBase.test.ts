@@ -1,11 +1,9 @@
 import assert from 'node:assert/strict'
-// ⚠️ 本 fork 暂未移植上游的「知识库文档区行为（子文件夹文档计数、目录刷新、助手刷新）」能力，用例整体挂起。
-//
-// 2026-10-19 合并 upstream/main 时，本 fork 的 KnowledgeBase.vue + KBDocList 是拆分后的实现，
-// 与上游的单体实现不是同一套代码；上游新增的这些用例断言的是上游实现的行为。
-// 移植任务见 docs/design/finance-workbench-decisions.md 的「上游特性移植」一节，
-// 移植完成后把这里的 test.skip 去掉即可恢复断言。
-//
+// 本 fork 已在 2026-10-20 移植上游的这项能力：断言保持上游原样，
+// 只有两处按本 fork 的结构做了适配 ——
+//   1. 文档区已拆成 detail/KBDocList.vue，面包屑的断言改看那个文件；
+//   2. 本 fork 的 KBDocList 用 script 里的 t()，上游用模板全局的 $t()，
+//      两种写法都认。
 import test, { type TestContext } from 'node:test'
 import * as vue from 'vue'
 import * as stall from '../../utils/knowledgeProcessingStall.ts'
@@ -56,7 +54,7 @@ async function setup(t: TestContext) {
   }
 }
 
-test.skip('refreshes files and folders for the open KB and ignores unrelated areas and KBs', async t => {
+test('refreshes files and folders for the open KB and ignores unrelated areas and KBs', async t => {
   const f = await setup(t)
   f.emit(change('knowledge.create_manual', { knowledge_base_id: ['other'] }))
   f.emit(change('agent.create'))
@@ -72,7 +70,7 @@ test.skip('refreshes files and folders for the open KB and ignores unrelated are
   assert.equal(f.hook.getCardDetails.mock.callCount(), 0)
 })
 
-test.skip('reloads KB metadata with force without adding file requests beyond the existing loader', async t => {
+test('reloads KB metadata with force without adding file requests beyond the existing loader', async t => {
   const f = await setup(t)
   await f.vm.loadKnowledgeBaseInfo('kb', true)
   await flush()
@@ -88,7 +86,7 @@ test.skip('reloads KB metadata with force without adding file requests beyond th
 })
 
 for (const operation of ['knowledge.update', 'knowledge.reparse', 'knowledge.cancel_parse', 'chunk.update', 'chunk.revert']) {
-  test.skip(`refreshes the open document on ${operation}`, async t => {
+  test(`refreshes the open document on ${operation}`, async t => {
     const f = await setup(t)
     f.emit(change(operation, { knowledge_id: ['doc'] }))
     t.mock.timers.tick(300)
@@ -100,7 +98,7 @@ for (const operation of ['knowledge.update', 'knowledge.reparse', 'knowledge.can
   })
 }
 
-test.skip('ignores chunk changes in another document outside this knowledge base', async t => {
+test('ignores chunk changes in another document outside this knowledge base', async t => {
   const f = await setup(t)
   f.emit(change('chunk.update', { knowledge_id: ['other-doc'] }))
   t.mock.timers.tick(300)
@@ -108,7 +106,7 @@ test.skip('ignores chunk changes in another document outside this knowledge base
   assert.equal(f.hook.getKnowled.mock.callCount(), 0)
 })
 
-test.skip('closes a deleted drawer even when the same burst includes an update', async t => {
+test('closes a deleted drawer even when the same burst includes an update', async t => {
   const f = await setup(t)
   f.emit(change('knowledge.update', { knowledge_id: ['doc'] }))
   f.emit(change('knowledge.batch_delete', { knowledge_base_id: ['kb'], knowledge_id: ['doc'] }))
@@ -117,7 +115,7 @@ test.skip('closes a deleted drawer even when the same burst includes an update',
   assert.equal(f.hook.getCardDetails.mock.callCount(), 0)
 })
 
-test.skip('refreshes ID-only changes outside the loaded page without refreshing an unrelated drawer', async t => {
+test('refreshes ID-only changes outside the loaded page without refreshing an unrelated drawer', async t => {
   const f = await setup(t)
   f.emit(change('knowledge.delete', { knowledge_id: ['unloaded-doc'] }))
   t.mock.timers.tick(300)
@@ -126,7 +124,7 @@ test.skip('refreshes ID-only changes outside the loaded page without refreshing 
   assert.equal(f.vm.isCardDetails, true)
 })
 
-test.skip('reloads the list again once a delete the assistant started has finished', async t => {
+test('reloads the list again once a delete the assistant started has finished', async t => {
   const f = await setup(t)
   f.emit(change('knowledge.delete', { knowledge_id: ['doc'] }))
   t.mock.timers.tick(300)
@@ -139,7 +137,7 @@ test.skip('reloads the list again once a delete the assistant started has finish
   assert.equal(f.hook.getKnowled.mock.callCount(), 2)
 })
 
-test.skip('uses the current route when a queued change fires', async t => {
+test('uses the current route when a queued change fires', async t => {
   const f = await setup(t)
   f.emit(change('knowledge.create_manual', { knowledge_base_id: ['kb'] }))
   f.route.params.kbId = 'other'

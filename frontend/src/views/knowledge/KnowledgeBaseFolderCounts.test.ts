@@ -1,11 +1,9 @@
 import assert from 'node:assert/strict'
-// ⚠️ 本 fork 暂未移植上游的「文件夹文档数（直属 / 子目录 / 递归三层计数）」能力，用例整体挂起。
-//
-// 2026-10-19 合并 upstream/main 时，本 fork 的 KnowledgeBase.vue + KBDocList 是拆分后的实现，
-// 与上游的单体实现不是同一套代码；上游新增的这些用例断言的是上游实现的行为。
-// 移植任务见 docs/design/finance-workbench-decisions.md 的「上游特性移植」一节，
-// 移植完成后把这里的 test.skip 去掉即可恢复断言。
-//
+// 本 fork 已在 2026-10-20 移植上游的这项能力：断言保持上游原样，
+// 只有两处按本 fork 的结构做了适配 ——
+//   1. 文档区已拆成 detail/KBDocList.vue，面包屑的断言改看那个文件；
+//   2. 本 fork 的 KBDocList 用 script 里的 t()，上游用模板全局的 $t()，
+//      两种写法都认。
 import { readFileSync } from 'node:fs'
 import test, { type TestContext } from 'node:test'
 import { createI18n } from 'vue-i18n'
@@ -21,6 +19,9 @@ import ruRU from '../../i18n/locales/ru-RU'
 import { pluralRules } from '../../i18n/pluralizationRules'
 
 const source = readFileSync(new URL('./KnowledgeBase.vue', import.meta.url), 'utf8')
+// 本 fork 把文档区拆成了 detail/KBDocList.vue：面包屑（文件夹路径 + 计数）
+// 住在那里，页面本身只管状态与数据。所以断言要对着真正放这段标记的文件。
+const listSource = readFileSync(new URL('./detail/KBDocList.vue', import.meta.url), 'utf8')
 
 // Mirrors the deployed DingTalk sync, which produces multi-level folders:
 // 售后 holds 2 documents of its own plus a video sub-folder with 1 more, so its
@@ -101,7 +102,7 @@ async function selectFolder(f: Awaited<ReturnType<typeof setup>>, path: string) 
 
 // ── Breadcrumb ──────────────────────────────────────────────────────────────
 
-test.skip('the breadcrumb counts the documents and sub-folders the page can show', async t => {
+test('the breadcrumb counts the documents and sub-folders the page can show', async t => {
   const f = await setup(t, syncedTree)
   f.hook.total.value = 2 // the two documents directly inside 售后
   await selectFolder(f, '天诛渗透攻防/售后')
@@ -114,7 +115,7 @@ test.skip('the breadcrumb counts the documents and sub-folders the page can show
   assert.equal(renderFolderContents('zh-CN', f.vm.folderContentsCount), '2 个文档 / 1 个文件夹')
 })
 
-test.skip('the root breadcrumb counts the root documents and the top-level folders', async t => {
+test('the root breadcrumb counts the root documents and the top-level folders', async t => {
   const f = await setup(t, syncedTree)
   f.hook.total.value = 3 // the root-level documents only
   assert.equal(f.vm.selectedFolderPath, '')
@@ -124,7 +125,7 @@ test.skip('the root breadcrumb counts the root documents and the top-level folde
   assert.notEqual(f.vm.folderContentsCount.documents, 17)
 })
 
-test.skip('the sub-folder number is direct children, not the documents below them', async t => {
+test('the sub-folder number is direct children, not the documents below them', async t => {
   const f = await setup(t, syncedTree)
   f.hook.total.value = 0
   await selectFolder(f, '天诛渗透攻防')
@@ -135,7 +136,7 @@ test.skip('the sub-folder number is direct children, not the documents below the
   assert.equal(f.vm.folderEmptyState, 'subfolders')
 })
 
-test.skip('the breadcrumb omits the folder segment when the folder has no sub-folders', async t => {
+test('the breadcrumb omits the folder segment when the folder has no sub-folders', async t => {
   const f = await setup(t, syncedTree)
   f.hook.total.value = 2
   await selectFolder(f, '培训材料库')
@@ -150,7 +151,7 @@ test.skip('the breadcrumb omits the folder segment when the folder has no sub-fo
   assert.doesNotMatch(text, /文件夹/)
 })
 
-test.skip('filtering keeps the flat result count and adds no folder number', async t => {
+test('filtering keeps the flat result count and adds no folder number', async t => {
   const f = await setup(t, syncedTree)
   await selectFolder(f, '天诛渗透攻防/售后')
   f.hook.total.value = 2 // two matching documents inside the subtree
@@ -165,7 +166,7 @@ test.skip('filtering keeps the flat result count and adds no folder number', asy
 // Browsing a folder lists its direct children, the way a file manager does.
 // The document list and card grid receive exactly this array.
 
-test.skip('the page lists exactly the direct sub-folders of the current folder', async t => {
+test('the page lists exactly the direct sub-folders of the current folder', async t => {
   const f = await setup(t, syncedTree)
   await selectFolder(f, '天诛渗透攻防')
   assert.deepEqual(
@@ -177,7 +178,7 @@ test.skip('the page lists exactly the direct sub-folders of the current folder',
   assert.equal(f.vm.visibleSubFolders.length, 5)
 })
 
-test.skip('filtering hides sub-folder entries because it lists matching documents', async t => {
+test('filtering hides sub-folder entries because it lists matching documents', async t => {
   const f = await setup(t, syncedTree)
   await selectFolder(f, '天诛渗透攻防')
   f.vm.docSearchKeyword = 'FAQ'
@@ -186,14 +187,14 @@ test.skip('filtering hides sub-folder entries because it lists matching document
   assert.equal(f.vm.visibleSubFolders.length, 0)
 })
 
-test.skip('an unloaded folder tree contributes no sub-folder entries', async t => {
+test('an unloaded folder tree contributes no sub-folder entries', async t => {
   const f = await setup(t, null)
   await selectFolder(f, '天诛渗透攻防')
   assert.equal(f.vm.folderTree, null)
   assert.equal(f.vm.visibleSubFolders.length, 0)
 })
 
-test.skip('an unloaded folder tree reports no folders instead of crashing', async t => {
+test('an unloaded folder tree reports no folders instead of crashing', async t => {
   const f = await setup(t, null)
   f.hook.total.value = 4
   await selectFolder(f, '天诛渗透攻防')
@@ -202,7 +203,7 @@ test.skip('an unloaded folder tree reports no folders instead of crashing', asyn
   assert.equal(f.vm.folderContentsCount.folders, 0)
 })
 
-test.skip('a stale folder path reports no folders instead of crashing', async t => {
+test('a stale folder path reports no folders instead of crashing', async t => {
   const f = await setup(t, syncedTree)
   f.hook.total.value = 2
   await selectFolder(f, '已删除/目录')
@@ -228,7 +229,7 @@ function renderFolderContents(
   return i18n.global.t(FOLDER_CONTENTS, { ...counts, count: counts.folders })
 }
 
-test.skip('every locale renders both numbers as "documents / folders"', () => {
+test('every locale renders both numbers as "documents / folders"', () => {
   assert.equal(renderFolderContents('zh-CN'), '2 个文档 / 1 个文件夹')
   assert.equal(renderFolderContents('zh-TW'), '2 個文件 / 1 個資料夾')
   assert.equal(renderFolderContents('en-US'), '2 documents / 1 folder')
@@ -237,7 +238,7 @@ test.skip('every locale renders both numbers as "documents / folders"', () => {
   assert.equal(renderFolderContents('ru-RU'), 'Документов: 2 / 1 папка')
 })
 
-test.skip('plural locales inflect the folder noun', () => {
+test('plural locales inflect the folder noun', () => {
   assert.equal(renderFolderContents('en-US', { documents: 2, folders: 2 }), '2 documents / 2 folders')
   assert.equal(renderFolderContents('ru-RU', { documents: 2, folders: 2 }), 'Документов: 2 / 2 папки')
   assert.equal(renderFolderContents('ru-RU', { documents: 2, folders: 5 }), 'Документов: 2 / 5 папок')
@@ -249,21 +250,21 @@ test.skip('plural locales inflect the folder noun', () => {
 
 // ── Empty state ─────────────────────────────────────────────────────────────
 
-test.skip('a folder whose documents live in sub-folders is not called empty', async t => {
+test('a folder whose documents live in sub-folders is not called empty', async t => {
   const f = await setup(t, syncedTree)
   await selectFolder(f, '天诛渗透攻防')
   assert.equal(f.vm.folderSubfolderDocumentCount, 5)
   assert.equal(f.vm.folderEmptyState, 'subfolders')
 })
 
-test.skip('a folder that really has no documents keeps the plain empty message', async t => {
+test('a folder that really has no documents keeps the plain empty message', async t => {
   const f = await setup(t, syncedTree)
   await selectFolder(f, '空目录')
   assert.equal(f.vm.folderSubfolderDocumentCount, 0)
   assert.equal(f.vm.folderEmptyState, 'folder')
 })
 
-test.skip('filtering keeps the no-match empty message', async t => {
+test('filtering keeps the no-match empty message', async t => {
   const f = await setup(t, syncedTree)
   await selectFolder(f, '天诛渗透攻防')
   f.vm.docSearchKeyword = 'nothing matches this'
@@ -271,35 +272,45 @@ test.skip('filtering keeps the no-match empty message', async t => {
   assert.equal(f.vm.folderEmptyState, 'search')
 })
 
-test.skip('a knowledge base without folders keeps the onboarding empty state', async t => {
+test('a knowledge base without folders keeps the onboarding empty state', async t => {
   const f = await setup(t, { root_document_count: 0, total_document_count: 0, folders: [] })
   assert.equal(f.vm.folderEmptyState, 'none')
 })
 
 // The rendered count and message come from the template, which the mounted
 // fixture does not render; these assertions keep the wiring honest.
-function expectSource(pattern: RegExp) {
-  assert.ok(pattern.test(source), `KnowledgeBase.vue should match ${pattern}`)
+function expectSource(pattern: RegExp, from = source, where = 'KnowledgeBase.vue') {
+  assert.ok(pattern.test(from), `${where} should match ${pattern}`)
 }
 
-test.skip('the breadcrumb wires both numbers into the two-part message', () => {
-  expectSource(/\$t\('knowledgeBase\.folderTree\.folderContentsCount', folderContentsMessage\)/)
+test('the breadcrumb wires both numbers into the two-part message', () => {
+  // 面包屑在 detail/KBDocList.vue 里（文档区已从页面拆出）。
+  // 本 fork 的 KBDocList 用 script 里的 t()，上游用模板全局的 $t()。
+  // 两种写法都认 —— 断言要的是「这两个数都接上了」，不是「用了哪个别名」。
   expectSource(
-    /\$t\('knowledgeBase\.folderTree\.filteredCount', \{ count: folderContentsCount\.documents \}\)/,
+    /(?:\$t|t)\('knowledgeBase\.folderTree\.folderContentsCount', folderContentsMessage\)/,
+    listSource, 'detail/KBDocList.vue',
   )
-  expectSource(/v-if="isFiltering"/)
-  expectSource(/v-else-if="showFolderContentsCount"/)
+  expectSource(
+    /(?:\$t|t)\('knowledgeBase\.folderTree\.filteredCount', \{ count: folderContentsCount\.documents \}\)/,
+    listSource, 'detail/KBDocList.vue',
+  )
+  expectSource(/v-if="isFiltering"/, listSource, 'detail/KBDocList.vue')
+  expectSource(/v-else-if="showFolderContentsCount"/, listSource, 'detail/KBDocList.vue')
   // With no sub-folders the two-part message would end in "0 folders", so the
   // breadcrumb falls back to the existing document-only message.
-  expectSource(/\$t\('knowledgeBase\.documentCount', \{ count: folderContentsCount\.documents \}\)/)
+  expectSource(
+    /(?:\$t|t)\('knowledgeBase\.documentCount', \{ count: folderContentsCount\.documents \}\)/,
+    listSource, 'detail/KBDocList.vue',
+  )
 })
 
-test.skip('the document views receive the current sub-folders', () => {
+test('the document views receive the current sub-folders', () => {
   const passed = source.match(/:sub-folders="visibleSubFolders"/g) || []
   assert.equal(passed.length, 2, 'both the list and the card grid should receive the folders')
 })
 
-test.skip('the empty state tells sub-folder documents apart from an empty folder', () => {
+test('the empty state tells sub-folder documents apart from an empty folder', () => {
   const search = source.indexOf("knowledgeBase.folderTree.emptySearch")
   const subfolders = source.indexOf("knowledgeBase.folderTree.emptyFolderWithSubfolders")
   const emptyFolder = source.indexOf("knowledgeBase.folderTree.emptyFolder')")

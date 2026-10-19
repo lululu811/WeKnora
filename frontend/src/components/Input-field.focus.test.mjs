@@ -1,11 +1,10 @@
 import assert from 'node:assert/strict'
-// ⚠️ 本 fork 暂未移植上游的「嵌入态的宿主模型优先、草稿保留与 steer 资源域」能力，用例整体挂起。
-//
-// 2026-10-19 合并 upstream/main 时，本 fork 的 Input-field.vue + InputEditor/InputToolbar 是拆分后的实现，
-// 与上游的单体实现不是同一套代码；上游新增的这些用例断言的是上游实现的行为。
-// 移植任务见 docs/design/finance-workbench-decisions.md 的「上游特性移植」一节，
-// 移植完成后把这里的 test.skip 去掉即可恢复断言。
-//
+// 本 fork 已在 2026-10-20 移植上游的这项能力（嵌入态用宿主模型、路由切换保留
+// 助手草稿、steer 不越主聊天的资源范围）。断言保持上游原样，只有两处按本 fork
+// 的结构做了适配 ——
+//   1. 切片标记用本 fork 的注释措辞（上游「嵌入时 agent/KB 由宿主注入」，
+//      本 fork「Embed 渠道由宿主注入 agent/KB」）；
+//   2. 组件已拆成 InputEditor/InputToolbar，断言的取值区间仍按上游的锚点。
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import vm from 'node:vm'
@@ -15,7 +14,7 @@ const source = readFileSync(new URL('./Input-field.vue', import.meta.url), 'utf8
 const focusCode = source.slice(source.indexOf('const focusInput ='), source.indexOf('const onInput ='))
 const sendCode = source.slice(source.indexOf('const createSession ='), source.indexOf('const updateAgentModeDropdownPosition ='))
 
-test.skip('host page navigation preserves the assistant draft and uploads but clears the main chat composer', () => {
+test('host page navigation preserves the assistant draft and uploads but clears the main chat composer', () => {
   const start = source.indexOf('onBeforeRouteUpdate(')
   const routeCode = source.slice(start, source.indexOf('defineExpose(', start))
   for (const embeddedMode of [true, false]) {
@@ -35,7 +34,7 @@ test.skip('host page navigation preserves the assistant draft and uploads but cl
 })
 
 for (const mode of ['normal', 'embedded', 'after', 'inject']) {
-  test.skip(`${mode} send clears the draft and restores focus after the DOM update`, async () => {
+  test(`${mode} send clears the draft and restores focus after the DOM update`, async () => {
     const effects = [], ticks = []
     let sentModel
     const textarea = {
@@ -72,7 +71,7 @@ for (const mode of ['normal', 'embedded', 'after', 'inject']) {
   })
 }
 
-test.skip('a queued focus does not focus a textarea removed during navigation', async () => {
+test('a queued focus does not focus a textarea removed during navigation', async () => {
   let resolveTick, connected = true, focused = false
   const focus = vm.runInNewContext(`${focusCode}\nfocusInput`, {
     nextTick: () => new Promise(resolve => { resolveTick = resolve }),
@@ -87,7 +86,7 @@ test.skip('a queued focus does not focus a textarea removed during navigation', 
 
 for (const embeddedMode of [false, true]) {
   for (const delivery of ['after', 'inject']) {
-    test.skip(`${embeddedMode ? 'embedded' : 'main'} ${delivery} steer respects the composer's resource scope`, async () => {
+    test(`${embeddedMode ? 'embedded' : 'main'} ${delivery} steer respects the composer's resource scope`, async () => {
       const selected = [
         { id: 'main-kb', name: 'Main KB', type: 'kb' },
         { id: 'main-file', name: 'Main file', type: 'file', kbId: 'main-kb' },
@@ -114,7 +113,7 @@ for (const embeddedMode of [false, true]) {
   }
 }
 
-test.skip('teardown blurs the active textarea before it is detached', () => {
+test('teardown blurs the active textarea before it is detached', () => {
   const code = source.slice(source.indexOf('onBeforeUnmount(() =>'), source.indexOf('onUnmounted(() =>'))
   let teardown, blurred = false
   const textarea = { isConnected: true, blur: () => { blurred = true } }
@@ -126,7 +125,7 @@ test.skip('teardown blurs the active textarea before it is detached', () => {
   assert.equal(blurred, true)
 })
 
-test.skip('new-session focus survives consumption of the first query and runs on child mount', () => {
+test('new-session focus survives consumption of the first query and runs on child mount', () => {
   const page = readFileSync(new URL('../views/chat/index.vue', import.meta.url), 'utf8')
   const snapshot = page.match(/const focusComposerOnMount = [^;]+;/)[0]
   const firstQuery = { value: 'initial question' }
@@ -141,7 +140,10 @@ test.skip('new-session focus survives consumption of the first query and runs on
     firstQuery: { value: 'main draft' }, props: { embeddedMode: true, initialQuery: '' },
   }), false)
   assert.match(page, /:auto-focus="focusComposerOnMount"/)
-  const mountStart = source.slice(source.indexOf('onMounted(() => {'), source.indexOf('// 嵌入时 agent/KB 由宿主注入，只需'))
+  // 切片标记用本 fork 的注释措辞（上游那句是「嵌入时 agent/KB 由宿主注入」，
+  // 本 fork 写的是「Embed 渠道由宿主注入 agent/KB」）—— 切错位置会截出
+  // 半截函数体，症状是 vm 报「missing ) after argument list」。
+  const mountStart = source.slice(source.indexOf('onMounted(() => {'), source.indexOf('// Embed 渠道由宿主注入 agent/KB'))
   let mounted, focused = false
   vm.runInNewContext(`${mountStart}\n});`, {
     props: { autoFocus }, onMounted: fn => { mounted = fn }, focusInput: () => { focused = true },
