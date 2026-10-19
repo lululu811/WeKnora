@@ -250,6 +250,40 @@ export interface LoadOutcome {
  * 拿到数据后交给 `applyNewData`。`loadData` 回调只在「向前加载更多」时触发，
  * 本项目是纯复盘模式，5000 根一次取完，因此该分支直接回调空数组终止。
  */
+/**
+ * 建图时的公共选项。
+ *
+ * 两个外壳都要建一张 klinecharts 实例：重工作台（KLineWorkspace）与自选股
+ * 侧栏里的轻量图（WatchKLineChart）。locale、时区、X 轴日期格式这三项是
+ * 同一份意思 —— 同一只票在两处画出来，X 轴得长得一样，否则两处的读数
+ * 没法互相印证。
+ *
+ * **画布配色不在这里**：重工作台的画布固定深色（浅色外壳 + 深色画布，
+ * 见 KLineWorkspace 的说明），轻量图跟随平台主题。那是两种外壳的设计
+ * 选择，不是重复 —— 样式由调用方传进来。
+ */
+export function coreChartOptions(styles: DeepPartial<Styles>) {
+  return {
+    locale: 'zh-CN',
+    timezone: 'Asia/Shanghai',
+    styles,
+    customApi: {
+      // X 轴按粒度显示日期，不显示默认的完整时间戳：周K/月K 的时间戳精确到
+      // 某一天的 00:00，默认格式会把同一周的 7 根 K 线标成同一个完整时刻，
+      // 在窄面板下必然重叠糊成一片。
+      formatDate: (
+        _dateTimeFormat: Intl.DateTimeFormat, timestamp: number, _format: string, _type: number,
+      ) => {
+        const d = new Date(timestamp)
+        const y = d.getUTCFullYear()
+        const m = String(d.getUTCMonth() + 1).padStart(2, '0')
+        const day = String(d.getUTCDate()).padStart(2, '0')
+        return `${y}-${m}-${day}`
+      },
+    },
+  }
+}
+
 export function createCoreChart(options: {
   container: HTMLElement
   symbol: SymbolInfo
@@ -271,23 +305,7 @@ export function createCoreChart(options: {
     onError: (_symbol, message, kind) => options.onError?.(message, kind),
   })
 
-  const chart = init(options.container, {
-    locale: 'zh-CN',
-    timezone: 'Asia/Shanghai',
-    styles: options.styles,
-    customApi: {
-      // 与 Pro 的 customApi.formatDate 保持一致：X 轴按粒度显示，
-      // 不用默认的完整时间戳（否则周K/月K 的 X 轴会精确到分钟）。
-      // 签名是 (dateTimeFormat, timestamp, format, type)，type 见 FormatDateType。
-      formatDate: (_dateTimeFormat: Intl.DateTimeFormat, timestamp: number, _format: string, type: number) => {
-        const d = new Date(timestamp)
-        const y = d.getUTCFullYear()
-        const m = String(d.getUTCMonth() + 1).padStart(2, '0')
-        const day = String(d.getUTCDate()).padStart(2, '0')
-        return type === 2 /* XAxis */ ? `${y}-${m}-${day}` : `${y}-${m}-${day}`
-      },
-    },
-  })
+  const chart = init(options.container, coreChartOptions(options.styles))
 
   if (!chart) {
     throw new Error('K 线图表初始化失败：容器不可用')

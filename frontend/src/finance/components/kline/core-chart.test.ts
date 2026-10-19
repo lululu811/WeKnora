@@ -15,6 +15,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import { coreChartOptions } from './core-chart';
 import path from 'node:path';
 
 const SRC = path.join(process.cwd(), 'src/finance/components/kline/core-chart.ts');
@@ -99,4 +100,43 @@ test('主图为空时仍然要有兜底指标（MA），且不能只建一个就
     !/createIndicator\(options\.mainIndicators\[0\] \?\? 'MA'/.test(source),
     "不应再用 '只建第一个 + 循环 add' 的写法（第二个会把第一个清掉）",
   );
+});
+
+// ── 两个外壳共用同一份建图选项 ─────────────────────────────────────────────
+//
+// 重工作台（KLineWorkspace）与自选股侧栏里的轻量图（WatchKLineChart）都要
+// 建一张 klinecharts 实例。同一只票在两处画出来，X 轴、时区、locale 得
+// 长得一样 —— 否则两处的读数没法互相印证，出了分歧也没法判断谁对。
+//
+// 这两条断言盯的是「别再各写一份」：谁把 options 抄回自己文件里，测试就红。
+test('两个外壳都从 core-chart 取建图选项，不各自抄一份', () => {
+  const workspace = fs.readFileSync(
+    path.join(process.cwd(), 'src/finance/components/kline/KLineWorkspace.vue'), 'utf8');
+  const light = fs.readFileSync(
+    path.join(process.cwd(), 'src/finance/components/watchlist/WatchKLineChart.vue'), 'utf8');
+
+  for (const [name, src] of [['KLineWorkspace.vue', workspace], ['WatchKLineChart.vue', light]] as const) {
+    assert.ok(
+      !/init\([^)]*locale:\s*'zh-CN'/.test(src),
+      `${name} 里还留着抄写的 init options —— locale/时区/X 轴格式应当只有一份`);
+  }
+  // 重的那个走 createCoreChart（它内部用 coreChartOptions），
+  // 轻的那个自己建实例，所以直接调 coreChartOptions。
+  assert.ok(
+    /createCoreChart\(/.test(workspace),
+    'KLineWorkspace.vue 应当走 createCoreChart(...) 建图');
+  assert.ok(
+    /coreChartOptions\(/.test(light),
+    'WatchKLineChart.vue 应当用 coreChartOptions(...) 建图，不要自己再抄一份 options');
+});
+
+test('coreChartOptions 的 X 轴按粒度显示日期，与两处原先的实现一致', () => {
+  const options = coreChartOptions({} as never);
+  const format = (options.customApi as { formatDate: Function }).formatDate;
+  // 周K/月K 的时间戳精确到某一天 00:00，默认格式会把同一周的 7 根 K 线
+  // 标成同一个完整时刻，窄面板下必然重叠糊成一片。
+  assert.equal(format(new Intl.DateTimeFormat(), Date.UTC(2026, 9, 20), '', 2), '2026-10-20');
+  assert.equal(format(new Intl.DateTimeFormat(), Date.UTC(2026, 8, 1), '', 1), '2026-09-01');
+  assert.equal(options.locale, 'zh-CN');
+  assert.equal(options.timezone, 'Asia/Shanghai');
 });

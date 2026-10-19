@@ -59,7 +59,7 @@ import { useI18n } from 'vue-i18n'
 import { useTheme } from '@/composables/useTheme'
 import { getKlineChartTheme } from '@/finance/components/kline/theme'
 import { setZettarancPalette, zettarancPalette } from '@/finance/components/kline/palette'
-import { drawAlertLevel, clearAlertOverlays, drawCostLevel, drawStopLevel, clearTradeTargetOverlays } from '@/finance/components/kline/core-chart'
+import { coreChartOptions, drawAlertLevel, clearAlertOverlays, drawCostLevel, drawStopLevel, clearTradeTargetOverlays } from '@/finance/components/kline/core-chart'
 import type { KLineData } from '@/finance/components/kline/types'
 import type { WatchCondition } from '@/finance/api/watchlist'
 import type { TradeTarget } from '@/finance/utils/tradeTargets'
@@ -214,23 +214,11 @@ function ensureChart(): Chart | null {
   // 事后改 current 不会回溯已经算好的 styles（workspace 里记着这条注释）。
   setZettarancPalette(isDark.value)
 
-  const instance = init(container, {
-    locale: 'zh-CN',
-    timezone: 'Asia/Shanghai',
-    styles: getKlineChartTheme(isDark.value),
-    customApi: {
-      // X 轴按粒度显示日期，不显示默认的完整时间戳：周K/月K 的时间戳精确到
-      // 某一天的 00:00，默认格式会把同一周的 7 根 K 线标成同一个完整时刻，
-      // 在这个宽度下必然重叠糊成一片。
-      formatDate: (_f: Intl.DateTimeFormat, timestamp: number, _fmt: string, _type: number) => {
-        const d = new Date(timestamp)
-        const y = d.getUTCFullYear()
-        const m = String(d.getUTCMonth() + 1).padStart(2, '0')
-        const day = String(d.getUTCDate()).padStart(2, '0')
-        return `${y}-${m}-${day}`
-      },
-    },
-  })
+  // 建图选项与重工作台共用同一份（core-chart.ts 的 coreChartOptions）：
+  // 同一只票在两处画出来，X 轴得长得一样，否则两处的读数没法互相印证。
+  // 画布配色不在那份里 —— 那边固定深色，这边跟随平台主题，是两种外壳的
+  // 设计选择，不是重复。
+  const instance = init(container, coreChartOptions(getKlineChartTheme(isDark.value)))
 
   if (!instance) {
     // 容器还没挂上（理论上只有卸载竞态能走到）。不建图，交给下一次 ensureChart。
