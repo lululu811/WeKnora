@@ -56,6 +56,33 @@ hithink.finance.discover
 **返回：**
 - 每日的 date, open, high, low, close, volume, amount
 
+#### hithink.finance.market.dividend.calendar
+
+获取股票除权除息与分红送转事件日历（送转股、派发现金）。支持查询单只个股历史分红派息记录，或全市场特定区间的除权除息日历。
+
+**参数：**
+- `thscode`: 可选。股票代码，如 `600519.SH`
+- `start_date`: 可选。起始除息日（YYYY-MM-DD）
+- `end_date`: 可选。截止除息日（YYYY-MM-DD）
+- `min_dividend`: 可选。每股最低派现金额（元）
+- `min_bonus`: 可选。每股最低送转股比例（如 0.3）
+- `limit`: 可选。返回记录数限制（默认 50）
+
+**返回：**
+- `thscode`, `name`, `ex_date`, `dividend_per_share`, `per_share_bonus`, `allotment_ratio`
+
+#### hithink.finance.market.dividend.yield_screener
+
+筛选高股息率红利标的（基于最新现金分红与最新收盘价计算真实股息率）。
+
+**参数：**
+- `year`: 可选。分红年度（YYYY），默认 2026
+- `min_yield_pct`: 可选。最低预估股息率百分比（默认 3.0）
+- `limit`: 可选。返回记录数限制（默认 50）
+
+**返回：**
+- `thscode`, `name`, `ex_date`, `dividend_per_share`, `per_share_bonus`, `close`, `div_yield_pct`
+
 ### Financial Tools（financials.duckdb）
 
 #### hithink.finance.financial.valuation.snapshot
@@ -85,7 +112,66 @@ hithink.finance.discover
 **返回：**
 - 每日的 ma5, ma10, ma20, ma60, ma120, ma250
 
+### Futures Tools（futures.duckdb）
+
+#### hithink.finance.futures.variety.list
+获取期货品种清单（含品种代码、名称、交易所、保证金比例、主力合约代码等）。
+
+#### hithink.finance.futures.price.snapshot
+获取期货品种（如 CU 铜、RB 螺纹钢、SC 原油、IF 股指）或具体合约的最新行情快照。
+
+#### hithink.finance.futures.price.historical
+获取期货合约或主力连续的历史日线行情。
+
+### Fund & ETF Tools（fund.duckdb）
+
+#### hithink.finance.fund.etf.snapshot
+获取全市场 ETF 最新行情快照与涨跌幅排行。
+
+#### hithink.finance.fund.holdings.stock
+穿透查询持有某只 A 股股票的公募基金明细（机构持仓图谱与持股比例）。
+
+#### hithink.finance.fund.holdings.portfolio
+查询指定基金或 ETF 的重仓股票组合明细。
+
+### Index Tools（index.duckdb）
+
+#### hithink.finance.index.overview
+获取上证指数、深证成指、创业板指、科创50、沪深300、中证500、中证1000等核心宽基指数的最新行情。
+
+#### hithink.finance.index.sector.ranking
+获取行业细分（industry）或前沿概念板块（cn_concept）的最新涨幅榜、跌幅榜或成交额榜。
+
+### Special Tools（special.duckdb）
+
+#### hithink.finance.special.auction.snapshot
+获取 9:25 盘前集合竞价异动股票（抢筹爆量、大幅超预期高开/低开）。
+
+#### hithink.finance.special.sentiment.stats
+获取市场短线情绪综合统计（涨停数、跌停数、炸板数、炸板率、最高连板高度等）。
+
+#### hithink.finance.special.limit.ladder_detail
+获取最新交易日连板梯队个股清单（市场最高空间板、各连板档位个股明细、封单金额、首次封板时间）。
+
+#### hithink.finance.special.limit.break_pool
+获取最新交易日炸板池（盘中触及涨停但被砸开、开板次数、收盘涨跌幅及亏钱效应）。
+
+#### hithink.finance.special.anomaly.stock_reason
+获取指定股票（或全市场最新）盘中/收盘大涨、大跌、异动归因分析、驱动逻辑与关键词列表。
+
+### Indicator Tools（indicators.duckdb）
+
+#### hithink.finance.indicator.volatility.bbands
+获取股票布林带（上轨、中轨、下轨）与真实波幅 ATR/NATR 指标。
+
+#### hithink.finance.indicator.momentum.macd_rsi
+获取股票 MACD（快线、信号线、柱状图）与多周期 RSI（RSI6、RSI12、RSI24）。
+
+#### hithink.finance.indicator.volume.money_flow
+获取股票主力资金指标：OBV 能量潮、CMF 蔡金资金流向、MFI 资金流量指标、VWAP。
+
 ### Query Tools
+
 
 #### hithink.finance.query.sql
 
