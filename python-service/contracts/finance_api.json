@@ -1,0 +1,343 @@
+{
+  "version": 1,
+  "generated_by": "python-service/scripts/emit_finance_contract.py",
+  "note": "fields 是前端声明并依赖的顶层字段；backend_only 是后端多发、前端当前不用的字段。两边对着这份契约验：前端多要一个字段 = 后端不会发它（危险）；后端多发一个字段 = 记进 backend_only 并写明原因。",
+  "endpoints": {
+    "/api/market/snapshot": {
+      "method": "GET",
+      "ts_interface": "MarketSnapshot",
+      "query": {
+        "days": 60
+      },
+      "fields": [
+        "code",
+        "trade_date",
+        "indices",
+        "tickers",
+        "sentiment",
+        "etfs",
+        "market_state",
+        "unavailable"
+      ],
+      "backend_only": [
+        "sources"
+      ]
+    },
+    "/api/market/dragon-tiger": {
+      "method": "GET",
+      "ts_interface": "DragonTigerResponse",
+      "query": {
+        "limit": 5
+      },
+      "fields": [
+        "code",
+        "trade_date",
+        "count",
+        "data"
+      ]
+    },
+    "/api/market/sectors": {
+      "method": "GET",
+      "ts_interface": "SectorResponse",
+      "query": {
+        "limit": 5
+      },
+      "fields": [
+        "ok",
+        "trade_date",
+        "items",
+        "total",
+        "unavailable",
+        "sort_rule",
+        "reason"
+      ]
+    },
+    "/api/market/limit-up-ladder": {
+      "method": "GET",
+      "ts_interface": "LadderResponse",
+      "query": {
+        "days": 30
+      },
+      "fields": [
+        "ok",
+        "days",
+        "unavailable",
+        "reason"
+      ]
+    },
+    "/api/market/basis": {
+      "method": "GET",
+      "ts_interface": "BasisResponse",
+      "fields": [
+        "ok",
+        "basis_date",
+        "futures_latest",
+        "spot_latest",
+        "items",
+        "unavailable",
+        "note",
+        "reason"
+      ]
+    },
+    "/api/market/commodities": {
+      "method": "GET",
+      "ts_interface": "CommoditiesResponse",
+      "fields": [
+        "ok",
+        "trade_date",
+        "items",
+        "unavailable",
+        "reason"
+      ]
+    },
+    "/api/market/fund-holdings": {
+      "method": "GET",
+      "ts_interface": "FundHoldingsResponse",
+      "query": {
+        "thscode": "600519.SH",
+        "limit": 20
+      },
+      "fields": [
+        "ok",
+        "stock_thscode",
+        "summary",
+        "items",
+        "count",
+        "unavailable",
+        "reason"
+      ]
+    },
+    "/api/market/ladder-detail": {
+      "method": "GET",
+      "ts_interface": "LadderDetailResponse",
+      "query": {
+        "limit": 20
+      },
+      "fields": [
+        "ok",
+        "trade_date",
+        "max_board",
+        "total_count",
+        "items",
+        "by_level",
+        "unavailable",
+        "reason"
+      ]
+    },
+    "/api/market/anomaly-reasons": {
+      "method": "GET",
+      "ts_interface": "AnomalyReasonsResponse",
+      "query": {
+        "thscode": "600519.SH",
+        "limit": 10
+      },
+      "fields": [
+        "ok",
+        "thscode",
+        "items",
+        "count",
+        "unavailable",
+        "reason"
+      ]
+    },
+    "/api/market/limit-break-down": {
+      "method": "GET",
+      "ts_interface": "LimitBreakDownResponse",
+      "query": {
+        "limit": 20
+      },
+      "fields": [
+        "ok",
+        "trade_date",
+        "break_pool",
+        "down_pool",
+        "break_count",
+        "down_count",
+        "unavailable",
+        "reason"
+      ]
+    },
+    "/api/market/dividend-calendar": {
+      "method": "GET",
+      "ts_interface": "DividendCalendarResponse",
+      "fields": [
+        "ok",
+        "items",
+        "count",
+        "unavailable",
+        "reason"
+      ]
+    },
+    "/api/market/hot-stocks": {
+      "method": "GET",
+      "ts_interface": "HotStocksResponse",
+      "query": {
+        "mode": "rank",
+        "limit": 50
+      },
+      "fields": [
+        "ok",
+        "mode",
+        "trade_date",
+        "items",
+        "count",
+        "unavailable",
+        "reason"
+      ]
+    },
+    "/api/market/hot-stock-trend": {
+      "method": "GET",
+      "ts_interface": "HotStockTrendResponse",
+      "query": {
+        "thscode": "600519.SH",
+        "limit": 30
+      },
+      "fields": [
+        "ok",
+        "thscode",
+        "items",
+        "count",
+        "unavailable",
+        "reason"
+      ]
+    },
+    "/api/market/futures-warehouse": {
+      "method": "GET",
+      "ts_interface": "FuturesWarehouseResponse",
+      "query": {
+        "limit": 20
+      },
+      "fields": [
+        "ok",
+        "trade_date",
+        "items",
+        "count",
+        "unavailable",
+        "reason"
+      ]
+    },
+    "/api/market/futures-basis-rate": {
+      "method": "GET",
+      "ts_interface": "FuturesBasisRateResponse",
+      "query": {
+        "limit": 20
+      },
+      "fields": [
+        "ok",
+        "trade_date",
+        "items",
+        "count",
+        "unavailable",
+        "reason"
+      ]
+    },
+    "/api/market/etf-holders": {
+      "method": "GET",
+      "ts_interface": "EtfHoldersResponse",
+      "query": {
+        "thscode": "510300.SH",
+        "limit": 10
+      },
+      "fields": [
+        "ok",
+        "fund_thscode",
+        "structure",
+        "top_holders",
+        "count",
+        "unavailable",
+        "reason"
+      ]
+    },
+    "/api/market/etf-institutional-ranking": {
+      "method": "GET",
+      "ts_interface": "EtfInstitutionalRankingResponse",
+      "query": {
+        "limit": 20
+      },
+      "fields": [
+        "ok",
+        "order_by",
+        "items",
+        "count",
+        "unavailable",
+        "reason"
+      ]
+    },
+    "/api/market/squeeze-status": {
+      "method": "GET",
+      "ts_interface": "SqueezeStatusResponse",
+      "query": {
+        "thscode": "600519.SH",
+        "limit": 30
+      },
+      "fields": [
+        "ok",
+        "thscode",
+        "is_squeezing",
+        "squeeze_status",
+        "latest_date",
+        "supertrend_direction",
+        "supertrend_level",
+        "momentum_hist",
+        "beta",
+        "items",
+        "count",
+        "unavailable",
+        "reason"
+      ]
+    },
+    "/api/market/auction": {
+      "method": "GET",
+      "ts_interface": "AuctionResponse",
+      "fields": [
+        "ok",
+        "date",
+        "stage",
+        "breadth",
+        "benchmark",
+        "movers",
+        "thscode",
+        "name",
+        "auction_pct",
+        "volume_ratio",
+        "turnover_pct",
+        "float_market_cap",
+        "min_float_cap",
+        "unavailable",
+        "reason"
+      ]
+    },
+    "/api/market/technicals": {
+      "method": "POST",
+      "ts_interface": "TechnicalsResponse",
+      "body": {
+        "thscodes": [
+          "600519.SH"
+        ]
+      },
+      "fields": [
+        "ok",
+        "as_of",
+        "backend",
+        "items",
+        "missing",
+        "unavailable",
+        "note",
+        "reason"
+      ]
+    },
+    "/api/market/industry-map": {
+      "method": "POST",
+      "ts_interface": null,
+      "body": {
+        "thscodes": [
+          "600519.SH"
+        ]
+      },
+      "fields": [
+        "code",
+        "data"
+      ]
+    }
+  }
+}
