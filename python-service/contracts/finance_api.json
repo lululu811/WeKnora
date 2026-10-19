@@ -1,7 +1,7 @@
 {
   "version": 1,
   "generated_by": "python-service/scripts/emit_finance_contract.py",
-  "note": "fields 是前端声明并依赖的顶层字段；backend_only 是后端多发、前端当前不用的字段。两边对着这份契约验：前端多要一个字段 = 后端不会发它（危险）；后端多发一个字段 = 记进 backend_only 并写明原因。",
+  "note": "三个桶：fields 是健康形态下后端实际发的字段（真相，以探针为准）；backend_only 是其中前端没声明的（前端不读，但要知道它存在）；degraded_only 是前端声明了、只在降级形态才出现的（降级壳是 {ok:false, reason, unavailable}，reason 就属于这一类）。接口类型写的是两种形态的并集，所以笼统比一套字段集要么误报要么漏报。",
   "endpoints": {
     "/api/market/snapshot": {
       "method": "GET",
