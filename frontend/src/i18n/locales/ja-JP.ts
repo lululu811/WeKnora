@@ -126,7 +126,107 @@ export default {
     cost: 'Cost',
     stopLoss: 'Stop Loss',
     costPlaceholder: '目標コスト価格',
-    stopPlaceholder: 'ストップロス価格'
+    stopPlaceholder: 'ストップロス価格',
+    sharesMarketValue: '{shares}株（時価 ¥{value}）',
+    anomalyTitle: '値動きの要因分析 · ドライバー分析',
+    fundTitle: '機関投資家の保有 · 公募ファンドと ETF の重倉',
+    fundHoldingCount: '{count} 銘柄が保有',
+    fundConcentration: '保有集中度',
+    fundInstitutionCount: '保有機関数',
+    fundInstitutionUnit: '{count} 社',
+    fundFlowTrend: '増減の動向',
+    fundIncrease: '増配 {count}',
+    fundDecrease: '減配 {count}',
+    fundLoading: '公募ファンドの保有銘柄を解析中...',
+    fundEmpty: '公募ファンドの重倉保有データはまだありません',
+    publicFund: '公募ファンド',
+    fundNetValueRatioTitle: '当該ファンド純資産比の保有割合',
+    fundHoldingRatio: '保有比率',
+    fundPeriodChangeTitle: '前期比の保有変動幅',
+    fundQuarterChange: '四半期変動 {value}%',
+    dividendHistory: '増配・株式配当の履歴',
+    dividendCount: '直近 {count} 回の増配',
+    dividendYield: '配当利回り {value}%',
+    dividendCash: '現金配当 ¥{value}/株',
+    dividendBonus: '10株につき{value}株',
+    hotTrendTitle: '注目ヒート · 順位の推移',
+    hotLatestRank: '最新順位 #{rank}',
+    quantTitle: 'クオンツ特徴 · ボラティリティ圧縮とスーパートレンド',
+    latest: '最新',
+    squeezeStatusLabel: 'TTM Squeeze 状態',
+    supertrendLabel: 'スーパートレンドのレール',
+    dynamicStopLine: '動的ストップライン: ¥{value}',
+    momentumLabel: 'モメンタムヒストグラム',
+    betaLabel: '20日 Beta 弾性係数',
+    techScoreTitle: 'テクニカル平均: {value}',
+    techScore: 'テクニカル {value}',
+    fundScoreTitle: '資金面平均: {value}',
+    fundScore: '資金面 {value}',
+    fundamentalScoreTitle: 'ファンダメンタルズ平均: {value}',
+    fundamentalScore: 'ファンダメンタルズ {value}',
+    macroScoreTitle: 'マクロ質の平均: {value}',
+    macroScore: 'マクロ {value}',
+    scorePoints: '{value}点',
+    squeeze: {
+      on: '圧縮からの蓄勢 (Squeeze ON)',
+      fired: '突破の解放 (Squeeze Fired)',
+      off: '通常のボラティリティ (Squeeze OFF)'
+    },
+    squeezeHint: {
+      on: 'ボリンジャーバンドがケルトナーチャネル内に収縮。変盤の臨界点',
+      fired: '圧縮が解除され、ボラティリティが拡大、一方通行のトレンドが加速',
+      off: 'チャネルは圧縮されておらず、広いレンジでの通常振荡'
+    },
+    supertrend: {
+      bullish: '強気順張り (Bullish)',
+      bearish: '弱気防衛 (Bearish)',
+      neutral: 'トレンド中立'
+    },
+    beta: {
+      high: '高弾力（攻め型）',
+      low: '低弾力（守り型）',
+      base: '基準弾力（市場と同期）'
+    },
+    resonance: {
+      tripleBullLabel: '3つの強気共鳴 · 強い順張り',
+      tripleBullDesc: '日・週・月の各級移動平均が弱気的に共鳴し、中長期も短期も主要上昇局面にあります。',
+      bullPullbackLabel: '大きいは順張り、小さいは逆行 · 押し目買い',
+      bullPullbackDesc: '月線と週線のトレンドは上向きのまま、日線に短期的なテクスチャルの押し目が出ています。移動平均までの戻りを確認し、控えめな建玉を検討してください。',
+      oversoldLabel: '売られすぎの反発 · 逆方向の防衛',
+      oversoldDesc: '中長期はなお移動平均に押さえられていますが、日線には短期的な売られすぎの反発が出ています。反発局面では利益確定を急ぐ一方、防衛ラインは維持してください。',
+      tripleBearLabel: '3つの弱気 · 割れ回避',
+      tripleBearDesc: '日・週・月の各級移動平均が下向きに割れ、弱気的な並びになっています。ポジションを抑え、慎重な見守りを推奨します。',
+      mixedBullLabel: '短期上昇 · 継続を確認',
+      mixedRangeLabel: '短期・中期の乖離 · レンジ整理',
+      mixedDesc: '強弱の移動平均が交差し、底値形成または持ち合いの段階にあります。'
+    },
+    questionCategory: {
+      technical: 'テクニカル',
+      capital: '資金',
+      fundamental: 'ファンダメンタル',
+      macro: 'マクロ',
+      other: 'その他'
+    },
+    question: {
+      trendStrength: 'トレンド強度',
+      shortMomentum: '短期モメンタム',
+      volumeConfirmation: '出来高の裏付け',
+      technicalPattern: 'テクニカルパターン',
+      trendStability: 'トレンド安定性',
+      volumePriceSync: '出来高と価格の整合',
+      maSupport: '移動平均の支持',
+      technicalComposite: 'テクニカル総合',
+      capitalDirection: '資金の向き',
+      volumePriceRelation: '出来高と価格の関係',
+      tradeActivity: '取引活性度',
+      capitalComposite: '資金総合',
+      poolReason: 'プール選定理由',
+      companyQuality: '企業の質',
+      observationChange: '観察項目の変化',
+      industryRisk: '業種リスク',
+      moat: '経済的堀',
+      valuationLevel: 'バリュエーション水準'
+    }
   },
   stockCitation: {
     noChangeData: 'No change data',
@@ -8851,7 +8951,24 @@ export default {
       title: '連板ラダー',
       caption: '直近 {n} 営業日 · 濃淡 = 家数',
       failed: '連板データ未準備',
-      level: { two: '2板', three: '3板', four: '4板', five: '5板', six: '6板', seven: '7板+' }
+      level: { two: '2板', three: '3板', four: '4板', five: '5板', six: '6板', seven: '7板+' },
+      tabMatrix: 'ヒートマップ',
+      tabStocks: '連板ラダー ({count})',
+      tabBreak: '板割れ・リミットダウン ({count})',
+      maxBoard: '最高連板：{count} 連板',
+      stockCount: '{count} 銘柄',
+      sealTimeTitle: '板ロック時刻',
+      sealMoneyTitle: '板ロック金額',
+      sealMoney: '板ロック {value}',
+      breakPoolTitle: '板割れプール（分析与回落 {count} 銘柄）',
+      breakPoolEmpty: '本日の板割れ銘柄はありません',
+      openTimes: '板開け {count} 回',
+      downPoolTitle: 'リミットダウンプール（極端な売り込み {count} 銘柄）',
+      downPoolEmpty: '本日のリミットダウン銘柄はありません',
+      limitDownAt: '{time} リミットダウン',
+      tradeDate: '取引日：{date}',
+      subCaptionStocks: '最高板ラダー',
+      subCaptionBreak: '盤中の板割れと極端な売り込み'
     },
     basis: {
       title: '先物・现货リンク · 股指先物基差',
@@ -8863,7 +8980,20 @@ export default {
       divergence: '{name} 基差率 vs 现货日騰落',
       legendBasis: '基差率',
       legendSpot: '现货日騰落',
-      window: '直近 {n} 営業日'
+      window: '直近 {n} 営業日',
+      tabIndex: '股指先物基差',
+      tabCommodity: '大宗商品連動 ({count})',
+      tabWarehouse: '登録倉庫証券の異動',
+      warehouseCaption: '取引所の登録倉庫証券の日次増減（減庫＝品不足 / 増庫＝品過剰）',
+      tradeDate: '取引日：{date}',
+      commodityFallback: '全市場の主要工業品・農産品の連動',
+      turnover: '売買代金 {value}',
+      linkedStocks: '関連 A 株：',
+      destock: '減庫 {value}',
+      accumulate: '増庫 +{value}',
+      flat: '横ばい 0',
+      warehouseLabel: '残存倉庫証券',
+      warehouseLots: '{count}枚'
     },
     watchlist: {
       title: 'ウォッチ',
@@ -9340,6 +9470,72 @@ export default {
     failed: '除権カレンダーのデータを読み込めません',
     statCount: '該当銘柄数',
     statAvgYield: '平均配当利回り',
-    statTopBonus: '最大の株式配当銘柄'
+    statTopBonus: '最大の株式配当銘柄',
+    bonusTen: '10株につき{value}株',
+    payoutLabel: '現金配当',
+    cashPerShare: '¥{value}/株',
+    bonusLabel: '株式配当',
+    bonusShares: '10株につき{value}株',
+    priceLabel: '現在値',
+    yieldPill: '配当利回り {value}%',
+    captionYield: '最新の現金配当利回りランキング（ディフェンシブな低ボラティリティのキャッシュカウ）',
+    captionBonus: '高株式配当銘柄（大規模の株式配当による増配株）',
+    captionAll: '2026 年の除権・除息カレンダー一覧'
+  },
+  etfWorkspace: {
+    group: {
+      institutional: '機関投資家保有ランキング'
+    },
+    col: {
+      fundName: 'ファンド / コード',
+      instHolding: '機関投資家保有比率',
+      retailHolding: '個人投資家保有比率',
+      avgShare: '1人平均口数',
+      action: '操作',
+      chipPenetration: '保有者の内訳'
+    },
+    holderCount: '保有口座数',
+    holderAccounts: '{count} 口座',
+    avgHolding: '1人平均保有口数',
+    holders: {
+      title: '保有者',
+      penetrateTop10: '上位10位の保有者の内訳'
+    },
+    drawer: {
+      title: '{name} ({code}) 保有者の内訳',
+      structureTitle: '保有者構成 · 株式の分布',
+      latestPeriod: '最新期',
+      insTitle: '機関投資家: {value}%',
+      retailTitle: '個人投資家: {value}%',
+      instLabel: '機関投資家',
+      retailLabel: '個人投資家',
+      topHoldersTitle: '上位10位の保有者の内訳（国家点小隊・保険・証券・銀行）',
+      noHoldersData: '保有者の内訳データはまだありません'
+    },
+    holder: {
+      holdRateLabel: '保有比率',
+      holdShareLabel: '保有口数'
+    }
+  },
+  hotStockRadar: {
+    title: '人気と銘柄 레이ダー',
+    tabSkyrocket: '急騰ダークホース',
+    tabRank: '人気総合ランキング (Top 50)',
+    expand: 'もっと見る',
+    failed: '人気データを読み込めません',
+    observeDate: '観測日',
+    latest: '最新',
+    topSurge: '最大の急騰',
+    topSurgeValue: '{name}（急上昇 +{value}位）',
+    topHeat: '人気1位',
+    topHeatValue: '{name}（ヒート {value}）',
+    heatLabel: '注目ヒート',
+    captionSkyrocket: '順位が急上昇したダークホース（短期的な点火、関心が急上昇）',
+    captionRank: '全市場で最も関心が集中する銘柄（テーマの主導株と認知度の高い中核銘柄）',
+    trend: {
+      up: '加熱',
+      down: '冷却',
+      flat: '横ばい'
+    }
   }
 }

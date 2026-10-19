@@ -27,7 +27,7 @@
         </span>
       </div>
       <button v-if="data.movers?.length" type="button" class="auc__toggle"
-        @click="expanded = !expanded">
+        :aria-expanded="expanded" @click="expanded = !expanded">
         {{ expanded ? $t('common.collapse') : $t('marketDashboard.auction.expand') }}
       </button>
     </header>

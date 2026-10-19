@@ -17,7 +17,7 @@
             :class="{ 'is-active': mode === 'index' }"
             @click="mode = 'index'"
           >
-            股指期货基差
+            {{ $t('marketDashboard.basis.tabIndex') }}
           </button>
           <button
             type="button"
@@ -25,7 +25,7 @@
             :class="{ 'is-active': mode === 'commodity' }"
             @click="mode = 'commodity'"
           >
-            大宗商品联动 ({{ commodities.length || 12 }})
+            {{ $t('marketDashboard.basis.tabCommodity', { count: commodities.length || 12 }) }}
           </button>
           <button
             type="button"
@@ -33,10 +33,10 @@
             :class="{ 'is-active': mode === 'warehouse' }"
             @click="mode = 'warehouse'"
           >
-            注册仓单异动
+            {{ $t('marketDashboard.basis.tabWarehouse') }}
           </button>
         </div>
-        <span class="bas__caption">{{ mode === 'index' ? caption : (mode === 'commodity' ? commodityCaption : '交易所注册仓单日增减（去库紧俏 vs 累库供过于求）') }}</span>
+        <span class="bas__caption">{{ mode === 'index' ? caption : (mode === 'commodity' ? commodityCaption : $t('marketDashboard.basis.warehouseCaption')) }}</span>
       </div>
       <button v-if="mode === 'index' && data?.items?.length" type="button" class="bas__toggle" @click="expanded = !expanded">
         {{ expanded ? $t('common.collapse') : $t('marketDashboard.basis.expand') }}
@@ -121,12 +121,12 @@
           </div>
 
           <div class="bas__comm-meta">
-            <span v-if="c.turnover" class="bas__comm-turnover">成交额 {{ fmtTurnover(c.turnover) }}</span>
+            <span v-if="c.turnover" class="bas__comm-turnover">{{ $t('marketDashboard.basis.turnover', { value: fmtTurnover(c.turnover) }) }}</span>
             <span v-if="c.trade_date" class="bas__comm-date">{{ c.trade_date }}</span>
           </div>
 
           <div class="bas__comm-stocks">
-            <span class="bas__comm-hint-label">映射 A 股：</span>
+            <span class="bas__comm-hint-label">{{ $t('marketDashboard.basis.linkedStocks') }}</span>
             <div class="bas__comm-chips">
               <span
                 v-for="stk in (c.linked_stocks && c.linked_stocks.length ? c.linked_stocks : [c.a_share_hint])"
@@ -153,19 +153,19 @@
               v-if="(w.amount_change ?? 0) < 0"
               class="bas__wh-change is-destock"
             >
-              去库 {{ w.amount_change?.toLocaleString() }}
+              {{ $t('marketDashboard.basis.destock', { value: w.amount_change?.toLocaleString() }) }}
             </span>
             <span
               v-else-if="(w.amount_change ?? 0) > 0"
               class="bas__wh-change is-accumulate"
             >
-              累库 +{{ w.amount_change?.toLocaleString() }}
+              {{ $t('marketDashboard.basis.accumulate', { value: w.amount_change?.toLocaleString() }) }}
             </span>
-            <span v-else class="bas__wh-change is-flat">持平 0</span>
+            <span v-else class="bas__wh-change is-flat">{{ $t('marketDashboard.basis.flat') }}</span>
           </div>
           <div class="bas__wh-bottom">
-            <span class="bas__wh-lbl">现存仓单:</span>
-            <span class="bas__wh-val">{{ w.amount?.toLocaleString() || '—' }} ({{ w.equivalent_lots || 0 }}手)</span>
+            <span class="bas__wh-lbl">{{ $t('marketDashboard.basis.warehouseLabel') }}:</span>
+            <span class="bas__wh-val">{{ w.amount?.toLocaleString() || '—' }} ({{ $t('marketDashboard.basis.warehouseLots', { count: w.equivalent_lots || 0 }) }})</span>
           </div>
         </div>
       </div>
@@ -211,7 +211,7 @@ const categories = computed(() => {
     map.set(c.category, (map.get(c.category) || 0) + 1)
   }
   const list = [
-    { key: 'all', label: '全部', count: commodities.value.length },
+    { key: 'all', label: t('common.all'), count: commodities.value.length },
   ]
   for (const [cat, count] of map.entries()) {
     list.push({ key: cat, label: cat, count })
@@ -286,7 +286,9 @@ const caption = computed(() => {
 })
 
 const commodityCaption = computed(() => {
-  return commTradeDate.value ? `行情交易日：${commTradeDate.value}` : '全市场核心工业品与农产品联动'
+  return commTradeDate.value
+    ? t('marketDashboard.basis.tradeDate', { date: commTradeDate.value })
+    : t('marketDashboard.basis.commodityFallback')
 })
 
 function fmtTurnover(turnover: number): string {

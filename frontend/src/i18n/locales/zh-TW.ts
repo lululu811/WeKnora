@@ -126,7 +126,107 @@ export default {
     cost: 'Cost',
     stopLoss: 'Stop Loss',
     costPlaceholder: 'Target cost price',
-    stopPlaceholder: 'Stop loss price'
+    stopPlaceholder: 'Stop loss price',
+    sharesMarketValue: '{shares} 股 (市值 ¥{value})',
+    anomalyTitle: '盤中異動歸因 · 驅動分析',
+    fundTitle: '機構籌碼 · 公募與 ETF 重倉',
+    fundHoldingCount: '{count} 檔重倉',
+    fundConcentration: '持股集中度',
+    fundInstitutionCount: '持倉機構數',
+    fundInstitutionUnit: '{count} 家',
+    fundFlowTrend: '增減倉動向',
+    fundIncrease: '增 {count}',
+    fundDecrease: '減 {count}',
+    fundLoading: '正在穿透公募基金持倉資料...',
+    fundEmpty: '暫無公募重倉持股揭露資料',
+    publicFund: '公募',
+    fundNetValueRatioTitle: '持倉占該基金淨值比',
+    fundHoldingRatio: '持倉比',
+    fundPeriodChangeTitle: '較上期持股變動幅度',
+    fundQuarterChange: '季變動 {value}%',
+    dividendHistory: '分紅送轉歷史',
+    dividendCount: '近 {count} 次分紅',
+    dividendYield: '股息率 {value}%',
+    dividendCash: '配息 ¥{value}/股',
+    dividendBonus: '10轉{value}股',
+    hotTrendTitle: '關注熱度 · 位次軌跡',
+    hotLatestRank: '最新位次 #{rank}',
+    quantTitle: '量化特徵 · 波動擠壓 & 超級趨勢',
+    latest: '最新',
+    squeezeStatusLabel: 'TTM Squeeze 狀態',
+    supertrendLabel: 'Supertrend 趨勢軌',
+    dynamicStopLine: '動態停損線: ¥{value}',
+    momentumLabel: '動量柱 (Momentum)',
+    betaLabel: '20日 Beta 彈性係數',
+    techScoreTitle: '技術面均分: {value}',
+    techScore: '技術 {value}',
+    fundScoreTitle: '資金面均分: {value}',
+    fundScore: '資金 {value}',
+    fundamentalScoreTitle: '基本面均分: {value}',
+    fundamentalScore: '基本面 {value}',
+    macroScoreTitle: '總體面質地均分: {value}',
+    macroScore: '總體 {value}',
+    scorePoints: '{value}分',
+    squeeze: {
+      on: '擠壓蓄勢中 (Squeeze ON)',
+      fired: '突破釋放 (Squeeze Fired)',
+      off: '常態波動 (Squeeze OFF)'
+    },
+    squeezeHint: {
+      on: '布林通道收縮進肯特納通道，變盤臨界點',
+      fired: '擠壓解除，波動率擴張，單邊趨勢加速',
+      off: '通道未受壓，處於寬幅常態震盪'
+    },
+    supertrend: {
+      bullish: '多頭順勢 (Bullish)',
+      bearish: '空頭防守 (Bearish)',
+      neutral: '趨勢中性'
+    },
+    beta: {
+      high: '高彈性 (進攻型)',
+      low: '低彈性 (防禦型)',
+      base: '基準彈性 (同步大盤)'
+    },
+    resonance: {
+      tripleBullLabel: '三紅共鳴 · 強順勢',
+      tripleBullDesc: '日、週、月三級別均線呈多頭共鳴，大勢與短線均處於主升浪區間。',
+      bullPullbackLabel: '大順小逆 · 回踩買點',
+      bullPullbackDesc: '月線與週線趨勢保持向上，日線出現短期技術回踩，回抽均線觀察試倉機會。',
+      oversoldLabel: '超跌反彈 · 逆勢防守',
+      oversoldDesc: '中長級別仍受均線壓制，日線出現短期超跌反彈脈衝，注意高拋止盈防守。',
+      tripleBearLabel: '三綠空頭 · 破位規避',
+      tripleBearDesc: '日、週、月三級別均線破位下行，空頭排列，建議嚴控倉位、謹慎觀望。',
+      mixedBullLabel: '短線轉多 · 觀察持續',
+      mixedRangeLabel: '中短分歧 · 震盪整理',
+      mixedDesc: '多空均線出現交叉分歧，處於震盪築底或整理蓄勢階段。'
+    },
+    questionCategory: {
+      technical: '技術',
+      capital: '資金',
+      fundamental: '基本面',
+      macro: '總體',
+      other: '其他'
+    },
+    question: {
+      trendStrength: '趨勢強度',
+      shortMomentum: '短期動量',
+      volumeConfirmation: '量能配合',
+      technicalPattern: '技術型態',
+      trendStability: '趨勢穩定',
+      volumePriceSync: '量價協調',
+      maSupport: '均線支撐',
+      technicalComposite: '技術綜合',
+      capitalDirection: '資金方向',
+      volumePriceRelation: '量價關係',
+      tradeActivity: '交易活躍',
+      capitalComposite: '資金綜合',
+      poolReason: '進池理由',
+      companyQuality: '公司體質',
+      observationChange: '觀察變化',
+      industryRisk: '產業風險',
+      moat: '護城河',
+      valuationLevel: '估值水準'
+    }
   },
   stockCitation: {
     noChangeData: 'No change data',
@@ -8849,7 +8949,24 @@ export default {
       title: '連板梯隊',
       caption: '近 {n} 個交易日 · 顏色深淺 = 家數',
       failed: '連板資料未就緒',
-      level: { two: '2板', three: '3板', four: '4板', five: '5板', six: '6板', seven: '7板+' }
+      level: { two: '2板', three: '3板', four: '4板', five: '5板', six: '6板', seven: '7板+' },
+      tabMatrix: '熱力矩陣',
+      tabStocks: '連板梯隊 ({count})',
+      tabBreak: '炸板跌停 ({count})',
+      maxBoard: '最高空間板：{count} 連板',
+      stockCount: '{count} 檔',
+      sealTimeTitle: '封板時間',
+      sealMoneyTitle: '封單金額',
+      sealMoney: '封單 {value}',
+      breakPoolTitle: '炸板池（開板回落 {count} 檔）',
+      breakPoolEmpty: '今日無炸板個股',
+      openTimes: '開板 {count} 次',
+      downPoolTitle: '跌停池（極端核按鈕 {count} 檔）',
+      downPoolEmpty: '今日無跌停個股',
+      limitDownAt: '{time} 跌停',
+      tradeDate: '行情交易日：{date}',
+      subCaptionStocks: '空間板梯隊',
+      subCaptionBreak: '盤中開板與極端核按鈕'
     },
     basis: {
       title: '期股連動 · 股股指數期貨基差',
@@ -8861,7 +8978,20 @@ export default {
       divergence: '{name} 基差率 vs 現貨日漲跌',
       legendBasis: '基差率',
       legendSpot: '現貨日漲跌',
-      window: '近 {n} 個交易日'
+      window: '近 {n} 個交易日',
+      tabIndex: '股指期貨基差',
+      tabCommodity: '大宗商品聯動 ({count})',
+      tabWarehouse: '註冊倉單異動',
+      warehouseCaption: '交易所註冊倉單日增減（去庫緊俏 vs 累庫供過於求）',
+      tradeDate: '行情交易日：{date}',
+      commodityFallback: '全市場核心工業品與農產品聯動',
+      turnover: '成交額 {value}',
+      linkedStocks: '對應 A 股：',
+      destock: '去庫 {value}',
+      accumulate: '累庫 +{value}',
+      flat: '持平 0',
+      warehouseLabel: '現存倉單',
+      warehouseLots: '{count}手'
     },
     watchlist: {
       title: 'Watchlist',
@@ -9338,6 +9468,72 @@ export default {
     failed: '除權日曆資料未就緒',
     statCount: '涉及股票',
     statAvgYield: '平均股息率',
-    statTopBonus: '最高送轉標的'
+    statTopBonus: '最高送轉標的',
+    bonusTen: '10轉{value}',
+    payoutLabel: '配息',
+    cashPerShare: '¥{value}/股',
+    bonusLabel: '送轉',
+    bonusShares: '10轉{value}股',
+    priceLabel: '現價',
+    yieldPill: '股息率 {value}%',
+    captionYield: '最新現金股息率排行（防守低波現金乳牛）',
+    captionBonus: '高送轉紅利股（大比例轉增擴股）',
+    captionAll: '2026 年度除權除息日曆一覽'
+  },
+  etfWorkspace: {
+    group: {
+      institutional: '機構控盤排行'
+    },
+    col: {
+      fundName: '基金名稱 / 代碼',
+      instHolding: '機構投資人占比',
+      retailHolding: '個人散戶占比',
+      avgShare: '戶均份額',
+      action: '操作',
+      chipPenetration: '籌碼穿透'
+    },
+    holderCount: '持有人戶數',
+    holderAccounts: '{count} 戶',
+    avgHolding: '戶均持股',
+    holders: {
+      title: '持有人',
+      penetrateTop10: '十大持有人穿透'
+    },
+    drawer: {
+      title: '{name} ({code}) 持股穿透',
+      structureTitle: '持有人結構 · 籌碼分布',
+      latestPeriod: '最新期',
+      insTitle: '機構占比: {value}%',
+      retailTitle: '散戶占比: {value}%',
+      instLabel: '機構投資人',
+      retailLabel: '個人散戶',
+      topHoldersTitle: '前十大持有人穿透 (國家隊/壽險/券商/銀行)',
+      noHoldersData: '暫無持有人穿透資料'
+    },
+    holder: {
+      holdRateLabel: '持有占比',
+      holdShareLabel: '持股份額'
+    }
+  },
+  hotStockRadar: {
+    title: '人氣與飆升雷達',
+    tabSkyrocket: '飆升黑馬榜',
+    tabRank: '人氣總榜 (Top 50)',
+    expand: '展開更多',
+    failed: '人氣資料未就緒',
+    observeDate: '觀測日期',
+    latest: '最新',
+    topSurge: '最大飆升',
+    topSurgeValue: '{name} (暴增 +{value}位)',
+    topHeat: '人氣榜首',
+    topHeatValue: '{name} (熱度 {value})',
+    heatLabel: '關注熱度',
+    captionSkyrocket: '位次暴增黑馬（短線點火、關注度劇烈激增）',
+    captionRank: '全市場綜合關注度最高標的（主線龍頭與高辨識度核心）',
+    trend: {
+      up: '升溫',
+      down: '降溫',
+      flat: '持平'
+    }
   }
 }

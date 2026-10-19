@@ -126,7 +126,107 @@ export default {
     cost: 'Cost',
     stopLoss: 'Stop Loss',
     costPlaceholder: 'Целевая цена покупки',
-    stopPlaceholder: 'Цена стоп-лосса'
+    stopPlaceholder: 'Цена стоп-лосса',
+    sharesMarketValue: '{shares} акц. (стоимость ¥{value})',
+    anomalyTitle: 'Атрибуция внутридневных движений · Анализ драйверов',
+    fundTitle: 'Институциональные вложения · Публичные фонды и ETF',
+    fundHoldingCount: '{count} фондов держат',
+    fundConcentration: 'Концентрация владения',
+    fundInstitutionCount: 'Число держателей',
+    fundInstitutionUnit: '{count} компаний',
+    fundFlowTrend: 'Динамика позиций',
+    fundIncrease: 'Увеличение {count}',
+    fundDecrease: 'Сокращение {count}',
+    fundLoading: 'Разбираем вложения публичных фондов...',
+    fundEmpty: 'Данных о крупных вложениях публичных фондов пока нет',
+    publicFund: 'Публичный фонд',
+    fundNetValueRatioTitle: 'Доля в чистых активах фонда',
+    fundHoldingRatio: 'Доля владения',
+    fundPeriodChangeTitle: 'Изменение вложений к прошлому периоду',
+    fundQuarterChange: 'Изменение за квартал {value}%',
+    dividendHistory: 'История выплат и бонусов акциями',
+    dividendCount: 'Последние выплаты: {count}',
+    dividendYield: 'Доходность {value}%',
+    dividendCash: 'Денежная выплата ¥{value} за акцию',
+    dividendBonus: '10 на {value} акций',
+    hotTrendTitle: 'Внимание инвесторов · Динамика позиции',
+    hotLatestRank: 'Текущая позиция #{rank}',
+    quantTitle: 'Квант-признаки · Сжатие волатильности и Supertrend',
+    latest: 'Последние',
+    squeezeStatusLabel: 'Статус TTM Squeeze',
+    supertrendLabel: 'Трек Supertrend',
+    dynamicStopLine: 'Динамический стоп: ¥{value}',
+    momentumLabel: 'Гистограмма импульса',
+    betaLabel: '20-дневная эластичность Beta',
+    techScoreTitle: 'Технический средний: {value}',
+    techScore: 'Техника {value}',
+    fundScoreTitle: 'Средний по средствам: {value}',
+    fundScore: 'Средства {value}',
+    fundamentalScoreTitle: 'Фундаментальный средний: {value}',
+    fundamentalScore: 'Фундаментал {value}',
+    macroScoreTitle: 'Средний по макро: {value}',
+    macroScore: 'Макро {value}',
+    scorePoints: '{value} баллов',
+    squeeze: {
+      on: 'Сжатие и накопление (Squeeze ON)',
+      fired: 'Пробой и высвобождение (Squeeze Fired)',
+      off: 'Обычная волатильность (Squeeze OFF)'
+    },
+    squeezeHint: {
+      on: 'Полосы Боллинджера сжались внутрь канала Кельтнера — точка перелома',
+      fired: 'Сжатие разрешилось, волатильность растёт, однонаправленный тренд ускоряется',
+      off: 'Канал не сжат, широкий обычный диапазон'
+    },
+    supertrend: {
+      bullish: 'Бычий тренд (Bullish)',
+      bearish: 'Медвежья защита (Bearish)',
+      neutral: 'Нейтральный тренд'
+    },
+    beta: {
+      high: 'Высокая эластичность (атака)',
+      low: 'Низкая эластичность (защита)',
+      base: 'Базовая эластичность (как рынок)'
+    },
+    resonance: {
+      tripleBullLabel: 'Тройной бычий резонанс · Сильный тренд',
+      tripleBullDesc: 'Скользящие средние дневного, недельного и месячного графиков направлены вверх, и крупный, и краткосрочный тренд находятся в главной волне роста.',
+      bullPullbackLabel: 'Большой тренд вверх, маленький откат · Покупка на откате',
+      bullPullbackDesc: 'Тренды месячного и недельного графиков продолжают расти, а на дневном графике возник краткосрочный технический откат. Дождитесь возврата к скользящей средней и подумайте о небольшой позиции.',
+      oversoldLabel: 'Отскок после перегрева · Защита против тренда',
+      oversoldDesc: 'На среднем и длинном горизонте цены всё ещё прижаты к скользящим средним, но на дневном графике виден краткосрочный отскок после перегрева. Фиксируйте прибыль на отскоке и держите защитную линию.',
+      tripleBearLabel: 'Тройной медвежий · Избегать пробоя',
+      tripleBearDesc: 'Скользящие средние дневного, недельного и месячного графиков пробиты вниз и выстроены в медвежью последовательность. Сокращайте размер позиции и наблюдайте с осторожностью.',
+      mixedBullLabel: 'Краткосрочный разворот вверх · Следить за продолжением',
+      mixedRangeLabel: 'Расхождение короткого и среднего · Консолидация',
+      mixedDesc: 'Бычьи и медвежьи скользящие средние пересеклись, рынок находится в фазе формирования дна или консолидации.'
+    },
+    questionCategory: {
+      technical: 'Техника',
+      capital: 'Средства',
+      fundamental: 'Фундаментал',
+      macro: 'Макро',
+      other: 'Прочее'
+    },
+    question: {
+      trendStrength: 'Сила тренда',
+      shortMomentum: 'Краткосрочный импульс',
+      volumeConfirmation: 'Подтверждение объёмом',
+      technicalPattern: 'Технический паттерн',
+      trendStability: 'Устойчивость тренда',
+      volumePriceSync: 'Согласованность объёма и цены',
+      maSupport: 'Поддержка скользящей средней',
+      technicalComposite: 'Технический итог',
+      capitalDirection: 'Направление средств',
+      volumePriceRelation: 'Связь объёма и цены',
+      tradeActivity: 'Активность торгов',
+      capitalComposite: 'Итог по средствам',
+      poolReason: 'Причина попадания в список',
+      companyQuality: 'Качество компании',
+      observationChange: 'Изменение наблюдений',
+      industryRisk: 'Риск отрасли',
+      moat: 'Экономический ров',
+      valuationLevel: 'Уровень оценки'
+    }
   },
   stockCitation: {
     noChangeData: 'No change data',
@@ -8851,7 +8951,24 @@ export default {
       title: 'Лестница лимитных движений',
       caption: 'Последние {n} дней · насыщенность = количество',
       failed: 'Данные лестницы недоступны',
-      level: { two: '2под', three: '3под', four: '4под', five: '5под', six: '6под', seven: '7под+' }
+      level: { two: '2под', three: '3под', four: '4под', five: '5под', six: '6под', seven: '7под+' },
+      tabMatrix: 'Тепловая карта',
+      tabStocks: 'Лестница лимитных движений ({count})',
+      tabBreak: 'Сорванные лимиты и снижения лимита ({count})',
+      maxBoard: 'Максимальная серия: {count} подряд',
+      stockCount: '{count} акций',
+      sealTimeTitle: 'Время фиксации лимита',
+      sealMoneyTitle: 'Объём зафиксированной заявки',
+      sealMoney: 'Заявка {value}',
+      breakPoolTitle: 'Пул сорванных лимитов (откат после открытия, {count} акций)',
+      breakPoolEmpty: 'Сегодня нет акций со сорванным лимитом',
+      openTimes: 'Открытий {count} раз',
+      downPoolTitle: 'Пул снижений лимита (экстремальный выброс, {count} акций)',
+      downPoolEmpty: 'Сегодня нет акций на снижении лимита',
+      limitDownAt: '{time} снижение лимита',
+      tradeDate: 'Торговый день: {date}',
+      subCaptionStocks: 'Лестница лимитных серий',
+      subCaptionBreak: 'Внутридневные срывы лимита и экстремальный выброс'
     },
     basis: {
       title: 'Связь фьючерс–спот · базис',
@@ -8863,7 +8980,20 @@ export default {
       divergence: 'Базис {name} vs дневное изменение спота',
       legendBasis: 'Ставка базиса',
       legendSpot: 'Изменение спота',
-      window: 'Последние {n} торговых дней'
+      window: 'Последние {n} торговых дней',
+      tabIndex: 'Базис по индексам',
+      tabCommodity: 'Связь с сырьевыми рынками ({count})',
+      tabWarehouse: 'Движение складских свидетельств',
+      warehouseCaption: 'Складские свидетельства биржи, изменение за день (сокращение запасов = дефицит / рост запасов = избыток)',
+      tradeDate: 'Торговый день: {date}',
+      commodityFallback: 'Ключевые промышленные и сельскохозяйственные товары всего рынка',
+      turnover: 'Оборот {value}',
+      linkedStocks: 'Связанные акции A-share:',
+      destock: 'Сокращение запасов {value}',
+      accumulate: 'Рост запасов +{value}',
+      flat: 'Без изменений 0',
+      warehouseLabel: 'Остаток свидетельств',
+      warehouseLots: '{count} контрактов'
     },
     watchlist: {
       title: 'Избранное',
@@ -9340,6 +9470,72 @@ export default {
     failed: 'Данные календаря выплат недоступны',
     statCount: 'Задействованных акций',
     statAvgYield: 'Средняя доходность',
-    statTopBonus: 'Максимальный бонус акциями'
+    statTopBonus: 'Максимальный бонус акциями',
+    bonusTen: '10 на {value}',
+    payoutLabel: 'Денежные выплаты',
+    cashPerShare: '¥{value} за акцию',
+    bonusLabel: 'Бонусы акциями',
+    bonusShares: '10 на {value} акций',
+    priceLabel: 'Текущая цена',
+    yieldPill: 'Доходность {value}%',
+    captionYield: 'Рейтинг свежей денежной доходности (защитные «дойные коровы» с низкой волатильностью)',
+    captionBonus: 'Акции с крупными бонусами акциями (масштабная капитализация резервов)',
+    captionAll: 'Календарь выплат и дивидендов за 2026 год'
+  },
+  etfWorkspace: {
+    group: {
+      institutional: 'Рейтинг контроля институционалов'
+    },
+    col: {
+      fundName: 'Фонд / Код',
+      instHolding: 'Доля институционалов',
+      retailHolding: 'Доля частных инвесторов',
+      avgShare: 'Среднее на держателя',
+      action: 'Действие',
+      chipPenetration: 'Разбор держателей'
+    },
+    holderCount: 'Число счетов держателей',
+    holderAccounts: '{count} счетов',
+    avgHolding: 'Средняя позиция на счёт',
+    holders: {
+      title: 'Держатели',
+      penetrateTop10: 'Разбор 10 крупнейших держателей'
+    },
+    drawer: {
+      title: '{name} ({code}) — разбор держателей',
+      structureTitle: 'Структура держателей · распределение долей',
+      latestPeriod: 'Последний период',
+      insTitle: 'Институционалы: {value}%',
+      retailTitle: 'Частные инвесторы: {value}%',
+      instLabel: 'Институциональные инвесторы',
+      retailLabel: 'Частные инвесторы',
+      topHoldersTitle: 'Разбор 10 крупнейших держателей (государственные фонды / страховые / брокеры / банки)',
+      noHoldersData: 'Данных по разбору держателей пока нет'
+    },
+    holder: {
+      holdRateLabel: 'Доля владения',
+      holdShareLabel: 'Объём удержания'
+    }
+  },
+  hotStockRadar: {
+    title: 'Радар внимания и взлётов',
+    tabSkyrocket: 'Взлетевшие лидеры',
+    tabRank: 'Рейтинг внимания (Top 50)',
+    expand: 'Показать больше',
+    failed: 'Данные по вниманию недоступны',
+    observeDate: 'Дата наблюдения',
+    latest: 'Последние',
+    topSurge: 'Максимальный взлёт',
+    topSurgeValue: '{name} (взлёт +{value} мест)',
+    topHeat: 'Лидер по вниманию',
+    topHeatValue: '{name} (внимание {value})',
+    heatLabel: 'Внимание инвесторов',
+    captionSkyrocket: 'Тёмные лошадки с резким ростом позиции (краткосрочный запуск, всплеск интереса)',
+    captionRank: 'Наиболее популярные бумаги всего рынка (лидеры темы и ключевые имена с высокой узнаваемостью)',
+    trend: {
+      up: 'Нагрев',
+      down: 'Охлаждение',
+      flat: 'Без изменений'
+    }
   }
 }

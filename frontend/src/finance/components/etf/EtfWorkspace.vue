@@ -69,12 +69,12 @@
       <div v-else class="etf-ws__card">
         <div class="etf-ws__table">
           <div class="etf-ws__tr etf-ws__tr--head etf-ws__tr--inst">
-            <span class="etf-ws__col-name">基金名称 / 代码</span>
-            <span class="is-center">机构投资者占比</span>
-            <span class="is-num">个人散户占比</span>
-            <span class="is-num">持有人户数</span>
-            <span class="is-num">户均份额</span>
-            <span class="is-center">操作</span>
+            <span class="etf-ws__col-name">{{ $t('etfWorkspace.col.fundName') }}</span>
+            <span class="is-center">{{ $t('etfWorkspace.col.instHolding') }}</span>
+            <span class="is-num">{{ $t('etfWorkspace.col.retailHolding') }}</span>
+            <span class="is-num">{{ $t('etfWorkspace.holderCount') }}</span>
+            <span class="is-num">{{ $t('etfWorkspace.col.avgShare') }}</span>
+            <span class="is-center">{{ $t('etfWorkspace.col.action') }}</span>
           </div>
 
           <div
@@ -96,7 +96,7 @@
             </span>
 
             <span class="is-num etf-ws__num">{{ row.psnl_rate ? row.psnl_rate.toFixed(2) + '%' : '—' }}</span>
-            <span class="is-num etf-ws__num">{{ row.holder_amount?.toLocaleString() ?? '—' }} 户</span>
+            <span class="is-num etf-ws__num">{{ $t('etfWorkspace.holderAccounts', { count: row.holder_amount?.toLocaleString() ?? '—' }) }}</span>
             <span class="is-num etf-ws__num">{{ fmtShare(row.avg_holder_share) }}</span>
             <span class="is-center">
               <button
@@ -104,7 +104,7 @@
                 class="etf-ws__holder-btn"
                 @click.stop="openHoldersDrawer(row.fund_thscode, row.fund_name || row.fund_thscode)"
               >
-                十大持有人穿透
+                {{ $t('etfWorkspace.holders.penetrateTop10') }}
               </button>
             </span>
           </div>
@@ -126,7 +126,7 @@
             <span class="is-num">{{ $t('tracking.etf.col.multiple') }}</span>
             <span class="is-center">{{ $t('tracking.etf.col.signal') }}</span>
             <span class="is-num">{{ $t('tracking.etf.col.observed') }}</span>
-            <span class="is-center">筹码穿透</span>
+            <span class="is-center">{{ $t('etfWorkspace.col.chipPenetration') }}</span>
           </div>
 
           <div
@@ -159,7 +159,7 @@
                 class="etf-ws__holder-btn"
                 @click.stop="openHoldersDrawer(row.it.thscode, row.it.name)"
               >
-                持有人
+                {{ $t('etfWorkspace.holders.title') }}
               </button>
             </span>
           </div>
@@ -184,8 +184,8 @@
         <!-- 机构 vs 散户结构 -->
         <div v-if="holdersDetail.structure" class="etf-drawer__struct-card">
           <div class="etf-drawer__struct-head">
-            <span class="etf-drawer__struct-title">持有人结构 · 筹码分布</span>
-            <span class="etf-drawer__struct-date">{{ holdersDetail.structure.report_date || '最新期' }}</span>
+            <span class="etf-drawer__struct-title">{{ $t('etfWorkspace.drawer.structureTitle') }}</span>
+            <span class="etf-drawer__struct-date">{{ holdersDetail.structure.report_date || $t('etfWorkspace.drawer.latestPeriod') }}</span>
           </div>
 
           <!-- 双色比例条 -->
@@ -193,33 +193,33 @@
             <div
               class="etf-drawer__bar-ins"
               :style="{ width: `${holdersDetail.structure.ins_position ?? 50}%` }"
-              :title="`机构占比: ${holdersDetail.structure.ins_position ?? '—'}%`"
+              :title="$t('etfWorkspace.drawer.insTitle', { value: holdersDetail.structure.ins_position ?? '—' })"
             />
             <div
               class="etf-drawer__bar-psnl"
               :style="{ width: `${holdersDetail.structure.psnl_rate ?? 50}%` }"
-              :title="`散户占比: ${holdersDetail.structure.psnl_rate ?? '—'}%`"
+              :title="$t('etfWorkspace.drawer.retailTitle', { value: holdersDetail.structure.psnl_rate ?? '—' })"
             />
           </div>
 
           <div class="etf-drawer__legend-row">
             <div class="etf-drawer__legend-item">
               <span class="etf-drawer__dot is-ins" />
-              <span>机构投资者: <b>{{ holdersDetail.structure.ins_position ?? '—' }}%</b></span>
+              <span>{{ $t('etfWorkspace.drawer.instLabel') }}: <b>{{ holdersDetail.structure.ins_position ?? '—' }}%</b></span>
             </div>
             <div class="etf-drawer__legend-item">
               <span class="etf-drawer__dot is-psnl" />
-              <span>个人散户: <b>{{ holdersDetail.structure.psnl_rate ?? '—' }}%</b></span>
+              <span>{{ $t('etfWorkspace.drawer.retailLabel') }}: <b>{{ holdersDetail.structure.psnl_rate ?? '—' }}%</b></span>
             </div>
           </div>
 
           <div class="etf-drawer__stat-grid">
             <div class="etf-drawer__stat-cell">
-              <span class="etf-drawer__stat-k">持有人户数</span>
-              <span class="etf-drawer__stat-v">{{ holdersDetail.structure.holder_amount?.toLocaleString() ?? '—' }} 户</span>
+              <span class="etf-drawer__stat-k">{{ $t('etfWorkspace.holderCount') }}</span>
+              <span class="etf-drawer__stat-v">{{ $t('etfWorkspace.holderAccounts', { count: holdersDetail.structure.holder_amount?.toLocaleString() ?? '—' }) }}</span>
             </div>
             <div class="etf-drawer__stat-cell">
-              <span class="etf-drawer__stat-k">户均持仓</span>
+              <span class="etf-drawer__stat-k">{{ $t('etfWorkspace.avgHolding') }}</span>
               <span class="etf-drawer__stat-v">{{ fmtShare(holdersDetail.structure.avg_holder_share) }}</span>
             </div>
           </div>
@@ -227,8 +227,8 @@
 
         <!-- 前十大持有人穿透 -->
         <div class="etf-drawer__top-section">
-          <h4 class="etf-drawer__sub-title">前十大持有人穿透 (国家队/险资/券商/银行)</h4>
-          <div v-if="!holdersDetail.top_holders.length" class="etf-drawer__empty-hint">暂无持有人穿透数据</div>
+          <h4 class="etf-drawer__sub-title">{{ $t('etfWorkspace.drawer.topHoldersTitle') }}</h4>
+          <div v-if="!holdersDetail.top_holders.length" class="etf-drawer__empty-hint">{{ $t('etfWorkspace.drawer.noHoldersData') }}</div>
           <div v-else class="etf-drawer__holder-list">
             <div v-for="h in holdersDetail.top_holders" :key="h.rank + h.holder_name" class="etf-drawer__holder-row">
               <span class="etf-drawer__holder-rank">#{{ h.rank }}</span>
@@ -238,8 +238,8 @@
                   <span class="etf-drawer__holder-badge" :class="holderBadgeClass(h.holder_type)">{{ h.holder_type }}</span>
                 </div>
                 <div class="etf-drawer__holder-bottom">
-                  <span>持有占比: <b>{{ h.hold_rate_pct ? h.hold_rate_pct.toFixed(2) + '%' : '—' }}</b></span>
-                  <span v-if="h.hold_share">持仓份额: {{ fmtShare(h.hold_share) }}</span>
+                  <span>{{ $t('etfWorkspace.holder.holdRateLabel') }}: <b>{{ h.hold_rate_pct ? h.hold_rate_pct.toFixed(2) + '%' : '—' }}</b></span>
+                  <span v-if="h.hold_share">{{ $t('etfWorkspace.holder.holdShareLabel') }}: {{ fmtShare(h.hold_share) }}</span>
                 </div>
               </div>
             </div>
@@ -303,7 +303,7 @@ async function loadInstitutional() {
 }
 
 async function openHoldersDrawer(thscode: string, name: string) {
-  drawerTitle.value = `${name} (${thscode}) 持仓穿透`
+  drawerTitle.value = t('etfWorkspace.drawer.title', { name, code: thscode })
   drawerVisible.value = true
   drawerLoading.value = true
   holdersDetail.value = null
@@ -389,7 +389,7 @@ const groups = computed(() => {
     },
     {
       key: 'institutional' as const,
-      label: '机构控盘排行',
+      label: t('etfWorkspace.group.institutional'),
       count: instItems.value.length || 30,
     },
   ]

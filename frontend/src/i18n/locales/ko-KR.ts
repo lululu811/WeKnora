@@ -126,7 +126,107 @@ export default {
     cost: 'Cost',
     stopLoss: 'Stop Loss',
     costPlaceholder: '목표 매수가',
-    stopPlaceholder: '손절가'
+    stopPlaceholder: '손절가',
+    sharesMarketValue: '{shares}주 (평가금액 ¥{value})',
+    anomalyTitle: '장중 변동 원인 · 동인 분석',
+    fundTitle: '기관 보유 구조 · 펀드와 ETF 집중 보유',
+    fundHoldingCount: '{count}개 집중 보유',
+    fundConcentration: '보유 집중도',
+    fundInstitutionCount: '보유 기관 수',
+    fundInstitutionUnit: '{count}곳',
+    fundFlowTrend: '증감 추이',
+    fundIncrease: '증가 {count}',
+    fundDecrease: '감소 {count}',
+    fundLoading: '펀드 보유 데이터를 조회하는 중...',
+    fundEmpty: '펀드 집중 보유 공시 데이터가 없습니다',
+    publicFund: '펀드',
+    fundNetValueRatioTitle: '해당 펀드 순자산 대비 보유 비율',
+    fundHoldingRatio: '보유 비율',
+    fundPeriodChangeTitle: '전분기 대비 보유 변동 폭',
+    fundQuarterChange: '분기 변동 {value}%',
+    dividendHistory: '배당·무상증자 이력',
+    dividendCount: '최근 {count}회 배당',
+    dividendYield: '배당수익률 {value}%',
+    dividendCash: '현금배당 ¥{value}/주',
+    dividendBonus: '10주당 {value}주',
+    hotTrendTitle: '관심도 · 순위 추이',
+    hotLatestRank: '최신 순위 #{rank}',
+    quantTitle: '퀀트 특징 · 변동성 수축과 슈퍼트렌드',
+    latest: '최신',
+    squeezeStatusLabel: 'TTM Squeeze 상태',
+    supertrendLabel: '슈퍼트렌드 레일',
+    dynamicStopLine: '동적 손절선: ¥{value}',
+    momentumLabel: '모멘텀 히스토그램',
+    betaLabel: '20일 Beta 탄성 계수',
+    techScoreTitle: '기술적 평균: {value}',
+    techScore: '기술적 {value}',
+    fundScoreTitle: '자금 평균: {value}',
+    fundScore: '자금 {value}',
+    fundamentalScoreTitle: '펀더멘털 평균: {value}',
+    fundamentalScore: '펀더멘털 {value}',
+    macroScoreTitle: '매크로 평균: {value}',
+    macroScore: '매크로 {value}',
+    scorePoints: '{value}점',
+    squeeze: {
+      on: '압축 국면 (Squeeze ON)',
+      fired: '돌파 (Squeeze Fired)',
+      off: '정상 변동 (Squeeze OFF)'
+    },
+    squeezeHint: {
+      on: '볼린저 밴드가 켈트너 채널 안으로 축소 — 변동의 전환점',
+      fired: '압축 해제, 변동성 확대, 한 방향 추세 가속',
+      off: '채널이 압축되지 않은 넓은 범위의 정상 등락'
+    },
+    supertrend: {
+      bullish: '강세 추세 (Bullish)',
+      bearish: '약세 방어 (Bearish)',
+      neutral: '중립 추세'
+    },
+    beta: {
+      high: '탄력 높음 (공격형)',
+      low: '탄력 낮음 (방어형)',
+      base: '기준 탄력 (시장과 동조)'
+    },
+    resonance: {
+      tripleBullLabel: '3중 강세 공명 · 강한 추세',
+      tripleBullDesc: '일·주·월 이동평균이 모두 강세로 정렬되어 중장기와 단기 모두 주요 상승 구간에 있습니다.',
+      bullPullbackLabel: '큰 것은 상승, 작은 것은 조정 · 눌림 매수',
+      bullPullbackDesc: '월선과 주선 추세는 상승을 유지하는 가운데 일봉에 단기 조정 나타나 이동평균까지 물러나는 것을 확인한 뒤 소규모 진입을 검토하세요.',
+      oversoldLabel: '과매도 반등 · 역방향 방어',
+      oversoldDesc: '중장기적으로는 여전히 이동평균의 압력을 받지만 일봉에 단기 과매도 반등이 나타났습니다. 반등 구간에서 익절하고 방어선을 유지하세요.',
+      tripleBearLabel: '3중 약세 · 이탈 회피',
+      tripleBearDesc: '일·주·월 이동평균이 모두 하향 이탈하며 약세로 정렬되었습니다. 비중을 엄격히 제한하고 신중하게 관망하기를 권합니다.',
+      mixedBullLabel: '단기 전환 상승 · 지속 여부 확인',
+      mixedRangeLabel: '단·중기 혼조 · 박스권 정리',
+      mixedDesc: '강세·약세 이동평균이 교차하며 바닥을 다지거나 횡보 정리 국면에 있습니다.'
+    },
+    questionCategory: {
+      technical: '기술적',
+      capital: '자금',
+      fundamental: '펀더멘털',
+      macro: '매크로',
+      other: '기타'
+    },
+    question: {
+      trendStrength: '추세 강도',
+      shortMomentum: '단기 모멘텀',
+      volumeConfirmation: '거래량 확인',
+      technicalPattern: '기술적 패턴',
+      trendStability: '추세 안정성',
+      volumePriceSync: '거래량·가격 정합',
+      maSupport: '이동평균 지지',
+      technicalComposite: '기술적 종합',
+      capitalDirection: '자금 흐름',
+      volumePriceRelation: '거래량·가격 관계',
+      tradeActivity: '거래 활발도',
+      capitalComposite: '자금 종합',
+      poolReason: '풀 편입 사유',
+      companyQuality: '기업 질',
+      observationChange: '관찰 항목 변화',
+      industryRisk: '업종 리스크',
+      moat: '경제적 해자',
+      valuationLevel: '밸류에이션 수준'
+    }
   },
   stockCitation: {
     noChangeData: 'No change data',
@@ -8851,7 +8951,24 @@ export default {
       title: '연속 상한가 사다리',
       caption: '최근 {n} 거래일 · 진하기 = 종목 수',
       failed: '사다리 데이터 미준비',
-      level: { two: '2판', three: '3판', four: '4판', five: '5판', six: '6판', seven: '7판+' }
+      level: { two: '2판', three: '3판', four: '4판', five: '5판', six: '6판', seven: '7판+' },
+      tabMatrix: '히트맵',
+      tabStocks: '연속 상한가 사다리 ({count})',
+      tabBreak: '상한가 이탈·하한가 ({count})',
+      maxBoard: '최고 연속 상한가: {count}연속',
+      stockCount: '{count}종목',
+      sealTimeTitle: '상한가 체결 시각',
+      sealMoneyTitle: '결제 금액',
+      sealMoney: '결제 {value}',
+      breakPoolTitle: '상한가 이탈 풀 (分析与回落 {count}종목)',
+      breakPoolEmpty: '오늘 상한가 이탈 종목 없음',
+      openTimes: '상한가 해제 {count}회',
+      downPoolTitle: '하한가 풀 (극단적 매도 {count}종목)',
+      downPoolEmpty: '오늘 하한가 종목 없음',
+      limitDownAt: '{time} 하한가',
+      tradeDate: '거래일: {date}',
+      subCaptionStocks: '최고 사다리',
+      subCaptionBreak: '장중 상한가 이탈과 극단적 매도'
     },
     basis: {
       title: '선물–현물 연동 · 지수선물 基차',
@@ -8863,7 +8980,20 @@ export default {
       divergence: '{name} 基차율 vs 현물 일간 등락',
       legendBasis: '基차율',
       legendSpot: '현물 일간 등락',
-      window: '최근 {n} 거래일'
+      window: '최근 {n} 거래일',
+      tabIndex: '지수선물 기차',
+      tabCommodity: '대자품 연동 ({count})',
+      tabWarehouse: '등록 창고증 변동',
+      warehouseCaption: '거래소 등록 창고증 일일 증감 (감고 = 부족 / 증고 = 과잉)',
+      tradeDate: '거래일: {date}',
+      commodityFallback: '전 시장 핵심 산업품·농산물 연동',
+      turnover: '거래대금 {value}',
+      linkedStocks: '연계 A주:',
+      destock: '감고 {value}',
+      accumulate: '증고 +{value}',
+      flat: '보합 0',
+      warehouseLabel: '잔여 창고증',
+      warehouseLots: '{count}계약'
     },
     watchlist: {
       title: '관심 종목',
@@ -9340,6 +9470,72 @@ export default {
     failed: '배당 캘린더 데이터를 불러오지 못했습니다',
     statCount: '관련 종목 수',
     statAvgYield: '평균 배당수익률',
-    statTopBonus: '최대 무상증자 종목'
+    statTopBonus: '최대 무상증자 종목',
+    bonusTen: '10주당 {value}주',
+    payoutLabel: '현금배당',
+    cashPerShare: '¥{value}/주',
+    bonusLabel: '무상증자',
+    bonusShares: '10주당 {value}주',
+    priceLabel: '현재가',
+    yieldPill: '배당수익률 {value}%',
+    captionYield: '최신 현금 배당수익률 순위 (방어적 저변동성 현금우)',
+    captionBonus: '고무상증자 종목 (대규모 증자에 따른 지분 확대)',
+    captionAll: '2026년 배당락일 캘린더 요약'
+  },
+  etfWorkspace: {
+    group: {
+      institutional: '기관 투자자 보유 순위'
+    },
+    col: {
+      fundName: '펀드 / 코드',
+      instHolding: '기관 투자자 보유 비중',
+      retailHolding: '개인 투자자 보유 비중',
+      avgShare: '1인당 평균 지분',
+      action: '작업',
+      chipPenetration: '보유 구조 분석'
+    },
+    holderCount: '보유 계좌 수',
+    holderAccounts: '{count} 계좌',
+    avgHolding: '1인당 평균 보유',
+    holders: {
+      title: '보유자',
+      penetrateTop10: '상위 10위 보유자 분석'
+    },
+    drawer: {
+      title: '{name} ({code}) 보유자 분석',
+      structureTitle: '보유자 구조 · 지분 분포',
+      latestPeriod: '최신',
+      insTitle: '기관 투자자: {value}%',
+      retailTitle: '개인 투자자: {value}%',
+      instLabel: '기관 투자자',
+      retailLabel: '개인 투자자',
+      topHoldersTitle: '상위 10위 보유자 분석 (국가팀·보험·증권·은행)',
+      noHoldersData: '보유자 분석 데이터가 없습니다'
+    },
+    holder: {
+      holdRateLabel: '보유 비중',
+      holdShareLabel: '보유 지분'
+    }
+  },
+  hotStockRadar: {
+    title: '관심도와 급등 레이더',
+    tabSkyrocket: '급등 다크호스',
+    tabRank: '관심도 종합 순위 (Top 50)',
+    expand: '더 보기',
+    failed: '관심도 데이터를 불러오지 못했습니다',
+    observeDate: '관측일',
+    latest: '최신',
+    topSurge: '최대 급등',
+    topSurgeValue: '{name} (+{value}위 급등)',
+    topHeat: '관심도 1위',
+    topHeatValue: '{name} (관심도 {value})',
+    heatLabel: '관심도',
+    captionSkyrocket: '순위가 급상승한 다크호스 (단기 점화, 관심 급증)',
+    captionRank: '전 시장 관심도가 가장 높은 종목 (테마 주도주와 인지도 높은 핵심 종목)',
+    trend: {
+      up: '온도 상승',
+      down: '온도 하락',
+      flat: '보합'
+    }
   }
 }

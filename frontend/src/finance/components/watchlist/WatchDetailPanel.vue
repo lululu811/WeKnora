@@ -11,7 +11,8 @@
         <span class="wl-detail__name">{{ displayName }}</span>
         <span class="wl-detail__code">{{ thscode }}</span>
       </div>
-      <button type="button" class="wl-detail__close" :title="t('watchlist.cancel')" @click="$emit('close')">
+      <button type="button" class="wl-detail__close" :title="t('watchlist.cancel')"
+        :aria-label="t('watchlist.cancel')" @click="$emit('close')">
         <t-icon name="close" size="16px" />
       </button>
     </header>
@@ -45,7 +46,7 @@
           <div class="wl-targets-item" v-if="tradeTarget?.shares">
             <span class="wl-targets-item__k">{{ t('watchlist.targetShares') }}:</span>
             <span class="wl-targets-item__v">
-              {{ tradeTarget.shares.toLocaleString() }} 股 (市值 ¥{{ targetMarketValueText }})
+              {{ t('watchDetail.sharesMarketValue', { shares: tradeTarget.shares.toLocaleString(), value: targetMarketValueText }) }}
             </span>
           </div>
           <div class="wl-targets-item" v-if="tradeTarget?.shares && tradeTarget?.cost && quote?.close">
@@ -129,7 +130,7 @@
       <div class="wl-detail__section-head">
         <h3 class="wl-detail__h3">
           <t-icon name="chart-bubble" size="14px" style="margin-right: 4px;" />
-          异动归因 · 驱动分析
+          {{ t('watchDetail.anomalyTitle') }}
         </h3>
         <span
           class="wl-anomaly__tag"
@@ -155,36 +156,36 @@
       <div class="wl-detail__section-head">
         <h3 class="wl-detail__h3">
           <t-icon name="usergroup" size="14px" style="margin-right: 4px;" />
-          机构筹码 · 公募与 ETF 重仓
+          {{ t('watchDetail.fundTitle') }}
         </h3>
         <span v-if="fundHoldings.length" class="wl-fund__count-badge">
-          {{ fundSummary?.total_funds ?? fundHoldings.length }} 只重仓
+          {{ t('watchDetail.fundHoldingCount', { count: fundSummary?.total_funds ?? fundHoldings.length }) }}
         </span>
       </div>
 
       <!-- 机构集中度与增减仓风向标 -->
       <div v-if="fundSummary && fundHoldings.length" class="wl-fund__summary-bar">
         <div class="wl-fund__stat">
-          <span class="wl-fund__stat-lbl">持股集中度</span>
+          <span class="wl-fund__stat-lbl">{{ t('watchDetail.fundConcentration') }}</span>
           <span class="wl-fund__stat-val">{{ fundSummary.total_hold_ratio ? fundSummary.total_hold_ratio.toFixed(2) + '%' : '—' }}</span>
         </div>
         <div class="wl-fund__stat">
-          <span class="wl-fund__stat-lbl">持仓机构数</span>
-          <span class="wl-fund__stat-val">{{ fundSummary.total_funds }} 家</span>
+          <span class="wl-fund__stat-lbl">{{ t('watchDetail.fundInstitutionCount') }}</span>
+          <span class="wl-fund__stat-val">{{ t('watchDetail.fundInstitutionUnit', { count: fundSummary.total_funds }) }}</span>
         </div>
         <div class="wl-fund__stat">
-          <span class="wl-fund__stat-lbl">增减仓动向</span>
+          <span class="wl-fund__stat-lbl">{{ t('watchDetail.fundFlowTrend') }}</span>
           <span class="wl-fund__stat-val wl-fund__stat-flow">
-            <span class="is-up">增 {{ fundSummary.increase_count }}</span>
+            <span class="is-up">{{ t('watchDetail.fundIncrease', { count: fundSummary.increase_count }) }}</span>
             <span class="wl-fund__sep">/</span>
-            <span class="is-down">减 {{ fundSummary.decrease_count }}</span>
+            <span class="is-down">{{ t('watchDetail.fundDecrease', { count: fundSummary.decrease_count }) }}</span>
           </span>
         </div>
       </div>
 
-      <p v-if="fundLoading" class="wl-detail__hint">正在穿透公募基金持仓数据...</p>
+      <p v-if="fundLoading" class="wl-detail__hint">{{ t('watchDetail.fundLoading') }}</p>
       <div v-else-if="!fundHoldings.length" class="wl-detail__empty">
-        <p class="wl-detail__empty-hint">暂无公募重仓持股披露数据</p>
+        <p class="wl-detail__empty-hint">{{ t('watchDetail.fundEmpty') }}</p>
       </div>
       <div v-else class="wl-fund__list">
         <div v-for="(fh, idx) in fundHoldings" :key="fh.fund_thscode" class="wl-fund__item">
@@ -194,7 +195,7 @@
           <div class="wl-fund__item-main">
             <div class="wl-fund__name-row">
               <span class="wl-fund__type-badge" :class="fh.fund_category === 'ETF' ? 'is-etf' : 'is-active'">
-                {{ fh.fund_category || '公募' }}
+                {{ fh.fund_category || t('watchDetail.publicFund') }}
               </span>
               <span class="wl-fund__name" :title="fh.fund_name">{{ fh.fund_name }}</span>
             </div>
@@ -204,16 +205,16 @@
             </div>
           </div>
           <div class="wl-fund__item-stats">
-            <span class="wl-fund__ratio" title="持仓占该基金净值比">
-              持仓比 <b>{{ fh.hold_ratio ? fh.hold_ratio.toFixed(2) + '%' : '—' }}</b>
+            <span class="wl-fund__ratio" :title="$t('watchDetail.fundNetValueRatioTitle')">
+              {{ t('watchDetail.fundHoldingRatio') }} <b>{{ fh.hold_ratio ? fh.hold_ratio.toFixed(2) + '%' : '—' }}</b>
             </span>
             <span
               v-if="fh.period_increase_rate_pct !== null && fh.period_increase_rate_pct !== undefined"
               class="wl-fund__chg"
               :class="fh.period_increase_rate_pct >= 0 ? 'is-up' : 'is-down'"
-              title="较上期持股变动幅度"
+              :title="$t('watchDetail.fundPeriodChangeTitle')"
             >
-              季变动 {{ fh.period_increase_rate_pct >= 0 ? '+' : '' }}{{ fh.period_increase_rate_pct.toFixed(2) }}%
+              {{ t('watchDetail.fundQuarterChange', { value: (fh.period_increase_rate_pct >= 0 ? '+' : '') + fh.period_increase_rate_pct.toFixed(2) }) }}
             </span>
           </div>
         </div>
@@ -225,24 +226,24 @@
       <div class="wl-detail__section-head">
         <h3 class="wl-detail__h3">
           <t-icon name="money-circle" size="14px" style="margin-right: 4px;" />
-          分红送转历史
+          {{ t('watchDetail.dividendHistory') }}
         </h3>
         <span class="wl-dividend__count-badge">
-          近 {{ dividendRecords.length }} 次分红
+          {{ t('watchDetail.dividendCount', { count: dividendRecords.length }) }}
         </span>
       </div>
       <div class="wl-dividend__list">
         <div v-for="d in dividendRecords" :key="d.ex_date || ''" class="wl-dividend__item">
           <div class="wl-dividend__top">
             <span class="wl-dividend__date">{{ d.ex_date }}</span>
-            <span v-if="d.dividend_yield" class="wl-dividend__yield">股息率 {{ d.dividend_yield.toFixed(2) }}%</span>
+            <span v-if="d.dividend_yield" class="wl-dividend__yield">{{ t('watchDetail.dividendYield', { value: d.dividend_yield.toFixed(2) }) }}</span>
           </div>
           <div class="wl-dividend__details">
             <span v-if="(d.dividend_per_share ?? 0) > 0" class="wl-dividend__cash">
-              派息 ¥{{ (d.dividend_per_share ?? 0).toFixed(2) }}/股
+              {{ t('watchDetail.dividendCash', { value: (d.dividend_per_share ?? 0).toFixed(2) }) }}
             </span>
             <span v-if="(d.per_share_bonus ?? 0) > 0" class="wl-dividend__bonus">
-              10转{{ ((d.per_share_bonus ?? 0) * 10).toFixed(1) }}股
+              {{ t('watchDetail.dividendBonus', { value: ((d.per_share_bonus ?? 0) * 10).toFixed(1) }) }}
             </span>
           </div>
         </div>
@@ -254,10 +255,10 @@
       <div class="wl-detail__section-head">
         <h3 class="wl-detail__h3">
           <t-icon name="fire" size="14px" style="margin-right: 4px;" />
-          关注热度 · 位次轨迹
+          {{ t('watchDetail.hotTrendTitle') }}
         </h3>
         <span class="wl-hot__badge">
-          最新位次 #{{ hotTrend[hotTrend.length - 1].rank }}
+          {{ t('watchDetail.hotLatestRank', { rank: hotTrend[hotTrend.length - 1].rank }) }}
         </span>
       </div>
       <div class="wl-hot__trend-box">
@@ -275,9 +276,9 @@
       <div class="wl-detail__section-head">
         <h3 class="wl-detail__h3">
           <t-icon name="dashboard" size="14px" style="margin-right: 4px;" />
-          量化特征 · 波动挤压 & 超级趋势
+          {{ t('watchDetail.quantTitle') }}
         </h3>
-        <span class="wl-squeeze__date">{{ squeezeData.latest_date || '最新' }}</span>
+        <span class="wl-squeeze__date">{{ squeezeData.latest_date || t('watchDetail.latest') }}</span>
       </div>
 
       <div class="wl-squeeze__card">
@@ -285,7 +286,7 @@
         <div class="wl-squeeze__status-row">
           <!-- TTM Squeeze 状态 -->
           <div class="wl-squeeze__col">
-            <span class="wl-squeeze__col-lbl">TTM Squeeze 状态</span>
+            <span class="wl-squeeze__col-lbl">{{ t('watchDetail.squeezeStatusLabel') }}</span>
             <div class="wl-squeeze__status-pill" :class="squeezePillClass">
               <span class="wl-squeeze__dot" />
               <span>{{ squeezeLabel }}</span>
@@ -295,13 +296,13 @@
 
           <!-- Supertrend 超级趋势追踪 -->
           <div class="wl-squeeze__col">
-            <span class="wl-squeeze__col-lbl">Supertrend 趋势轨</span>
+            <span class="wl-squeeze__col-lbl">{{ t('watchDetail.supertrendLabel') }}</span>
             <div class="wl-squeeze__status-pill" :class="supertrendPillClass">
               <t-icon :name="squeezeData.supertrend_direction === 1 ? 'arrow-up' : 'arrow-down'" size="14px" />
               <span>{{ supertrendLabel }}</span>
             </div>
             <span class="wl-squeeze__sub-hint">
-              动态止损线: ¥{{ squeezeData.supertrend_level ? squeezeData.supertrend_level.toFixed(2) : '—' }}
+              {{ t('watchDetail.dynamicStopLine', { value: squeezeData.supertrend_level ? squeezeData.supertrend_level.toFixed(2) : '—' }) }}
             </span>
           </div>
         </div>
@@ -309,7 +310,7 @@
         <!-- 动量与风险系数指标网格 -->
         <div class="wl-squeeze__metric-grid">
           <div class="wl-squeeze__metric-cell">
-            <span class="wl-squeeze__m-k">动量柱 (Momentum)</span>
+            <span class="wl-squeeze__m-k">{{ t('watchDetail.momentumLabel') }}</span>
             <span
               class="wl-squeeze__m-v"
               :class="(squeezeData.momentum_hist ?? 0) >= 0 ? 'is-up' : 'is-down'"
@@ -318,7 +319,7 @@
             </span>
           </div>
           <div class="wl-squeeze__metric-cell">
-            <span class="wl-squeeze__m-k">20日 Beta 弹性系数</span>
+            <span class="wl-squeeze__m-k">{{ t('watchDetail.betaLabel') }}</span>
             <span class="wl-squeeze__m-v">
               {{ squeezeData.beta?.toFixed(2) ?? '—' }}
               <span class="wl-squeeze__beta-tag" :class="betaTagClass">
@@ -416,17 +417,17 @@
                 </span>
                 <span v-if="d.rank" class="wl-scorecard__rank">#{{ d.rank }}</span>
                 <div class="wl-scorecard__dim-chips" v-if="parseDiaryDims(d)">
-                  <span class="wl-dim-chip" :title="`技术面均分: ${parseDiaryDims(d)!.tech.toFixed(0)}`">
-                    技术 {{ parseDiaryDims(d)!.tech.toFixed(0) }}
+                  <span class="wl-dim-chip" :title="$t('watchDetail.techScoreTitle', { value: parseDiaryDims(d)!.tech.toFixed(0) })">
+                    {{ t('watchDetail.techScore', { value: parseDiaryDims(d)!.tech.toFixed(0) }) }}
                   </span>
-                  <span class="wl-dim-chip" :title="`资金面均分: ${parseDiaryDims(d)!.fund.toFixed(0)}`">
-                    资金 {{ parseDiaryDims(d)!.fund.toFixed(0) }}
+                  <span class="wl-dim-chip" :title="$t('watchDetail.fundScoreTitle', { value: parseDiaryDims(d)!.fund.toFixed(0) })">
+                    {{ t('watchDetail.fundScore', { value: parseDiaryDims(d)!.fund.toFixed(0) }) }}
                   </span>
-                  <span class="wl-dim-chip" :title="`基本面均分: ${parseDiaryDims(d)!.base.toFixed(0)}`">
-                    基本面 {{ parseDiaryDims(d)!.base.toFixed(0) }}
+                  <span class="wl-dim-chip" :title="$t('watchDetail.fundamentalScoreTitle', { value: parseDiaryDims(d)!.base.toFixed(0) })">
+                    {{ t('watchDetail.fundamentalScore', { value: parseDiaryDims(d)!.base.toFixed(0) }) }}
                   </span>
-                  <span class="wl-dim-chip" :title="`宏观质地均分: ${parseDiaryDims(d)!.macro.toFixed(0)}`">
-                    宏观 {{ parseDiaryDims(d)!.macro.toFixed(0) }}
+                  <span class="wl-dim-chip" :title="$t('watchDetail.macroScoreTitle', { value: parseDiaryDims(d)!.macro.toFixed(0) })">
+                    {{ t('watchDetail.macroScore', { value: parseDiaryDims(d)!.macro.toFixed(0) }) }}
                   </span>
                 </div>
               </div>
@@ -446,7 +447,7 @@
                 <div class="wl-scorecard__q-head">
                   <span class="q-tag">{{ item.category }}</span>
                   <span class="q-name">{{ item.name }}</span>
-                  <span class="q-score" :class="qScoreClass(item.score)">{{ item.score }}分</span>
+                  <span class="q-score" :class="qScoreClass(item.score)">{{ t('watchDetail.scorePoints', { value: item.score }) }}</span>
                 </div>
                 <div v-if="item.reason" class="wl-scorecard__q-reason">{{ item.reason }}</div>
               </div>
@@ -623,9 +624,9 @@ async function loadSqueeze() {
 
 const squeezeLabel = computed(() => {
   const s = squeezeData.value?.squeeze_status
-  if (s === 'on') return '挤压蓄势中 (Squeeze ON)'
-  if (s === 'fired') return '突破释放 (Squeeze Fired)'
-  return '常态波动 (Squeeze OFF)'
+  if (s === 'on') return t('watchDetail.squeeze.on')
+  if (s === 'fired') return t('watchDetail.squeeze.fired')
+  return t('watchDetail.squeeze.off')
 })
 
 const squeezePillClass = computed(() => {
@@ -637,16 +638,16 @@ const squeezePillClass = computed(() => {
 
 const squeezeSubHint = computed(() => {
   const s = squeezeData.value?.squeeze_status
-  if (s === 'on') return '布林带收缩进肯特纳通道，变盘临界点'
-  if (s === 'fired') return '挤压解除，波动率扩张，单边趋势加速'
-  return '通道未受压，处于宽幅常态震荡'
+  if (s === 'on') return t('watchDetail.squeezeHint.on')
+  if (s === 'fired') return t('watchDetail.squeezeHint.fired')
+  return t('watchDetail.squeezeHint.off')
 })
 
 const supertrendLabel = computed(() => {
   const dir = squeezeData.value?.supertrend_direction
-  if (dir === 1) return '多头顺势 (Bullish)'
-  if (dir === -1) return '空头防守 (Bearish)'
-  return '趋势中性'
+  if (dir === 1) return t('watchDetail.supertrend.bullish')
+  if (dir === -1) return t('watchDetail.supertrend.bearish')
+  return t('watchDetail.supertrend.neutral')
 })
 
 const supertrendPillClass = computed(() => {
@@ -659,9 +660,9 @@ const supertrendPillClass = computed(() => {
 const betaDesc = computed(() => {
   const b = squeezeData.value?.beta
   if (b == null) return '—'
-  if (b >= 1.2) return '高弹性 (进攻型)'
-  if (b <= 0.8) return '低弹性 (防御型)'
-  return '基准弹性 (同步大盘)'
+  if (b >= 1.2) return t('watchDetail.beta.high')
+  if (b <= 0.8) return t('watchDetail.beta.low')
+  return t('watchDetail.beta.base')
 })
 
 const betaTagClass = computed(() => {
@@ -799,40 +800,40 @@ const resonanceResult = computed(() => {
   if (monthly && weekly && daily) {
     return {
       daily, weekly, monthly,
-      label: '三红共振 · 强顺势',
+      label: t('watchDetail.resonance.tripleBullLabel'),
       themeClass: 'is-bull-all',
-      desc: '日、周、月三级别均线呈多头共振，大势与短线均处于主升浪区间。',
+      desc: t('watchDetail.resonance.tripleBullDesc'),
     }
   }
   if (monthly && weekly && !daily) {
     return {
       daily, weekly, monthly,
-      label: '大顺小逆 · 回踩买点',
+      label: t('watchDetail.resonance.bullPullbackLabel'),
       themeClass: 'is-bull-pullback',
-      desc: '月线与周线趋势保持向上，日线出现短期技术回踩，回抽均线观察试仓机会。',
+      desc: t('watchDetail.resonance.bullPullbackDesc'),
     }
   }
   if (!monthly && !weekly && daily) {
     return {
       daily, weekly, monthly,
-      label: '超跌反弹 · 逆势防守',
+      label: t('watchDetail.resonance.oversoldLabel'),
       themeClass: 'is-bear-bounce',
-      desc: '中长级别仍受均线压制，日线出现短期超跌反弹脉冲，注意高抛止盈防守。',
+      desc: t('watchDetail.resonance.oversoldDesc'),
     }
   }
   if (!monthly && !weekly && !daily) {
     return {
       daily, weekly, monthly,
-      label: '三绿空头 · 破位规避',
+      label: t('watchDetail.resonance.tripleBearLabel'),
       themeClass: 'is-bear-all',
-      desc: '日、周、月三级别均线破位下行，空头排列，建议严控仓位、谨慎观望。',
+      desc: t('watchDetail.resonance.tripleBearDesc'),
     }
   }
   return {
     daily, weekly, monthly,
-    label: daily ? '短线转多 · 观察持续' : '中短分歧 · 震荡整理',
+    label: daily ? t('watchDetail.resonance.mixedBullLabel') : t('watchDetail.resonance.mixedRangeLabel'),
     themeClass: daily ? 'is-mixed-up' : 'is-mixed-down',
-    desc: '多空均线出现交叉分歧，处于震荡筑底或整理蓄势阶段。',
+    desc: t('watchDetail.resonance.mixedDesc'),
   }
 })
 
@@ -999,25 +1000,25 @@ interface ParsedQItem {
   reason: string
 }
 
-const Q_CONFIG: Record<string, { category: string; name: string }> = {
-  q1: { category: '技术', name: '趋势强度' },
-  q2: { category: '技术', name: '短期动量' },
-  q3: { category: '技术', name: '量能配合' },
-  q4: { category: '技术', name: '技术形态' },
-  q5: { category: '技术', name: '趋势稳定' },
-  q6: { category: '技术', name: '量价协调' },
-  q7: { category: '技术', name: '均线支撑' },
-  q8: { category: '技术', name: '技术综合' },
-  q9: { category: '资金', name: '资金方向' },
-  q10: { category: '资金', name: '量价关系' },
-  q11: { category: '资金', name: '交易活跃' },
-  q12: { category: '资金', name: '资金综合' },
-  q13: { category: '基本面', name: '入池理由' },
-  q14: { category: '基本面', name: '公司质地' },
-  q15: { category: '基本面', name: '观察变化' },
-  q16: { category: '宏观', name: '行业风险' },
-  q17: { category: '宏观', name: '护城河' },
-  q18: { category: '宏观', name: '估值水平' },
+const Q_CONFIG: Record<string, () => { category: string; name: string }> = {
+  q1: () => ({ category: t('watchDetail.questionCategory.technical'), name: t('watchDetail.question.trendStrength') }),
+  q2: () => ({ category: t('watchDetail.questionCategory.technical'), name: t('watchDetail.question.shortMomentum') }),
+  q3: () => ({ category: t('watchDetail.questionCategory.technical'), name: t('watchDetail.question.volumeConfirmation') }),
+  q4: () => ({ category: t('watchDetail.questionCategory.technical'), name: t('watchDetail.question.technicalPattern') }),
+  q5: () => ({ category: t('watchDetail.questionCategory.technical'), name: t('watchDetail.question.trendStability') }),
+  q6: () => ({ category: t('watchDetail.questionCategory.technical'), name: t('watchDetail.question.volumePriceSync') }),
+  q7: () => ({ category: t('watchDetail.questionCategory.technical'), name: t('watchDetail.question.maSupport') }),
+  q8: () => ({ category: t('watchDetail.questionCategory.technical'), name: t('watchDetail.question.technicalComposite') }),
+  q9: () => ({ category: t('watchDetail.questionCategory.capital'), name: t('watchDetail.question.capitalDirection') }),
+  q10: () => ({ category: t('watchDetail.questionCategory.capital'), name: t('watchDetail.question.volumePriceRelation') }),
+  q11: () => ({ category: t('watchDetail.questionCategory.capital'), name: t('watchDetail.question.tradeActivity') }),
+  q12: () => ({ category: t('watchDetail.questionCategory.capital'), name: t('watchDetail.question.capitalComposite') }),
+  q13: () => ({ category: t('watchDetail.questionCategory.fundamental'), name: t('watchDetail.question.poolReason') }),
+  q14: () => ({ category: t('watchDetail.questionCategory.fundamental'), name: t('watchDetail.question.companyQuality') }),
+  q15: () => ({ category: t('watchDetail.questionCategory.fundamental'), name: t('watchDetail.question.observationChange') }),
+  q16: () => ({ category: t('watchDetail.questionCategory.macro'), name: t('watchDetail.question.industryRisk') }),
+  q17: () => ({ category: t('watchDetail.questionCategory.macro'), name: t('watchDetail.question.moat') }),
+  q18: () => ({ category: t('watchDetail.questionCategory.macro'), name: t('watchDetail.question.valuationLevel') }),
 }
 
 function parseDiaryDims(d: WatchDiary): { tech: number; fund: number; base: number; macro: number } | null {
@@ -1055,7 +1056,7 @@ function parseScoresJson(raw: string | undefined): ParsedQItem[] {
     for (let i = 1; i <= 18; i++) {
       const k = `q${i}`
       if (s[k] !== undefined) {
-        const conf = Q_CONFIG[k] || { category: '其他', name: k.toUpperCase() }
+        const conf = Q_CONFIG[k] ? Q_CONFIG[k]() : { category: t('watchDetail.questionCategory.other'), name: k.toUpperCase() }
         out.push({
           key: k,
           category: conf.category,

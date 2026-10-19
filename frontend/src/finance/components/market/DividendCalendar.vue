@@ -19,6 +19,8 @@
           <button
             type="button"
             class="div-cal__tab"
+            role="tab"
+            :aria-selected="mode === 'all'"
             :class="{ 'is-active': mode === 'all' }"
             @click="switchMode('all')"
           >
@@ -27,6 +29,8 @@
           <button
             type="button"
             class="div-cal__tab"
+            role="tab"
+            :aria-selected="mode === 'yield'"
             :class="{ 'is-active': mode === 'yield' }"
             @click="switchMode('yield')"
           >
@@ -35,6 +39,8 @@
           <button
             type="button"
             class="div-cal__tab"
+            role="tab"
+            :aria-selected="mode === 'bonus'"
             :class="{ 'is-active': mode === 'bonus' }"
             @click="switchMode('bonus')"
           >
@@ -65,7 +71,7 @@
         </div>
         <div v-if="maxBonusItem" class="div-cal__stat-chip">
           <span class="div-cal__stat-lbl">{{ t('dividend.statTopBonus') }}</span>
-          <span class="div-cal__stat-val">{{ maxBonusItem.name }} (10转{{ ((maxBonusItem.per_share_bonus ?? 0) * 10).toFixed(1) }})</span>
+          <span class="div-cal__stat-val">{{ maxBonusItem.name }} ({{ t('dividend.bonusTen', { value: ((maxBonusItem.per_share_bonus ?? 0) * 10).toFixed(1) }) }})</span>
         </div>
       </div>
 
@@ -87,18 +93,18 @@
 
           <div class="div-cal__card-payout">
             <div v-if="(item.dividend_per_share ?? 0) > 0" class="div-cal__payout-item">
-              <span class="div-cal__payout-k">派息:</span>
-              <span class="div-cal__payout-v">¥{{ (item.dividend_per_share ?? 0).toFixed(2) }}/股</span>
+              <span class="div-cal__payout-k">{{ t('dividend.payoutLabel') }}:</span>
+              <span class="div-cal__payout-v">{{ t('dividend.cashPerShare', { value: (item.dividend_per_share ?? 0).toFixed(2) }) }}</span>
             </div>
             <div v-if="(item.per_share_bonus ?? 0) > 0" class="div-cal__payout-item is-bonus">
-              <span class="div-cal__payout-k">送转:</span>
-              <span class="div-cal__payout-v">10转{{ ((item.per_share_bonus ?? 0) * 10).toFixed(1) }}股</span>
+              <span class="div-cal__payout-k">{{ t('dividend.bonusLabel') }}:</span>
+              <span class="div-cal__payout-v">{{ t('dividend.bonusShares', { value: ((item.per_share_bonus ?? 0) * 10).toFixed(1) }) }}</span>
             </div>
           </div>
 
           <div class="div-cal__card-bottom">
             <div class="div-cal__price">
-              <span class="div-cal__price-k">现价:</span>
+              <span class="div-cal__price-k">{{ t('dividend.priceLabel') }}:</span>
               <span class="div-cal__price-v">¥{{ item.close ? item.close.toFixed(2) : '—' }}</span>
             </div>
             <div
@@ -106,7 +112,7 @@
               class="div-cal__yield-pill"
               :class="yieldPillClass(item.dividend_yield)"
             >
-              股息率 {{ item.dividend_yield.toFixed(2) }}%
+              {{ t('dividend.yieldPill', { value: item.dividend_yield.toFixed(2) }) }}
             </div>
           </div>
         </div>
@@ -134,9 +140,9 @@ const emit = defineEmits<{
 }>()
 
 const captionText = computed(() => {
-  if (mode.value === 'yield') return '最新现金股息率排行（防守低波现金奶牛）'
-  if (mode.value === 'bonus') return '高送转红利股票（大比例转增扩股）'
-  return '2026 年度除权除息日历一览'
+  if (mode.value === 'yield') return t('dividend.captionYield')
+  if (mode.value === 'bonus') return t('dividend.captionBonus')
+  return t('dividend.captionAll')
 })
 
 const displayItems = computed(() => {
@@ -208,7 +214,7 @@ onMounted(() => {
 
 <style scoped lang="less">
 .div-cal {
-  background: var(--app-panel-bg, #fff);
+  background: var(--td-bg-color-container);
   border: 1px solid var(--app-border, rgba(0, 0, 0, 0.08));
   border-radius: var(--td-radius-medium, 8px);
   padding: 12px 14px;
@@ -242,7 +248,7 @@ onMounted(() => {
   &__title {
     font-size: 13px;
     font-weight: 600;
-    color: var(--app-text-primary, #111827);
+    color: var(--td-text-color-primary);
   }
 
   &__tabs {
@@ -259,17 +265,17 @@ onMounted(() => {
     border-radius: 4px;
     border: none;
     background: transparent;
-    color: var(--app-text-secondary, #6b7280);
+    color: var(--td-text-color-secondary);
     cursor: pointer;
     transition: all 0.15s ease;
 
     &:hover {
-      color: var(--app-text-primary, #111827);
+      color: var(--td-text-color-primary);
     }
 
     &.is-active {
-      background: var(--app-panel-bg, #fff);
-      color: var(--app-text-primary, #111827);
+      background: var(--td-bg-color-container);
+      color: var(--td-text-color-primary);
       font-weight: 600;
       box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
     }
@@ -277,7 +283,7 @@ onMounted(() => {
 
   &__caption {
     font-size: 11px;
-    color: var(--app-text-tertiary, #9ca3af);
+    color: var(--td-text-color-placeholder);
   }
 
   &__toggle {
@@ -296,7 +302,7 @@ onMounted(() => {
 
   &__empty {
     font-size: 12px;
-    color: var(--app-text-tertiary, #9ca3af);
+    color: var(--td-text-color-placeholder);
     text-align: center;
     padding: 20px 0;
     margin: 0;
@@ -323,13 +329,13 @@ onMounted(() => {
   }
 
   &__stat-lbl {
-    color: var(--app-text-secondary, #6b7280);
+    color: var(--td-text-color-secondary);
   }
 
   &__stat-num {
     font-family: var(--app-font-mono, monospace);
     font-weight: 600;
-    color: var(--app-text-primary, #111827);
+    color: var(--td-text-color-primary);
 
     &.is-yield {
       color: #059669;
@@ -379,19 +385,19 @@ onMounted(() => {
   &__card-name {
     font-size: 12px;
     font-weight: 600;
-    color: var(--app-text-primary, #111827);
+    color: var(--td-text-color-primary);
   }
 
   &__card-code {
     font-size: 10px;
     font-family: var(--app-font-mono, monospace);
-    color: var(--app-text-tertiary, #9ca3af);
+    color: var(--td-text-color-placeholder);
   }
 
   &__card-date {
     font-size: 10px;
     font-family: var(--app-font-mono, monospace);
-    color: var(--app-text-secondary, #6b7280);
+    color: var(--td-text-color-secondary);
   }
 
   &__card-payout {
@@ -409,13 +415,13 @@ onMounted(() => {
   }
 
   &__payout-k {
-    color: var(--app-text-tertiary, #9ca3af);
+    color: var(--td-text-color-placeholder);
   }
 
   &__payout-v {
     font-family: var(--app-font-mono, monospace);
     font-weight: 500;
-    color: var(--app-text-primary, #111827);
+    color: var(--td-text-color-primary);
   }
 
   &__payout-item.is-bonus &__payout-v {
@@ -438,12 +444,12 @@ onMounted(() => {
   }
 
   &__price-k {
-    color: var(--app-text-tertiary, #9ca3af);
+    color: var(--td-text-color-placeholder);
   }
 
   &__price-v {
     font-family: var(--app-font-mono, monospace);
-    color: var(--app-text-secondary, #6b7280);
+    color: var(--td-text-color-secondary);
   }
 
   &__yield-pill {

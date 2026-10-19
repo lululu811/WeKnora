@@ -181,7 +181,8 @@
             @input="handleSearchInput"
             @keydown.esc="showSearchModal = false"
           />
-          <button type="button" class="search-modal__close" @click="showSearchModal = false">
+          <button type="button" class="search-modal__close" :aria-label="t('common.close')"
+            @click="showSearchModal = false">
             <t-icon name="close" size="14px" />
           </button>
         </div>
@@ -292,6 +293,7 @@
         type="button"
         class="toolbar__icon-btn"
         :title="t('halo.open')"
+        :aria-label="t('halo.open')"
         :disabled="!currentTicker || !currentExchange"
         @click="showHaloReport = true"
       >
@@ -305,6 +307,7 @@
         type="button"
         class="toolbar__icon-btn"
         :title="workspace.isCollapsed.value ? t('kline.expandWorkspace') : t('kline.collapseWorkspace')"
+        :aria-label="workspace.isCollapsed.value ? t('kline.expandWorkspace') : t('kline.collapseWorkspace')"
         @click="workspace.toggleCollapsed()"
       >
         <t-icon :name="workspace.isCollapsed.value ? 'chevron-left' : 'chevron-right'" size="16px" />

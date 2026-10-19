@@ -11,30 +11,36 @@
     <header class="lad__head">
       <div class="lad__title-row">
         <span class="bas-title">{{ $t('marketDashboard.ladder.title') }}</span>
-        <div class="lad__tabs">
+        <div class="lad__tabs" role="tablist">
           <button
             type="button"
             class="lad__tab"
+            role="tab"
+            :aria-selected="viewMode === 'matrix'"
             :class="{ 'is-active': viewMode === 'matrix' }"
             @click="viewMode = 'matrix'"
           >
-            热力矩阵
+            {{ $t('marketDashboard.ladder.tabMatrix') }}
           </button>
           <button
             type="button"
             class="lad__tab"
+            role="tab"
+            :aria-selected="viewMode === 'stocks'"
             :class="{ 'is-active': viewMode === 'stocks' }"
             @click="viewMode = 'stocks'"
           >
-            连板梯队 ({{ ladderDetail?.total_count ?? 18 }})
+            {{ $t('marketDashboard.ladder.tabStocks', { count: ladderDetail?.total_count ?? 18 }) }}
           </button>
           <button
             type="button"
             class="lad__tab"
+            role="tab"
+            :aria-selected="viewMode === 'break'"
             :class="{ 'is-active': viewMode === 'break' }"
             @click="viewMode = 'break'"
           >
-            炸板跌停 ({{ (breakDownData?.break_count ?? 0) + (breakDownData?.down_count ?? 0) }})
+            {{ $t('marketDashboard.ladder.tabBreak', { count: (breakDownData?.break_count ?? 0) + (breakDownData?.down_count ?? 0) }) }}
           </button>
         </div>
         <span class="lad__caption">{{ subCaption }}</span>
@@ -75,7 +81,7 @@
       <div v-else class="lad__ladder-panel">
         <!-- 空间板最高标提示 -->
         <div v-if="ladderDetail.max_board" class="lad__max-board-bar">
-          <span class="lad__max-badge">最高空间板：{{ ladderDetail.max_board }} 连板</span>
+          <span class="lad__max-badge">{{ $t('marketDashboard.ladder.maxBoard', { count: ladderDetail.max_board }) }}</span>
           <span class="lad__max-date">{{ ladderDetail.trade_date }}</span>
         </div>
 
@@ -83,7 +89,7 @@
           <div v-for="(stocks, levelName) in ladderDetail.by_level" :key="levelName" class="lad__level-group">
             <div class="lad__level-head">
               <span class="lad__level-badge">{{ levelName }}</span>
-              <span class="lad__level-count">{{ stocks.length }} 只</span>
+              <span class="lad__level-count">{{ $t('marketDashboard.ladder.stockCount', { count: stocks.length }) }}</span>
             </div>
             <div class="lad__stock-chips">
               <div v-for="s in stocks" :key="s.thscode" class="lad__stock-card">
@@ -92,9 +98,9 @@
                   <span class="lad__stock-code">{{ s.thscode }}</span>
                 </div>
                 <div class="lad__stock-meta">
-                  <span class="lad__stock-time" title="封板时间">{{ s.limit_up_time || '—' }}</span>
-                  <span v-if="s.seal_money" class="lad__stock-money" title="封单金额">
-                    封单 {{ fmtMoney(s.seal_money) }}
+                  <span class="lad__stock-time" :title="$t('marketDashboard.ladder.sealTimeTitle')">{{ s.limit_up_time || '—' }}</span>
+                  <span v-if="s.seal_money" class="lad__stock-money" :title="$t('marketDashboard.ladder.sealMoneyTitle')">
+                    {{ $t('marketDashboard.ladder.sealMoney', { value: fmtMoney(s.seal_money) }) }}
                   </span>
                 </div>
               </div>
@@ -112,9 +118,9 @@
         <!-- 炸板池 -->
         <div class="lad__break-col">
           <div class="lad__col-title">
-            <span>炸板池（开板回落 {{ breakDownData.break_count }} 只）</span>
+            <span>{{ $t('marketDashboard.ladder.breakPoolTitle', { count: breakDownData.break_count }) }}</span>
           </div>
-          <div v-if="!breakDownData.break_pool.length" class="lad__empty-sub">今日无炸板个股</div>
+          <div v-if="!breakDownData.break_pool.length" class="lad__empty-sub">{{ $t('marketDashboard.ladder.breakPoolEmpty') }}</div>
           <div v-else class="lad__break-list">
             <div v-for="b in breakDownData.break_pool" :key="b.thscode" class="lad__break-item">
               <div class="lad__break-info">
@@ -122,7 +128,7 @@
                 <span class="lad__break-code">{{ b.thscode }}</span>
               </div>
               <div class="lad__break-stats">
-                <span class="lad__break-times">开板 {{ b.open_times }} 次</span>
+                <span class="lad__break-times">{{ $t('marketDashboard.ladder.openTimes', { count: b.open_times }) }}</span>
                 <span class="lad__break-pct" :class="b.price_change_ratio && b.price_change_ratio >= 0 ? 'is-up' : 'is-down'">
                   {{ b.price_change_ratio ? (b.price_change_ratio > 0 ? '+' : '') + b.price_change_ratio.toFixed(2) + '%' : '—' }}
                 </span>
@@ -134,9 +140,9 @@
         <!-- 跌停池 -->
         <div class="lad__break-col">
           <div class="lad__col-title">
-            <span>跌停池（极端核按钮 {{ breakDownData.down_count }} 只）</span>
+            <span>{{ $t('marketDashboard.ladder.downPoolTitle', { count: breakDownData.down_count }) }}</span>
           </div>
-          <div v-if="!breakDownData.down_pool.length" class="lad__empty-sub">今日无跌停个股</div>
+          <div v-if="!breakDownData.down_pool.length" class="lad__empty-sub">{{ $t('marketDashboard.ladder.downPoolEmpty') }}</div>
           <div v-else class="lad__break-list">
             <div v-for="d in breakDownData.down_pool" :key="d.thscode" class="lad__break-item">
               <div class="lad__break-info">
@@ -144,7 +150,7 @@
                 <span class="lad__break-code">{{ d.thscode }}</span>
               </div>
               <div class="lad__break-stats">
-                <span class="lad__down-time">{{ d.first_limit_time || '—' }} 跌停</span>
+                <span class="lad__down-time">{{ $t('marketDashboard.ladder.limitDownAt', { time: d.first_limit_time || '—' }) }}</span>
                 <span class="lad__down-pct is-down">
                   {{ d.price_change_ratio ? d.price_change_ratio.toFixed(2) + '%' : '—' }}
                 </span>
@@ -241,10 +247,12 @@ const daysShown = computed(() => matrix.value.length)
 
 const subCaption = computed(() => {
   if (viewMode.value === 'stocks') {
-    return ladderDetail.value?.trade_date ? `行情交易日：${ladderDetail.value.trade_date}` : '空间板梯队'
+    return ladderDetail.value?.trade_date
+      ? t('marketDashboard.ladder.tradeDate', { date: ladderDetail.value.trade_date })
+      : t('marketDashboard.ladder.subCaptionStocks')
   }
   if (viewMode.value === 'break') {
-    return '盘中开板与极端核按钮'
+    return t('marketDashboard.ladder.subCaptionBreak')
   }
   return t('marketDashboard.ladder.caption', { n: daysShown.value })
 })
@@ -257,7 +265,10 @@ function countOf(date: string, level: string): number | null {
 }
 
 function cellTitle(date: string, level: string): string {
-  return `${date} · ${LEVELS.find((l) => l.key === level)?.labelKey ?? level}: ${countOf(date, level) ?? 0}`
+  // 这里必须走 t() 解析：直接拼 labelKey 会把 'marketDashboard.ladder.level.two'
+  // 这种原始 key 显示给用户（悬浮提示里一眼就能看到）。
+  const label = LEVELS.find((l) => l.key === level)?.labelKey
+  return `${date} · ${label ? t(label) : level}: ${countOf(date, level) ?? 0}`
 }
 
 function cellClass(v: number | null): string {

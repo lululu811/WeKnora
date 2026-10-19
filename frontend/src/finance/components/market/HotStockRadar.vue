@@ -12,51 +12,55 @@
       <div class="hot-radar__title-row">
         <div class="hot-radar__title-wrap">
           <t-icon name="fire" size="16px" class="hot-radar__icon" />
-          <span class="hot-radar__title">人气与飙升雷达</span>
+          <span class="hot-radar__title">{{ t('hotStockRadar.title') }}</span>
         </div>
         <div class="hot-radar__tabs" role="tablist">
           <button
             type="button"
             class="hot-radar__tab"
+            role="tab"
+            :aria-selected="mode === 'skyrocket'"
             :class="{ 'is-active': mode === 'skyrocket' }"
             @click="switchMode('skyrocket')"
           >
-            飙升黑马榜
+            {{ t('hotStockRadar.tabSkyrocket') }}
           </button>
           <button
             type="button"
             class="hot-radar__tab"
+            role="tab"
+            :aria-selected="mode === 'rank'"
             :class="{ 'is-active': mode === 'rank' }"
             @click="switchMode('rank')"
           >
-            人气总榜 (Top 50)
+            {{ t('hotStockRadar.tabRank') }}
           </button>
         </div>
         <span class="hot-radar__caption">{{ captionText }}</span>
       </div>
       <button type="button" class="hot-radar__toggle" @click="expanded = !expanded">
-        {{ expanded ? t('common.collapse') : '展开更多' }}
+        {{ expanded ? t('common.collapse') : t('hotStockRadar.expand') }}
       </button>
     </header>
 
     <p v-if="loading" class="hot-radar__empty">{{ t('common.loading') }}</p>
-    <p v-else-if="failed" class="hot-radar__empty">人气数据未就绪</p>
+    <p v-else-if="failed" class="hot-radar__empty">{{ t('hotStockRadar.failed') }}</p>
     <p v-else-if="!items.length" class="hot-radar__empty">{{ t('marketDashboard.noData') }}</p>
 
     <div v-else class="hot-radar__content">
       <!-- 汇总提示条 -->
       <div class="hot-radar__summary-bar">
         <div class="hot-radar__stat">
-          <span class="hot-radar__stat-lbl">观测日期</span>
-          <span class="hot-radar__stat-val">{{ tradeDate || '最新' }}</span>
+          <span class="hot-radar__stat-lbl">{{ t('hotStockRadar.observeDate') }}</span>
+          <span class="hot-radar__stat-val">{{ tradeDate || t('hotStockRadar.latest') }}</span>
         </div>
         <div class="hot-radar__stat" v-if="topSurgeItem && mode === 'skyrocket'">
-          <span class="hot-radar__stat-lbl">最大飙升</span>
-          <span class="hot-radar__stat-val is-surge">{{ topSurgeItem.name }} (暴增 +{{ topSurgeItem.rank_change }}位)</span>
+          <span class="hot-radar__stat-lbl">{{ t('hotStockRadar.topSurge') }}</span>
+          <span class="hot-radar__stat-val is-surge">{{ t('hotStockRadar.topSurgeValue', { name: topSurgeItem.name, value: topSurgeItem.rank_change }) }}</span>
         </div>
         <div class="hot-radar__stat" v-if="topHeatItem && mode === 'rank'">
-          <span class="hot-radar__stat-lbl">人气榜首</span>
-          <span class="hot-radar__stat-val is-surge">{{ topHeatItem.name }} (热度 {{ fmtHeat(topHeatItem.heat) }})</span>
+          <span class="hot-radar__stat-lbl">{{ t('hotStockRadar.topHeat') }}</span>
+          <span class="hot-radar__stat-val is-surge">{{ t('hotStockRadar.topHeatValue', { name: topHeatItem.name, value: fmtHeat(topHeatItem.heat) }) }}</span>
         </div>
       </div>
 
@@ -85,7 +89,7 @@
           </div>
 
           <div class="hot-radar__card-bottom">
-            <span class="hot-radar__heat-lbl">关注热度:</span>
+            <span class="hot-radar__heat-lbl">{{ t('hotStockRadar.heatLabel') }}:</span>
             <span class="hot-radar__heat-val">{{ fmtHeat(item.heat) }}</span>
             <span v-if="item.rank_trend" class="hot-radar__trend-tag" :class="'is-' + item.rank_trend">
               {{ trendText(item.rank_trend) }}
@@ -118,9 +122,9 @@ const emit = defineEmits<{
 
 const captionText = computed(() => {
   if (mode.value === 'skyrocket') {
-    return '位次暴增黑马（短线点火、关注度剧烈激增）'
+    return t('hotStockRadar.captionSkyrocket')
   }
-  return '全市场综合关注度最高标的（主线龙头与高辨识度核心）'
+  return t('hotStockRadar.captionRank')
 })
 
 const displayItems = computed(() => {
@@ -156,9 +160,9 @@ function fmtHeat(heat: number | null) {
 }
 
 function trendText(trend: string) {
-  if (trend === 'up') return '升温'
-  if (trend === 'down') return '降温'
-  return '持平'
+  if (trend === 'up') return t('hotStockRadar.trend.up')
+  if (trend === 'down') return t('hotStockRadar.trend.down')
+  return t('hotStockRadar.trend.flat')
 }
 
 function handleClickStock(thscode: string) {
@@ -198,7 +202,7 @@ onMounted(() => {
 
 <style scoped lang="less">
 .hot-radar {
-  background: var(--app-panel-bg, #fff);
+  background: var(--td-bg-color-container);
   border: 1px solid var(--app-border, rgba(0, 0, 0, 0.08));
   border-radius: var(--td-radius-medium, 8px);
   padding: 12px 14px;
@@ -232,7 +236,7 @@ onMounted(() => {
   &__title {
     font-size: 13px;
     font-weight: 600;
-    color: var(--app-text-primary, #111827);
+    color: var(--td-text-color-primary);
   }
 
   &__tabs {
@@ -249,17 +253,17 @@ onMounted(() => {
     border-radius: 4px;
     border: none;
     background: transparent;
-    color: var(--app-text-secondary, #6b7280);
+    color: var(--td-text-color-secondary);
     cursor: pointer;
     transition: all 0.15s ease;
 
     &:hover {
-      color: var(--app-text-primary, #111827);
+      color: var(--td-text-color-primary);
     }
 
     &.is-active {
-      background: var(--app-panel-bg, #fff);
-      color: var(--app-text-primary, #111827);
+      background: var(--td-bg-color-container);
+      color: var(--td-text-color-primary);
       font-weight: 600;
       box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
     }
@@ -267,7 +271,7 @@ onMounted(() => {
 
   &__caption {
     font-size: 11px;
-    color: var(--app-text-tertiary, #9ca3af);
+    color: var(--td-text-color-placeholder);
   }
 
   &__toggle {
@@ -286,7 +290,7 @@ onMounted(() => {
 
   &__empty {
     font-size: 12px;
-    color: var(--app-text-tertiary, #9ca3af);
+    color: var(--td-text-color-placeholder);
     text-align: center;
     padding: 20px 0;
     margin: 0;
@@ -309,13 +313,13 @@ onMounted(() => {
   }
 
   &__stat-lbl {
-    color: var(--app-text-secondary, #6b7280);
+    color: var(--td-text-color-secondary);
   }
 
   &__stat-val {
     font-family: var(--app-font-mono, monospace);
     font-weight: 600;
-    color: var(--app-text-primary, #111827);
+    color: var(--td-text-color-primary);
 
     &.is-surge {
       color: #dc2626;
@@ -357,7 +361,7 @@ onMounted(() => {
     padding: 1px 4px;
     border-radius: 3px;
     background: rgba(0, 0, 0, 0.06);
-    color: var(--app-text-secondary, #6b7280);
+    color: var(--td-text-color-secondary);
 
     &.is-first {
       background: #ef4444;
@@ -384,7 +388,7 @@ onMounted(() => {
   &__card-name {
     font-size: 12px;
     font-weight: 600;
-    color: var(--app-text-primary, #111827);
+    color: var(--td-text-color-primary);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -393,7 +397,7 @@ onMounted(() => {
   &__card-code {
     font-size: 10px;
     font-family: var(--app-font-mono, monospace);
-    color: var(--app-text-tertiary, #9ca3af);
+    color: var(--td-text-color-placeholder);
   }
 
   &__change-pill {
@@ -422,13 +426,13 @@ onMounted(() => {
   }
 
   &__heat-lbl {
-    color: var(--app-text-tertiary, #9ca3af);
+    color: var(--td-text-color-placeholder);
   }
 
   &__heat-val {
     font-family: var(--app-font-mono, monospace);
     font-weight: 500;
-    color: var(--app-text-secondary, #4b5563);
+    color: var(--td-text-color-secondary);
   }
 
   &__trend-tag {
@@ -445,7 +449,7 @@ onMounted(() => {
       background: rgba(5, 150, 105, 0.08);
     }
     &.is-flat {
-      color: var(--app-text-tertiary, #9ca3af);
+      color: var(--td-text-color-placeholder);
     }
   }
 }

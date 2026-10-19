@@ -545,7 +545,24 @@ export default {
       title: 'Consecutive limit-up ladder',
       caption: 'Last {n} trading days · shade = count',
       failed: 'Ladder data unavailable',
-      level: { two: '2B', three: '3B', four: '4B', five: '5B', six: '6B', seven: '7B+' }
+      level: { two: '2B', three: '3B', four: '4B', five: '5B', six: '6B', seven: '7B+' },
+      tabMatrix: 'Heat map',
+      tabStocks: 'Limit-up ladder ({count})',
+      tabBreak: 'Broken limit-ups & limit-downs ({count})',
+      maxBoard: 'Top board: {count} consecutive',
+      stockCount: '{count} stocks',
+      sealTimeTitle: 'First seal time',
+      sealMoneyTitle: 'Seal amount',
+      sealMoney: 'Seal {value}',
+      breakPoolTitle: 'Broken limit-up pool (opened and faded, {count} stocks)',
+      breakPoolEmpty: 'No broken limit-ups today',
+      openTimes: 'Opened {count} times',
+      downPoolTitle: 'Limit-down pool (extreme capitulation, {count} stocks)',
+      downPoolEmpty: 'No limit-down stocks today',
+      limitDownAt: '{time} limit-down',
+      tradeDate: 'Trading day: {date}',
+      subCaptionStocks: 'Board ladder',
+      subCaptionBreak: 'Intraday limit-up breaks and extreme capitulation'
     },
     basis: {
       title: 'Futures–spot basis',
@@ -557,7 +574,20 @@ export default {
       divergence: '{name} basis rate vs spot daily change',
       legendBasis: 'Basis rate',
       legendSpot: 'Spot daily change',
-      window: 'Last {n} trading days'
+      window: 'Last {n} trading days',
+      tabIndex: 'Index futures basis',
+      tabCommodity: 'Commodity linkage ({count})',
+      tabWarehouse: 'Exchange warehouse receipts',
+      warehouseCaption: 'Exchange registered warehouse receipts, daily change (destocking = tight supply vs restocking = surplus)',
+      tradeDate: 'Trading day: {date}',
+      commodityFallback: 'Core industrial and agricultural commodities across the market',
+      turnover: 'Turnover {value}',
+      linkedStocks: 'A-share links:',
+      destock: 'Destock {value}',
+      accumulate: 'Restock +{value}',
+      flat: 'Flat 0',
+      warehouseLabel: 'Warehouse receipts',
+      warehouseLots: '{count} lots'
     },
     etf: {
       title: 'Broad ETFs · Fund Flows',
@@ -9213,7 +9243,107 @@ export default {
     cost: 'Cost',
     stopLoss: 'Stop Loss',
     costPlaceholder: 'Target cost price',
-    stopPlaceholder: 'Stop loss price'
+    stopPlaceholder: 'Stop loss price',
+    sharesMarketValue: '{shares} shares (market value ¥{value})',
+    anomalyTitle: 'Intraday move attribution · Driver analysis',
+    fundTitle: 'Institutional holdings · Public funds and ETF positions',
+    fundHoldingCount: '{count} funds holding',
+    fundConcentration: 'Holding concentration',
+    fundInstitutionCount: 'Holding institutions',
+    fundInstitutionUnit: '{count} firms',
+    fundFlowTrend: 'Position change trend',
+    fundIncrease: 'Added {count}',
+    fundDecrease: 'Cut {count}',
+    fundLoading: 'Looking through public fund holdings...',
+    fundEmpty: 'No public fund holding disclosures yet',
+    publicFund: 'Public fund',
+    fundNetValueRatioTitle: 'Share of the fund net asset value',
+    fundHoldingRatio: 'Holding ratio',
+    fundPeriodChangeTitle: 'Change versus the previous period',
+    fundQuarterChange: 'Quarterly change {value}%',
+    dividendHistory: 'Dividend & bonus share history',
+    dividendCount: '{count} dividends recently',
+    dividendYield: 'Dividend yield {value}%',
+    dividendCash: 'Cash dividend ¥{value}/share',
+    dividendBonus: '10-for-{value} shares',
+    hotTrendTitle: 'Attention heat · Rank trajectory',
+    hotLatestRank: 'Latest rank #{rank}',
+    quantTitle: 'Quant features · Volatility squeeze & Supertrend',
+    latest: 'Latest',
+    squeezeStatusLabel: 'TTM Squeeze status',
+    supertrendLabel: 'Supertrend rail',
+    dynamicStopLine: 'Dynamic stop line: ¥{value}',
+    momentumLabel: 'Momentum histogram',
+    betaLabel: '20-day beta elasticity',
+    techScoreTitle: 'Technical average: {value}',
+    techScore: 'Technical {value}',
+    fundScoreTitle: 'Capital average: {value}',
+    fundScore: 'Capital {value}',
+    fundamentalScoreTitle: 'Fundamental average: {value}',
+    fundamentalScore: 'Fundamental {value}',
+    macroScoreTitle: 'Macro quality average: {value}',
+    macroScore: 'Macro {value}',
+    scorePoints: '{value} pts',
+    squeeze: {
+      on: 'Coiling (Squeeze ON)',
+      fired: 'Breakout (Squeeze Fired)',
+      off: 'Normal volatility (Squeeze OFF)'
+    },
+    squeezeHint: {
+      on: 'Bollinger bands compressed into the Keltner channel — the point of inflection',
+      fired: 'Squeeze released, volatility expanding, one-way trend accelerating',
+      off: 'Channel not compressed, wide-range normal oscillation'
+    },
+    supertrend: {
+      bullish: 'Bullish trend (Bullish)',
+      bearish: 'Bearish defence (Bearish)',
+      neutral: 'Neutral trend'
+    },
+    beta: {
+      high: 'High elasticity (offensive)',
+      low: 'Low elasticity (defensive)',
+      base: 'Baseline elasticity (with the market)'
+    },
+    resonance: {
+      tripleBullLabel: 'Triple bull resonance · Strong uptrend',
+      tripleBullDesc: 'Daily, weekly and monthly moving averages are all in bullish alignment, so both the big trend and the short term sit in the main rising leg.',
+      bullPullbackLabel: 'Big up, small pullback · Buy the dip',
+      bullPullbackDesc: 'Monthly and weekly trends keep rising while the daily chart pulls back; wait for the pullback to the moving average and size a starter position.',
+      oversoldLabel: 'Oversold bounce · Counter-trend defence',
+      oversoldDesc: 'The medium and long term stay capped by moving averages while the daily chart shows a short oversold bounce; take profit into the rebound and keep the defence.',
+      tripleBearLabel: 'Triple bear · Break-down avoidance',
+      tripleBearDesc: 'Daily, weekly and monthly moving averages all break down into a bearish stack; keep position size tight and stay on the sidelines.',
+      mixedBullLabel: 'Short-term turn up · Watch for follow-through',
+      mixedRangeLabel: 'Short/medium-term conflict · Range consolidation',
+      mixedDesc: 'Bull and bear moving averages cross over, leaving the market in a bottoming or consolidation phase.'
+    },
+    questionCategory: {
+      technical: 'Technical',
+      capital: 'Capital',
+      fundamental: 'Fundamental',
+      macro: 'Macro',
+      other: 'Other'
+    },
+    question: {
+      trendStrength: 'Trend strength',
+      shortMomentum: 'Short-term momentum',
+      volumeConfirmation: 'Volume confirmation',
+      technicalPattern: 'Technical pattern',
+      trendStability: 'Trend stability',
+      volumePriceSync: 'Volume-price coordination',
+      maSupport: 'Moving-average support',
+      technicalComposite: 'Technical composite',
+      capitalDirection: 'Capital flow direction',
+      volumePriceRelation: 'Volume-price relation',
+      tradeActivity: 'Trading activity',
+      capitalComposite: 'Capital composite',
+      poolReason: 'Reason for entering the pool',
+      companyQuality: 'Company quality',
+      observationChange: 'Observation change',
+      industryRisk: 'Industry risk',
+      moat: 'Economic moat',
+      valuationLevel: 'Valuation level'
+    }
   },
   mentionedStocks: {
     title: 'Stocks Mentioned',
@@ -9346,6 +9476,72 @@ export default {
     failed: 'Dividend data unavailable',
     statCount: 'Stocks Found',
     statAvgYield: 'Average Yield',
-    statTopBonus: 'Top Bonus Share'
+    statTopBonus: 'Top Bonus Share',
+    bonusTen: '10-for-{value}',
+    payoutLabel: 'Cash dividend',
+    cashPerShare: '¥{value}/share',
+    bonusLabel: 'Bonus shares',
+    bonusShares: '10-for-{value} shares',
+    priceLabel: 'Price',
+    yieldPill: 'Dividend yield {value}%',
+    captionYield: 'Latest cash dividend yield ranking (defensive low-volatility cash cows)',
+    captionBonus: 'High bonus share stocks (large-scale capitalisation of reserves)',
+    captionAll: '2026 ex-dividend calendar at a glance'
+  },
+  etfWorkspace: {
+    group: {
+      institutional: 'Institutional control ranking'
+    },
+    col: {
+      fundName: 'Fund / Code',
+      instHolding: 'Institutional holding',
+      retailHolding: 'Retail holding',
+      avgShare: 'Avg shares per holder',
+      action: 'Action',
+      chipPenetration: 'Holder look-through'
+    },
+    holderCount: 'Holder accounts',
+    holderAccounts: '{count} accounts',
+    avgHolding: 'Avg position per holder',
+    holders: {
+      title: 'Holders',
+      penetrateTop10: 'Top-10 holder look-through'
+    },
+    drawer: {
+      title: '{name} ({code}) holder look-through',
+      structureTitle: 'Holder structure · Share distribution',
+      latestPeriod: 'Latest period',
+      insTitle: 'Institutional: {value}%',
+      retailTitle: 'Retail: {value}%',
+      instLabel: 'Institutional investors',
+      retailLabel: 'Retail investors',
+      topHoldersTitle: 'Top-10 holder look-through (state funds / insurers / brokers / banks)',
+      noHoldersData: 'No holder look-through data yet'
+    },
+    holder: {
+      holdRateLabel: 'Holding ratio',
+      holdShareLabel: 'Shares held'
+    }
+  },
+  hotStockRadar: {
+    title: 'Attention & Surge Radar',
+    tabSkyrocket: 'Surge leaders',
+    tabRank: 'Attention ranking (Top 50)',
+    expand: 'Show more',
+    failed: 'Attention data not ready',
+    observeDate: 'Observation date',
+    latest: 'Latest',
+    topSurge: 'Biggest surge',
+    topSurgeValue: '{name} (surge +{value} places)',
+    topHeat: 'Attention leader',
+    topHeatValue: '{name} (heat {value})',
+    heatLabel: 'Attention heat',
+    captionSkyrocket: 'Rank-jumping dark horses (short-term ignition, attention surging)',
+    captionRank: 'Highest attention names market-wide (sector leaders and high-recognition core names)',
+    trend: {
+      up: 'Heating up',
+      down: 'Cooling down',
+      flat: 'Flat'
+    }
   }
 }

@@ -126,7 +126,107 @@ export default {
     cost: '成本',
     stopLoss: '止损',
     costPlaceholder: '目标成本价 (元)',
-    stopPlaceholder: '止损价 (元)'
+    stopPlaceholder: '止损价 (元)',
+    sharesMarketValue: '{shares} 股 (市值 ¥{value})',
+    anomalyTitle: '异动归因 · 驱动分析',
+    fundTitle: '机构筹码 · 公募与 ETF 重仓',
+    fundHoldingCount: '{count} 只重仓',
+    fundConcentration: '持股集中度',
+    fundInstitutionCount: '持仓机构数',
+    fundInstitutionUnit: '{count} 家',
+    fundFlowTrend: '增减仓动向',
+    fundIncrease: '增 {count}',
+    fundDecrease: '减 {count}',
+    fundLoading: '正在穿透公募基金持仓数据...',
+    fundEmpty: '暂无公募重仓持股披露数据',
+    publicFund: '公募',
+    fundNetValueRatioTitle: '持仓占该基金净值比',
+    fundHoldingRatio: '持仓比',
+    fundPeriodChangeTitle: '较上期持股变动幅度',
+    fundQuarterChange: '季变动 {value}%',
+    dividendHistory: '分红送转历史',
+    dividendCount: '近 {count} 次分红',
+    dividendYield: '股息率 {value}%',
+    dividendCash: '派息 ¥{value}/股',
+    dividendBonus: '10转{value}股',
+    hotTrendTitle: '关注热度 · 位次轨迹',
+    hotLatestRank: '最新位次 #{rank}',
+    quantTitle: '量化特征 · 波动挤压 & 超级趋势',
+    latest: '最新',
+    squeezeStatusLabel: 'TTM Squeeze 状态',
+    supertrendLabel: 'Supertrend 趋势轨',
+    dynamicStopLine: '动态止损线: ¥{value}',
+    momentumLabel: '动量柱 (Momentum)',
+    betaLabel: '20日 Beta 弹性系数',
+    techScoreTitle: '技术面均分: {value}',
+    techScore: '技术 {value}',
+    fundScoreTitle: '资金面均分: {value}',
+    fundScore: '资金 {value}',
+    fundamentalScoreTitle: '基本面均分: {value}',
+    fundamentalScore: '基本面 {value}',
+    macroScoreTitle: '宏观质地均分: {value}',
+    macroScore: '宏观 {value}',
+    scorePoints: '{value}分',
+    squeeze: {
+      on: '挤压蓄势中 (Squeeze ON)',
+      fired: '突破释放 (Squeeze Fired)',
+      off: '常态波动 (Squeeze OFF)'
+    },
+    squeezeHint: {
+      on: '布林带收缩进肯特纳通道，变盘临界点',
+      fired: '挤压解除，波动率扩张，单边趋势加速',
+      off: '通道未受压，处于宽幅常态震荡'
+    },
+    supertrend: {
+      bullish: '多头顺势 (Bullish)',
+      bearish: '空头防守 (Bearish)',
+      neutral: '趋势中性'
+    },
+    beta: {
+      high: '高弹性 (进攻型)',
+      low: '低弹性 (防御型)',
+      base: '基准弹性 (同步大盘)'
+    },
+    resonance: {
+      tripleBullLabel: '三红共振 · 强顺势',
+      tripleBullDesc: '日、周、月三级别均线呈多头共振，大势与短线均处于主升浪区间。',
+      bullPullbackLabel: '大顺小逆 · 回踩买点',
+      bullPullbackDesc: '月线与周线趋势保持向上，日线出现短期技术回踩，回抽均线观察试仓机会。',
+      oversoldLabel: '超跌反弹 · 逆势防守',
+      oversoldDesc: '中长级别仍受均线压制，日线出现短期超跌反弹脉冲，注意高抛止盈防守。',
+      tripleBearLabel: '三绿空头 · 破位规避',
+      tripleBearDesc: '日、周、月三级别均线破位下行，空头排列，建议严控仓位、谨慎观望。',
+      mixedBullLabel: '短线转多 · 观察持续',
+      mixedRangeLabel: '中短分歧 · 震荡整理',
+      mixedDesc: '多空均线出现交叉分歧，处于震荡筑底或整理蓄势阶段。'
+    },
+    questionCategory: {
+      technical: '技术',
+      capital: '资金',
+      fundamental: '基本面',
+      macro: '宏观',
+      other: '其他'
+    },
+    question: {
+      trendStrength: '趋势强度',
+      shortMomentum: '短期动量',
+      volumeConfirmation: '量能配合',
+      technicalPattern: '技术形态',
+      trendStability: '趋势稳定',
+      volumePriceSync: '量价协调',
+      maSupport: '均线支撑',
+      technicalComposite: '技术综合',
+      capitalDirection: '资金方向',
+      volumePriceRelation: '量价关系',
+      tradeActivity: '交易活跃',
+      capitalComposite: '资金综合',
+      poolReason: '入池理由',
+      companyQuality: '公司质地',
+      observationChange: '观察变化',
+      industryRisk: '行业风险',
+      moat: '护城河',
+      valuationLevel: '估值水平'
+    }
   },
   stockCitation: {
     noChangeData: '涨跌幅无数据',
@@ -8849,7 +8949,24 @@ export default {
       title: '连板梯队',
       caption: '近 {n} 个交易日 · 颜色深浅 = 家数',
       failed: '连板数据未就绪',
-      level: { two: '2板', three: '3板', four: '4板', five: '5板', six: '6板', seven: '7板+' }
+      level: { two: '2板', three: '3板', four: '4板', five: '5板', six: '6板', seven: '7板+' },
+      tabMatrix: '热力矩阵',
+      tabStocks: '连板梯队 ({count})',
+      tabBreak: '炸板跌停 ({count})',
+      maxBoard: '最高空间板：{count} 连板',
+      stockCount: '{count} 只',
+      sealTimeTitle: '封板时间',
+      sealMoneyTitle: '封单金额',
+      sealMoney: '封单 {value}',
+      breakPoolTitle: '炸板池（开板回落 {count} 只）',
+      breakPoolEmpty: '今日无炸板个股',
+      openTimes: '开板 {count} 次',
+      downPoolTitle: '跌停池（极端核按钮 {count} 只）',
+      downPoolEmpty: '今日无跌停个股',
+      limitDownAt: '{time} 跌停',
+      tradeDate: '行情交易日：{date}',
+      subCaptionStocks: '空间板梯队',
+      subCaptionBreak: '盘中开板与极端核按钮'
     },
     basis: {
       title: '期股联动 · 股指期货基差',
@@ -8861,7 +8978,20 @@ export default {
       divergence: '{name} 基差率 vs 现货日涨跌',
       legendBasis: '基差率',
       legendSpot: '现货日涨跌',
-      window: '近 {n} 个交易日'
+      window: '近 {n} 个交易日',
+      tabIndex: '股指期货基差',
+      tabCommodity: '大宗商品联动 ({count})',
+      tabWarehouse: '注册仓单异动',
+      warehouseCaption: '交易所注册仓单日增减（去库紧俏 vs 累库供过于求）',
+      tradeDate: '行情交易日：{date}',
+      commodityFallback: '全市场核心工业品与农产品联动',
+      turnover: '成交额 {value}',
+      linkedStocks: '映射 A 股：',
+      destock: '去库 {value}',
+      accumulate: '累库 +{value}',
+      flat: '持平 0',
+      warehouseLabel: '现存仓单',
+      warehouseLots: '{count}手'
     },
     watchlist: {
       title: '自选股',
@@ -9338,6 +9468,72 @@ export default {
     failed: '除权日历数据未就绪',
     statCount: '涉及股票',
     statAvgYield: '平均股息率',
-    statTopBonus: '最高送转标的'
+    statTopBonus: '最高送转标的',
+    bonusTen: '10转{value}',
+    payoutLabel: '派息',
+    cashPerShare: '¥{value}/股',
+    bonusLabel: '送转',
+    bonusShares: '10转{value}股',
+    priceLabel: '现价',
+    yieldPill: '股息率 {value}%',
+    captionYield: '最新现金股息率排行（防守低波现金奶牛）',
+    captionBonus: '高送转红利股票（大比例转增扩股）',
+    captionAll: '2026 年度除权除息日历一览'
+  },
+  etfWorkspace: {
+    group: {
+      institutional: '机构控盘排行'
+    },
+    col: {
+      fundName: '基金名称 / 代码',
+      instHolding: '机构投资者占比',
+      retailHolding: '个人散户占比',
+      avgShare: '户均份额',
+      action: '操作',
+      chipPenetration: '筹码穿透'
+    },
+    holderCount: '持有人户数',
+    holderAccounts: '{count} 户',
+    avgHolding: '户均持仓',
+    holders: {
+      title: '持有人',
+      penetrateTop10: '十大持有人穿透'
+    },
+    drawer: {
+      title: '{name} ({code}) 持仓穿透',
+      structureTitle: '持有人结构 · 筹码分布',
+      latestPeriod: '最新期',
+      insTitle: '机构占比: {value}%',
+      retailTitle: '散户占比: {value}%',
+      instLabel: '机构投资者',
+      retailLabel: '个人散户',
+      topHoldersTitle: '前十大持有人穿透 (国家队/险资/券商/银行)',
+      noHoldersData: '暂无持有人穿透数据'
+    },
+    holder: {
+      holdRateLabel: '持有占比',
+      holdShareLabel: '持仓份额'
+    }
+  },
+  hotStockRadar: {
+    title: '人气与飙升雷达',
+    tabSkyrocket: '飙升黑马榜',
+    tabRank: '人气总榜 (Top 50)',
+    expand: '展开更多',
+    failed: '人气数据未就绪',
+    observeDate: '观测日期',
+    latest: '最新',
+    topSurge: '最大飙升',
+    topSurgeValue: '{name} (暴增 +{value}位)',
+    topHeat: '人气榜首',
+    topHeatValue: '{name} (热度 {value})',
+    heatLabel: '关注热度',
+    captionSkyrocket: '位次暴增黑马（短线点火、关注度剧烈激增）',
+    captionRank: '全市场综合关注度最高标的（主线龙头与高辨识度核心）',
+    trend: {
+      up: '升温',
+      down: '降温',
+      flat: '持平'
+    }
   }
 }
