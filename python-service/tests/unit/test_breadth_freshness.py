@@ -28,6 +28,28 @@ def _write_breadth(path: Path, dates: list) -> Path:
     return path
 
 
+# 这些用例原来把「当天」写死成 2026-09-30，于是过了那一天之后，
+# 服务算出「距今 19 天」触发绝对滞后判定，用例自己开始失败
+# （2026-10-19 复现：4 个用例全红）。服务的两层判定
+# ——「相对请求日的滞后」+「相对今天的绝对滞后」——行为是对的，
+# 腐烂的是测试。改成相对今天构造，用例就不会再过期。
+TODAY = dt.date.today()
+
+
+def _last_business_day(d: dt.date) -> dt.date:
+    """往前找最近的工作日。
+
+    落在周末时 fixture 生成的最后一根就不是它（`_recent_business_days`
+    只收工作日），lag 断言会差 1~2 天。
+    """
+    while d.weekday() >= 5:
+        d -= dt.timedelta(days=1)
+    return d
+
+
+ANCHOR = _last_business_day(TODAY)
+
+
 def _recent_business_days(n: int, end: dt.date) -> list:
     """从 end 往前取 n 个工作日（跳过周末），返回 YYYY-MM-DD 升序列表。"""
     out, cur = [], end
@@ -49,7 +71,7 @@ def cache(tmp_path):
 class TestBreadthMissing:
     def test_no_file_returns_neutral(self, tmp_path):
         current, history, fresh = svc._load_breadth_for(
-            "2026-09-30", csv_path=str(tmp_path / "nope.csv")
+            ANCHOR.isoformat(), csv_path=str(tmp_path / "nope.csv")
         )
         assert current is None
         assert history == []
@@ -61,14 +83,14 @@ class TestBreadthMissing:
         p.write_text(
             "date,n_stocks,pct_new_high_120,pct_above_ma60,pct_above_ma20,total_turnover\n"
         )
-        current, history, fresh = svc._load_breadth_for("2026-09-30", csv_path=str(p))
+        current, history, fresh = svc._load_breadth_for(ANCHOR.isoformat(), csv_path=str(p))
         assert current is None
         assert history == []
         assert fresh["stale"] is True
         assert fresh["note"]
 
     def test_date_before_cache_returns_neutral(self, cache):
-        p = cache(dt.date(2026, 9, 30))
+        p = cache(ANCHOR)
         current, history, fresh = svc._load_breadth_for("2019-01-02", csv_path=str(p))
         assert current is None
         assert fresh["stale"] is True
@@ -77,24 +99,25 @@ class TestBreadthMissing:
 
 class TestBreadthFreshness:
     def test_same_day_is_fresh(self, cache):
-        p = cache(dt.date(2026, 9, 30))
-        current, history, fresh = svc._load_breadth_for("2026-09-30", csv_path=str(p))
+        p = cache(ANCHOR)
+        current, history, fresh = svc._load_breadth_for(ANCHOR.isoformat(), csv_path=str(p))
         assert current is not None
         assert current["pct_above_ma60"] == 0.50
-        assert fresh["last_date"] == "2026-09-30"
+        assert fresh["last_date"] == ANCHOR.isoformat()
         assert fresh["lag_trading_days"] == 0
         assert fresh["stale"] is False
 
     def test_returns_sixty_day_history(self, cache):
-        p = cache(dt.date(2026, 9, 30))
-        _, history, _ = svc._load_breadth_for("2026-09-30", csv_path=str(p))
+        p = cache(ANCHOR)
+        _, history, _ = svc._load_breadth_for(ANCHOR.isoformat(), csv_path=str(p))
         assert len(history) == 60
 
     def test_lag_computed_when_cache_behind(self, cache):
-        """缓存只到 09-30，请求 10-20 → 应报 stale 并说明落后天数。"""
-        p = cache(dt.date(2026, 9, 30))
-        _, _, fresh = svc._load_breadth_for("2026-10-20", csv_path=str(p))
-        assert fresh["last_date"] == "2026-09-30"
+        """缓存只到锚点，请求日比它晚 20 天 → 应报 stale 并说明落后天数。"""
+        p = cache(ANCHOR)
+        request = (ANCHOR + dt.timedelta(days=20)).isoformat()
+        _, _, fresh = svc._load_breadth_for(request, csv_path=str(p))
+        assert fresh["last_date"] == ANCHOR.isoformat()
         assert fresh["lag_trading_days"] == 20
         assert fresh["stale"] is True
         assert "落后" in fresh["note"]
@@ -102,16 +125,18 @@ class TestBreadthFreshness:
 
     def test_small_lag_not_stale(self, cache):
         """差 2 天 < 阈值 5 天，不该报。"""
-        p = cache(dt.date(2026, 9, 30))
-        _, _, fresh = svc._load_breadth_for("2026-10-02", csv_path=str(p))
+        p = cache(ANCHOR)
+        request = (ANCHOR + dt.timedelta(days=2)).isoformat()
+        _, _, fresh = svc._load_breadth_for(request, csv_path=str(p))
         assert fresh["lag_trading_days"] == 2
         assert fresh["stale"] is False
 
     def test_boundary_at_threshold(self, cache):
         """恰好等于阈值不算 stale（严格大于才报）。"""
-        p = cache(dt.date(2026, 9, 30))
-        # 2026-10-05 - 2026-09-30 = 5 天 == _BREADTH_STALE_DAYS
-        _, _, fresh = svc._load_breadth_for("2026-10-05", csv_path=str(p))
+        p = cache(ANCHOR)
+        # 锚点 + 5 天 == _BREADTH_STALE_DAYS
+        request = (ANCHOR + dt.timedelta(days=svc._BREADTH_STALE_DAYS)).isoformat()
+        _, _, fresh = svc._load_breadth_for(request, csv_path=str(p))
         assert fresh["lag_trading_days"] == svc._BREADTH_STALE_DAYS
         assert fresh["stale"] is False
 
@@ -137,8 +162,8 @@ class TestBreadthFreshness:
         assert "距今" in fresh["note"]
 
     def test_freshness_keys_always_present(self, cache):
-        p = cache(dt.date(2026, 9, 30))
-        _, _, fresh = svc._load_breadth_for("2026-09-30", csv_path=str(p))
+        p = cache(ANCHOR)
+        _, _, fresh = svc._load_breadth_for(ANCHOR.isoformat(), csv_path=str(p))
         for k in (
             "source", "last_date", "lag_trading_days",
             "days_behind_today", "stale", "note",
@@ -146,6 +171,6 @@ class TestBreadthFreshness:
             assert k in fresh, f"缺字段 {k}"
 
     def test_source_reports_real_path_when_injected(self, cache):
-        p = cache(dt.date(2026, 9, 30))
-        _, _, fresh = svc._load_breadth_for("2026-09-30", csv_path=str(p))
+        p = cache(ANCHOR)
+        _, _, fresh = svc._load_breadth_for(ANCHOR.isoformat(), csv_path=str(p))
         assert fresh["source"] == "market_breadth.csv"
