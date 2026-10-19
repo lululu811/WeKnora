@@ -41,7 +41,9 @@ ENV GOSUMDB=${GOSUMDB_ARG}
 
 # Install dependencies
 RUN if [ -n "$APK_MIRROR_ARG" ]; then \
-        sed -i "s@deb.debian.org@${APK_MIRROR_ARG}@g" /etc/apt/sources.list.d/debian.sources; \
+        case "$APK_MIRROR_ARG" in *://*) mirror="$APK_MIRROR_ARG" ;; *) mirror="https://$APK_MIRROR_ARG" ;; esac; \
+        sed -i -E "s@https?://deb\.debian\.org@${mirror}@g; s@https?://security\.debian\.org@${mirror}@g" \
+            /etc/apt/sources.list.d/debian.sources; \
     fi && \
     apt-get update && \
     apt-get install -y git build-essential libsqlite3-dev curl
@@ -117,7 +119,9 @@ RUN apt-get update && \
 
 # Then switch to mirror if specified and install other packages
 RUN if [ -n "$APK_MIRROR_ARG" ]; then \
-        sed -i "s@deb.debian.org@${APK_MIRROR_ARG}@g" /etc/apt/sources.list.d/debian.sources; \
+        case "$APK_MIRROR_ARG" in *://*) mirror="$APK_MIRROR_ARG" ;; *) mirror="https://$APK_MIRROR_ARG" ;; esac; \
+        sed -i -E "s@https?://deb\.debian\.org@${mirror}@g; s@https?://security\.debian\.org@${mirror}@g" \
+            /etc/apt/sources.list.d/debian.sources; \
     fi && \
     apt-get update && \
     apt-get install -y --no-install-recommends \

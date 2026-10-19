@@ -7,8 +7,6 @@ import uuid
 from pathlib import Path
 from typing import List, Optional
 
-import textract
-
 from docreader.config import CONFIG
 from docreader.models.document import Document
 from docreader.parser.docx2_parser import Docx2Parser
@@ -184,9 +182,6 @@ class DocParser(Docx2Parser):
             # 2. If image extraction is not needed or conversion failed,
             # try using antiword to extract text
             self._parse_with_antiword,
-            # 3. If antiword extraction fails, use textract
-            # NOTE: _parse_with_textract is disabled due to SSRF vulnerability
-            # self._parse_with_textract,
         ]
 
         # Save byte content as a temporary file
@@ -235,12 +230,6 @@ class DocParser(Docx2Parser):
         text = stdout.decode("utf-8", errors="ignore")
         logger.info(f"Successfully extracted {len(text)} characters using antiword")
         return Document(content=text)
-
-    def _parse_with_textract(self, temp_file_path: str) -> Document:
-        logger.info(f"Parsing DOC file with textract: {temp_file_path}")
-        text = textract.process(temp_file_path, method="antiword").decode("utf-8")
-        logger.info(f"Successfully extracted {len(text)} bytes of DOC using textract")
-        return Document(content=str(text))
 
     def _try_convert_doc_to_docx(self, doc_path: str) -> Optional[bytes]:
         """Convert DOC file to DOCX format

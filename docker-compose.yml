@@ -47,6 +47,9 @@ services:
       args:
         - APK_MIRROR_ARG=${APK_MIRROR_ARG:-}
         - WITH_ANYDOC=${WITH_ANYDOC:-1}
+        - GOPROXY_ARG=${GOPROXY:-https://proxy.golang.org,direct}
+        - GOPRIVATE_ARG=${GOPRIVATE:-}
+        - GOSUMDB_ARG=${GOSUMDB:-off}
     container_name: WeKnora-app
     ports:
       - "${APP_PORT:-8080}:8080"
@@ -425,6 +428,21 @@ services:
     restart: unless-stopped
     extra_hosts:
       - "host.docker.internal:host-gateway"
+      # 宿主机开着 FlClash（fake-ip 模式）时，所有公网域名都会被解析到
+      # 198.18.0.0/16 由 utun5 隧道转发。Docker 内嵌 DNS 转发到宿主，因此容器
+      # 拿到的也是 fake-ip —— SSRF 防护会把它判成内网地址而拒绝，且容器网络
+      # 命名空间进不了 macOS 的 utun5 隧道，请求根本发不出去（实测 exit=8）。
+      #
+      # 阿里云百炼（dashscope）不用走代理，直接写真实 IP 即可。
+      # 这 4 个是阿里云北京 NLB 的 A 记录，多次查询稳定（只是返回顺序轮换）。
+      # 阿里云调整 NLB 后需要重新取值：
+      #   curl -sk "https://223.5.5.5/resolve?name=<域名>&type=A" | grep -o '"data":"[0-9.]*"'
+      # 取值写在 .env 的 DASHSCOPE_NLB_IP_* 里，compose 读环境变量；此处保留
+      # 当时的默认值，改 NLB 时只改 .env 即可，不必动 compose 文件。
+      - "coding.dashscope.aliyuncs.com:${DASHSCOPE_NLB_IP_1:-182.92.22.84}"
+      - "coding.dashscope.aliyuncs.com:${DASHSCOPE_NLB_IP_2:-59.110.154.215}"
+      - "coding.dashscope.aliyuncs.com:${DASHSCOPE_NLB_IP_3:-39.96.146.131}"
+      - "coding.dashscope.aliyuncs.com:${DASHSCOPE_NLB_IP_4:-8.140.211.27}"
 
 
   # Sandbox 镜像：仅用于 build/pull，非常驻。Docker 沙箱默认关闭，需
@@ -450,6 +468,10 @@ services:
         - APT_MIRROR=${APT_MIRROR:-}
         - PLAYWRIGHT_DOWNLOAD_HOST=${PLAYWRIGHT_DOWNLOAD_HOST:-}
         - PLAYWRIGHT_WEBKIT_DOWNLOAD_HOST=${PLAYWRIGHT_WEBKIT_DOWNLOAD_HOST:-}
+        # PyPI 镜像：留空直连官方源；国内建议 https://pypi.tuna.tsinghua.edu.cn/simple
+        - PIP_INDEX_URL=${PIP_INDEX_URL:-}
+        # uv 官方镜像 tag。钉死可避免上游发新版导致同一 commit 构建行为漂移。
+        - UV_VERSION=${UV_VERSION:-0.12.4}
     container_name: WeKnora-docreader
     # docreader gRPC ships without auth/TLS and is only consumed by the app
     # container over the WeKnora-network (DOCREADER_ADDR defaults to

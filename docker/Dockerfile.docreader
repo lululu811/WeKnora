@@ -1,9 +1,26 @@
 # =========================
 # 构建阶段（轻量化：仅文档解析 + 图片提取，无 OCR/VLM）
 # =========================
+
+# uv 直接取官方镜像里的二进制，而不是 `pip install uv`。两个原因：
+#   1) 不必先绕 PyPI 拉一个 13MB 的 wheel —— 国内直连 pypi.org 单次请求
+#      实测 12s，这一步是构建卡死/超时的头号嫌疑；
+#   2) 版本被钉死，不会因为上游发新版就让同一个 commit 昨天能构建、
+#      今天失败。与 docker/Dockerfile.sandbox 用同一个 uv 版本。
+ARG UV_VERSION=0.12.4
+FROM ghcr.io/astral-sh/uv:${UV_VERSION} AS uv-base
+
 FROM python:3.10.18-bookworm AS builder
 
 ARG APT_MIRROR=""
+
+# PyPI 镜像：留空 = 直连官方源（与原行为一致）；国内建议填
+# https://pypi.tuna.tsinghua.edu.cn/simple 。
+# 宿主机 ~/.config/pip/pip.conf 不会被传进容器，必须在此显式指定。
+# pip 认 PIP_INDEX_URL，uv 认 UV_DEFAULT_INDEX/UV_INDEX_URL，缺一不可。
+ARG PIP_INDEX_URL=""
+
+COPY --from=uv-base /uv /usr/local/bin/uv
 
 # Configure mirror first if provided, then install ca-certificates
 RUN if [ -n "$APT_MIRROR" ]; then \
@@ -70,8 +87,17 @@ RUN if [ -z "$TARGETARCH" ]; then \
 
 # 复制依赖文件
 COPY docreader/pyproject.toml docreader/uv.lock ./
-RUN pip install uv --break-system-packages && \
-    python -m uv sync --locked --no-dev
+# 镜像只在非空时导出，避免给 uv 传一个空字符串索引。
+# 用 uv 二进制直接调用（与 CI 一致）；此前写的是 `python -m uv`，
+# 那个包装层只是多 exec 一次并注入 UV_INTERNAL__PARENT_INTERPRETER，
+# 没有额外收益。
+RUN if [ -n "$PIP_INDEX_URL" ]; then \
+        export PIP_INDEX_URL \
+               UV_DEFAULT_INDEX="$PIP_INDEX_URL" \
+               UV_INDEX_URL="$PIP_INDEX_URL"; \
+    fi && \
+    uv --version && \
+    uv sync --locked --no-dev
 
 # 复制源代码和生成脚本
 COPY docreader docreader
