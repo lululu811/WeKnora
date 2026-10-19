@@ -53,7 +53,15 @@ agent 要的是「参数化、可组合、可复述的取数」。强行合一�
 
 代价是**同一张表两套 SQL 两套口径**。已知的口径陷阱在 AGENTS.md 的
 `hithink_finance` 一节（`period` 不是报告期、`report` 是 `YYYY-N`），
-共享口径用机器可校验的契约守住，不要各自写死。
+共享口径用机器可校验的契约守住，不要各自写死：
+
+| 契约 | 覆盖 | 守卫 |
+|---|---|---|
+| `internal/agent/tools/hithink_finance/testdata/schema.json` | agent 侧引用的表与列 | `schema_contract_test.go` |
+| `python-service/contracts/finance_api.json` | 前端↔后端的线格式（21 个端点） | `frontend/src/finance/api/financeContract.test.ts`（前端声明）+ `python-service/tests/unit/test_finance_api_contract.py`（后端实际） |
+
+线格式契约尤其重要：字段改名或删除不会有人发现 —— 前端拿到空值，界面照常
+渲染成「今天没数据」，后端日志里一切正常。不是崩溃，是静默失真。
 
 ### 反代白名单：漏一条 = 静默少一块数据
 

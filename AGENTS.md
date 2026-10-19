@@ -84,7 +84,12 @@ invariants as load-bearing.
 
 - **口径只有一份。** 前端走 python-service（FastAPI → 本地 DuckDB），agent 走 Go 的
   `hithink_finance` 工具。同一张表两套 SQL 两套口径，所以共享口径要有机器可校验的
-  契约（`testdata/schema.json` + `schema_contract_test.go`），不要各自写死。
+  契约，不要各自写死：
+  - agent 侧（表与列）：`internal/agent/tools/hithink_finance/testdata/schema.json`
+    + `schema_contract_test.go`；
+  - 前端侧（线格式）：`python-service/contracts/finance_api.json`，由
+    `scripts/emit_finance_contract.py` 生成，前端与后端各有一个用例对着它验。
+    改了接口字段却没重新生成契约，两个用例会红。
 - **注册 ≠ 可用。** Go 工具进了代码不等于模型能调：`allowed_tools` 白名单决定它
   是否进 tool schema。`internal/agent/tools/zettaranc/whitelist_test.go` 与
   `internal/healthcheck/reachability.go` 守着这条 —— 加工具必须同步加白名单，
