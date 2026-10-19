@@ -30,6 +30,7 @@ func (t *TrendAnalysisTool) Description() string {
 
 分析内容：
 - 道氏理论：识别HH/HL（上升趋势）或LH/LL（下降趋势）结构
+- 重剑 518 均线系统：5日/18日均线交叉、开口与金叉次数语义（一次反弹/二次突破/三次跃迁）
 - 均线排列：多头排列（MA5>MA10>MA20>MA60）/ 空头排列 / 均线粘合
 - 均线交叉：短期均线上穿/下穿长期均线
 - 葛兰碧法则：价格与MA20的关系（突破/跌破/回踩/反弹）
@@ -135,6 +136,7 @@ func (t *TrendAnalysisTool) Execute(ctx context.Context, args json.RawMessage) (
 			"ma_values":     maValues,
 			"price_vs_ma20": priceVsMA20,
 			"crossovers":    crossovers,
+			"ma518_system":  analyzeMA518System(rows),
 		},
 		"granville_signals": granville,
 		"supertrend": map[string]interface{}{
@@ -355,6 +357,104 @@ func detectMACrossovers(rows []marketRow) []map[string]interface{} {
 		}
 	}
 	return crosses
+}
+
+// analyzeMA518System evaluates the Heavy Sword 518 moving average system.
+func analyzeMA518System(rows []marketRow) map[string]interface{} {
+	if len(rows) < 18 {
+		return map[string]interface{}{
+			"status": "unknown",
+			"desc":   "数据不足18天，无法计算18日均线",
+		}
+	}
+
+	n := len(rows)
+	ma5Arr := make([]float64, n)
+	ma18Arr := make([]float64, n)
+
+	for i := 0; i < n; i++ {
+		if i+5 <= n {
+			sum := 0.0
+			for j := i; j < i+5; j++ {
+				sum += rows[j].Close
+			}
+			ma5Arr[i] = sum / 5.0
+		}
+		if i+18 <= n {
+			sum := 0.0
+			for j := i; j < i+18; j++ {
+				sum += rows[j].Close
+			}
+			ma18Arr[i] = sum / 18.0
+		}
+	}
+
+	latestMA5 := ma5Arr[0]
+	latestMA18 := ma18Arr[0]
+	if latestMA18 <= 0 {
+		return map[string]interface{}{
+			"status": "unknown",
+			"desc":   "18日均线未形成",
+		}
+	}
+
+	spreadPct := ((latestMA5 - latestMA18) / latestMA18) * 100.0
+	isGolden := latestMA5 >= latestMA18
+
+	goldenCrossCount := 0
+	crossEvent := "none"
+
+	if n >= 2 && ma5Arr[1] > 0 && ma18Arr[1] > 0 {
+		if ma5Arr[1] <= ma18Arr[1] && latestMA5 > latestMA18 {
+			crossEvent = "golden_cross"
+		} else if ma5Arr[1] >= ma18Arr[1] && latestMA5 < latestMA18 {
+			crossEvent = "death_cross"
+		}
+	}
+
+	for i := 0; i < n-1; i++ {
+		if ma5Arr[i] <= 0 || ma18Arr[i] <= 0 || ma5Arr[i+1] <= 0 || ma18Arr[i+1] <= 0 {
+			break
+		}
+		if ma5Arr[i+1] <= ma18Arr[i+1] && ma5Arr[i] > ma18Arr[i] {
+			goldenCrossCount++
+		}
+		if !isGolden && ma5Arr[i+1] >= ma18Arr[i+1] && ma5Arr[i] < ma18Arr[i] {
+			break
+		}
+		if isGolden && ma5Arr[i+1] >= ma18Arr[i+1] && ma5Arr[i] < ma18Arr[i] {
+			break
+		}
+	}
+
+	phaseSemantic := "518多头排列"
+	if isGolden {
+		if goldenCrossCount <= 1 {
+			phaseSemantic = "一次金叉（做反弹段）"
+		} else if goldenCrossCount == 2 {
+			phaseSemantic = "二次金叉（做突破段）"
+		} else {
+			phaseSemantic = fmt.Sprintf("三次及以上金叉（%d次金叉，主升跃迁段）", goldenCrossCount)
+		}
+	} else {
+		phaseSemantic = "518死叉空头受制"
+	}
+
+	var riskWarning string
+	if !isGolden && spreadPct < -0.5 {
+		riskWarning = "死叉开口放大，死叉之初严禁抄底补仓；死叉之下不做过夜趋势"
+	}
+
+	return map[string]interface{}{
+		"ma5":            round2(latestMA5),
+		"ma18":           round2(latestMA18),
+		"spread_pct":     round2(spreadPct),
+		"is_golden":      isGolden,
+		"cross_event":    crossEvent,
+		"cross_count":    goldenCrossCount,
+		"phase_semantic": phaseSemantic,
+		"risk_warning":   riskWarning,
+	}
 }
 
 // detectGranvilleSignals checks price vs MA20 relationships.

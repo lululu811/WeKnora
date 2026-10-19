@@ -322,6 +322,8 @@ builtin_agents:
         # Public tools (hithink finance data)
         - "hithink.finance.market.price.snapshot"
         - "hithink.finance.market.price.historical"
+        - "hithink.finance.market.dividend.calendar"
+        - "hithink.finance.market.dividend.yield_screener"
         - "hithink.finance.financial.valuation.snapshot"
         - "hithink.finance.financial.statement.income"
         - "hithink.finance.financial.statement.balance"
@@ -335,6 +337,24 @@ builtin_agents:
         - "hithink.finance.special.limit.limit_up_pool"
         - "hithink.finance.special.dragon_tiger.list"
         - "hithink.finance.special.hot_stock.skyrocket"
+        - "hithink.finance.special.hot_stock.top_list"
+        - "hithink.finance.special.hot_stock.rank_trend"
+        - "hithink.finance.special.auction.snapshot"
+        - "hithink.finance.special.sentiment.stats"
+        - "hithink.finance.index.overview"
+        - "hithink.finance.index.sector.ranking"
+        - "hithink.finance.futures.variety.list"
+        - "hithink.finance.futures.price.snapshot"
+        - "hithink.finance.futures.price.historical"
+        - "hithink.finance.fund.etf.snapshot"
+        - "hithink.finance.fund.holdings.stock"
+        - "hithink.finance.fund.holdings.portfolio"
+        - "hithink.finance.special.limit.ladder_detail"
+        - "hithink.finance.special.limit.break_pool"
+        - "hithink.finance.special.anomaly.stock_reason"
+        - "hithink.finance.indicator.volatility.bbands"
+        - "hithink.finance.indicator.momentum.macd_rsi"
+        - "hithink.finance.indicator.volume.money_flow"
 
         # 形态识别与技术分析。这五个在 agent_service.go 早已注册，但此前漏在
         # 白名单之外 —— 注册了不等于 agent 能用：白名单决定注册遍历范围，
@@ -411,6 +431,8 @@ builtin_agents:
         # 行情与估值：判断「现在贵不贵」「价格处在什么位置」需要
         - "hithink.finance.market.price.snapshot"
         - "hithink.finance.market.price.historical"
+        - "hithink.finance.market.dividend.calendar"
+        - "hithink.finance.market.dividend.yield_screener"
         - "hithink.finance.financial.valuation.snapshot"
         - "hithink.finance.financial.statement.income"
         - "hithink.finance.financial.statement.balance"

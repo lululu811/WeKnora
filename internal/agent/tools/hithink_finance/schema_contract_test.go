@@ -304,8 +304,8 @@ func TestToolSQLMatchesSchema(t *testing.T) {
 				matched := false
 				for _, tb := range tables {
 					tbl := tb[1]
-					if !strings.HasPrefix(tbl, "v_") {
-						continue // 子查询里对非视图的引用不在契约范围内
+					if !strings.HasPrefix(tbl, "v_") && owner[tbl] == "" {
+						continue // 子查询或 CTE 等非快照对象不在契约范围内
 					}
 					db, ok := owner[tbl]
 					if !ok {

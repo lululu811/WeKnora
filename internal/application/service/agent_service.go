@@ -16,6 +16,8 @@ import (
 	"github.com/Tencent/WeKnora/internal/agent/tools/hithink_finance"
 	"github.com/Tencent/WeKnora/internal/agent/tools/hithink_finance/analysis"
 	"github.com/Tencent/WeKnora/internal/agent/tools/hithink_finance/financial"
+	"github.com/Tencent/WeKnora/internal/agent/tools/hithink_finance/fund"
+	"github.com/Tencent/WeKnora/internal/agent/tools/hithink_finance/futures"
 	indexfinance "github.com/Tencent/WeKnora/internal/agent/tools/hithink_finance/index"
 	"github.com/Tencent/WeKnora/internal/agent/tools/hithink_finance/indicator"
 	"github.com/Tencent/WeKnora/internal/agent/tools/hithink_finance/market"
@@ -1345,6 +1347,8 @@ func (s *agentService) registerTools(
 		case "hithink.finance.discover",
 			"hithink.finance.market.price.snapshot",
 			"hithink.finance.market.price.historical",
+			"hithink.finance.market.dividend.calendar",
+			"hithink.finance.market.dividend.yield_screener",
 			"hithink.finance.financial.valuation.snapshot",
 			"hithink.finance.financial.statement.income",
 			"hithink.finance.financial.statement.balance",
@@ -1353,11 +1357,35 @@ func (s *agentService) registerTools(
 			"hithink.finance.index.sector.membership",
 			"hithink.finance.index.sector.constituents",
 			"hithink.finance.index.sector.daily",
+			"hithink.finance.index.overview",
+			"hithink.finance.index.sector.ranking",
+			"hithink.finance.futures.variety.list",
+			"hithink.finance.futures.price.snapshot",
+			"hithink.finance.futures.price.historical",
+			"hithink.finance.futures.inventory.warehouse_receipts",
+			"hithink.finance.futures.basis.rate",
+			"hithink.finance.fund.etf.snapshot",
+			"hithink.finance.fund.etf.holders_structure",
+			"hithink.finance.fund.etf.institutional_ranking",
+			"hithink.finance.fund.holdings.stock",
+			"hithink.finance.fund.holdings.portfolio",
+			"hithink.finance.special.auction.snapshot",
+			"hithink.finance.special.sentiment.stats",
+			"hithink.finance.special.limit.ladder_detail",
+			"hithink.finance.special.limit.break_pool",
+			"hithink.finance.special.anomaly.stock_reason",
 			"hithink.finance.indicator.trend.ma",
 			"hithink.finance.indicator.momentum.kdj",
+			"hithink.finance.indicator.volatility.bbands",
+			"hithink.finance.indicator.volatility.squeeze",
+			"hithink.finance.indicator.trend.supertrend",
+			"hithink.finance.indicator.momentum.macd_rsi",
+			"hithink.finance.indicator.volume.money_flow",
 			"hithink.finance.special.limit.limit_up_pool",
 			"hithink.finance.special.dragon_tiger.list",
 			"hithink.finance.special.hot_stock.skyrocket",
+			"hithink.finance.special.hot_stock.top_list",
+			"hithink.finance.special.hot_stock.rank_trend",
 			"hithink.finance.query.sql",
 			"hithink.finance.pattern.scan",
 			"hithink.finance.analysis.trend",
@@ -1377,6 +1405,10 @@ func (s *agentService) registerTools(
 				toolToRegister = market.NewPriceSnapshotTool(s.hithinkConfig)
 			case "hithink.finance.market.price.historical":
 				toolToRegister = market.NewPriceHistoricalTool(s.hithinkConfig)
+			case "hithink.finance.market.dividend.calendar":
+				toolToRegister = market.NewDividendCalendarTool(s.hithinkConfig)
+			case "hithink.finance.market.dividend.yield_screener":
+				toolToRegister = market.NewDividendYieldScreenerTool(s.hithinkConfig)
 			case "hithink.finance.financial.valuation.snapshot":
 				toolToRegister = financial.NewValuationSnapshotTool(s.hithinkConfig)
 			case "hithink.finance.financial.statement.income":
@@ -1393,16 +1425,64 @@ func (s *agentService) registerTools(
 				toolToRegister = indexfinance.NewSectorConstituentsTool(s.hithinkConfig)
 			case "hithink.finance.index.sector.daily":
 				toolToRegister = indexfinance.NewSectorDailyTool(s.hithinkConfig)
+			case "hithink.finance.index.overview":
+				toolToRegister = indexfinance.NewIndexOverviewTool(s.hithinkConfig)
+			case "hithink.finance.index.sector.ranking":
+				toolToRegister = indexfinance.NewSectorRankingTool(s.hithinkConfig)
+			case "hithink.finance.futures.variety.list":
+				toolToRegister = futures.NewVarietyListTool(s.hithinkConfig)
+			case "hithink.finance.futures.price.snapshot":
+				toolToRegister = futures.NewPriceSnapshotTool(s.hithinkConfig)
+			case "hithink.finance.futures.price.historical":
+				toolToRegister = futures.NewPriceHistoricalTool(s.hithinkConfig)
+			case "hithink.finance.futures.inventory.warehouse_receipts":
+				toolToRegister = futures.NewWarehouseReceiptsTool(s.hithinkConfig)
+			case "hithink.finance.futures.basis.rate":
+				toolToRegister = futures.NewFuturesBasisRateTool(s.hithinkConfig)
+			case "hithink.finance.fund.etf.snapshot":
+				toolToRegister = fund.NewETFSnapshotTool(s.hithinkConfig)
+			case "hithink.finance.fund.etf.holders_structure":
+				toolToRegister = fund.NewETFHoldersStructureTool(s.hithinkConfig)
+			case "hithink.finance.fund.etf.institutional_ranking":
+				toolToRegister = fund.NewETFInstitutionalRankingTool(s.hithinkConfig)
+			case "hithink.finance.fund.holdings.stock":
+				toolToRegister = fund.NewHoldingsStockTool(s.hithinkConfig)
+			case "hithink.finance.fund.holdings.portfolio":
+				toolToRegister = fund.NewHoldingsPortfolioTool(s.hithinkConfig)
+			case "hithink.finance.special.auction.snapshot":
+				toolToRegister = special.NewAuctionSnapshotTool(s.hithinkConfig)
+			case "hithink.finance.special.sentiment.stats":
+				toolToRegister = special.NewSentimentStatsTool(s.hithinkConfig)
+			case "hithink.finance.special.limit.ladder_detail":
+				toolToRegister = special.NewLimitLadderDetailTool(s.hithinkConfig)
+			case "hithink.finance.special.limit.break_pool":
+				toolToRegister = special.NewLimitBreakPoolTool(s.hithinkConfig)
+			case "hithink.finance.special.anomaly.stock_reason":
+				toolToRegister = special.NewAnomalyStockTool(s.hithinkConfig)
 			case "hithink.finance.indicator.trend.ma":
 				toolToRegister = indicator.NewTrendMATool(s.hithinkConfig)
 			case "hithink.finance.indicator.momentum.kdj":
 				toolToRegister = indicator.NewMomentumKDJTool(s.hithinkConfig)
+			case "hithink.finance.indicator.volatility.bbands":
+				toolToRegister = indicator.NewVolatilityBBandsTool(s.hithinkConfig)
+			case "hithink.finance.indicator.volatility.squeeze":
+				toolToRegister = indicator.NewVolatilitySqueezeTool(s.hithinkConfig)
+			case "hithink.finance.indicator.trend.supertrend":
+				toolToRegister = indicator.NewTrendSupertrendTool(s.hithinkConfig)
+			case "hithink.finance.indicator.momentum.macd_rsi":
+				toolToRegister = indicator.NewMomentumMacdRsiTool(s.hithinkConfig)
+			case "hithink.finance.indicator.volume.money_flow":
+				toolToRegister = indicator.NewVolumeMoneyFlowTool(s.hithinkConfig)
 			case "hithink.finance.special.limit.limit_up_pool":
 				toolToRegister = special.NewLimitUpPoolTool(s.hithinkConfig)
 			case "hithink.finance.special.dragon_tiger.list":
 				toolToRegister = special.NewDragonTigerTool(s.hithinkConfig)
 			case "hithink.finance.special.hot_stock.skyrocket":
 				toolToRegister = special.NewHotStockTool(s.hithinkConfig)
+			case "hithink.finance.special.hot_stock.top_list":
+				toolToRegister = special.NewHotStockListTool(s.hithinkConfig)
+			case "hithink.finance.special.hot_stock.rank_trend":
+				toolToRegister = special.NewHotStockTrendTool(s.hithinkConfig)
 			case "hithink.finance.query.sql":
 				toolToRegister = query.NewSQLQueryTool(s.hithinkConfig)
 			case "hithink.finance.pattern.scan":

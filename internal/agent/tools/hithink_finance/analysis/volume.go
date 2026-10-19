@@ -28,6 +28,7 @@ func (t *VolumeAnalysisTool) Description() string {
 	return `量价分析工具。基于威科夫方法和量价关系理论，分析资金流向和主力行为。
 
 分析内容：
+- 微观量价：重剑双上五四态（双上五/阴量上五/量上五价未上/价上五量未上/双下五）
 - 威科夫阶段判断：吸筹/派发/上涨(Markup)/下跌(Markdown)
 - 量价关系：量价齐升、量价背离、缩量回调、放量突破
 - 假突破检测：Spring(向下假突破)/Upthrust(向上假突破)
@@ -94,6 +95,7 @@ func (t *VolumeAnalysisTool) Execute(ctx context.Context, args json.RawMessage) 
 		"thscode":         params.Thscode,
 		"wyckoff_phase":   t.analyzeWyckoffPhase(rows),
 		"volume_price":    t.analyzeVolumePrice(rows),
+		"dual_above_5":    t.analyzeDualAbove5(rows),
 		"spring_upthrust": t.analyzeSpringUpthrust(rows),
 		"obv":             t.analyzeOBV(rows),
 		"money_flow":      t.analyzeMoneyFlow(rows),
@@ -557,6 +559,82 @@ func (t *VolumeAnalysisTool) calcVolAvg(rows []marketRow, window, startIdx int) 
 		return 0
 	}
 	return sum / float64(count)
+}
+
+// analyzeDualAbove5 performs the Heavy Sword micro volume-price analysis (双上五四态).
+func (t *VolumeAnalysisTool) analyzeDualAbove5(rows []marketRow) map[string]interface{} {
+	if len(rows) < 5 {
+		return map[string]interface{}{
+			"state": "unknown",
+			"desc":  "数据不足5天，无法计算双上五",
+		}
+	}
+	latest := rows[0]
+	volMA5 := t.calcVolAvg(rows, 5, 0)
+	priceMA5 := latest.MA5
+	if priceMA5 <= 0 {
+		sum := 0.0
+		for i := 0; i < 5; i++ {
+			sum += rows[i].Close
+		}
+		priceMA5 = sum / 5.0
+	}
+
+	priceUp := latest.Close >= priceMA5
+	volUp := latest.Vol >= volMA5
+	isYin := latest.Close < latest.Open
+
+	var state, label, action, desc string
+	confidence := 0.7
+
+	if priceUp && volUp {
+		state = "BOTH_UP_5"
+		label = "双上五"
+		action = "BUY_OR_HOLD"
+		confidence = 0.85
+		desc = "量上5日均量线 + 价上5日均线（量价齐升，开仓/持股）"
+	} else if !priceUp && volUp {
+		if isYin {
+			state = "YIN_VOL_UP_5"
+			label = "阴量上五"
+			action = "PROBE_BUY_LEFT"
+			confidence = 0.65
+			desc = "阴量上五先手（多头承接放量，可分批低吸但缩量永不补仓）"
+		} else {
+			state = "VOL_UP_PRICE_DOWN_5"
+			label = "量上五(价未上)"
+			action = "HOLD_WATCH_BULLISH"
+			confidence = 0.65
+			desc = "量能站上均量线、价格未站上均线（量比价重要，多头在承接，保持戒备偏多）"
+		}
+	} else if priceUp && !volUp {
+		state = "PRICE_UP_VOL_DOWN_5"
+		label = "价上五(量未上)"
+		action = "ALERT_WEAK"
+		confidence = 0.5
+		desc = "价格站上均线但量能未跟上（无量虚涨，防冲高回落，戒备不可追高）"
+	} else {
+		state = "BOTH_DOWN_5"
+		label = "双下五"
+		action = "EXIT_DEFENSE"
+		confidence = 0.85
+		desc = "量价齐破5日线与5日均量线（主力弃庄，离场防守）"
+	}
+
+	return map[string]interface{}{
+		"state":      state,
+		"label":      label,
+		"action":     action,
+		"price_up":   priceUp,
+		"vol_up":     volUp,
+		"is_yin":     isYin,
+		"close":      round2(latest.Close),
+		"ma5":        round2(priceMA5),
+		"volume":     latest.Vol,
+		"vol_ma5":    round2(volMA5),
+		"confidence": confidence,
+		"desc":       desc,
+	}
 }
 
 var _ types.Tool = (*VolumeAnalysisTool)(nil)

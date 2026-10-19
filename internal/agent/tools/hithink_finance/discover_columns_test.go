@@ -421,15 +421,15 @@ func TestDiscoverColumnsConsumedFilter(t *testing.T) {
 		t.Fatal("嵌入源码里一个已消费列都没扫到 —— consumed 会全量谎报成 false")
 	}
 
-	// 已知有现成工具消费的列：indicator/trend_ma.go 与 indicator/momentum_kdj.go
-	// 的 SQL 显式 SELECT 了它们。
-	for _, col := range []string{"overlap_sma_5", "momentum_kdj_9_3_k"} {
+	// 已知有现成工具消费的列：indicator/trend_ma.go、indicator/momentum_kdj.go 与
+	// indicator/volatility_squeeze.go 的 SQL 显式 SELECT 了它们。
+	for _, col := range []string{"overlap_sma_5", "momentum_kdj_9_3_k", "volatility_kc_20_2_upper"} {
 		if !consumedSet[col] {
 			t.Errorf("%s 被现成工具 SELECT 过，应判为 consumed", col)
 		}
 	}
 	// 已知没有任何 Go 代码读取的列。
-	for _, col := range []string{"volatility_kc_20_2_upper", "momentum_trix_15"} {
+	for _, col := range []string{"momentum_trix_15", "cycles_ht_dcperiod_0"} {
 		if consumedSet[col] {
 			t.Errorf("%s 没有任何工具消费，不应判为 consumed", col)
 		}
@@ -464,18 +464,18 @@ func TestDiscoverColumnsConsumedFilter(t *testing.T) {
 		if int(out["matched"].(float64)) != len(names) {
 			t.Errorf("matched=%v 但实际返回 %d 列", out["matched"], len(names))
 		}
-		kcFound := false
+		trixFound := false
 		for _, r := range out["columns"].([]interface{}) {
 			c := r.(map[string]interface{})
 			if c["consumed"] != false {
 				t.Errorf("%v 有现成工具，不该出现在 consumed=no 的结果里", c["name"])
 			}
-			if c["name"] == "volatility_kc_20_2_upper" {
-				kcFound = true
+			if c["name"] == "momentum_trix_15" {
+				trixFound = true
 			}
 		}
-		if !kcFound {
-			t.Errorf("死列 volatility_kc_20_2_upper 应出现在 consumed=no 里，实际返回：%v", names)
+		if !trixFound {
+			t.Errorf("死列 momentum_trix_15 应出现在 consumed=no 里，实际返回：%v", names)
 		}
 		// yes 与 no 必须互补：同一份清单不能有一列既算有又算没有。
 		yes := decodeOutput(t, callTool(t, tool, `{"kind":"columns","consumed":"yes"}`).Output)
