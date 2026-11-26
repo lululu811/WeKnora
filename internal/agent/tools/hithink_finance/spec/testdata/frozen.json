@@ -1324,7 +1324,7 @@
             "600519.SH"
           ]
         ],
-        "output": "{\n  \"_source\": {\n    \"db\": \"market\",\n    \"tables\": [\n      \"v_daily_qfq\"\n    ]\n  },\n  \"close\": 100,\n  \"date\": \"2026-08-03\",\n  \"high\": 101.1,\n  \"low\": 98.7,\n  \"open\": 99.6,\n  \"thscode\": \"600519.SH\",\n  \"vol\": 1000,\n  \"warning\": \"数据已过期 83 天，最后更新日期：2026-08-03。请检查数据同步状态\"\n}",
+        "output": "{\n  \"_source\": {\n    \"db\": \"market\",\n    \"tables\": [\n      \"v_daily_qfq\"\n    ]\n  },\n  \"close\": 100,\n  \"date\": \"2026-08-03\",\n  \"high\": 101.1,\n  \"low\": 98.7,\n  \"open\": 99.6,\n  \"thscode\": \"600519.SH\",\n  \"vol\": 1000,\n  \"warning\": \"数据已过期 {days} 天，最后更新日期：2026-08-03。请检查数据同步状态\"\n}",
         "error": ""
       },
       {

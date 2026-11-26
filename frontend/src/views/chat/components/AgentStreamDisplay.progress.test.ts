@@ -28,6 +28,12 @@ test('delegated work keeps progress and approvals in one chronological stream an
     computed, props: { ragMode: false }, hasCollaborationTasks: delegated, showIntermediateSteps: expanded,
     eventStream: stream, isConversationDone: done, intermediateStepsCount: ref(2), readingHistory, timelineCompleted: useDeferredTimelineCompletion(done, readingHistory),
     buildFullEventList: foldProgressIntoThinking, finalContent: ref(null),
+    hideApprovalFromTimeline: (event: { type?: string; kind?: string; host?: unknown; resolved?: boolean }) => {
+      if (event?.type === 'tool_approval_resolved') return true
+      if (event?.type !== 'tool_approval_required') return false
+      const host = event.kind === 'host_command' || event.host != null
+      return host && !event.resolved
+    },
   })
   for (const hasChildren of [false, true]) {
     delegated.value = hasChildren
@@ -75,7 +81,7 @@ test('live child waiting uses the timeline tail icon and existing pending shimme
   assert.match(tail, /class="tree-child tree-child-last streaming-loading-node"/)
   assert.match(tail, /role="status" aria-live="polite"/)
   assert.match(tail, /class="action-card action-pending"/)
-  assert.match(tail, /class="action-title-icon icon-mask"/)
+  assert.match(tail, /<ChatTimelineIcon class="action-title-icon" name="lightbulb"/)
   assert.match(tail, /class="action-name"/)
   assert.match(template, /!showAgentActivityIndicator && !childActivity && index === lastStreamingTimelineEventIndex/)
   assert.doesNotMatch(template, /agent-child-activity|child-wait-spinner|child_wait/)

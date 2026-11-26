@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/Tencent/WeKnora/internal/common"
 	"github.com/Tencent/WeKnora/internal/logger"
@@ -18,13 +19,60 @@ import (
 
 // pgRepository implements PostgreSQL-based retrieval operations
 type pgRepository struct {
-	db *gorm.DB // Database connection
+	db                   *gorm.DB // Database connection
+	keywordScoreMu       sync.Mutex
+	keywordScoreFunction string
+
+	// autoIndex is whether ensureHNSWIndex may build indexes at all
+	// (AUTO_MIGRATE != false).
+	autoIndex bool
+	// hnswSeen holds every embedding dimension ensureHNSWIndex has already
+	// scheduled in this process, so the catalog is consulted once per
+	// dimension (int -> struct{}).
+	hnswSeen sync.Map
+	// buildHNSWIndex is the work ensureHNSWIndex runs in the background;
+	// tests swap it for a recorder.
+	buildHNSWIndex func(dimension int)
 }
 
 // NewPostgresRetrieveEngineRepository creates a new PostgreSQL retriever repository
 func NewPostgresRetrieveEngineRepository(db *gorm.DB) interfaces.RetrieveEngineRepository {
 	logger.GetLogger(context.Background()).Info("[Postgres] Initializing PostgreSQL retriever engine repository")
-	return &pgRepository{db: db}
+	repo := &pgRepository{db: db, autoIndex: autoHNSWIndexEnabled()}
+	repo.buildHNSWIndex = repo.buildHNSWIndexInBackground
+	return repo
+}
+
+// keywordScoreFunctionSQL only selects fixed, schema-qualified function names.
+// Some PolarDB pg_search builds expose pgsearch.score instead of paradedb.score.
+const keywordScoreFunctionSQL = `SELECT n.nspname || '.score' AS score_function
+FROM pg_catalog.pg_proc p
+JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+WHERE n.nspname IN ('paradedb', 'pgsearch')
+  AND p.proname = 'score' AND p.prokind = 'f' AND p.pronargs = 1
+  AND p.proargtypes[0] = 'pg_catalog.anyelement'::regtype
+  AND p.prorettype = 'pg_catalog.float4'::regtype
+ORDER BY CASE n.nspname WHEN 'paradedb' THEN 0 ELSE 1 END
+LIMIT 1`
+
+// resolveKeywordScoreFunction probes lazily so vector-only stores remain usable.
+// Cache successes per repository/database; transient failures can be retried.
+func (g *pgRepository) resolveKeywordScoreFunction(ctx context.Context) (string, error) {
+	g.keywordScoreMu.Lock()
+	defer g.keywordScoreMu.Unlock()
+	if g.keywordScoreFunction != "" {
+		return g.keywordScoreFunction, nil
+	}
+	var row struct{ ScoreFunction string }
+	if err := g.db.WithContext(ctx).Raw(keywordScoreFunctionSQL).Scan(&row).Error; err != nil {
+		return "", fmt.Errorf("detect PostgreSQL keyword score function: %w", err)
+	}
+	if row.ScoreFunction != "paradedb.score" && row.ScoreFunction != "pgsearch.score" {
+		return "", errors.New("PostgreSQL keyword retrieval requires paradedb.score(anyelement) or " +
+			"pgsearch.score(anyelement); check pg_search extension compatibility")
+	}
+	g.keywordScoreFunction = row.ScoreFunction
+	return g.keywordScoreFunction, nil
 }
 
 // EngineType returns the retriever engine type (PostgreSQL)
@@ -98,6 +146,7 @@ func (g *pgRepository) Save(ctx context.Context, indexInfo *types.IndexInfo, add
 		return err
 	}
 	logger.GetLogger(ctx).Infof("[Postgres] Successfully saved index for source ID: %s", indexInfo.SourceID)
+	g.ensureHNSWIndex(embeddingDB.Dimension)
 	return nil
 }
 
@@ -130,6 +179,9 @@ func (g *pgRepository) BatchSave(
 		return err
 	}
 	logger.GetLogger(ctx).Infof("[Postgres] Successfully batch saved %d indices", len(indexInfoList))
+	for _, indexInfoDB := range indexInfoDBList {
+		g.ensureHNSWIndex(indexInfoDB.Dimension)
+	}
 	return nil
 }
 
@@ -191,6 +243,10 @@ func (g *pgRepository) KeywordsRetrieve(ctx context.Context,
 	params types.RetrieveParams,
 ) ([]*types.RetrieveResult, error) {
 	logger.GetLogger(ctx).Infof("[Postgres] Keywords retrieval: query=%s, topK=%d", params.Query, params.TopK)
+	scoreFunction, err := g.resolveKeywordScoreFunction(ctx)
+	if err != nil {
+		return nil, err
+	}
 	conds := make([]clause.Expression, 0)
 
 	// KnowledgeBaseIDs and KnowledgeIDs use AND logic
@@ -231,14 +287,17 @@ func (g *pgRepository) KeywordsRetrieve(ctx context.Context,
 		SQL:  "(is_enabled IS NULL OR is_enabled = ?)",
 		Vars: []interface{}{true},
 	})
+	if exclusion := generatedQuestionExclusionClause(params.ExcludeGeneratedQuestionKBIDs); exclusion != nil {
+		conds = append(conds, exclusion)
+	}
 	conds = append(conds, clause.OrderBy{Columns: []clause.OrderByColumn{
 		{Column: clause.Column{Name: "score"}, Desc: true},
 	}})
 
 	var embeddingDBList []pgVectorWithScore
-	err := g.db.WithContext(ctx).Clauses(conds...).
+	err = g.db.WithContext(ctx).Clauses(conds...).
 		Select([]string{
-			"paradedb.score(id) as score",
+			scoreFunction + "(id) as score",
 			"id",
 			"content",
 			"source_id",
@@ -295,6 +354,7 @@ func (g *pgRepository) VectorRetrieve(ctx context.Context,
 		len(params.Embedding), params.TopK, params.Threshold)
 
 	dimension := len(params.Embedding)
+	g.ensureHNSWIndex(dimension)
 	queryVector := pgvector.NewHalfVector(params.Embedding)
 
 	// Build WHERE conditions for filtering
@@ -359,6 +419,19 @@ func (g *pgRepository) VectorRetrieve(ctx context.Context,
 	// is_enabled filter
 	whereParts = append(whereParts, fmt.Sprintf("(is_enabled IS NULL OR is_enabled = $%d)", len(allVars)+1))
 	allVars = append(allVars, true)
+	if len(params.ExcludeGeneratedQuestionKBIDs) > 0 {
+		placeholders := make([]string, len(params.ExcludeGeneratedQuestionKBIDs))
+		paramStart := len(allVars) + 1
+		for i, id := range params.ExcludeGeneratedQuestionKBIDs {
+			placeholders[i] = fmt.Sprintf("$%d", paramStart+i)
+			allVars = append(allVars, id)
+		}
+		whereParts = append(whereParts, fmt.Sprintf(
+			"NOT (knowledge_base_id IN (%s) AND %s)",
+			strings.Join(placeholders, ", "),
+			types.GeneratedQuestionRowPredicate(""),
+		))
+	}
 
 	// Build WHERE clause string
 	whereClause := ""
@@ -434,6 +507,7 @@ func (g *pgRepository) VectorRetrieve(ctx context.Context,
 	}
 
 	var embeddingDBList []pgVectorWithScore
+	var retryWithoutHNSWSettings bool
 
 	err := g.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Exec(fmt.Sprintf("SET LOCAL hnsw.ef_search = %d", efSearch)).Error; err != nil {
@@ -442,6 +516,7 @@ func (g *pgRepository) VectorRetrieve(ctx context.Context,
 			// with default recall). We must rollback first because a failed
 			// statement aborts the transaction in PostgreSQL.
 			logger.GetLogger(ctx).Warnf("[Postgres] Failed to set hnsw.ef_search=%d: %v", efSearch, err)
+			retryWithoutHNSWSettings = strings.Contains(err.Error(), "hnsw.ef_search")
 			return err
 		}
 		// pgvector >= 0.8 supports iterative scan, which keeps pulling more
@@ -452,6 +527,7 @@ func (g *pgRepository) VectorRetrieve(ctx context.Context,
 		// Best-effort: ignore failure on older pgvector versions.
 		if err := tx.Exec("SET LOCAL hnsw.iterative_scan = strict_order").Error; err != nil {
 			logger.GetLogger(ctx).Debugf("[Postgres] hnsw.iterative_scan not available: %v", err)
+			retryWithoutHNSWSettings = strings.Contains(err.Error(), "hnsw.iterative_scan")
 			// abort transaction and let the fallback path below handle it.
 			return err
 		}
@@ -460,10 +536,10 @@ func (g *pgRepository) VectorRetrieve(ctx context.Context,
 
 	// Fallback: if the transaction failed because of an unsupported GUC (e.g.
 	// older pgvector that doesn't have hnsw.ef_search or hnsw.iterative_scan),
-	// retry the query without the SETs so we still return results.
-	if err != nil && len(embeddingDBList) == 0 &&
-		(strings.Contains(err.Error(), "hnsw.ef_search") ||
-			strings.Contains(err.Error(), "hnsw.iterative_scan")) {
+	// retry the query without the SETs after Transaction has rolled back.
+	// Begin, query, and commit failures must not select this compatibility
+	// fallback, even when their diagnostics mention an HNSW setting.
+	if err != nil && len(embeddingDBList) == 0 && retryWithoutHNSWSettings {
 		logger.GetLogger(ctx).Warnf("[Postgres] Retrying vector query without HNSW GUC overrides: %v", err)
 		err = g.db.WithContext(ctx).Raw(querySQL, allVars...).Scan(&embeddingDBList).Error
 	}
@@ -733,4 +809,27 @@ func (g *pgRepository) BatchUpdateChunkTagID(ctx context.Context, chunkTagMap ma
 
 	logger.GetLogger(ctx).Infof("[Postgres] Successfully batch updated chunk tag ID")
 	return nil
+}
+
+func generatedQuestionExclusionClause(kbIDs []string) clause.Expression {
+	if len(kbIDs) == 0 {
+		return nil
+	}
+	placeholders := make([]string, len(kbIDs))
+	vars := make([]interface{}, len(kbIDs))
+	for i, id := range kbIDs {
+		placeholders[i] = "?"
+		vars[i] = id
+	}
+	// ParadeDB can reject score-ordered BM25 queries with column comparisons
+	// in the filter. Use a prefix test for generated-question source IDs.
+	return clause.Expr{
+		SQL: fmt.Sprintf(
+			"NOT (knowledge_base_id IN (%s) AND source_type = %d AND chunk_id <> '' "+
+				"AND starts_with(source_id, chunk_id || '-'))",
+			strings.Join(placeholders, ", "),
+			types.ChunkSourceType,
+		),
+		Vars: vars,
+	}
 }

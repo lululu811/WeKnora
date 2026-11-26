@@ -5,8 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
+	"sort"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/Tencent/WeKnora/internal/types"
 	"github.com/Tencent/WeKnora/internal/types/interfaces"
@@ -87,12 +90,84 @@ func (r *wikiPageRepository) wikiEmptyInLinksPredicate() string {
 	if r.db != nil && r.db.Dialector != nil && r.db.Dialector.Name() == "sqlite" {
 		return "(in_links IS NULL OR json_array_length(in_links) = 0)"
 	}
-	return "(in_links IS NULL OR in_links = '[]'::JSONB)"
+	return "(in_links IS NULL OR in_links IN ('[]'::JSONB, 'null'::JSONB))"
 }
 
-// Create inserts a new wiki page record
+// Create inserts a page only while its knowledge base is active.
 func (r *wikiPageRepository) Create(ctx context.Context, page *types.WikiPage) error {
-	return r.db.WithContext(ctx).Create(page).Error
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := assertWikiKnowledgeBaseActive(tx, page); err != nil {
+			return err
+		}
+		return tx.Create(page).Error
+	})
+}
+
+// GetOrCreate inserts page, or returns the live page that already owns
+// (knowledge_base_id, slug) when a concurrent writer won the race.
+//
+// Batch ingest resolves "does this slug exist" from a snapshot taken
+// before the reduce phase, so two batches — or a retry overlapping a new
+// batch — can both decide the slug is missing and then collide on the
+// unique index idx_wiki_pages_kb_slug. A bare insert turns that race
+// into a permanent REDUCE_FAILED: every retry replays the same losing
+// insert and the document never leaves finalizing. Catching the
+// unique-key violation and returning the winner's row instead lets the
+// caller apply its content through the normal versioned update path.
+//
+// The refetch runs outside the insert transaction: a failed INSERT
+// aborts a PostgreSQL transaction, so the lookup must not run inside
+// it. When the winner's row is gone by refetch time (soft-deleted in
+// between), the original conflict error is returned and the next retry
+// recreates the page.
+//
+// Deliberately not ON CONFLICT DO NOTHING: that statement is only
+// valid where the partial index exists, and AutoMigrate-only schemas
+// (several wiki ingest test harnesses) do not have it — the statement
+// itself would fail even with no conflicting row.
+func (r *wikiPageRepository) GetOrCreate(ctx context.Context, page *types.WikiPage) (*types.WikiPage, bool, error) {
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := assertWikiKnowledgeBaseActive(tx, page); err != nil {
+			return err
+		}
+		return tx.Create(page).Error
+	})
+	if err == nil {
+		return page, true, nil
+	}
+	if !isWikiPageUniqueViolation(err) {
+		return nil, false, err
+	}
+	existing, getErr := r.GetBySlug(ctx, page.KnowledgeBaseID, page.Slug)
+	if getErr != nil {
+		return nil, false, err
+	}
+	return existing, false, nil
+}
+
+// isWikiPageUniqueViolation recognizes a duplicate-key error on both
+// dialects, translated or not. Same shape as isCredentialUniqueViolation.
+func isWikiPageUniqueViolation(err error) bool {
+	if errors.Is(err, gorm.ErrDuplicatedKey) {
+		return true
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "duplicate") || strings.Contains(msg, "unique constraint")
+}
+
+// assertWikiKnowledgeBaseActive verifies the page's knowledge base still
+// exists for this tenant. An in-flight Wiki worker may finish after the
+// KB cleanup has run, so the check runs inside the write transaction
+// with a SHARE lock to serialize against the KB soft-delete.
+func assertWikiKnowledgeBaseActive(tx *gorm.DB, page *types.WikiPage) error {
+	var kb types.KnowledgeBase
+	err := tx.Clauses(clause.Locking{Strength: "SHARE"}).Select("id").
+		Where("id = ? AND tenant_id = ?", page.KnowledgeBaseID, page.TenantID).
+		Take(&kb).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return ErrKnowledgeBaseNotFound
+	}
+	return err
 }
 
 // Update updates an existing wiki page record with optimistic locking.
@@ -117,6 +192,9 @@ func (r *wikiPageRepository) UpdateWithRevision(
 	ctx context.Context, page *types.WikiPage, rev *types.WikiPageRevision,
 ) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := checkWikiPageWriteSnapshot(tx, page); err != nil {
+			return err
+		}
 		if rev != nil {
 			// An already-present (page_id, version) pair means a concurrent
 			// writer snapshotted the same version first; its copy is
@@ -289,19 +367,26 @@ func (r *wikiPageRepository) UpdateAutoLinkedContent(ctx context.Context, page *
 	return nil
 }
 
-// UpdateMeta updates bookkeeping / provenance fields WITHOUT incrementing the
-// version number. "Content" for versioning purposes is the user-visible page
-// body (title/content/summary/page_type/status); everything else — links,
-// source refs, chunk refs, page_metadata — is considered bookkeeping and is
-// refreshed here so the version counter only advances on real edits.
-//
-// Used by link maintenance, re-ingest (same-content case), and status changes.
+// UpdateMeta 保存来源、状态和目录等元数据，不修改反链或版本。
 func (r *wikiPageRepository) UpdateMeta(ctx context.Context, page *types.WikiPage) error {
-	result := r.db.WithContext(ctx).
+	if _, guarded := types.WikiPageWriteSnapshotFromContext(ctx); guarded {
+		return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			if err := checkWikiPageWriteSnapshot(tx, page); err != nil {
+				return err
+			}
+			return updateWikiPageMeta(tx, page)
+		})
+	}
+	return updateWikiPageMeta(r.db.WithContext(ctx), page)
+}
+
+// updateWikiPageMeta 保留主线的窄字段写入；普通保存与快照保护的保存都不覆盖反链。
+func updateWikiPageMeta(db *gorm.DB, page *types.WikiPage) error {
+	// 反链由专用原子操作维护，避免这份元数据快照覆盖并发添加的链接。
+	result := db.
 		Model(page).
 		Where("id = ?", page.ID).
 		Updates(map[string]interface{}{
-			"in_links":      page.InLinks,
 			"out_links":     page.OutLinks,
 			"aliases":       page.Aliases,
 			"status":        page.Status,
@@ -365,12 +450,25 @@ func (r *wikiPageRepository) List(ctx context.Context, req *types.WikiPageListRe
 		query = query.Where("status = ?", req.Status)
 	}
 	if req.Query != "" {
-		// Use PostgreSQL full-text search + ILIKE for aliases
-		query = query.Where(
-			"(to_tsvector('simple', coalesce(title, '') || ' ' || coalesce(content, '')) @@ plainto_tsquery('simple', ?) OR aliases::text ILIKE ?)",
-			req.Query,
-			"%"+req.Query+"%",
-		)
+		pattern := "%" + escapeLikeKeyword(req.Query) + "%"
+		if r.wikiDialect() == "sqlite" {
+			// SQLite does not provide PostgreSQL's full-text functions or casts.
+			// Search the same user-visible fields with a case-insensitive LIKE.
+			query = query.Where(
+				"(LOWER(COALESCE(title, '')) LIKE LOWER(?) ESCAPE ? OR "+
+					"LOWER(COALESCE(content, '')) LIKE LOWER(?) ESCAPE ? OR "+
+					"LOWER(CAST(aliases AS TEXT)) LIKE LOWER(?) ESCAPE ?)",
+				pattern, likeEscapeChar, pattern, likeEscapeChar, pattern, likeEscapeChar,
+			)
+		} else {
+			// Use PostgreSQL full-text search + ILIKE for aliases.
+			query = query.Where(
+				"(to_tsvector('simple', coalesce(title, '') || ' ' || "+
+					"coalesce(content, '')) @@ plainto_tsquery('simple', ?) OR "+
+					"aliases::text ILIKE ? ESCAPE ?)",
+				req.Query, pattern, likeEscapeChar,
+			)
+		}
 	}
 	// Directory filters are pushed to SQL so the DB does the counting and
 	// pagination instead of loading every page of the type into memory. `depth`
@@ -1036,16 +1134,13 @@ func (r *wikiPageRepository) ListByTypeRecent(
 }
 
 // FindSimilarPages returns the top-k entity/concept pages whose lowercase
-// title is most similar to the given query under PostgreSQL pg_trgm
-// trigram similarity. Backed by idx_wiki_pages_title_trgm (GIN
-// gin_trgm_ops, migration 000041). Used by the dedup pre-filter to
-// surface candidate merge targets without loading every entity/concept
-// page into Go.
+// title is most similar to the given query. PostgreSQL uses pg_trgm backed by
+// idx_wiki_pages_title_trgm (GIN gin_trgm_ops, migration 000041). SQLite does
+// not implement pg_trgm, so Lite loads the filtered title projection and ranks
+// it with a compatible padded-trigram Jaccard fallback in Go.
 //
 // types is an optional page_type allow-list; empty means entity+concept.
-// limit is clamped to [1, 50]. Pages whose title similarity is below
-// 0.1 are dropped server-side via the `%` operator (which respects
-// pg_trgm.similarity_threshold).
+// limit is clamped to [1, 50].
 func (r *wikiPageRepository) FindSimilarPages(
 	ctx context.Context,
 	kbID string,
@@ -1067,6 +1162,9 @@ func (r *wikiPageRepository) FindSimilarPages(
 	}
 
 	q := strings.ToLower(strings.TrimSpace(query))
+	if r.wikiDialect() == "sqlite" {
+		return r.findSimilarPagesSQLite(ctx, kbID, q, pageTypes, limit)
+	}
 
 	var rows []types.WikiPageLite
 	if err := r.db.WithContext(ctx).
@@ -1079,12 +1177,113 @@ func (r *wikiPageRepository) FindSimilarPages(
 		Scan(&rows).Error; err != nil {
 		return nil, err
 	}
-	out := make([]*types.WikiPageLite, len(rows))
-	for i := range rows {
-		r := rows[i]
-		out[i] = &r
+	return wikiPageLitePointers(rows), nil
+}
+
+// findSimilarPagesSQLite is the Lite equivalent of the PostgreSQL pg_trgm
+// query above. SQLite has no pg_trgm extension or compatible similarity
+// operator, so it fetches only the dedup projection and ranks padded rune
+// trigrams in-process. The corpus is already scoped to one knowledge base and
+// the entity/concept page types before any rows enter Go.
+func (r *wikiPageRepository) findSimilarPagesSQLite(
+	ctx context.Context,
+	kbID, query string,
+	pageTypes []string,
+	limit int,
+) ([]*types.WikiPageLite, error) {
+	var rows []types.WikiPageLite
+	if err := r.db.WithContext(ctx).
+		Model(&types.WikiPage{}).
+		Select("slug, title, page_type, status, aliases, out_links").
+		Where("knowledge_base_id = ? AND page_type IN ? AND status <> ?",
+			kbID, pageTypes, types.WikiPageStatusArchived).
+		Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+
+	queryGrams := wikiTitleTrigrams(query)
+	scored := make([]scoredWikiPageLite, 0, len(rows))
+	for _, row := range rows {
+		score := wikiTrigramJaccard(queryGrams, wikiTitleTrigrams(row.Title))
+		if score >= wikiSQLiteTrigramScoreFloor {
+			scored = append(scored, scoredWikiPageLite{page: row, score: score})
+		}
+	}
+	sort.SliceStable(scored, func(i, j int) bool {
+		if scored[i].score != scored[j].score {
+			return scored[i].score > scored[j].score
+		}
+		return scored[i].page.Slug < scored[j].page.Slug
+	})
+	if len(scored) > limit {
+		scored = scored[:limit]
+	}
+
+	out := make([]*types.WikiPageLite, len(scored))
+	for i := range scored {
+		page := scored[i].page
+		out[i] = &page
 	}
 	return out, nil
+}
+
+// wikiSQLiteTrigramScoreFloor uses pg_trgm's default similarity threshold.
+// It keeps a coincidental shared trigram from entering the dedup prompt on Lite.
+// PostgreSQL deployments may still configure pg_trgm with a different threshold.
+const wikiSQLiteTrigramScoreFloor = 0.3
+
+type scoredWikiPageLite struct {
+	page  types.WikiPageLite
+	score float64
+}
+
+func wikiPageLitePointers(rows []types.WikiPageLite) []*types.WikiPageLite {
+	out := make([]*types.WikiPageLite, len(rows))
+	for i := range rows {
+		row := rows[i]
+		out[i] = &row
+	}
+	return out
+}
+
+// wikiTitleTrigrams follows pg_trgm's word boundaries: non-alphanumeric
+// characters separate words, and each word receives two leading spaces and
+// one trailing space before its rune trigrams are added to the shared set.
+func wikiTitleTrigrams(value string) map[string]struct{} {
+	words := strings.FieldsFunc(strings.ToLower(value), func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsNumber(r)
+	})
+	if len(words) == 0 {
+		return nil
+	}
+	grams := make(map[string]struct{})
+	for _, word := range words {
+		runes := append([]rune{' ', ' '}, []rune(word)...)
+		runes = append(runes, ' ')
+		for i := 0; i+3 <= len(runes); i++ {
+			grams[string(runes[i:i+3])] = struct{}{}
+		}
+	}
+	return grams
+}
+
+func wikiTrigramJaccard(left, right map[string]struct{}) float64 {
+	if len(left) == 0 || len(right) == 0 {
+		return 0
+	}
+	if len(left) > len(right) {
+		left, right = right, left
+	}
+	intersection := 0
+	for gram := range left {
+		if _, ok := right[gram]; ok {
+			intersection++
+		}
+	}
+	if intersection == 0 {
+		return 0
+	}
+	return float64(intersection) / float64(len(left)+len(right)-intersection)
 }
 
 func wikiNormalizedTitleSQL(db *gorm.DB) string {
@@ -1331,6 +1530,16 @@ func (r *wikiPageRepository) Search(
 	ctx context.Context, kbID string, query string, limit int,
 ) ([]*types.WikiPage, error) {
 	return r.SearchAcross(ctx, []string{kbID}, query, limit)
+}
+
+// SearchLiteral preserves literal text across PostgreSQL regex and SQLite LIKE.
+func (r *wikiPageRepository) SearchLiteral(
+	ctx context.Context, kbID, query string, limit int,
+) ([]*types.WikiPage, error) {
+	if r.wikiDialect() != "sqlite" {
+		query = regexp.QuoteMeta(query)
+	}
+	return r.Search(ctx, kbID, query, limit)
 }
 
 func wikiSearchPredicate(column, op string, withEscape bool) string {

@@ -21,7 +21,7 @@
   <div v-else class="action-card interaction-inline" :class="{ 'action-pending': !resolved }">
     <div class="action-header no-results">
       <div class="action-title">
-        <t-icon class="action-title-icon" :name="headerIcon" />
+        <ChatTimelineIcon class="action-title-icon" :name="headerIcon" :active="open" />
         <span class="action-name">{{ mainTitle }}</span>
       </div>
     </div>
@@ -41,6 +41,7 @@
 </template>
 
 <script setup lang="ts">
+import ChatTimelineIcon from '@/components/ChatTimelineIcon.vue'
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { useI18n } from 'vue-i18n'
@@ -60,6 +61,7 @@ import {
 } from '@/api/embed'
 import { markPromptSubmitted, promptSubmission, usePromptDock } from '@/composables/usePromptDock'
 import { isSubmitKey } from '@/utils/promptKeys'
+import { getApiBaseUrl } from '@/utils/api-base'
 
 const props = defineProps<{
   pendingId: string
@@ -198,10 +200,12 @@ const authorize = async () => {
   if (props.resolved || authorizing.value) return
   authorizing.value = true
   try {
-    const redirectUri = window.location.origin + MCP_OAUTH_CALLBACK_PATH
+    // Subpath deployments: the provider-registered callback URL and popup
+    // bounce target must carry the SPA base prefix.
+    const redirectUri = window.location.origin + getApiBaseUrl() + MCP_OAUTH_CALLBACK_PATH
     const frontendRedirect = useEmbedOAuth()
       ? window.location.pathname + window.location.search
-      : '/'
+      : `${getApiBaseUrl()}/`
     const authorization = useEmbedOAuth()
       ? await getEmbedMCPOAuthAuthorizeURL(
         props.embedChannelId!,

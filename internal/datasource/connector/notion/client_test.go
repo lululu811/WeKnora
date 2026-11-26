@@ -352,22 +352,24 @@ func TestClientQueryDatabaseAll(t *testing.T) {
 var _ = time.Now
 
 func TestDownloadFile_RejectsLoopbackURL(t *testing.T) {
+	const apiHost = "notion.example"
 	// Whitelist the client's base host, not loopback. The guard resolves
 	// hostnames, and on a machine behind a fake-IP resolver every public name
 	// answers from 198.18.0.0/15 (RFC 2544 benchmarking space), which the guard
 	// refuses — client construction would fail before the loopback URL is ever
 	// exercised. The attachment URL under test stays un-whitelisted.
-	t.Setenv("SSRF_WHITELIST", "api.notion.com")
+	// Permit client setup without DNS while leaving the attachment host blocked.
+	t.Setenv("SSRF_WHITELIST", apiHost)
 	secutils.ResetSSRFWhitelistForTest()
 	t.Cleanup(secutils.ResetSSRFWhitelistForTest)
 
-	client, err := newClient("test-token", "https://api.notion.com")
+	client, err := newClient("test-token", "https://"+apiHost)
 	if err != nil {
 		t.Fatalf("newClient: %v", err)
 	}
 	_, err = client.DownloadFile(context.Background(), "http://127.0.0.1/secret")
-	if err == nil {
-		t.Fatal("expected loopback attachment URL to be rejected")
+	if err == nil || !strings.HasPrefix(err.Error(), "attachment URL rejected:") {
+		t.Fatalf("expected SSRF validation to reject the loopback attachment URL, got %v", err)
 	}
 }
 

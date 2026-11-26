@@ -13,6 +13,12 @@
 
 切换引擎需要重建索引。知识库绑定的向量存储在创建后不可修改，应在建库前确定实例。
 
+## 调整混合检索
+
+检索设置将召回、融合等参数分组展示。RRF 使用各路结果的排名融合向量和关键词检索，可调整平滑参数及两路权重。建议用同一组有代表性的问题比较结果，再决定是否保存；提高某一路权重不等于提高模型回答准确率。
+
+只有一路结果时不执行双路 RRF。参数含义与默认值见下文 [RRF 加权融合](#_5-2-rrf-加权融合)。
+
 ## 多模态 Embedding 与图片召回
 
 支持图片输入的向量模型可将文本和图片编码到同一空间。知识库默认不开启图片向量，需要同时配置多模态与「图片向量检索」；已有文档需重新解析，扫描 PDF 页不生成图片向量。画廊只展示已有图片，不依赖此开关。详情见[知识库图片配置](02-knowledge-base.md#multimodal-embedding)。
@@ -23,7 +29,7 @@
 
 | 引擎 | RETRIEVE_DRIVER 值 | 向量检索 | 关键词/全文 | 关键词打分 | 中文分词 | 维度管理 | 阈值下推 | 部署复杂度 | 适用场景 |
 |------|-------------------|----------|------------|-----------|---------|----------|---------|-----------|----------|
-| PostgreSQL | `postgres` | pgvector halfvec + HNSW 表达式索引 | ParadeDB BM25（`\|\|\|`） | BM25（paradedb.score） | ParadeDB tokenizer | 单表混维，表达式索引按维 cast | 距离阈值 SQL 内 | 低（默认镜像内置） | 默认选择；与业务同库，事务一致 |
+| PostgreSQL | `postgres` | pgvector halfvec + HNSW 表达式索引 | pg_search BM25（`\|\|\|`） | BM25（优先 `paradedb.score`，兼容 `pgsearch.score`） | pg_search tokenizer | 单表混维，表达式索引按维 cast | 距离阈值 SQL 内 | 低（默认镜像内置） | 默认选择；与业务同库，事务一致 |
 | SQLite | `sqlite` | sqlite-vec vec0（cosine） | FTS5 contentless | FTS5 | 应用侧 bigram | 每维一张 vec0 虚表 | 应用侧 | 极低（内嵌） | 桌面版 / 开发 / 微型部署 |
 | Elasticsearch v8 | `elasticsearch_v8` | script_score cosineSimilarity | match（BM25） | BM25 | ES analyzer | dense_vector 单索引 | 应用侧 | 中 | 已有 ES 8 集群 |
 | Elasticsearch v7 | `elasticsearch_v7` | 不支持（Support 仅 keywords） | match（BM25） | BM25 | ES analyzer | — | — | 中 | 存量 ES 7，仅作关键词引擎，需与其他向量引擎组合 |
@@ -54,6 +60,46 @@
 | `NEO4J_ENABLE` / `NEO4J_URI` / `_USERNAME` / `_PASSWORD` | `false` / `bolt://neo4j:7687` | 图谱检索（独立于向量引擎体系） |
 
 除环境变量（env store，进程级全局）外，还可在管理端为租户创建 `VectorStore` 记录（DB store）并绑定到具体 KB——同一引擎类型可接多套集群实例，检索时按 KB 绑定自动路由并做租户属主校验（[检索时的引擎选择](#_1-2-检索时的引擎选择)）。
+
+### 使用不提供 pg_search 的托管 PostgreSQL
+
+`DB_DRIVER` 决定业务数据存在哪里，`RETRIEVE_DRIVER` 决定在哪里建立和查询检索索引。托管 PostgreSQL 缺少 `pg_search` 时，可以继续用它存放业务数据，再选用上表中的独立检索引擎。
+
+使用[标准 Compose 部署](../01-getting-started/02-installation.md)提供的 Qdrant 服务时，在 `.env` 中加入以下配置。
+
+```dotenv
+DB_DRIVER=postgres
+RETRIEVE_DRIVER=qdrant
+QDRANT_HOST=qdrant
+QDRANT_PORT=6334
+```
+
+将 `DB_HOST`、`DB_PORT`、`DB_USER`、`DB_PASSWORD` 和 `DB_NAME` 指向业务库。`qdrant:6334` 是 Compose 网络内的 gRPC 地址，使用独立部署的 Qdrant 时填入应用可访问的 gRPC 地址和对应认证设置。
+
+在 `docker-compose.yml` 旁创建 `compose.managed-postgres.yml`。以下覆盖文件需要 Docker Compose 2.24.4 或更高版本。它将本地 ParadeDB 放入单独的 profile，并替换 `app` 的依赖列表，保留 Redis 和文档解析服务。
+
+```yaml
+services:
+  postgres:
+    profiles: [local-postgres]
+  app:
+    depends_on: !override
+      redis:
+        condition: service_started
+      docreader:
+        condition: service_healthy
+```
+
+仅启用 `qdrant` profile。先检查服务列表，确认包含 `app`、`redis`、`docreader`、`qdrant`，且没有 `postgres`。随后使用同一份覆盖文件启动。
+
+```bash
+docker compose -f docker-compose.yml -f compose.managed-postgres.yml --profile qdrant config --services
+docker compose -f docker-compose.yml -f compose.managed-postgres.yml --profile qdrant up -d
+```
+
+- `RETRIEVE_DRIVER` 必须排除 `postgres`。启动迁移会自动设置 `app.skip_embedding=true`，跳过 PostgreSQL 检索索引及其 `vector` 和 `pg_search` 扩展的初始化。
+- 业务库迁移仍需要 `uuid-ossp` 和 `pg_trgm`。如果应用账号无权创建扩展，由数据库管理员在目标库预先安装。这版应用的 PostgreSQL 连接使用 `sslmode=disable`，仅接受 TLS 连接的数据库不能按此示例直连。
+- 启动后检查业务库迁移和检索引擎注册日志，再用新建的测试知识库上传一份文档并验证检索。已有知识库从 PostgreSQL 检索切换到新引擎时需要重建检索索引。
 
 ## 引擎实现参考
 
@@ -125,7 +171,17 @@ flowchart TD
 `internal/application/repository/retriever/postgres/repository.go`。数据与业务库同库（`embeddings` 表，GORM 管理）。
 
 - **向量检索**：pgvector `halfvec`（半精度，2 字节/维）。`embedding` 列不定维，HNSW 索引建在表达式 `(embedding::halfvec(dim)) halfvec_cosine_ops` 上——**ORDER BY 表达式必须与索引表达式完全一致**（两侧显式 cast），否则退化为顺序扫描（源码注释引 pgvector issue [#702](https://github.com/pgvector/pgvector/issues/702)/[#835](https://github.com/pgvector/pgvector/issues/835)）。查询用子查询先取 `expandedTopK`（TopK*2，夹在 [100,200]，避免大 LIMIT 拖垮 HNSW）个候选算 `distance = embedding <=> query`，再按 `distance <= 1-threshold` 过滤，`score = 1 - distance`。事务内 `SET LOCAL hnsw.ef_search`（≥40）与 `SET LOCAL hnsw.iterative_scan = strict_order`（pgvector ≥ 0.8，选择性过滤下持续补召回），老版本 GUC 不存在时自动降级重试。
-- **关键词检索**：ParadeDB `pg_search` BM25——`content ||| query`（任意 token 匹配）+ `paradedb.score(id) as score`。
+- **按维度自动建 HNSW 索引**：迁移只为 3584 / 798 / 1024 维建好了索引，其它维度过去每次向量检索都是顺序扫描。现在某个维度**第一次写入或检索**时，会在后台用 `CREATE INDEX CONCURRENTLY` 建部分索引 `embeddings_embedding_idx_<dim>`（`WHERE dimension = <dim>`），请求本身不等待，也不会因此失败。已有同表达式且覆盖整个维度的**有效** HNSW 索引（不论名字）会跳过；只覆盖某个知识库等更窄范围的手建部分索引不会代替全维度索引。覆盖识别只接受无条件索引或 PostgreSQL 反解析文本为 `(dimension = <dim>)` 的条件；其它等价写法也可能额外建索引，原手建索引保留。同名索引的类型或覆盖不符时只报错，不删除有效的运维索引；上次没建完留下的同名无效索引会先删再建；超过 4000 维（pgvector 对 `halfvec` 的上限）不建；`AUTO_MIGRATE=false` 时不建。多副本之间用会话级 advisory lock 轮流，不会删掉彼此正在建的索引。建索引的那个会话会把 `statement_timeout` 临时设为 0、结束后复原，避免角色或库级超时把长时间的构建取消、留下无效索引。
+
+  > **升级影响**：升级后该维度的**第一次检索**就会触发（不需要有新写入），在生产库上后台建索引。已有大量该维度数据时，构建会持续占用较多 CPU / I/O，耗时与 `maintenance_work_mem` 强相关——HNSW 图放不进内存时会明显变慢。建议在低峰期升级，或提前手动建好，语句与自动构建一致：
+  >
+  > ```sql
+  > CREATE INDEX CONCURRENTLY IF NOT EXISTS embeddings_embedding_idx_<dim> ON embeddings
+  >   USING hnsw ((embedding::halfvec(<dim>)) halfvec_cosine_ops)
+  >   WITH (m = 16, ef_construction = 64) WHERE (dimension = <dim>);
+  > ```
+- **关键词检索**：`pg_search` BM25——`content ||| query`（任意 token 匹配）。首次关键词查询探测评分函数，优先使用 `paradedb.score(anyelement) -> real`，兼容部分 PolarDB 实例的 `pgsearch.score(anyelement) -> real`；仅缓存成功结果，探测失败可重试。缓存按检索仓库实例隔离，纯向量查询不触发探测。
+- **兼容边界**：评分函数适配不会安装扩展、创建包装函数或修改数据库结构；仍须预先具备兼容的 `pg_search`、`|||` 操作符及有效 BM25 索引。不代表所有 PolarDB 版本均受支持；没有匹配评分函数时，关键词检索返回明确错误。
 - **过滤**：`knowledge_base_id` / `knowledge_id` / `tag_id` IN 过滤（AND 语义），`is_enabled` 为 NULL 或 true。
 - **建索引**：`BatchSave` + `ON CONFLICT DO NOTHING`；删除按 chunk/source/knowledge ID 物理删除。
 

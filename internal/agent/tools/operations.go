@@ -48,6 +48,8 @@ const findOperationsDescription = "" +
 	"workspace's models, MCP services and skills (adding, renaming, enabling, removing, installing a " +
 	"skill from a hub), copying knowledge bases, editing or restoring document chunks, " +
 	"inspecting data sources and sync logs, pausing/resuming sync schedules, triggering syncs, " +
+	"creating and managing the user's automations (an agent runs a task on a schedule as them, " +
+	"for reminders and recurring or later work), " +
 	"configuring document parsing, chunking, OCR and generated questions, " +
 	"batch updating FAQ enabled/recommended states and tags, reading and refreshing saved MCP tool directories, " +
 	"managing saved web search providers and data source sync settings, checking connections and retrieval, " +
@@ -69,7 +71,8 @@ const (
 	approvalPolicyAutoWrite = "Operations with risk write run right away, except skill installs; destructive " +
 		"ones and skill installs ask the user to confirm before they run."
 	approvalPolicyReadOnly = "The user set the assistant to read-only, so only read and probe operations can run. " +
-		"If they ask for a change, say it is off and that they can allow changes in the assistant settings."
+		"If they ask for a change, say it is off and that they can allow changes with the execution permission " +
+		"selector below the chat input."
 )
 
 // withheldReason tells the model, and through it the user, why an operation
@@ -77,7 +80,8 @@ const (
 func withheldReason(w operations.Withholding, access operations.Access) string {
 	switch {
 	case w.ReadOnly:
-		return "The user set the assistant to read-only; they can allow changes in the assistant settings."
+		return "The user set the assistant to read-only; they can allow changes with the execution permission " +
+			"selector below the chat input."
 	case w.SystemAdmin:
 		return "Requires system administrator permission; " +
 			"workspace owner/admin roles and cross-workspace access do not grant it."
@@ -122,7 +126,8 @@ const findOperationsSchema = `{
 const runOperationDescription = "" +
 	"Run one WeKnora operation as the signed-in user, with their permissions. " +
 	"operation is an id returned by find_operations; params must match its parameters " +
-	"(use knowledge base and document handles such as b1 or d2 where an ID is expected; " +
+	"(use knowledge base and document handles such as kb://1 or doc://2 where an ID is expected, " +
+	"and copy the same handles verbatim into free-text params such as instructions; " +
 	"agent, model and MCP service IDs are passed as returned). " +
 	"Read operations run immediately. An operation that asks for confirmation shows the user a " +
 	"card first; if they decline, do not retry the same call — ask what they want instead. " +

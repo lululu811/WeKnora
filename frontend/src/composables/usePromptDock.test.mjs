@@ -17,6 +17,9 @@ const modules = {
   '@/composables/useChatStreamHandler': {
     isAwaitingInput: (m) => m?.run_state === 'awaiting_input',
   },
+  '@/views/chat/components/hostApproval': {
+    isHostApprovalEvent: (e) => e?.kind === 'host_command' || e?.host != null,
+  },
 }
 const exports = {}
 vm.runInNewContext(compiled, {
@@ -47,6 +50,26 @@ test('docks the open prompts of streaming and suspended runs, oldest first', () 
     },
   ])
   assert.deepEqual(ids(prompts), ['a', 'b', 'c'])
+})
+
+test('leaves Lite host approvals to the composer card', () => {
+  const prompts = pendingPrompts([{
+    role: 'assistant', is_completed: false, agentEventStream: [
+      approval('host', { kind: 'host_command', host: { command: 'rm a' } }),
+      approval('mcp'),
+    ],
+  }])
+  assert.deepEqual(ids(prompts), ['mcp'])
+})
+
+test('docks an open secure form and leaves other prompt kinds in the timeline', () => {
+  const prompts = pendingPrompts([{
+    role: 'assistant', is_completed: false, agentEventStream: [
+      { type: 'agent_prompt_required', kind: 'secure_form', pending_id: 'sf', resolved: false },
+      { type: 'agent_prompt_required', kind: 'something_else', pending_id: 'other', resolved: false },
+    ],
+  }])
+  assert.deepEqual(ids(prompts), ['sf'])
 })
 
 test('leaves settled runs, resolved prompts and unknown kinds in the timeline', () => {
@@ -91,7 +114,7 @@ test('both chat views mount the dock above their composer and feed it their mess
   const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf8')
   const chat = read('../views/chat/index.vue')
   assert.match(chat, /providePromptDock\(messagesList\)/)
-  assert.match(chat, /<PendingPromptDock[^>]*\/>\s*<InputField/)
+  assert.match(chat, /<PendingPromptDock[^>]*\/>[\s\S]*?<InputField/)
 
   const embed = read('../views/embed/EmbedChatCore.vue')
   assert.match(embed, /providePromptDock\(messagesList\)/)

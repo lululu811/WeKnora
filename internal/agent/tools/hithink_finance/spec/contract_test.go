@@ -497,6 +497,19 @@ func TestWindowMaxIsTheSchemaMaximum(t *testing.T) {
 	}
 }
 
+// normalizeFreshnessDays 把「数据已过期 N 天」里的天数抹成 {days} 占位符。
+//
+// 过期天数是「今天 - 数据日期」算出来的：冻结快照里记死一个数字，就意味着
+// 这份基线每天都会失效（今天 83 天、明天 84 天）。契约要钉的是模型读到的
+// **那句话的形状**，不是那个随日期漂移的数字 —— 钉住它只会让真回归藏在一个
+// 天天红的套件里。基线里记的也是同一个占位符，两边抹完再逐字比。
+func normalizeFreshnessDays(s string) string {
+	return freshnessDaysRe.ReplaceAllString(s, "数据已过期 {days} 天")
+}
+
+// freshnessDaysRe 匹配过期告警里的天数部分。
+var freshnessDaysRe = regexp.MustCompile("数据已过期 [0-9]+ 天")
+
 // TestExecutorSendsTheFrozenSQL 是端到端的那一条：执行器发出去的 SQL 必须与
 // 迁移前逐字相同，窗口必须被钳到冻结快照里记的那个值。
 //
@@ -541,7 +554,7 @@ func TestExecutorSendsTheFrozenSQL(t *testing.T) {
 				got = res.Output
 				gotErr = res.Error
 			}
-			if got != pr.Output {
+			if normalizeFreshnessDays(got) != normalizeFreshnessDays(pr.Output) {
 				t.Errorf("%s（探针 %d，参数 %v）：返回给模型的正文变了\n迁移前：%q\n现在：  %q",
 					name, i, pr.Args, pr.Output, got)
 			}

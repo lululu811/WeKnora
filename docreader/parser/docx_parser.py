@@ -11,10 +11,22 @@ from io import BytesIO
 from multiprocessing import Manager
 from typing import Any, Dict, List, Optional, Tuple
 
-
 # patch from https://github.com/python-openxml/python-docx/issues/1105#issuecomment-1298075246
 from docx.opc.pkgreader import _SerializedRelationships, _SerializedRelationship
 from docx.opc.oxml import parse_xml
+
+DOCX_TEMP_IMAGE_PREFIX = os.path.join(tempfile.gettempdir(), "docx_img_")
+
+
+def _is_docx_temp_image(path: str) -> bool:
+    """Whether `path` names an image this module wrote for a page under the temp dir.
+
+    The directory `_save_image_to_temp` creates lives under the host's temp root,
+    which is only `/tmp` on Linux: comparing against that literal leaked every
+    image (and one directory each) on Windows and macOS.
+    """
+    return path.startswith(DOCX_TEMP_IMAGE_PREFIX)
+
 
 def load_from_xml_v2(baseURI, rels_item_xml):
     """
@@ -40,6 +52,8 @@ from docx.image.exceptions import (
     UnrecognizedImageError,
 )
 from docx.oxml.ns import qn
+from docx.table import Table
+from docx.text.run import Run
 from PIL import Image
 
 from docreader.config import CONFIG
@@ -51,6 +65,99 @@ logger = logging.getLogger(__name__)
 
 _W_P = qn("w:p")
 _W_TBL = qn("w:tbl")
+_W_R = qn("w:r")
+_W_SDT = qn("w:sdt")
+_W_SDT_PR = qn("w:sdtPr")
+_W_SDT_CONTENT = qn("w:sdtContent")
+_W_CUSTOM_XML = qn("w:customXml")
+
+# Inline wrappers whose runs Word shows as part of the paragraph. python-docx's
+# Paragraph.text reads only w:r and w:hyperlink children, so the text of a
+# tracked insertion (w:ins) or move destination (w:moveTo), a smart tag,
+# custom XML markup or a simple field was dropped, and that of an inline
+# content control (w:sdt, read through _sdt_content). Deletions (w:del,
+# w:moveFrom) hold their text in w:delText, not w:t, and stay out, which is
+# the document as it reads with changes accepted.
+_INLINE_TEXT_CONTAINERS = frozenset(
+    qn(tag)
+    for tag in (
+        "w:hyperlink",
+        "w:ins",
+        "w:moveTo",
+        "w:smartTag",
+        "w:customXml",
+        "w:fldSimple",
+    )
+)
+
+
+def _sdt_content(sdt: Any) -> Optional[Any]:
+    """The w:sdtContent of a content control that holds document text, or None.
+
+    A control still showing its placeholder ("Click or tap here to enter
+    text.") holds none, and a table of contents repeats the headings with
+    their page numbers, so both are left out as before.
+    """
+    props = sdt.find(_W_SDT_PR)
+    if props is not None:
+        if props.find(qn("w:showingPlcHdr")) is not None:
+            return None
+        gallery = props.find(f"{qn('w:docPartObj')}/{qn('w:docPartGallery')}")
+        if gallery is not None and gallery.get(qn("w:val")) == "Table of Contents":
+            return None
+    return sdt.find(_W_SDT_CONTENT)
+
+
+def _paragraph_text(p_element: Any) -> str:
+    """The text of a w:p as Word shows it, wrapped runs included."""
+    parts: List[str] = []
+
+    def walk(parent: Any) -> None:
+        for child in parent:
+            if child.tag == _W_R:
+                parts.append(Run(child, None).text)
+            elif child.tag == _W_SDT:
+                content = _sdt_content(child)
+                if content is not None:
+                    walk(content)
+            elif child.tag in _INLINE_TEXT_CONTAINERS:
+                walk(child)
+
+    walk(p_element)
+    return "".join(parts)
+
+
+def _block_children(container: Any):
+    """Yield the paragraphs and tables of a body or cell in document order.
+
+    A block content control (w:sdt) and block custom XML hold paragraphs and
+    tables of their own, which Word shows in place; they are opened instead of
+    skipped. Yields ``(element, direct)``, where ``direct`` is False for an
+    element found inside one of them.
+    """
+    for child in container:
+        if child.tag in (_W_P, _W_TBL):
+            yield child, True
+        elif child.tag == _W_SDT:
+            content = _sdt_content(child)
+            if content is not None:
+                for element, _ in _block_children(content):
+                    yield element, False
+        elif child.tag == _W_CUSTOM_XML:
+            for element, _ in _block_children(child):
+                yield element, False
+
+
+def _cell_text(cell: Any) -> str:
+    """Keep cell paragraphs and nested table text in document order."""
+    parts: List[str] = []
+    for element, _ in _block_children(cell._tc):
+        if element.tag == _W_P:
+            parts.append(_paragraph_text(element))
+        elif element.tag == _W_TBL:
+            for row in Table(element, cell).rows:
+                parts.append(" ".join(_cell_text(nested) for nested in row.cells))
+    return "\n".join(parts)
 
 
 def _gfm_cell_text(text: Optional[str]) -> str:
@@ -67,9 +174,13 @@ def table_to_gfm_markdown(table: Any) -> str:
     """
     rows: List[List[str]] = []
     for row in table.rows:
-        cells = [_gfm_cell_text(cell.text) for cell in row.cells]
+        cells = [_gfm_cell_text(_cell_text(cell)) for cell in row.cells]
         if cells:
-            rows.append(cells)
+            # Omitted edge cells occupy grid positions but are absent from
+            # row.cells; retain them so values stay under the right headers.
+            rows.append(
+                [""] * row.grid_cols_before + cells + [""] * row.grid_cols_after
+            )
     if not rows:
         return ""
     width = max(len(row) for row in rows)
@@ -267,45 +378,21 @@ class DocxParser(BaseParser):
             )
             text_parts = []
 
-            # Extract paragraph text
-            para_count = len(doc.paragraphs)
-            logger.info(f"Extracting text from {para_count} paragraphs")
-            para_with_text = 0
-            for i, para in enumerate(doc.paragraphs):
-                if i % 100 == 0:
-                    logger.info(f"Processing paragraph {i + 1}/{para_count}")
-                if para.text.strip():
-                    text_parts.append(para.text.strip())
-                    para_with_text += 1
-
-            logger.info(f"Extracted text from {para_with_text}/{para_count} paragraphs")
-
-            # Extract table text
-            table_count = len(doc.tables)
-            logger.info(f"Extracting text from {table_count} tables")
-            tables_with_content = 0
-            rows_processed = 0
-            for i, table in enumerate(doc.tables):
-                if i % 10 == 0:
-                    logger.info(f"Processing table {i + 1}/{table_count}")
-
-                table_has_content = False
-                for row in table.rows:
-                    rows_processed += 1
-                    row_text = " | ".join(
-                        [cell.text.strip() for cell in row.cells if cell.text.strip()]
-                    )
-                    if row_text:
-                        text_parts.append(row_text)
-                        table_has_content = True
-
-                if table_has_content:
-                    tables_with_content += 1
-
-            logger.info(
-                f"Extracted content from {tables_with_content}/{table_count} tables, "
-                f"processed {rows_processed} rows"
-            )
+            # Walk the body once: separate paragraph/table collections reorder
+            # interleaved content and omit blocks inside content controls.
+            for element, _ in _block_children(doc.element.body):
+                if element.tag == _W_P:
+                    text = _paragraph_text(element).strip()
+                else:
+                    table = Table(element, doc._body)
+                    if not any(
+                        _cell_text(cell).strip()
+                        for row in table.rows for cell in row.cells
+                    ):
+                        continue
+                    text = table_to_gfm_markdown(table).strip()
+                if text:
+                    text_parts.append(text)
 
             # Combine text
             result_text = "\n\n".join(text_parts)
@@ -702,21 +789,22 @@ class Docx:
             )
 
         temp_file_path = self._prepare_document_sharing(binary)
+        try:
+            # Prepare multiprocess processing arguments
+            args_list = self._prepare_multiprocess_args(
+                pages_to_process,
+                from_page,
+                to_page,
+                doc_contains_images,
+                temp_file_path,
+            )
 
-        # Prepare multiprocess processing arguments
-        args_list = self._prepare_multiprocess_args(
-            pages_to_process,
-            from_page,
-            to_page,
-            doc_contains_images,
-            temp_file_path,
-        )
-
-        # Execute multiprocess tasks
-        self._execute_multiprocess_tasks(args_list, max_workers)
-
-        # Clean up temporary file
-        self._cleanup_temp_file(temp_file_path)
+            # Execute multiprocess tasks
+            self._execute_multiprocess_tasks(args_list, max_workers)
+        finally:
+            # A worker that dies takes the run with it; the copy of the whole
+            # document it was reading must not stay on disk after that.
+            self._cleanup_temp_file(temp_file_path)
 
     def _check_document_has_images(self):
         """Check if the document contains images
@@ -866,8 +954,8 @@ class Docx:
                 # Collect temporary image paths for later cleanup
                 for line in page_lines:
                     for image_data in line.images:
-                        if image_data.local_path and image_data.local_path.startswith(
-                            "/tmp/docx_img_"
+                        if image_data.local_path and _is_docx_temp_image(
+                            image_data.local_path
                         ):
                             temp_img_paths.add(image_data.local_path)
 
@@ -1040,9 +1128,7 @@ class Docx:
                     # Delete temporary directory (if empty)
                     try:
                         temp_dir = os.path.dirname(path)
-                        if temp_dir.startswith("/tmp/docx_img_") and os.path.exists(
-                            temp_dir
-                        ):
+                        if _is_docx_temp_image(temp_dir) and os.path.exists(temp_dir):
                             os.rmdir(temp_dir)
                     except OSError:
                         # If directory is not empty, ignore error
@@ -1082,28 +1168,26 @@ class Docx:
         max_allowed = max(allowed) if allowed else -1
 
         parts: List[str] = []
+        # Counts the body's own paragraphs, the ones the page mapping indexes.
         para_i = 0
-        tbl_i = 0
-        paragraphs = self.doc.paragraphs
-        tables = self.doc.tables
 
-        for child in self.doc.element.body:
+        def in_page_range() -> bool:
+            return not allowed or min_allowed <= para_i <= max_allowed + 1
+
+        for child, direct in _block_children(self.doc.element.body):
             if child.tag == _W_P:
-                if para_i in allowed and para_i < len(paragraphs):
-                    text = (paragraphs[para_i].text or "").strip()
+                # Paragraphs inside a content control are not in the page
+                # mapping; they follow the range of the paragraphs around them.
+                include = para_i in allowed if direct else in_page_range()
+                if direct:
+                    para_i += 1
+                if include:
+                    text = _paragraph_text(child).strip()
                     if text:
                         parts.append(text)
-                para_i += 1
                 continue
-            if child.tag != _W_TBL:
-                continue
-            include_table = False
-            if not allowed:
-                include_table = True
-            elif min_allowed <= para_i <= max_allowed + 1:
-                include_table = True
-            if include_table and tbl_i < len(tables):
-                table = tables[tbl_i]
+            if in_page_range():
+                table = Table(child, self.doc._body)
                 if not (
                     len(table.rows) == 0
                     or all(len(row.cells) == 0 for row in table.rows)
@@ -1111,7 +1195,6 @@ class Docx:
                     markdown = table_to_gfm_markdown(table)
                     if markdown:
                         parts.append(markdown)
-            tbl_i += 1
 
         return "\n\n".join(parts)
 

@@ -232,6 +232,16 @@ var capabilityRegisteredTools = map[string]string{
 	tools.ToolReadWeKnoraDoc: "registerAssistantCapabilityTools (agent_service.go:564): " +
 		"bundled product documentation reader for the assistant; " +
 		"absent from AvailableToolDefinitions (definitions.go)",
+	tools.ToolShellExecAsync: "registerShellExecAsync (agent_service.go:1370): the async sibling of shell_exec; " +
+		"registered from the background-work capability, so no allowlist names it (definitions.go)",
+	tools.ToolWorkWait: "registerBackgroundWorkTools (agent_service.go:549): " +
+		"bound to one background run, so no allowlist names it (definitions.go)",
+	tools.ToolWorkCancel: "registerBackgroundWorkTools (agent_service.go:552): " +
+		"bound to one background run, so no allowlist names it (definitions.go)",
+	tools.ToolRequestSecureForm: "registerSandboxFileTools (agent_service.go): " +
+		"bound to the resolved sandbox manager, like edit_sandbox_file (definitions.go)",
+	tools.ToolBrowserFillSecret: "registerSandboxFileTools (agent_service.go): " +
+		"bound to the resolved sandbox manager, like edit_sandbox_file (definitions.go)",
 }
 
 // acceptedUnreachableTools are registered tools that are deliberately offered

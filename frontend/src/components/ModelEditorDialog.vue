@@ -1,5 +1,6 @@
 <template>
   <SettingDrawer :visible="dialogVisible" :title="isEdit ? $t('model.editor.editTitle') : $t('model.editor.addTitle')"
+    :z-index="2300"
     :description="getModalDescription()" :icon="modelTypeIcon" :confirm-loading="saving" :cancel-disabled="saving"
     :confirm-text="$t('model.editor.saveAndClose')"
     :close-on-overlay-click="!saving" :close-on-esc-keydown="!saving"
@@ -33,9 +34,14 @@
         <div v-if="remoteChecked && !remoteAvailable" class="connection-result error">
           <div class="connection-result__header">
             <strong>{{ $t('model.editor.connectionFailed') }}</strong>
-            <t-button size="small" variant="text" @click="copyWithToast(remoteMessage, 'common.copied')">
-              {{ $t('common.copy') }}
-            </t-button>
+            <div class="connection-result__actions">
+              <AssistantActionButton :label="$t('assistant.actions.diagnose')"
+                :query="$t('assistant.prompts.modelFailure')" :disabled="remoteStale || checking || saving"
+                :selection="{ field: $t('model.editor.connectionFailed'), text: remoteMessage }" />
+              <t-button size="small" variant="text" @click="copyWithToast(remoteMessage, 'common.copied')">
+                {{ $t('common.copy') }}
+              </t-button>
+            </div>
           </div>
           <div class="connection-result__details" tabindex="0">{{ remoteMessage }}</div>
         </div>
@@ -644,6 +650,7 @@ import { levelLabelKey, supportedLevels } from '@/utils/reasoningEffort'
 import { DEFAULT_MODEL_CONTEXT_WINDOW, formatTokenCount } from '@/utils/contextWindow'
 import { copyWithToast } from '@/utils/clipboard'
 import SettingDrawer from '@/components/settings/SettingDrawer.vue'
+import AssistantActionButton from '@/components/assistant/AssistantActionButton.vue'
 import CredentialResource, {
   type CredentialFieldDef,
   type CredentialResourceApi,
@@ -818,7 +825,13 @@ const credentialLabel = computed(() =>
 )
 const apiKeyLabel = computed(() => {
   const label = credentialLabel.value
-  return label ? pickLocalized(label.labels, currentLocale.value, label.label) : t('model.editor.apiKeyOptional')
+  if (label) {
+    return pickLocalized(label.labels, currentLocale.value, label.label)
+  }
+
+  return selectedProvider.value?.requiresAuth
+    ? t('model.editor.apiKey')
+    : t('model.editor.apiKeyOptional')
 })
 const apiKeyRequired = computed(
   () => credentialLabel.value?.required === true || (!!selectedProvider.value?.requiresAuth && !isEdit.value),
@@ -2473,6 +2486,12 @@ const handleCancel = () => {
     overflow-wrap: anywhere;
     line-height: 1.5;
     user-select: text;
+  }
+
+  &__actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
   }
 }
 

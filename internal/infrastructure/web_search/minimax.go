@@ -39,7 +39,7 @@ type MiniMaxProvider struct {
 }
 
 // NewMiniMaxProvider creates a new MiniMax web search provider instance.
-func NewMiniMaxProvider(params types.WebSearchProviderParameters) (interfaces.WebSearchProvider, error) {
+func NewMiniMaxProvider(params types.WebSearchProviderParameters) (interfaces.WebSearcher, error) {
 	if err := ValidateMiniMaxParameters(params); err != nil {
 		return nil, err
 	}
@@ -83,17 +83,21 @@ func miniMaxRegion(extraConfig map[string]string) string {
 func (p *MiniMaxProvider) Name() string { return "minimax" }
 
 // Search executes a web search query against MiniMax API.
-func (p *MiniMaxProvider) Search(ctx context.Context, query string, maxResults int, includeDate bool) ([]*types.WebSearchResult, error) {
-	query = strings.TrimSpace(query)
+func (p *MiniMaxProvider) Search(
+	ctx context.Context, request types.WebSearchRequest,
+) ([]*types.WebSearchResult, error) {
+	query := strings.TrimSpace(request.Query)
 	if query == "" {
 		return nil, fmt.Errorf("query is empty")
 	}
+	maxResults := request.MaxResults
 	if maxResults <= 0 {
 		maxResults = defaultMiniMaxResults
 	}
 	if maxResults > maxMiniMaxResults {
 		maxResults = maxMiniMaxResults
 	}
+	includeDate := request.IncludeDate
 
 	body, err := json.Marshal(miniMaxSearchRequest{
 		Query: query,

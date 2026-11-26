@@ -50,6 +50,9 @@ ENV VITE_FRONTEND_COMMIT=${VITE_FRONTEND_COMMIT}
 # 默认 WeKnora；部署方可用 .env 的 VITE_APP_NAME 覆盖（compose 的 build args 会带进来）。
 ARG VITE_APP_NAME=WeKnora
 ENV VITE_APP_NAME=${VITE_APP_NAME}
+
+ARG VITE_BASE_PATH=/
+ENV VITE_BASE_PATH=${VITE_BASE_PATH}
 RUN npm run build
 
 # ---------------------------------------------------------------------------

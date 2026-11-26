@@ -73,6 +73,10 @@ func RegisterKnowledgeRoutes(r *gin.RouterGroup, handler *handler.KnowledgeHandl
 		kb.POST("/file", g.OwnedKBOrAdmin(), g.KBAccessWrite("id"), handler.CreateKnowledgeFromFile)
 		kb.POST("/url", g.OwnedKBOrAdmin(), g.KBAccessWrite("id"), handler.CreateKnowledgeFromURL)
 		kb.POST("/manual", g.OwnedKBOrAdmin(), g.KBAccessWrite("id"), handler.CreateManualKnowledge)
+		// KB-scoped aliases use :id for the KB and :knowledge_id for the document.
+		// The handlers also verify that all requested documents belong to this KB.
+		kb.POST("/:knowledge_id/reparse", g.OwnedKBOrAdmin(), g.KBAccessWrite("id"), handler.ReparseKnowledge)
+		kb.POST("/batch-reparse", g.OwnedKBOrAdmin(), g.KBAccessWrite("id"), handler.BatchReparseKnowledge)
 		kbRead.GET("", g.Viewer(), g.KBAccessRead("id"), handler.ListKnowledge)
 		// 原始文件下载沿用单文件下载的 Contributor + Editor 权限边界。
 		kbRead.POST("/batch-download", g.Contributor(), g.KBAccessWrite("id"), handler.BatchDownloadKnowledge)
@@ -100,6 +104,14 @@ func RegisterKnowledgeRoutes(r *gin.RouterGroup, handler *handler.KnowledgeHandl
 		// attribute sources resolve against :id.
 		kbImagesRead.GET("/gallery-config", g.Viewer(), g.KBAccessRead("id"), handler.GetGalleryConfig)
 	}
+
+	// Whole-KB index rebuild after an indexing-strategy change (called by the
+	// KB settings modal via POST /api/v1/knowledge-bases/:id/rebuild-index).
+	// Content write like /knowledge/batch-reparse: ingest-capable API keys
+	// may call it; JWT callers need Contributor+ with KB write access, and
+	// the handler re-validates ownership before enqueueing.
+	kbRebuild := g.apiKeyGroup(r.Group("/knowledge-bases/:id"), apiKeyIngest(apiKeyFullAccess()))
+	kbRebuild.POST("/rebuild-index", g.OwnedKBOrAdmin(), g.KBAccessWrite("id"), handler.RebuildKnowledgeBaseIndex)
 
 	// 知识路由组（URL :id is a knowledge id; the guard walks it to the parent KB）
 	kgrp := r.Group("/knowledge")

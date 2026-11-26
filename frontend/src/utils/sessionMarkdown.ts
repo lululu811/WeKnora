@@ -40,6 +40,20 @@ const roleOrder = (role?: string): number => {
   return 2
 }
 
+function compareMessageTimes(left: string, right: string): number {
+  const a = Date.parse(left), b = Date.parse(right)
+  const validA = Number.isFinite(a), validB = Number.isFinite(b)
+  if (!validA || !validB) {
+    if (validA !== validB) return validA ? 1 : -1
+    return left.localeCompare(right)
+  }
+  // Go's RFC3339Nano timestamps may carry precision below Date's milliseconds.
+  const remainder = (value: string) => Number(
+    (value.match(/\.(\d+)(?:Z|[+-]\d{2}:\d{2})$/i)?.[1] || '').padEnd(9, '0').slice(3, 9),
+  )
+  return a - b || remainder(left) - remainder(right)
+}
+
 export async function collectAllSessionMessages(
   fetchPage: SessionMessagePageFetcher,
   pageSize = 100,
@@ -54,7 +68,10 @@ export async function collectAllSessionMessages(
     pages.unshift(page)
 
     const oldestTime = page[0]?.created_at || ''
-    if (page.length < pageSize || !oldestTime || oldestTime === beforeTime) break
+    if (page.length < pageSize) break
+    if (!oldestTime || oldestTime === beforeTime) {
+      throw new Error('Session history cursor did not advance')
+    }
     beforeTime = oldestTime
   }
 
@@ -69,7 +86,7 @@ export async function collectAllSessionMessages(
       return true
     })
     .sort((a, b) => {
-      const timeCompare = String(a.created_at || '').localeCompare(String(b.created_at || ''))
+      const timeCompare = compareMessageTimes(a.created_at || '', b.created_at || '')
       return timeCompare || roleOrder(a.role) - roleOrder(b.role)
     })
 }
@@ -77,7 +94,6 @@ export async function collectAllSessionMessages(
 function cleanMessageContent(content?: string): string {
   return String(content || '')
     .replace(KB_WEB_TAG_RE, '')
-    .replace(/[ \t]+\n/g, '\n')
     .trim()
 }
 
@@ -120,7 +136,9 @@ export function buildSessionMarkdown(options: {
 
   for (const message of options.messages) {
     if (message.role !== 'user' && message.role !== 'assistant') continue
-    const content = cleanMessageContent(message.content)
+    const content = message.role === 'assistant'
+      ? cleanMessageContent(message.content)
+      : (message.content || '').trim()
     const attachments = (message.attachments || [])
       .map((attachment) => attachment.file_name?.trim() || '')
       .filter(Boolean)

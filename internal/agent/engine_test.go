@@ -75,6 +75,61 @@ func (m *mockChat) ChatStream(
 	return ch, nil
 }
 
+func TestStreamLLMToEventBusKeepsAnswerSnapshots(t *testing.T) {
+	model := &mockChat{responses: []mockResponse{{chunks: []types.StreamResponse{
+		{ResponseType: types.ResponseTypeThinking, Content: "推理"},
+		{ResponseType: types.ResponseTypeAnswer, Content: "第一段"},
+		{ResponseType: types.ResponseTypeThinking, Content: "补充"},
+		{ResponseType: types.ResponseTypeThinking, Content: "提取的推理", Data: map[string]interface{}{"source": "content"}},
+		{ResponseType: types.ResponseTypeAnswer, Content: "第二段", Done: true, FinishReason: "stop"},
+	}}}}
+	engine := newTestEngine(t, model)
+	var snapshots []string
+	emit := func(_ *types.StreamResponse, answer string) {
+		snapshots = append(snapshots, answer)
+	}
+	result, err := engine.streamLLMToEventBus(context.Background(), nil, nil, emit)
+	require.NoError(t, err)
+	require.Equal(t, []string{"", "第一段", "第一段", "第一段", "第一段第二段"}, snapshots)
+	require.Equal(t, "第一段第二段", result.Content)
+	require.Equal(t, "推理补充", result.ReasoningContent)
+}
+
+func BenchmarkStreamLLMToEventBus(b *testing.B) {
+	fragment := strings.Repeat("streamed text. ", 8)
+	for _, pairs := range []int{256, 1024} {
+		b.Run(fmt.Sprint(pairs), func(b *testing.B) {
+			chunks := make([]types.StreamResponse, 0, 2*pairs+1)
+			for range pairs {
+				chunks = append(chunks,
+					types.StreamResponse{ResponseType: types.ResponseTypeThinking, Content: fragment},
+					types.StreamResponse{ResponseType: types.ResponseTypeAnswer, Content: fragment},
+				)
+			}
+			chunks = append(chunks, types.StreamResponse{
+				ResponseType: types.ResponseTypeAnswer, Done: true, FinishReason: "stop",
+			})
+			model := &mockChat{responses: []mockResponse{{chunks: chunks}}}
+			engine := newTestEngine(b, model)
+			ctx := context.Background()
+			var latestAnswer string
+			emit := func(_ *types.StreamResponse, answer string) { latestAnswer = answer }
+			b.ReportAllocs()
+			b.SetBytes(int64(2 * pairs * len(fragment)))
+			for b.Loop() {
+				model.callCount = 0
+				model.calls = model.calls[:0]
+				model.opts = model.opts[:0]
+				result, err := engine.streamLLMToEventBus(ctx, nil, nil, emit)
+				if err != nil || len(result.Content) != pairs*len(fragment) ||
+					len(result.ReasoningContent) != pairs*len(fragment) || latestAnswer != result.Content {
+					b.Fatalf("unexpected stream result: %v", err)
+				}
+			}
+		})
+	}
+}
+
 func TestStreamLLMResourceAliasesRoundTrip(t *testing.T) {
 	const ref = "resource://AbCdEfGhIjKlMnOpQrStUv"
 	model := &mockChat{responses: []mockResponse{{chunks: []types.StreamResponse{
@@ -120,9 +175,9 @@ func TestStreamLLMSummarySlugSurvivesDocumentCompaction(t *testing.T) {
 	}}}}
 
 	engine := newTestEngine(t, model)
-	// The document UUID is registered as citation alias d1, exactly as the RAG
-	// context (<document id="d1">…) would have registered it upstream.
-	require.Equal(t, "d1", engine.modelContext.RegisterDocument(knowledgeID))
+	// The document UUID is registered as citation alias doc://1, exactly as the RAG
+	// context (<document id="doc://1">…) would have registered it upstream.
+	require.Equal(t, "doc://1", engine.modelContext.RegisterDocument(knowledgeID))
 
 	toolMsg := chat.Message{
 		Role:    "tool",
@@ -150,9 +205,12 @@ func TestStreamLLMSummarySlugSurvivesDocumentCompaction(t *testing.T) {
 // unrelated FAQ entries injected by the bound-KB directory.
 func TestStreamMCPAnswerRejectsUnretrievedKnowledgeCitations(t *testing.T) {
 	model := &mockChat{responses: []mockResponse{{chunks: []types.StreamResponse{
-		{ResponseType: types.ResponseTypeAnswer, Content: `KM文章<ref id="c`},
-		{ResponseType: types.ResponseTypeAnswer, Content: `3"/><ref id="c1"/><ref id="c2"/> 正确来源<ref id="w`},
-		{ResponseType: types.ResponseTypeAnswer, Content: `1"/>`, Done: true, FinishReason: "stop"},
+		{ResponseType: types.ResponseTypeAnswer, Content: `KM文章<ref id="chunk://`},
+		{
+			ResponseType: types.ResponseTypeAnswer,
+			Content:      `3"/><ref id="chunk://1"/><ref id="chunk://2"/> 正确来源<ref id="url:/`,
+		},
+		{ResponseType: types.ResponseTypeAnswer, Content: `/1"/>`, Done: true, FinishReason: "stop"},
 	}}}}
 	engine := newTestEngine(t, model)
 	engine.knowledgeBasesInfo = []*KnowledgeBaseInfo{{
@@ -178,8 +236,8 @@ func TestStreamMCPAnswerRejectsUnretrievedKnowledgeCitations(t *testing.T) {
 	want := `KM文章 正确来源<web url="` + article + `" title="" />`
 	require.Equal(t, want, result.Content)
 	require.Equal(t, want, emitted.String(), "invalid references must not reach SSE even transiently")
-	require.Contains(t, model.calls[0][2].Content, `<source id="w1"`)
-	require.Contains(t, model.calls[0][1].Content, `chunk_id="c1"`, "FAQ handles remain available for retrieval")
+	require.Contains(t, model.calls[0][2].Content, `<source id="url://1"`)
+	require.Contains(t, model.calls[0][1].Content, `chunk_id="chunk://1"`, "FAQ handles remain available for retrieval")
 }
 
 // Reproduces the round that ended a 40-round conversation: the stream broke
@@ -219,7 +277,7 @@ func TestStreamLLMToEventBus_ErrorAfterContent_IsNotASuccessfulTurn(t *testing.T
 func TestStreamLLMChunkReferenceExpandsBeforeEmission(t *testing.T) {
 	model := &mockChat{responses: []mockResponse{{chunks: []types.StreamResponse{
 		{ResponseType: types.ResponseTypeAnswer, Content: `answer <ref id="`},
-		{ResponseType: types.ResponseTypeAnswer, Content: `c1"/>`, Done: true},
+		{ResponseType: types.ResponseTypeAnswer, Content: `chunk://1"/>`, Done: true},
 	}}}}
 	engine := newTestEngine(t, model)
 	engine.modelContext.RegisterChunk(modelcontext.ChunkReference{
@@ -244,11 +302,11 @@ func TestRunToolCallRejectsUnresolvedHandlesBeforeExecution(t *testing.T) {
 			ID: "call-1",
 			Function: types.FunctionCall{
 				Name:      tool.Name(),
-				Arguments: `{"id":"d99"}`,
+				Arguments: `{"id":"doc://99"}`,
 			},
-			ModelArguments:     `{"id":"d99"}`,
+			ModelArguments:     `{"id":"doc://99"}`,
 			ArgumentResolution: modelcontext.ArgumentResolutionUnresolved,
-			UnresolvedHandles:  []string{"d99"},
+			UnresolvedHandles:  []string{"doc://99"},
 		},
 		0, 0, 1, "session", "message",
 	)
@@ -272,8 +330,8 @@ func TestRunToolCallDecodesHandlesAfterJSONRepair(t *testing.T) {
 		context.Background(),
 		types.LLMToolCall{
 			ID:             "call-unknown",
-			Function:       types.FunctionCall{Name: unknownTool.Name(), Arguments: `{"id":"d99",}`},
-			ModelArguments: `{"id":"d99",}`,
+			Function:       types.FunctionCall{Name: unknownTool.Name(), Arguments: `{"id":"doc://99",}`},
+			ModelArguments: `{"id":"doc://99",}`,
 		},
 		0, 0, 1, "session", "message",
 	)
@@ -287,8 +345,8 @@ func TestRunToolCallDecodesHandlesAfterJSONRepair(t *testing.T) {
 		context.Background(),
 		types.LLMToolCall{
 			ID:             "call-known",
-			Function:       types.FunctionCall{Name: knownTool.Name(), Arguments: `{"id":"d1",}`},
-			ModelArguments: `{"id":"d1",}`,
+			Function:       types.FunctionCall{Name: knownTool.Name(), Arguments: `{"id":"doc://1",}`},
+			ModelArguments: `{"id":"doc://1",}`,
 		},
 		0, 0, 1, "session", "message",
 	)
@@ -517,6 +575,67 @@ func TestContextCompactionDoesNotRunEveryRound(t *testing.T) {
 		"a context that cannot shrink must not spend another summarization call")
 }
 
+// toolRound is one assistant tool call plus its result.
+func toolRound(id, name, output string) []chat.Message {
+	return []chat.Message{
+		{Role: "assistant", ToolCalls: []chat.ToolCall{{
+			ID:       id,
+			Type:     "function",
+			Function: chat.FunctionCall{Name: name, Arguments: `{"path":"/w/a.log"}`},
+		}}},
+		{Role: "tool", Name: name, ToolCallID: id, Content: output},
+	}
+}
+
+// The exhausted mark is tied to a message count on the premise that the count
+// only grows. A successful compaction breaks that premise: it rebuilds the
+// history as system + summary + keep-recent tail, which can land below where
+// the last failed compaction parked the mark. The mark must be cleared on
+// success, or every later compaction — including the overflow recovery that
+// retries an over-window request — is silently skipped until the loop appends
+// enough rounds to climb back above the stale count.
+func TestSuccessfulCompactionClearsTheExhaustedMark(t *testing.T) {
+	engine := newTestEngine(t, &summarizerChat{},
+		withMaxContextTokens(40000), withMaxCompletionTokens(4000))
+	ctx := context.Background()
+
+	// Round 1: the live turn carries one oversized tool result the cut point
+	// cannot reach, so the compaction frees almost nothing and marks the
+	// context exhausted at its message count.
+	exhausted := append([]chat.Message{
+		{Role: "system", Content: "you are an agent"},
+		{Role: "user", Content: "first question", TurnID: "turn-a"},
+		{Role: "assistant", Content: "first answer", TurnID: "turn-a"},
+		{Role: "user", Content: "read the export"},
+	}, toolRound("call-1", "read_file", strings.Repeat("row,value ", 12000))...)
+	_, ok := engine.runCompaction(ctx, exhausted, 1, compaction.ReasonThreshold)
+	require.False(t, ok)
+	mark := engine.compactionExhaustedAt
+	require.Equal(t, len(exhausted), mark)
+
+	// Round 2: the loop keeps producing oversized rounds. This time the cut
+	// lands on them, so the compaction succeeds — and rebuilds the history
+	// as system + summary + the newest round, below the mark.
+	recovering := append(append([]chat.Message(nil), exhausted...),
+		toolRound("call-2", "read_file", strings.Repeat("row,value ", 4000))...)
+	recovering = append(recovering,
+		toolRound("call-3", "read_file", strings.Repeat("row,value ", 4000))...)
+	compacted, ok := engine.runCompaction(ctx, recovering, 2, compaction.ReasonThreshold)
+	require.True(t, ok, "the regrown context must compact successfully")
+	require.LessOrEqual(t, len(compacted), mark,
+		"premise: the successful compaction rebuilt the history below the mark")
+
+	// Round 3: one more oversized round overflows again. The
+	// overflow-recovery compaction must actually run instead of being
+	// skipped by the stale mark.
+	overflowed := append(append([]chat.Message(nil), compacted...),
+		toolRound("call-4", "read_file", strings.Repeat("row,value ", 4000))...)
+	require.LessOrEqual(t, len(overflowed), mark,
+		"premise: the overflowing context sits below the stale mark")
+	_, ok = engine.runCompaction(ctx, overflowed, 3, compaction.ReasonOverflow)
+	require.True(t, ok, "a successful compaction must clear the exhausted mark")
+}
+
 // recordingCheckpointSink captures what the engine persists.
 type recordingCheckpointSink struct {
 	turnIDs []string
@@ -722,7 +841,7 @@ func TestBuildSystemPromptUsesHostWorkspace(t *testing.T) {
 	require.NotContains(t, prompt, "There is no /workspace")
 }
 
-func newTestEngine(t *testing.T, chatModel chat.Chat, opts ...testEngineOption) *AgentEngine {
+func newTestEngine(t testing.TB, chatModel chat.Chat, opts ...testEngineOption) *AgentEngine {
 	t.Helper()
 	cfg := &types.AgentConfig{
 		MaxIterations: 10,
@@ -1159,16 +1278,16 @@ func TestStreamLLMIncompleteFinishIsAStreamError(t *testing.T) {
 func TestWebFetchUnknownReferenceIsAnItemError(t *testing.T) {
 	engine := newTestEngine(t, &mockChat{})
 	engine.toolRegistry = agenttools.NewToolRegistry()
-	engine.toolRegistry.RegisterTool(agenttools.NewWebFetchTool())
+	engine.toolRegistry.RegisterTool(agenttools.NewWebFetchTool(nil))
 	calls := []types.LLMToolCall{{
 		ID: "fetch",
 		Function: types.FunctionCall{
 			Name:      agenttools.ToolWebFetch,
-			Arguments: `{"items":[{"url":"w999"}]}`,
+			Arguments: `{"items":[{"url":"url://999"}]}`,
 		},
 	}}
 	engine.modelContext.DecodeToolCalls(calls)
-	require.Equal(t, []string{"w999"}, calls[0].UnresolvedHandles)
+	require.Equal(t, []string{"url://999"}, calls[0].UnresolvedHandles)
 	result := engine.runToolCall(t.Context(), calls[0], 0, 0, 1, "session", "message")
 	require.NotNil(t, result.Result)
 	require.Contains(t, result.Result.Output, "unknown_page_reference")

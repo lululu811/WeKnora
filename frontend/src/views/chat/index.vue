@@ -50,7 +50,7 @@
                             </div>
                         </div>
                         <!-- 推荐问题卡片 - 仅在新会话（无消息）时展示 -->
-                        <div v-if="!embeddedMode && messagesList.length === 0 && !loading"
+                        <div v-if="!embeddedMode && currentSession && !isAutomationSession && messagesList.length === 0 && !loading"
                             class="suggested-questions-container"
                             :class="{ 'has-questions': suggestedQuestions.length > 0 || suggestedQuestionsLoading }">
                             <!-- 骨架屏占位 -->
@@ -143,7 +143,7 @@
                                     :session="session"
                                     @select-stock="handleOpenStockWorkspace"
                                 />
-                                <FollowUpSuggestions v-if="session.answerFullyRendered && !session.steerForked && !session.suggestionsDismissed"
+                                <FollowUpSuggestions v-if="!isAutomationSession && session.answerFullyRendered && !session.steerForked && !session.suggestionsDismissed"
                                     :suggestion-set="session.suggestionSet"
                                     :loading="session.suggestionLoading"
                                     :allow-regenerate="session.suggestionSet?.allow_regenerate"
@@ -161,6 +161,17 @@
                 </div>
             </div>
             <div ref="composerElement" class="chat_composer">
+                <div v-if="composerApprovals.length" class="host-approval-pop">
+                    <HostApprovalCard v-for="approval in composerApprovals" :key="approval.pending_id"
+                        :pending-id="approval.pending_id"
+                        :host="approval.host || { reason: approval.kind === 'host_command' ? 'delete' : '' }"
+                        :timeout-seconds="approval.timeout_seconds"
+                        :requested-at="approval.requested_at"
+                        :resolved="approval.resolved"
+                        :approved="approval.approved"
+                        :resolve-reason="approval.resolve_reason"
+                        :resolve-scope="approval.resolve_scope" />
+                </div>
                 <div class="input-container" :class="{ 'is-embedded': embeddedMode }">
                     <transition name="scroll-btn-fade">
                         <div v-show="userHasScrolledUp" class="scroll-to-bottom-btn" @click="onClickScrollToBottom">
@@ -168,7 +179,11 @@
                         </div>
                     </transition>
                     <PendingPromptDock :embedded-mode="embeddedMode" />
-                    <InputField ref="inputFieldRef" :auto-focus="focusComposerOnMount" compact
+                    <div v-if="isAutomationSession" class="automation-session-notice" role="note">
+                        <t-icon name="time" size="14px" />
+                        <span>{{ t('automation.conversationNotice') }}</span>
+                    </div>
+                    <InputField v-else-if="embeddedMode || currentSession" ref="inputFieldRef" :auto-focus="focusComposerOnMount" compact
                         @send-msg="(query, modelId, mentionedItems, imageFiles, attachmentFiles, options) => sendMsg(query, modelId, mentionedItems, imageFiles, attachmentFiles, options)"
                         @steer-msg="(query, mentionedItems, delivery) => handleSteerMsg(query, mentionedItems, delivery)"
                         @promote-steer="handlePromoteSteer"
@@ -181,7 +196,12 @@
                         :model-id="modelId" :default-model-id="defaultModelId"
                         @update:model-id="(id) => emit('update:modelId', id)"
                         :queuedSteers="steerQueue.filter(item => item.delivery === 'after')" :canSteer="isAgentStreamSession()">
-                        <template v-if="$slots['composer-chips']" #chips><slot name="composer-chips" /></template>
+                        <template v-if="$slots['composer-chips']" #chips>
+                            <slot name="composer-chips" />
+                        </template>
+                        <template v-if="backgroundItems.length" #background-work>
+                            <BackgroundWorkChip :items="backgroundItems" :cancel-work="onCancelWork" @view="openWorkOutput" />
+                        </template>
                         <template v-if="$slots['composer-controls']" #controls><slot name="composer-controls" /></template>
                     </InputField>
                 </div>
@@ -219,6 +239,10 @@
         @leave="scheduleStockFloatClose(150)"
         @open-workspace="handleOpenStockWorkspace"
     />
+    <t-dialog v-model:visible="workOutputVisible" :header="viewingWorkTitle" :footer="false" width="720px">
+        <BackgroundWorkResults v-if="workOutputVisible && viewingWorkId && session_id" :session-id="String(session_id)"
+            :work-id="viewingWorkId" />
+    </t-dialog>
 </template>
 <script setup>
 import ChildAgentTabBar from './components/ChildAgentTabBar.vue';
@@ -229,6 +253,12 @@ import { storeToRefs } from 'pinia';
 import { inject, ref, onMounted, onBeforeMount, onUnmounted, nextTick, watch, reactive, computed, provide } from 'vue';
 import { useRoute, useRouter, onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router';
 import InputField from '../../components/Input-field.vue';
+import HostApprovalCard from './components/HostApprovalCard.vue';
+import {
+    clearComposerApproval,
+    isHostApprovalEvent,
+    pendingComposerApprovals,
+} from './components/hostApproval';
 import botmsg from './components/botmsg.vue';
 import usermsg from './components/usermsg.vue';
 import { getMessageList, getSession, forkSession, rewindSession } from "@/api/chat/index";
@@ -259,6 +289,7 @@ import FollowUpSuggestions from '@/components/chat/FollowUpSuggestions.vue';
 import MessageTimestamp from '@/components/chat/MessageTimestamp.vue';
 import ChatQuestionMinimap from '@/components/chat/ChatQuestionMinimap.vue';
 import { shouldShowConversationTimestamp } from '@/utils/messageTimestamp';
+import { historyHasMoreAfterAttempt } from '@/utils/historyPagination';
 import ChatHeader from '@/components/ChatHeader.vue';
 import {
     notifySessionMutation,
@@ -289,6 +320,10 @@ import {
 } from '@/finance';
 import BrowserTaskPreview from './components/BrowserTaskPreview.vue';
 import PendingPromptDock from './components/PendingPromptDock.vue';
+import BackgroundWorkChip from './components/BackgroundWorkChip.vue';
+import BackgroundWorkResults from './components/BackgroundWorkResults.vue';
+import { cancelBackgroundWork, listBackgroundWork } from '@/api/chat/background-work';
+import { createBackgroundWorkPoller, mergeBackgroundWork } from '@/utils/backgroundWork';
 import { providePromptDock } from '@/composables/usePromptDock';
 import { collectSessionArtifacts, markSessionArtifactDeleted } from '@/utils/sessionArtifacts';
 import { isCollectingSkillArtifacts } from '@/utils/skillArtifacts';
@@ -388,6 +423,76 @@ const router = useRouter();
 const session_id = ref(props.session_id || route.params.chatid);
 watch(session_id, () => childTabs.reset(), { flush: 'sync' });
 const currentSession = ref(null);
+// A session ID can be revisited while requests from its previous visit are still pending.
+let chatLoadVersion = 0;
+const isAutomationSession = computed(() => currentSession.value?.kind === 'automation');
+const backgroundItems = ref([]);
+const viewingWorkId = ref('');
+const workOutputVisible = ref(false);
+const viewingWorkTitle = computed(() => {
+    const item = backgroundItems.value.find((row) => row.work_id === viewingWorkId.value);
+    return item?.title || viewingWorkId.value || '';
+});
+
+function replaceBackgroundItems(incoming) {
+    const merged = mergeBackgroundWork(backgroundItems.value, incoming);
+    const ids = new Set(incoming.map((item) => item.work_id));
+    const next = merged.filter((item) => ids.has(item.work_id));
+    if (
+        next.length === backgroundItems.value.length
+        && next.every((item, index) => item === backgroundItems.value[index])
+    ) {
+        return;
+    }
+    backgroundItems.value = next;
+}
+
+const backgroundPoller = createBackgroundWorkPoller({
+    sessionId: () => String(session_id.value || ''),
+    list: (id, signal) => listBackgroundWork(id, signal),
+    onUpdate: replaceBackgroundItems,
+});
+
+function startBackgroundWork() {
+    if (!session_id.value) {
+        backgroundItems.value = [];
+        return;
+    }
+    backgroundPoller.start();
+}
+
+async function refreshBackgroundWork() {
+    if (!session_id.value) return;
+    await backgroundPoller.refresh();
+}
+
+function openWorkOutput(workId) {
+    viewingWorkId.value = workId;
+    workOutputVisible.value = true;
+}
+
+async function onCancelWork(workId) {
+    const id = String(session_id.value || '');
+    if (!id || !workId) return;
+    try {
+        await cancelBackgroundWork(id, workId);
+    } catch {
+        // Refresh anyway so a rejected stop can leave the row running.
+    }
+    try {
+        if (String(session_id.value || '') === id) await refreshBackgroundWork();
+    } catch {
+        // Keep the last chip. A non-empty list is still on the 5s poller.
+    }
+}
+
+watch(session_id, (id) => {
+    backgroundPoller.stop();
+    backgroundItems.value = [];
+    viewingWorkId.value = '';
+    workOutputVisible.value = false;
+    if (id) backgroundPoller.start();
+});
 
 // 拉 session 详情，并按其 last_request_state 把输入栏状态恢复到当时的发起态。
 // 嵌入式（embeddedMode）由宿主页面注入 agent/KB，所以跳过整套恢复逻辑，
@@ -397,14 +502,16 @@ const loadSessionAndHydrate = async (sid) => {
     // Capture before awaiting: onMounted sends and clears firstQuery while this
     // request is in flight. A new session must retain the createChat draft.
     const preserveDraft = Boolean(firstQuery.value);
+    const version = chatLoadVersion;
     try {
         const sessionRes = await getSession(sid);
-        if (sessionRes?.data && sid === session_id.value) {
+        if (sessionRes?.data && version === chatLoadVersion && sid === session_id.value) {
             currentSession.value = sessionRes.data;
             const lastState = sessionRes.data.last_request_state;
             useSettingsStoreInstance.hydrateSessionInputState(lastState, preserveDraft);
         }
     } catch (error) {
+        if (version !== chatLoadVersion || sid !== session_id.value) return;
         console.error('Failed to load session data:', error);
     }
 };
@@ -431,8 +538,18 @@ function handleAskAssistant(messageId) {
     assistant.open();
 }
 
+const backgroundWorkStamp = computed(() => messagesList.map((message) => {
+    const work = message?.background_work;
+    if (!work || typeof work !== 'object') return '';
+    return Object.entries(work).map(([id, row]) => `${id}:${row?.state || ''}`).join(',');
+}).join('|'));
+watch(backgroundWorkStamp, (stamp, previous) => {
+    if (!stamp || stamp === previous) return;
+    refreshBackgroundWork().catch(() => {});
+});
+
 function forkAffordanceOf(messageId) {
-    if (!messageId) return { canFork: false }
+    if (isAutomationSession.value || !messageId) return { canFork: false }
     return resolveForkAffordance(messagesList, messageId)
 }
 
@@ -444,15 +561,19 @@ const rewindableIds = computed(() => rewindableMessageIds(messagesList, {
 }))
 
 function canRewindMessage(messageId) {
-    return Boolean(messageId) && rewindableIds.value.has(String(messageId))
+    return !isAutomationSession.value && Boolean(messageId) && rewindableIds.value.has(String(messageId))
 }
 
 const FORK_PREFILL_KEY = 'weknora:fork-prefill'
 let forkInFlight = false
 const rewindInFlight = ref(false)
 const rewindLockSessionId = ref('')
+const composerApprovals = computed(() =>
+    pendingComposerApprovals.value.filter((item) => item && !item.resolved && isHostApprovalEvent(item))
+)
+
 const composerLocked = computed(() =>
-    rewindInFlight.value && String(session_id.value || '') === rewindLockSessionId.value
+    isAutomationSession.value || (rewindInFlight.value && String(session_id.value || '') === rewindLockSessionId.value)
 )
 
 function stashForkLanding(sessionId, text) {
@@ -655,6 +776,16 @@ const currentAssistantMessageId = ref(''); // 当前正在生成的 assistant me
 // continue-stream always fails even though the answer is coming — recover by polling
 // instead of erroring. Web/api replies are left on the original error path.
 const isAttachingImStream = ref(false);
+
+// A session change drops the stack; continue-stream replay adds back the
+// cards that are still waiting. Clearing on every isReplying change hid a
+// card that replay had just restored.
+watch(session_id, () => {
+    clearComposerApproval();
+});
+watch(isReplying, (replying) => {
+    if (!replying) clearComposerApproval();
+});
 let recoverPollTimer = null;
 // True while polling to recover an in-flight IM reply we couldn't stream. Drives
 // the same "generating" typing indicator the normal reply path shows, so the wait
@@ -829,6 +960,7 @@ const handleAnswerRenderComplete = (message, ready) => {
 };
 
 const loadFollowUpSuggestions = async (message, ensure = false, regenerate = false) => {
+    if (isAutomationSession.value) return;
     const messageId = resolveAssistantMessageId(message);
     const targetSessionId = session_id.value;
     if (!messageId || !targetSessionId || message.suggestionsDismissed) return;
@@ -931,6 +1063,8 @@ watch([() => route.params], async (newvalue) => {
         steerQueue.value = [];
         session_id.value = newvalue[0].chatid;
         currentSession.value = null;
+        const version = ++chatLoadVersion;
+        const sid = session_id.value;
         clearCitationChunkCache();
 
         // 切换会话时，重置状态
@@ -947,9 +1081,10 @@ watch([() => route.params], async (newvalue) => {
         // 并应用自己的 last_request_state（在 loadSessionAndHydrate 内部完成）。
         useSettingsStoreInstance.restoreDefaultsIfSnapshotted();
 
-        await loadSessionAndHydrate(session_id.value);
+        await loadSessionAndHydrate(sid);
+        if (version !== chatLoadVersion) return;
         let data = {
-            session_id: session_id.value,
+            session_id: sid,
             created_at: '',
             limit: limit.value
         }
@@ -1007,9 +1142,12 @@ const fetchMessageList = (data) => getMessageList(data);
 // its carried-over queue is readable, and treating that gap as "queue is
 // empty" would wipe messages the user can still see.
 const hydrateSteerQueue = async ({ onlyWhenLive = false } = {}) => {
-    if (!session_id.value) return;
+    const sid = session_id.value;
+    const version = chatLoadVersion;
+    if (!sid) return;
     try {
-        const res = await listSteerSession(session_id.value);
+        const res = await listSteerSession(sid);
+        if (version !== chatLoadVersion || sid !== session_id.value) return;
         if (onlyWhenLive && !res?.assistant_message_id) return;
         const items = Array.isArray(res?.items) ? res.items : [];
         steerQueue.value = items.map((item) => ({
@@ -1023,6 +1161,7 @@ const hydrateSteerQueue = async ({ onlyWhenLive = false } = {}) => {
             if (item.delivery === 'inject') previewSteerMessage(messagesList, item);
         }
     } catch (e) {
+        if (version !== chatLoadVersion || sid !== session_id.value) return;
         console.warn('[Steer] Failed to restore queue:', e);
     }
 };
@@ -1055,6 +1194,7 @@ const {
     scrollContainer,
     debug: import.meta.env.DEV,
     onAfterMsgList: async () => {
+        const version = chatLoadVersion;
         activitySessionId.value = String(session_id.value);
         for (const message of messagesList) {
             if (message.role === 'assistant' && message.is_completed && message.suggestionSet === undefined) {
@@ -1078,6 +1218,7 @@ const {
         if (!steerQueue.value.length) {
             await hydrateSteerQueue();
         }
+        if (version !== chatLoadVersion) return;
         // Resume the trailing *assistant*, not simply the last row: a turn
         // that absorbed a mid-run message ends with the injected user bubble
         // in some orderings, and keying off that row would skip the resume
@@ -1116,7 +1257,7 @@ const {
             });
             // On success the stream resumed normally; on failure the error watcher
             // already took over (quiet recovery for IM), so only clear the flag here.
-            if (!error.value) isAttachingImStream.value = false;
+            if (version === chatLoadVersion && !error.value) isAttachingImStream.value = false;
         }
     },
     onAgentQuery: (data, existingMessage) => {
@@ -1154,18 +1295,27 @@ const showGlobalTypingIndicator = computed(() =>
 );
 
 const getmsgList = (data, isScrollType = false, scrollHeight) => {
+    const sid = String(data?.session_id || session_id.value || '');
+    const version = chatLoadVersion;
+    const isCurrent = () => version === chatLoadVersion && sid === String(session_id.value || '');
+    if (!isCurrent()) return;
     if (isScrollType) {
         if (historyLoadingMore.value || !hasMoreHistory.value) return;
         historyLoadingMore.value = true;
     }
     return fetchMessageList(data).then(async (res) => {
-        if (data?.session_id && String(data.session_id) !== String(session_id.value || '')) {
+        if (!isCurrent()) {
             return
         }
         const batch = res?.data;
         if (!batch?.length) {
             if (isScrollType) {
-                hasMoreHistory.value = false;
+                hasMoreHistory.value = historyHasMoreAfterAttempt(hasMoreHistory.value, {
+                    status: 'loaded',
+                    itemCount: 0,
+                    pageSize: limit.value,
+                    cursorAdvanced: false,
+                });
             }
             return;
         }
@@ -1173,21 +1323,28 @@ const getmsgList = (data, isScrollType = false, scrollHeight) => {
             cancelSuggestedQuestionsFetch();
         }
         const nextCursor = batch[0].created_at;
-        if (isScrollType && created_at.value && nextCursor === created_at.value) {
-            hasMoreHistory.value = false;
+        const cursorAdvanced = !(isScrollType && created_at.value && nextCursor === created_at.value);
+        hasMoreHistory.value = historyHasMoreAfterAttempt(hasMoreHistory.value, {
+            status: 'loaded',
+            itemCount: batch.length,
+            pageSize: limit.value,
+            cursorAdvanced,
+        });
+        if (!cursorAdvanced) {
             return;
-        }
-        if (batch.length < limit.value) {
-            hasMoreHistory.value = false;
         }
         created_at.value = nextCursor;
         await handleMsgList(batch, isScrollType, scrollHeight);
     }).catch((err) => {
+        if (!isCurrent()) return;
         console.error('Failed to load messages:', err);
         if (isScrollType) {
-            hasMoreHistory.value = false;
+            hasMoreHistory.value = historyHasMoreAfterAttempt(hasMoreHistory.value, {
+                status: 'failed',
+            });
         }
     }).finally(() => {
+        if (!isCurrent()) return;
         historyLoading.value = false;
         historyLoadingMore.value = false;
         if (!isScrollType && messagesList.length === 0) {
@@ -1506,6 +1663,11 @@ const attachSteerFollowUp = async (completedAssistantId) => {
 // 通过解构获得：maybeAutoSwitchChart, resetFinanceForNewTurn。
 
 const sendMsg = async (value, modelId = '', mentionedItems = [], imageFiles = [], attachmentFiles = [], options = {}) => {
+    if (!props.embeddedMode && !currentSession.value) {
+        const version = chatLoadVersion;
+        await loadSessionAndHydrate(session_id.value);
+        if (version !== chatLoadVersion || !currentSession.value) return;
+    }
     if (composerLocked.value) return
     // 新一轮开始：清掉上一轮的「用户已表态」与「已自动切过」，让本轮的自动
     // 联动重新有机会发生。
@@ -1765,7 +1927,7 @@ const resumeSuspendedRun = async (pendingId) => {
     currentAssistantMessageId.value = resumeId;
     attachingResumedRun = true;
     try {
-        for (let attempt = 0; attempt < 10; attempt++) {
+        for (let attempt = 0; attempt < 60; attempt++) {
             await new Promise((resolve) => setTimeout(resolve, 500));
             if (session_id.value !== sessionId) return;
             await startStream({
@@ -1773,6 +1935,7 @@ const resumeSuspendedRun = async (pendingId) => {
                 query: resumeId,
                 method: 'GET',
                 url: '/api/v1/sessions/continue-stream',
+                resume_pending_id: pendingId,
             });
             if (!error.value) return;
         }
@@ -1856,6 +2019,8 @@ const handleSessionMutation = (event) => {
         };
     }
     if (detail.messagesCleared) {
+        chatLoadVersion++;
+        historyLoading.value = false;
         messagesList.splice(0);
         steerQueue.value = [];
         created_at.value = '';
@@ -1889,6 +2054,7 @@ onMounted(async () => {
     // 初始化状态：加载历史消息时不应显示loading
     loading.value = false;
     isReplying.value = false;
+    startBackgroundWork();
 
     if (props.embeddedMode && props.initialQuery) {
         scrollLock.value = true;
@@ -1919,6 +2085,7 @@ onMounted(async () => {
     }
 })
 const clearData = () => {
+    chatLoadVersion++;
     if (!props.embeddedMode) sessionActivity.detach(activitySessionId.value);
     activitySessionId.value = '';
     stopStream();
@@ -1930,10 +2097,13 @@ const clearData = () => {
     isImRecovering.value = false;
 }
 onUnmounted(() => {
+    chatLoadVersion++;
     if (!props.embeddedMode) sessionActivity.detach(activitySessionId.value);
     activitySessionId.value = '';
     window.removeEventListener(SESSION_MUTATION_EVENT, handleSessionMutation);
     if (recoverPollTimer) { clearTimeout(recoverPollTimer); recoverPollTimer = null; }
+    backgroundPoller.dispose();
+    clearComposerApproval();
 });
 // An embedded view outlives the page behind it: a route change must not stop
 // its stream or restore the main chat's defaults.
@@ -2121,6 +2291,14 @@ onBeforeRouteUpdate((to, from, next) => {
     }
 }
 
+.host-approval-pop {
+    width: 100%;
+    max-width: 800px;
+    margin: 0 auto 8px;
+    padding: 0 16px;
+    box-sizing: border-box;
+}
+
 .chat_composer {
     position: absolute;
     bottom: 0;
@@ -2243,6 +2421,19 @@ onBeforeRouteUpdate((to, from, next) => {
         box-sizing: border-box;
         overflow-x: clip;
     }
+}
+
+.automation-session-notice {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 16px 0;
+    color: var(--td-text-color-secondary);
+    font-size: var(--app-text-sm);
+    line-height: 1.6;
+
+    > .t-icon { flex-shrink: 0; }
 }
 
 .msg_list {

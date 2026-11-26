@@ -2,7 +2,9 @@ package core
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/Tencent/WeKnora/internal/datasource"
@@ -67,6 +69,13 @@ type NodeOps[N any] interface {
 	EncodeCursor(times map[string]map[string]string, lastSync time.Time) *types.SyncCursor
 }
 
+// nodeDirPathOps is an optional capability on NodeOps adapters that already
+// resolve per-node directory paths during List so fetch-failure error items
+// preserve the same folder-qualified label as ingest-failure error items.
+type nodeDirPathOps[N any] interface {
+	DirPath(n N) string
+}
+
 // CollectHandler is the StreamHandler used by FetchAll / FetchIncremental to
 // gather every Emitted item into a slice instead of streaming. Checkpoint is a
 // no-op: those paths return a single cursor at the end.
@@ -127,10 +136,60 @@ func runSync[N any](
 
 	processed := 0
 	lastCheckpoint := time.Now()
+	// maybeCheckpoint persists progress on a node-count or wall-clock cadence.
+	// Skipped nodes count too: a round where every node was already up to date
+	// would otherwise write no checkpoint at all, so the next run fell back to
+	// the previous cursor snapshot and re-fetched the whole tree (#4712).
+	maybeCheckpoint := func() {
+		if processed%FeishuStreamCheckpointInterval != 0 &&
+			time.Since(lastCheckpoint) < FeishuStreamCheckpointMaxInterval {
+			return
+		}
+		checkpoint := ops.EncodeCursor(newTimes, lastSync)
+		if fullRun {
+			checkpoint.ConnectorCursor[fullSyncPending] = true
+		}
+		if cerr := h.Checkpoint(ctx, checkpoint); cerr != nil {
+			logger.Warnf(ctx, "%s stream Checkpoint failed: %v", ops.LogTag(), cerr)
+		}
+		lastCheckpoint = time.Now()
+	}
 	for _, resourceID := range resourceIDs {
 		nodes, partial, err := ops.List(ctx, client, resourceID)
 		if err != nil {
 			return nil, fmt.Errorf("list %s for resource %s: %w", ops.ResourceNoun(), resourceID, err)
+		}
+		var deletedRes *SelectedResourceDeletedError
+		if errors.As(partial, &deletedRes) {
+			tokens := make([]string, 0, len(prevTimes[resourceID])+1)
+			if prevTimes != nil {
+				for tok := range prevTimes[resourceID] {
+					tokens = append(tokens, tok)
+				}
+				slices.Sort(tokens)
+			}
+			if len(tokens) == 0 && deletedRes.Token != "" {
+				tokens = append(tokens, deletedRes.Token)
+			}
+			for _, tok := range tokens {
+				if eerr := h.Emit(ctx, types.FetchedItem{
+					ExternalID:       tok,
+					IsDeleted:        true,
+					ReplacesSubtree:  true,
+					SourceResourceID: resourceID,
+					Metadata: map[string]string{
+						types.MetaKeySelectedResourceDeleted: "true",
+					},
+				}); eerr != nil {
+					return nil, eerr
+				}
+			}
+			delete(newTimes, resourceID)
+			processed++
+			maybeCheckpoint()
+			logger.Infof(ctx, "%s selected resource deleted in source resource=%s token=%s",
+				ops.LogTag(), resourceID, deletedRes.Token)
+			continue
 		}
 		if partial != nil {
 			for _, item := range ops.ListFailureItems(resourceID, partial) {
@@ -160,6 +219,9 @@ func runSync[N any](
 			// and Skip re-fetching.
 			if !forceFull && hadPrev && prevEdit == editTimeStr {
 				newTimes[resourceID][tok] = editTimeStr
+				datasource.RecordUnchangedItem(h)
+				processed++
+				maybeCheckpoint()
 				continue
 			}
 
@@ -172,42 +234,49 @@ func runSync[N any](
 				// skipped on a transient export failure (Tencent/WeKnora#2136).
 				// The seeded entry keeps the prior key, or the invalidated
 				// full-fetch key, without losing its deletion identity.
-				if eerr := h.Emit(ctx, types.FetchedItem{
+				errItem := types.FetchedItem{
 					ExternalID:       tok,
 					Title:            ops.Title(node),
 					SourceResourceID: resourceID,
 					Metadata:         FeishuErrorItemMeta(ferr, nil),
-				}); eerr != nil {
+				}
+				if dirOps, ok := ops.(nodeDirPathOps[N]); ok {
+					if dir := dirOps.DirPath(node); dir != "" {
+						errItem.FileName = dir + "/" + SanitizeFileName(ops.Title(node))
+					}
+				}
+				if eerr := h.Emit(ctx, errItem); eerr != nil {
 					return nil, eerr
 				}
-			} else {
-				// Fetched, or an unsupported type (nothing to fetch): record
-				// the current edit time so the node is not re-processed next run.
-				newTimes[resourceID][tok] = editTimeStr
-				if len(items) > 0 {
-					tally.fetch()
-					for _, it := range items {
-						if eerr := h.Emit(ctx, *it); eerr != nil {
-							return nil, eerr
+			} else if len(items) > 0 {
+				itemIngestFailed := false
+				for _, it := range items {
+					if eerr := h.Emit(ctx, *it); eerr != nil {
+						if errors.Is(eerr, datasource.ErrItemIngestFailed) {
+							itemIngestFailed = true
+							continue
 						}
+						return nil, eerr
 					}
-				} else {
-					// Unsupported type (mindnote/slides/…): no item.
-					tally.Skip(ops.ObjType(node))
 				}
+				if itemIngestFailed {
+					tally.fail()
+					// Keep the prior edit time (or leave the node absent) so a
+					// single item's ingest failure retries on a later sync
+					// without blocking unrelated nodes or newly added resources.
+				} else {
+					tally.fetch()
+					newTimes[resourceID][tok] = editTimeStr
+				}
+			} else {
+				// Unsupported type (mindnote/slides/…): record the current edit
+				// time so the node is not re-processed next run.
+				newTimes[resourceID][tok] = editTimeStr
+				tally.Skip(ops.ObjType(node))
 			}
 
 			processed++
-			if processed%FeishuStreamCheckpointInterval == 0 || time.Since(lastCheckpoint) >= FeishuStreamCheckpointMaxInterval {
-				checkpoint := ops.EncodeCursor(newTimes, lastSync)
-				if fullRun {
-					checkpoint.ConnectorCursor[fullSyncPending] = true
-				}
-				if cerr := h.Checkpoint(ctx, checkpoint); cerr != nil {
-					logger.Warnf(ctx, "%s stream Checkpoint failed: %v", ops.LogTag(), cerr)
-				}
-				lastCheckpoint = time.Now()
-			}
+			maybeCheckpoint()
 			if n := i + 1; n%100 == 0 {
 				logger.Infof(ctx, "%s stream progress resource=%s %d/%d (%s)",
 					ops.LogTag(), resourceID, n, len(nodes), tally.summary())
@@ -224,6 +293,7 @@ func runSync[N any](
 						if eerr := h.Emit(ctx, types.FetchedItem{
 							ExternalID:       tok,
 							IsDeleted:        true,
+							ReplacesSubtree:  true,
 							SourceResourceID: resourceID,
 						}); eerr != nil {
 							return nil, eerr

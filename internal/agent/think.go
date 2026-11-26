@@ -8,6 +8,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	"github.com/Tencent/WeKnora/internal/agent/compaction"
 	agenttools "github.com/Tencent/WeKnora/internal/agent/tools"
@@ -77,6 +78,8 @@ func (e *AgentEngine) streamLLMToEventBus(
 	}
 
 	result := &streamLLMResult{}
+	// Keep incremental answer snapshots without copying the accumulated text on each chunk.
+	var answerText, reasoningText strings.Builder
 	chunkCount := 0
 	responseTypeCounts := make(map[string]int)
 	firstChunkTime := time.Time{}
@@ -85,7 +88,20 @@ func (e *AgentEngine) streamLLMToEventBus(
 	answerDecoder := e.modelContext.StreamDecoder()
 	thinkingDecoder := e.modelContext.StreamDecoder()
 
-	for chunk := range stream {
+	// A provider may take time to close its channel after cancellation.
+streamLoop:
+	for {
+		var chunk types.StreamResponse
+		var ok bool
+		select {
+		case <-llmCtx.Done():
+			break streamLoop
+		case chunk, ok = <-stream:
+			// A buffered chunk and cancellation can both be ready.
+			if !ok || llmCtx.Err() != nil {
+				break streamLoop
+			}
+		}
 		lastChunkAt.Store(time.Now().UnixNano())
 		chunkCount++
 		if chunkCount == 1 {
@@ -137,9 +153,9 @@ func (e *AgentEngine) streamLLMToEventBus(
 			isExtracted := chunk.Data != nil && chunk.Data["source"] != nil
 			if !isExtracted {
 				if chunk.ResponseType == types.ResponseTypeThinking {
-					result.ReasoningContent += chunk.Content
+					reasoningText.WriteString(chunk.Content)
 				} else {
-					result.Content += chunk.Content
+					answerText.WriteString(chunk.Content)
 				}
 			}
 		}
@@ -163,8 +179,11 @@ func (e *AgentEngine) streamLLMToEventBus(
 		}
 
 		if emitFunc != nil {
-			emitFunc(&chunk, result.Content)
+			emitFunc(&chunk, answerText.String())
 		}
+	}
+	if err := ctx.Err(); err != nil {
+		return result, err
 	}
 	guardTail, guardErr := answerGuard.Flush()
 	if guardErr != nil {
@@ -175,8 +194,10 @@ func (e *AgentEngine) streamLLMToEventBus(
 	}
 	answerTail := guardTail + answerDecoder.Flush()
 	thinkingTail := thinkingDecoder.Flush()
-	result.Content += answerTail
-	result.ReasoningContent += thinkingTail
+	answerText.WriteString(answerTail)
+	reasoningText.WriteString(thinkingTail)
+	result.Content = answerText.String()
+	result.ReasoningContent = reasoningText.String()
 	if emitFunc != nil {
 		if thinkingTail != "" {
 			emitFunc(
@@ -508,6 +529,19 @@ func (e *AgentEngine) streamThinkingToEventBus(
 		},
 	)
 	if err != nil {
+		// A failed attempt may already have streamed answer text. The retry
+		// starts a new answer event, so leaving this draft live would make the
+		// final message concatenate the failed attempt with the recovered one.
+		// A user cancellation is the exception: there is no retry, and the
+		// partial text is the only answer the user has.
+		if ctx.Err() == nil && answerStreamed {
+			_ = e.eventBus.Emit(ctx, event.Event{
+				ID:        answerID,
+				Type:      event.EventAgentFinalAnswer,
+				SessionID: sessionID,
+				Data:      event.AgentFinalAnswerData{Replace: true},
+			})
+		}
 		logger.Errorf(ctx, "[Agent][Thinking] Iteration-%d failed: %v", iteration+1, err)
 		return nil, err
 	}
@@ -584,10 +618,7 @@ func (e *AgentEngine) callLLMWithRetry(
 			logger.Debugf(ctx, "[Agent][Round-%d] msg[%d]: role=%s, len=%d, tool_calls=%v",
 				round, i, msg.Role, len(msg.Content), tcNames)
 		} else {
-			preview := msg.Content
-			if len(preview) > 100 {
-				preview = preview[:100] + "..."
-			}
+			preview := cutDebugPreview(msg.Content, 100)
 			logger.Debugf(ctx, "[Agent][Round-%d] msg[%d]: role=%s, len=%d, content=%s",
 				round, i, msg.Role, len(msg.Content), preview)
 		}
@@ -617,7 +648,7 @@ func (e *AgentEngine) callLLMWithRetry(
 		// into the summary envelope, where the next compaction cannot read it
 		// back out. The provider gets the sanitized view; the engine keeps the
 		// structured one.
-		compacted := e.forceCompaction(ctx, messages, round)
+		compacted := e.forceCompaction(ctx, *messagesPtr, round)
 		*messagesPtr = compacted
 		messages = agenttools.SanitizeMessages(compacted)
 		e.lastSentMsgCount = len(compacted)
@@ -723,10 +754,7 @@ func (e *AgentEngine) callLLMWithRetry(
 		}
 	}
 	if response.Content != "" {
-		preview := response.Content
-		if len(preview) > 300 {
-			preview = preview[:300] + "..."
-		}
+		preview := cutDebugPreview(response.Content, 300)
 		logger.Debugf(ctx, "[Agent][Round-%d] LLM content preview:\n%s", round, preview)
 	}
 
@@ -745,4 +773,17 @@ func reportModelContextLeaks(
 	}
 	logger.Warnf(ctx, "[%s][ModelContext] %d message field(s) carry raw identifiers after encoding: %s",
 		scope, len(leaks), modelcontext.SummarizeLeaks(leaks))
+}
+
+// cutDebugPreview keeps at most limit bytes of s for a debug log line, backing
+// off to a rune start so Chinese model output is never cut inside a character.
+func cutDebugPreview(s string, limit int) string {
+	if len(s) <= limit {
+		return s
+	}
+	cut := limit
+	for cut > 0 && !utf8.RuneStart(s[cut]) {
+		cut--
+	}
+	return s[:cut] + "..."
 }

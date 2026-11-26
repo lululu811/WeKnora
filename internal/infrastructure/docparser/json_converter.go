@@ -261,22 +261,24 @@ func trimBOM(data []byte) []byte {
 // A dict with multiple keys can be split by distributing keys across chunks.
 // A dict with a single key can still be split if its value is a splittable dict.
 func canSplitDict(d map[string]interface{}) bool {
-	if len(d) > 1 {
-		return true
-	}
-	if len(d) == 1 {
-		for _, v := range d {
-			if sub, ok := v.(map[string]interface{}); ok && len(sub) > 1 {
-				return true
+	// Single-key containers do not prevent splitting a deeper multi-key object.
+	// Walk iteratively so deeply wrapped exports do not add recursion here.
+	for len(d) == 1 {
+		for _, value := range d {
+			sub, ok := value.(map[string]interface{})
+			if !ok {
+				return false
 			}
+			d = sub
 		}
 	}
-	return false
+	return len(d) > 1
 }
 
 // sortedKeys returns the keys of a map in sorted order.
 // When all keys are numeric strings (from array-to-dict conversion),
-// sorts numerically so "2" comes before "10".
+// sorts numerically so "2" comes before "10". Equal numbers are ordered
+// by their original key strings.
 func sortedKeys(m map[string]interface{}) []string {
 	keys := make([]string, 0, len(m))
 	allNumeric := true
@@ -292,7 +294,10 @@ func sortedKeys(m map[string]interface{}) []string {
 		sort.Slice(keys, func(i, j int) bool {
 			ni, _ := strconv.Atoi(keys[i])
 			nj, _ := strconv.Atoi(keys[j])
-			return ni < nj
+			if ni != nj {
+				return ni < nj
+			}
+			return keys[i] < keys[j]
 		})
 	} else {
 		sort.Strings(keys)

@@ -158,6 +158,7 @@ import {
 } from './sessionSidebarSourceFilter';
 import { logout as logoutApi } from '@/api/auth';
 import { useMenuStore } from '@/stores/menu';
+import { useSettingsStore } from '@/stores/settings';
 import { useSessionActivityStore } from '@/stores/sessionActivity';
 import { useAuthStore } from '@/stores/auth';
 import { useDeploymentCapabilitiesStore } from '@/stores/deploymentCapabilities';
@@ -167,6 +168,8 @@ import { useOrganizationStore } from '@/stores/organization';
 import { useUIStore } from '@/stores/ui';
 import { useAssistantStore } from '@/stores/assistant';
 import { useCommandPaletteStore } from '@/stores/commandPalette';
+// 注：上游把侧栏助手入口换成了 <AssistantButton>，本地把该入口搬进了
+// menu/SidebarShell.vue（拆分后的子组件），因此本文件不再引用该组件。
 import { MessagePlugin, DialogPlugin, Icon as TIcon } from "tdesign-vue-next";
 import { useI18n } from 'vue-i18n';
 import { useEditorResourcesStore } from '@/stores/editorResources';
@@ -313,6 +316,11 @@ const isInKnowledgeBase = computed<boolean>(() => {
         route.name === 'knowledgeBaseSettings';
 });
 
+// 是否在创建聊天页面
+const isInCreatChat = computed<boolean>(() => {
+    return route.name === 'globalCreatChat' || route.name === 'kbCreatChat';
+});
+
 // 统一的菜单项激活状态判断
 const isMenuItemActive = (itemPath: string): boolean => {
     const currentRoute = route.name;
@@ -328,6 +336,8 @@ const isMenuItemActive = (itemPath: string): boolean => {
             return currentRoute === 'toolbox';
         case 'artifacts':
             return currentRoute === 'artifactLibrary';
+        case 'automations':
+            return currentRoute === 'automationList';
         case 'organizations':
             return currentRoute === 'organizationList';
         case 'creatChat':
@@ -359,6 +369,8 @@ const getIconActiveState = (itemPath: string) => {
 // 用排除法：不在 BOTTOM 集合里的一律视为顶部菜单项。注册到外部模块注册表
 // 的菜单项（如金融 watchlist）自动成为顶部菜单项，本文件不再硬编码任何
 // 外部模块 path。
+// 上游新增的 automations（自动化）入口同样落在顶部组：排除法天然覆盖它，
+// 无需像上游那样把 path 硬编码进 TOP_MENU_PATHS。
 const BOTTOM_MENU_PATHS = new Set(['settings', 'logout'])
 
 const topMenuItems = computed<MenuItem[]>(() => {
@@ -503,16 +515,19 @@ const ensureBucketFillsViewport = async (key: string) => {
 };
 
 const enterBatchMode = () => {
+    if (batchDeleting.value) return
     batchMode.value = true
     batchSelectedIds.value = []
 }
 
 const exitBatchMode = () => {
+    if (batchDeleting.value) return
     batchMode.value = false
     batchSelectedIds.value = []
 }
 
 const toggleBatchSelect = (id: string) => {
+    if (batchDeleting.value) return
     const idx = batchSelectedIds.value.indexOf(id)
     if (idx > -1) {
         batchSelectedIds.value.splice(idx, 1)
@@ -522,13 +537,16 @@ const toggleBatchSelect = (id: string) => {
 }
 
 const toggleBatchSelectAll = (checked: boolean) => {
+    if (batchDeleting.value) return
     batchSelectedIds.value = checked ? [...allSessionIds.value] : []
 }
 
 const handleInlineBatchDelete = () => {
-    if (batchSelectedIds.value.length === 0) return
-    const isDeleteAll = isAllBatchSelected.value
-    const displayCount = batchDisplayCount.value
+    if (batchDeleting.value || batchSelectedIds.value.length === 0) return;
+    const selectedIds = [...batchSelectedIds.value];
+    const isDeleteAll = isAllBatchSelected.value;
+    const displayCount = batchDisplayCount.value;
+    let submitted = false;
     const confirmDialog = DialogPlugin.confirm({
         header: t('batchManage.deleteConfirmTitle'),
         body: isDeleteAll
@@ -537,15 +555,25 @@ const handleInlineBatchDelete = () => {
         confirmBtn: { content: t('batchManage.delete'), theme: 'danger' as const },
         cancelBtn: t('batchManage.cancel'),
         theme: 'warning',
+        confirmOnEnter: false,
+        onClose: () => {
+            if (!batchDeleting.value) confirmDialog.destroy();
+        },
         onConfirm: async () => {
-            batchDeleting.value = true
+            if (submitted || batchDeleting.value) return;
+            submitted = true;
+            batchDeleting.value = true;
             try {
-                let res: any
-                if (isDeleteAll) {
-                    res = await deleteAllSessions()
-                } else {
-                    res = await batchDelSessions([...batchSelectedIds.value])
-                }
+                confirmDialog.update({
+                    confirmLoading: true,
+                    closeOnEscKeydown: false,
+                    closeOnOverlayClick: false,
+                    closeBtn: false,
+                    cancelBtn: { content: t('batchManage.cancel'), disabled: true },
+                });
+                const res = isDeleteAll
+                    ? await deleteAllSessions()
+                    : await batchDelSessions(selectedIds);
                 if (res && res.success === true) {
                     if (isDeleteAll) {
                         usemenuStore.clearMenuArr();
@@ -553,30 +581,28 @@ const handleInlineBatchDelete = () => {
                         await getMessageList();
                     } else {
                         let next = sessionBuckets.value;
-                        for (const id of batchSelectedIds.value) {
-                            next = removeSessionFromBuckets(next, id);
-                        }
+                        for (const id of selectedIds) next = removeSessionFromBuckets(next, id);
                         sessionBuckets.value = next;
                         syncMenuStoreFromBuckets();
                     }
                     const currentChatId = route.params.chatid as string;
-                    if (currentChatId && (isDeleteAll || batchSelectedIds.value.includes(currentChatId))) {
+                    if (currentChatId && (isDeleteAll || selectedIds.includes(currentChatId)))
                         router.push('/platform/creatChat');
-                    }
-                    batchSelectedIds.value = []
-                    MessagePlugin.success(t('batchManage.deleteSuccess'))
-                    exitBatchMode()
+                    batchSelectedIds.value = [];
+                    batchMode.value = false;
+                    MessagePlugin.success(t('batchManage.deleteSuccess'));
                 } else {
-                    MessagePlugin.error(t('batchManage.deleteFailed'))
+                    MessagePlugin.error(t('batchManage.deleteFailed'));
                 }
             } catch {
-                MessagePlugin.error(t('batchManage.deleteFailed'))
+                MessagePlugin.error(t('batchManage.deleteFailed'));
+            } finally {
+                batchDeleting.value = false;
+                confirmDialog.destroy();
             }
-            batchDeleting.value = false
-            confirmDialog.destroy()
         },
-    })
-}
+    });
+};
 
 const handleSessionMenuClick = (data: { value: string }, item: any) => {
     if (data?.value === 'delete') {
@@ -1071,6 +1097,7 @@ let agentIcon = ref('agent.svg');
 let artifactIcon = ref('artifact.svg');
 let toolboxIcon = ref('toolbox.svg');
 let watchlistIcon = ref('watchlist.svg');
+let automationIcon = ref('automation.svg');
 let organizationIcon = ref('organization.svg');
 let pathPrefix = ref(route.name)
 const getIcon = (path: string) => {
@@ -1092,6 +1119,7 @@ const getIcon = (path: string) => {
     artifactIcon.value = artifactsActiveState ? 'artifact-green.svg' : 'artifact.svg';
 
     toolboxIcon.value = route.name === 'toolbox' ? 'toolbox-green.svg' : 'toolbox.svg';
+    automationIcon.value = route.name === 'automationList' ? 'automation-green.svg' : 'automation.svg';
 
     // 自选图标：只在自选页面显示绿色
     watchlistIcon.value = route.name === 'watchlist' ? 'watchlist-green.svg' : 'watchlist.svg';
@@ -1122,6 +1150,9 @@ const NAV_ICON_FILES: Record<string, string> = {
     zhishiku: knowledgeIcon.value,
     agent: agentIcon.value,
     artifact: artifactIcon.value,
+    // 上游新增的自动化入口：原来写在内联三元里，拆成映射表后必须显式登记，
+    // 否则会退回 prefixIcon。
+    automation: automationIcon.value,
     toolbox: toolboxIcon.value,
     watchlist: watchlistIcon.value,
     organization: organizationIcon.value,
@@ -1137,10 +1168,11 @@ const resolveNavIcon = (item: MenuItem): string => {
     return getImgSrc(file);
 };
 // 路由变化时 getIcon() 会更新这些 ref，映射表跟着刷新，保持与原内联三元一致
-watch([knowledgeIcon, agentIcon, artifactIcon, toolboxIcon, watchlistIcon, organizationIcon, logoutIcon, settingIcon, prefixIcon], () => {
+watch([knowledgeIcon, agentIcon, artifactIcon, automationIcon, toolboxIcon, watchlistIcon, organizationIcon, logoutIcon, settingIcon, prefixIcon], () => {
     NAV_ICON_FILES.zhishiku = knowledgeIcon.value;
     NAV_ICON_FILES.agent = agentIcon.value;
     NAV_ICON_FILES.artifact = artifactIcon.value;
+    NAV_ICON_FILES.automation = automationIcon.value;
     NAV_ICON_FILES.toolbox = toolboxIcon.value;
     NAV_ICON_FILES.watchlist = watchlistIcon.value;
     NAV_ICON_FILES.organization = organizationIcon.value;
@@ -1202,6 +1234,8 @@ const gotopage = async (path: string) => {
         return;
     } else {
         if (path === 'creatChat') {
+            // 再次点击当前「新对话」时路由不会变化，仍需清空上一条草稿的引用。
+            if (isInCreatChat.value) useSettingsStore().clearChatReferences()
             // 如果在知识库详情页，跳转到全局对话创建页
             if (isInKnowledgeBase.value) {
                 router.push('/platform/creatChat')

@@ -9,6 +9,8 @@ import * as history from '../utils/rag-pipeline-history.ts'
 import * as timestamps from '../utils/messageTimestamp.ts'
 import * as steering from '../utils/steerStreamFork.ts'
 import * as dataChange from '../utils/assistantDataChange.ts'
+import * as thinkBlocks from '../utils/thinkBlocks.ts'
+import * as hostApproval from '../views/chat/components/hostApproval.ts'
 import { useProtectedImageRecovery } from './useProtectedImageRecovery.ts'
 import { clearProtectedFileFailureCache, hydrateProtectedFileImages } from '../utils/security.ts'
 import { setDefaultProtectedFileAccess } from '../utils/protectedFileAccess.ts'
@@ -27,6 +29,8 @@ const modules: Record<string, unknown> = {
   '@/utils/messageTimestamp': timestamps,
   '@/utils/steerStreamFork': steering,
   '@/utils/assistantDataChange': dataChange,
+  '@/utils/thinkBlocks': thinkBlocks,
+  '@/views/chat/components/hostApproval': hostApproval,
 }
 const exports: { useChatStreamHandler?: typeof StreamHandler } = {}
 vm.runInNewContext(compiled, {
@@ -95,7 +99,7 @@ function setup(t: TestContext, mode: 'ordinary' | 'quick-timeline' | 'agent') {
     handler.processStreamChunk({ id: 'request', response_type, content, done, data })
   }
   return {
-    message, loading, isReplying, currentAssistantMessageId, replies, turns, errors, img, requests, answer, send, revealed,
+    message, messagesList, loading, isReplying, currentAssistantMessageId, replies, turns, errors, img, requests, answer, send, revealed,
     persist: () => { persisted = true },
     render: () => hydrateProtectedFileImages(root, access()),
     flush: async () => {
@@ -105,6 +109,29 @@ function setup(t: TestContext, mode: 'ordinary' | 'quick-timeline' | 'agent') {
     },
   }
 }
+
+test('a continuation created during replay renders each answer chunk before completion', async t => {
+  const h = setup(t, 'agent')
+  h.send('agent_query')
+  h.send('user_message_injected', '', false, { steer_id: 'steer', content: 'Please continue' })
+  const continuation = h.messagesList[2]
+  assert.equal(continuation.role, 'assistant')
+
+  const rendered: string[] = []
+  const stop = vue.watchEffect(() => {
+    const text = continuation.agentEventStream[0]?.content
+    if (text) rendered.push(text)
+  })
+  t.after(stop)
+
+  h.send('answer', 'First', false, { event_id: 'answer' })
+  await vue.nextTick()
+  assert.deepEqual(rendered, ['First'])
+  h.send('answer', ' chunk', false, { event_id: 'answer' })
+  await vue.nextTick()
+  assert.deepEqual(rendered, ['First', 'First chunk'])
+  assert.equal(continuation.is_completed, false)
+})
 
 for (const mode of ['ordinary', 'quick-timeline', 'agent'] as const) {
   test(`${mode}: answer.done → persistence → complete retries the image exactly once`, async t => {
@@ -150,6 +177,38 @@ for (const mode of ['ordinary', 'quick-timeline', 'agent'] as const) {
     assert.equal(h.requests.length, 0, 'a persistence error must not trigger a completion retry')
   })
 }
+
+test('a live host approval reaches the composer while the tool is still running', async t => {
+  const h = setup(t, 'agent')
+  hostApproval.clearComposerApproval()
+  h.send('tool_call', '', false, { tool_call_id: 'call-1', tool_name: 'shell_exec', arguments: { command: 'rm a.txt' } })
+  h.send('tool_approval_required', 'MCP tool requires human approval', true, {
+    pending_id: 'pending-1', kind: 'host_command', tool_call_id: 'call-1',
+    host: { reason: 'delete', command: 'rm a.txt', allow_session: true },
+  })
+  await h.flush()
+  assert.equal(hostApproval.pendingComposerApprovals.value[0]?.pending_id, 'pending-1')
+  h.send('tool_approval_required', 'MCP tool requires human approval', true, {
+    pending_id: 'pending-2', kind: 'host_command', tool_call_id: 'call-2',
+    host: { reason: 'delete', command: 'rm b.txt', allow_session: true },
+  })
+  await h.flush()
+  assert.deepEqual(hostApproval.pendingComposerApprovals.value.map((item) => item.pending_id), ['pending-1', 'pending-2'])
+  h.send('tool_approval_resolved', '', true, { pending_id: 'pending-1', approved: true, scope: 'once' })
+  await h.flush()
+  assert.deepEqual(hostApproval.pendingComposerApprovals.value.map((item) => item.pending_id), ['pending-2'])
+})
+
+test('a model review stays in the timeline and never reaches the composer', async t => {
+  const h = setup(t, 'agent')
+  hostApproval.clearComposerApproval()
+  h.send('tool_approval_required', '', true, {
+    pending_id: 'review-1', kind: 'host_command', tool_call_id: 'call-1',
+    host: { reason: 'delete', command: 'rm ~/Desktop/a.txt', reviewer: 'model', allow_session: false },
+  })
+  await h.flush()
+  assert.deepEqual(hostApproval.pendingComposerApprovals.value, [])
+})
 
 test('ordinary completion waits for the buffered typewriter before recovering images', async t => {
   const h = setup(t, 'ordinary')

@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"runtime/debug"
 	"sort"
-	"strings"
 	"sync"
 	"time"
 
@@ -40,6 +39,19 @@ func truncateForLangfuse(s string, n int) string {
 		return s
 	}
 	return string(r[:n]) + "…"
+}
+
+// toolOutputPreviewBytes bounds the debug log preview of one tool result.
+const toolOutputPreviewBytes = 500
+
+// toolOutputPreview keeps that preview within the byte budget without cutting
+// a multi-byte character in half: tool output is frequently Chinese, and a
+// byte cut leaves invalid UTF-8 in the log sink.
+func toolOutputPreview(output string) string {
+	if len(output) <= toolOutputPreviewBytes {
+		return output
+	}
+	return common.TruncateUTF8Bytes(output, toolOutputPreviewBytes) + "... (truncated)"
 }
 
 // argKeys returns the sorted list of top-level keys in a tool's argument
@@ -178,6 +190,8 @@ var toolDisplayNames = map[string]string{
 	agenttools.LegacyToolGetDocumentInfo:     "获取文档信息",
 	agenttools.ToolSearchConversations:       "回顾历史对话",
 	agenttools.ToolAskUser:                   "向用户提问",
+	agenttools.ToolRequestSecureForm:         "请求登录凭据",
+	agenttools.ToolBrowserFillSecret:         "填写登录凭据",
 	agenttools.ToolSearchMemory:              "查询长期记忆",
 	agenttools.ToolDatabaseQuery:             "查询数据",
 	agenttools.ToolDataAnalysis:              "数据分析",
@@ -213,9 +227,7 @@ func formatToolHint(name string, args map[string]any) string {
 	}
 	for _, v := range args {
 		if s, ok := v.(string); ok {
-			if len(s) > 40 {
-				s = s[:40] + "…"
-			}
+			s = truncateForLangfuse(s, 40)
 			return fmt.Sprintf(`%s("%s")`, displayName, s)
 		}
 	}
@@ -595,6 +607,9 @@ func (e *AgentEngine) runToolCallAnswered(
 	})
 
 	principal, _ := types.PrincipalFromContext(ctx)
+	// Same ID stored on this turn's user messages; host auto-review uses it
+	// to tell current-turn authorization from earlier / forked history.
+	requestID, _ := types.RequestIDFromContext(toolCtx)
 	execTimeout := toolExecutionTimeout(tc.Function.Name, tc.Function.Arguments)
 	if tool, lookupErr := e.toolRegistry.GetTool(tc.Function.Name); lookupErr == nil {
 		if timed, ok := tool.(interface{ ExecutionTimeout() time.Duration }); ok {
@@ -604,6 +619,7 @@ func (e *AgentEngine) runToolCallAnswered(
 	toolExecCtx := agenttools.WithToolExecContext(toolCtx, &agenttools.ToolExecContext{
 		SessionID:          sessionID,
 		AssistantMessageID: assistantMessageID,
+		RequestID:          requestID,
 		EventBus:           e.eventBus,
 		ToolCallID:         tc.ID,
 		UserID:             principal.StorageID(),
@@ -620,7 +636,7 @@ func (e *AgentEngine) runToolCallAnswered(
 	var err error
 	if len(tc.UnresolvedHandles) > 0 && !webFetchValidatesReferences(tc) {
 		// A temporary handle is not an application identity. Fail before tool
-		// execution so a hallucinated/stale cN/dN/bN/wN/iN/res:// token can
+		// execution so a hallucinated/stale kb://, doc://, chunk://, url://, iN or res:// token can
 		// never reach persistence, an external service, or a routing decision.
 		err = fmt.Errorf("tool arguments contain unresolved model handles: %v", tc.UnresolvedHandles)
 	} else {
@@ -686,10 +702,7 @@ func (e *AgentEngine) runToolCallAnswered(
 	}
 
 	if toolCall.Result != nil && toolCall.Result.Output != "" {
-		preview := toolCall.Result.Output
-		if len(preview) > 500 {
-			preview = preview[:500] + "... (truncated)"
-		}
+		preview := toolOutputPreview(toolCall.Result.Output)
 		logger.Debugf(ctx, "%s Output preview:\n%s", toolTag, preview)
 	}
 	if toolCall.Result != nil && toolCall.Result.Error != "" {
@@ -707,7 +720,7 @@ func webFetchValidatesReferences(tc types.LLMToolCall) bool {
 		return false
 	}
 	for _, handle := range tc.UnresolvedHandles {
-		if len(handle) < 2 || handle[0] != 'w' || strings.Trim(handle[1:], "0123456789") != "" {
+		if !agenttools.IsPageHandleShaped(handle) {
 			return false
 		}
 	}

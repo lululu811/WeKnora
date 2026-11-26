@@ -1,15 +1,15 @@
 package docparser
 
 import (
-	"bytes"
 	"context"
-	"encoding/csv"
 	"fmt"
 	"net/http"
+	"net/url"
 	"path/filepath"
 	"strings"
 
 	"github.com/Tencent/WeKnora/internal/types"
+	"github.com/Tencent/WeKnora/internal/utils/textencoding"
 )
 
 // simpleFormats lists file extensions that Go can handle without the Python service.
@@ -26,7 +26,7 @@ var imageFormats = map[string]bool{
 }
 
 var audioFormats = map[string]bool{
-	"mp3": true, "wav": true, "m4a": true, "flac": true, "ogg": true,
+	"mp3": true, "wav": true, "m4a": true, "flac": true, "ogg": true, "aac": true,
 }
 
 func init() {
@@ -48,7 +48,7 @@ func IsSimpleFormat(fileType string) bool {
 type SimpleFormatReader struct{}
 
 // Read reads simple format files and returns markdown.
-func (b *SimpleFormatReader) Read(_ context.Context, req *types.ReadRequest) (*types.ReadResult, error) {
+func (b *SimpleFormatReader) Read(ctx context.Context, req *types.ReadRequest) (*types.ReadResult, error) {
 	ft := strings.ToLower(strings.TrimPrefix(req.FileType, "."))
 	if ft == "" {
 		ft = strings.TrimPrefix(strings.ToLower(filepath.Ext(req.FileName)), ".")
@@ -56,11 +56,11 @@ func (b *SimpleFormatReader) Read(_ context.Context, req *types.ReadRequest) (*t
 
 	switch {
 	case ft == "md" || ft == "markdown":
-		return &types.ReadResult{MarkdownContent: string(req.FileContent)}, nil
+		return &types.ReadResult{MarkdownContent: string(textencoding.Decode(req.FileContent))}, nil
 	case ft == "txt" || ft == "text":
-		return &types.ReadResult{MarkdownContent: string(req.FileContent)}, nil
+		return &types.ReadResult{MarkdownContent: string(textencoding.Decode(req.FileContent))}, nil
 	case ft == "csv":
-		md, err := csvToMarkdown(req.FileContent)
+		md, err := csvToMarkdownContext(ctx, textencoding.Decode(req.FileContent), maxCSVMarkdownBytes)
 		if err != nil {
 			return nil, fmt.Errorf("csv conversion failed: %w", err)
 		}
@@ -86,17 +86,15 @@ func imageToResult(fileName string, data []byte) *types.ReadResult {
 	if fileName == "" {
 		fileName = "image.png"
 	}
-	refPath := "images/" + fileName
-	// Encode spaces so the markdown URL is valid and matches the regex in ResolveAndStore.
-	safeRef := strings.ReplaceAll(refPath, " ", "%20")
+	markdown, refPath := originalImageMarkdown(fileName)
 	mime := http.DetectContentType(data)
 
 	return &types.ReadResult{
-		MarkdownContent: fmt.Sprintf("![%s](%s)", fileName, safeRef),
+		MarkdownContent: markdown,
 		ImageRefs: []types.ImageRef{
 			{
 				Filename:    fileName,
-				OriginalRef: safeRef,
+				OriginalRef: refPath,
 				MimeType:    mime,
 				ImageData:   data,
 				IsOriginal:  true,
@@ -104,6 +102,18 @@ func imageToResult(fileName string, data []byte) *types.ReadResult {
 		},
 	}
 }
+
+// originalImageMarkdown keeps a filename from changing Markdown syntax. The
+// destination is also the exact lookup key used by ImageResolver.
+func originalImageMarkdown(fileName string) (markdown, refPath string) {
+	refPath = "images/" + url.PathEscape(fileName)
+	alt := markdownImageAltReplacer.Replace(fileName)
+	return fmt.Sprintf("![%s](%s)", alt, refPath), refPath
+}
+
+var markdownImageAltReplacer = strings.NewReplacer(
+	`\`, `\\`, "[", `\[`, "]", `\]`, "\r\n", " ", "\r", " ", "\n", " ",
+)
 
 // IsImageFormat returns true if the file type is a recognized image format.
 func IsImageFormat(fileType string) bool {
@@ -153,13 +163,12 @@ func ensureOriginalImageRef(req *types.ReadRequest, mdContent string, imageRefs 
 	if fileName == "" {
 		fileName = "image." + ft
 	}
-	refPath := "images/" + fileName
+	imgLine, refPath := originalImageMarkdown(fileName)
 
-	if strings.Contains(mdContent, refPath) {
+	if strings.Contains(mdContent, "images/"+fileName) || strings.Contains(mdContent, refPath) {
 		return mdContent, imageRefs
 	}
 
-	imgLine := fmt.Sprintf("![%s](%s)", fileName, refPath)
 	if strings.TrimSpace(mdContent) == "" {
 		mdContent = imgLine
 	} else {
@@ -176,60 +185,6 @@ func ensureOriginalImageRef(req *types.ReadRequest, mdContent string, imageRefs 
 	})
 
 	return mdContent, imageRefs
-}
-
-func csvToMarkdown(data []byte) (string, error) {
-	// Excel's "CSV UTF-8" export starts the file with a byte order mark.
-	data = bytes.TrimPrefix(data, []byte("\xef\xbb\xbf"))
-	reader := csv.NewReader(bytes.NewReader(data))
-	reader.LazyQuotes = true
-	reader.TrimLeadingSpace = true
-	// Rows may differ in length. The default, the first row's length, made
-	// one short or long row fail the whole file.
-	reader.FieldsPerRecord = -1
-
-	records, err := reader.ReadAll()
-	if err != nil {
-		return "", err
-	}
-	if len(records) == 0 {
-		return "", nil
-	}
-
-	// The table is as wide as the widest row, so no field is dropped, and
-	// shorter rows are padded with empty cells.
-	width := 0
-	for _, record := range records {
-		width = max(width, len(record))
-	}
-
-	var sb strings.Builder
-	writeRow := func(record []string) {
-		cells := make([]string, width)
-		for i, cell := range record {
-			cells[i] = csvCellReplacer.Replace(cell)
-		}
-		sb.WriteString("| ")
-		sb.WriteString(strings.Join(cells, " | "))
-		sb.WriteString(" |\n")
-	}
-
-	// Header row
-	writeRow(records[0])
-
-	// Separator
-	sb.WriteString("|")
-	for range width {
-		sb.WriteString(" --- |")
-	}
-	sb.WriteString("\n")
-
-	// Data rows
-	for _, row := range records[1:] {
-		writeRow(row)
-	}
-
-	return sb.String(), nil
 }
 
 // csvCellReplacer escapes what would end a GFM table cell or row: a pipe, and

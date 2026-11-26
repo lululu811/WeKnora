@@ -48,6 +48,8 @@ import FAQEntryManager from './components/FAQEntryManager.vue';
 import DocumentListView from './components/DocumentListView.vue';
 import DocumentCardView from './components/DocumentCardView.vue';
 import DocumentBatchBar from './components/DocumentBatchBar.vue';
+import AssistantActionsButton from '@/components/assistant/AssistantActionsButton.vue';
+import { useAssistantPageContext } from '@/composables/useAssistantPageContext';
 import KbFolderTree from './components/KbFolderTree.vue';
 import BatchTagDialog from './components/BatchTagDialog.vue';
 import type { KnowledgeProcessOverrides } from '@/types/knowledgeProcess';
@@ -439,12 +441,32 @@ const onCardMoreVisibleChange = (visible: boolean, item: KnowledgeCard) => {
   }
 };
 let isCardDetails = ref(false);
+useAssistantPageContext(() => {
+  if (!kbId.value) return null;
+  const docOpen = isCardDetails.value && !!details.id;
+  return {
+    page: 'knowledge_base',
+    section: kbInfo.value?.id === kbId.value && isFAQ.value ? 'faq' : undefined,
+    knowledgeBaseId: kbId.value,
+    knowledgeBaseName: kbInfo.value?.id === kbId.value ? kbInfo.value?.name : undefined,
+    chatModelId: kbInfo.value?.id === kbId.value ? kbInfo.value?.summary_model_id || undefined : undefined,
+    knowledgeId: docOpen ? details.id : undefined,
+    knowledgeTitle: docOpen ? details.title : undefined,
+  };
+});
+const STATUS_POLL_INTERVAL_MS = 1500;
+// UUID 放在 GET 查询串中，限制单次长度，避免大批量重建触发代理的请求行上限。
+const STATUS_QUERY_BATCH_SIZE = 100;
 let timeout: ReturnType<typeof setTimeout> | null = null;
+let statusPollGeneration = 0;
+let statusPollRequest: object | null = null;
+let statusPollingDisposed = false;
 let knowledgeScroll = ref()
 let page = 1;
 let pageSize = 35;
 let scrollLoading = false;
-const resetPage = () => { page = 1; scrollLoading = false; };
+let documentPageGeneration = 0;
+const resetPage = () => { page = 1; scrollLoading = false; documentPageGeneration++; };
 
 // Move state — inline in card menu
 const moveMenuMode = ref<'normal' | 'targets' | 'confirm'>('normal');
@@ -473,6 +495,17 @@ watch(viewMode, (v) => {
 // Multi-select state — shared between grid and list views.
 // Vue 3.5 tracks Set#add/delete natively, so direct mutation is reactive.
 const selectedIds = ref<Set<string>>(new Set());
+const selectedDocumentAssistantActions = computed(() => {
+  const scope = { kb: kbId.value, ids: JSON.stringify([...selectedIds.value]) };
+  return [
+    { key: 'summarize', label: t('assistant.actions.summarizeSelected'), query: t('assistant.prompts.summarizeDocuments', scope) },
+    { key: 'compare', label: t('assistant.actions.compareDocuments'), query: t('assistant.prompts.compareDocuments', scope), disabled: selectedIds.value.size < 2 },
+    ...(canMutateKnowledge.value ? [
+      { key: 'tags', label: t('assistant.actions.suggestTags'), query: t('assistant.prompts.tagDocuments', scope) },
+      { key: 'folders', label: t('assistant.actions.organizeDocuments'), query: t('assistant.prompts.organizeDocuments', scope) },
+    ] : []),
+  ];
+});
 let lastSelectedIndex = -1;
 const batchDeleting = ref(false);
 const batchReparsing = ref(false);
@@ -555,14 +588,31 @@ const batchTagPreSelectedIds = computed(() => {
   }
   return Array.from(firstTagIds);
 });
-// IDs submitted for async batch reparse; hold optimistic pending until the worker updates DB.
-const pendingReparseAck = ref<Set<string>>(new Set());
+// 批量接口成功只表示任务已入队，后台可能还没更新状态。
+// 暂时保留 pending；若重建很快、轮询没看到处理中状态，也要在期限后恢复真实状态。
+const BATCH_REPARSE_ACK_TIMEOUT_MS = 12000;
+const pendingReparseAck = new Map<string, ReturnType<typeof setTimeout>>();
+// 等待结束后仍保留重建版本，避免迟到的旧查询再次被当成当前结果。
+const reparseVersionById = new Map<string, number>();
+
+const clearReparseAck = (id: string) => {
+  const timer = pendingReparseAck.get(id);
+  if (timer !== undefined) clearTimeout(timer);
+  pendingReparseAck.delete(id);
+};
 
 const applyOptimisticBatchReparse = (ids: string[]) => {
   const idSet = new Set(ids);
   for (const card of cardList.value) {
     if (!idSet.has(card.id)) continue;
-    pendingReparseAck.value.add(card.id);
+    clearReparseAck(card.id);
+    reparseVersionById.set(card.id, (reparseVersionById.get(card.id) ?? 0) + 1);
+    const timer = setTimeout(() => {
+      if (pendingReparseAck.get(card.id) !== timer) return;
+      pendingReparseAck.delete(card.id);
+      updateStatus(cardList.value.filter(needsStatusPolling), 0);
+    }, BATCH_REPARSE_ACK_TIMEOUT_MS);
+    pendingReparseAck.set(card.id, timer);
     card.parse_status = 'pending';
     card.summary_status = undefined;
     card.description = '';
@@ -571,26 +621,16 @@ const applyOptimisticBatchReparse = (ids: string[]) => {
   }
 };
 
-const syncReparseAckFromServer = (ids: string[]) => {
-  for (const id of ids) {
-    if (!pendingReparseAck.value.has(id)) continue;
-    const card = cardList.value.find((c) => c.id === id);
-    if (card && isParseInFlight(card.parse_status)) {
-      pendingReparseAck.value.delete(id);
-    }
-  }
-};
-
-const awaitBatchReparseReflection = async (ids: string[]) => {
-  const maxPolls = 30;
-  const delayMs = 400;
-  for (let i = 0; i < maxPolls && pendingReparseAck.value.size > 0; i++) {
-    await loadKnowledgeFiles(kbId.value);
-    syncReparseAckFromServer(ids);
-    applyOptimisticBatchReparse(Array.from(pendingReparseAck.value));
-    await new Promise<void>((r) => setTimeout(r, delayMs));
-  }
-  pendingReparseAck.value.clear();
+// 切换知识库、目录或离开页面时，让定时任务和未返回的请求一起失效。
+// 新页面的轮询不必等待旧请求结束。
+const resetStatusPolling = () => {
+  statusPollGeneration++;
+  if (timeout !== null) clearTimeout(timeout);
+  timeout = null;
+  statusPollRequest = null;
+  for (const id of pendingReparseAck.keys()) clearReparseAck(id);
+  reparseVersionById.clear();
+  batchReparsing.value = false;
 };
 
 const confirmBatchReparse = async () => {
@@ -608,23 +648,27 @@ const confirmBatchReparse = async () => {
   if (skipped > 0) {
     MessagePlugin.warning(t('knowledgeBase.batchReparseSkippedInFlight', { count: skipped }));
   }
+  const submissionGeneration = statusPollGeneration;
+  const targetKbId = kbId.value;
   batchReparsing.value = true;
   try {
-    const res: any = await batchReparseKnowledge(kbId.value, ids);
+    const res: any = await batchReparseKnowledge(targetKbId, ids);
+    if (statusPollingDisposed || submissionGeneration !== statusPollGeneration) return;
     if (res?.success) {
       MessagePlugin.success(t('knowledgeBase.batchReparseSuccess', { count: ids.length }));
       applyOptimisticBatchReparse(ids);
       clearSelection();
       batchMode.value = false;
       scheduleWikiStatusProbes();
-      void awaitBatchReparseReflection(ids);
     } else {
       MessagePlugin.error(res?.message || t('knowledgeBase.batchReparseFailed'));
     }
   } catch (e: any) {
-    MessagePlugin.error(e?.message || t('knowledgeBase.batchReparseFailed'));
+    if (!statusPollingDisposed && submissionGeneration === statusPollGeneration) {
+      MessagePlugin.error(e?.message || t('knowledgeBase.batchReparseFailed'));
+    }
   } finally {
-    batchReparsing.value = false;
+    if (submissionGeneration === statusPollGeneration) batchReparsing.value = false;
   }
 };
 
@@ -696,6 +740,7 @@ const sourceOptions = computed(() => [
   { label: t('knowledgeBase.channelConfluence'), value: 'confluence' },
   { label: t('knowledgeBase.channelGitLab'), value: 'gitlab' },
   { label: t('knowledgeBase.channelSeafile'), value: 'seafile' },
+  { label: t('knowledgeBase.channelNextcloud'), value: 'nextcloud' },
   { label: t('knowledgeBase.channelIma'), value: 'ima' },
   { label: t('knowledgeBase.channelWechat'), value: 'wechat' },
   { label: t('knowledgeBase.channelWecom'), value: 'wecom' },
@@ -789,6 +834,7 @@ const folderTreeLoading = ref(false);
 // The folder being browsed; ROOT_FOLDER_PATH ('') is the knowledge base top
 // level, a real node of the tree rather than a separate mode.
 const selectedFolderPath = ref<string>(ROOT_FOLDER_PATH);
+watch([kbId, selectedFolderPath], resetStatusPolling, { flush: 'sync' });
 const folderTreeCollapsed = ref(readStoredFlag(FOLDER_TREE_COLLAPSED_KEY));
 const hasFolders = computed(() => (folderTree.value?.folders?.length ?? 0) > 0);
 // The folder column only earns its space once the knowledge base actually has
@@ -809,15 +855,21 @@ const isFiltering = computed(() =>
 // A row's folder is worth showing only when the list can span folders.
 // 浏览某个文件夹时，它的**直属**子文件夹会作为条目排在文档前面（像文件管理器）。
 // 筛选时搜索的是整棵子树，把文件夹条目摆进去就是噪音。
-const visibleSubFolders = computed(() =>
-  isFiltering.value ? [] : childFolders(folderTree.value, selectedFolderPath.value),
-)
-
-// 面包屑报的是这个文件夹**自己装的东西**：列表能显示的文档数 + 直属子文件夹数。
-// 递归总数留在树行和空态里 —— 面包屑放递归数会和页面显示的对不上。
+// 上游补充：文件夹树展开时，文件夹只出现在左侧树里；树折叠时文档区仍然列出
+// 它们，保证导航不丢。
+// 注意：showDocumentFolderPath / folderBreadcrumbs 在本文件下方另有定义，
+// 这里不再重复声明。
+const visibleSubFolders = computed(() => {
+  if (isFiltering.value) return []
+  if (showFolderTree.value && !folderTreeCollapsed.value) return []
+  return childFolders(folderTree.value, selectedFolderPath.value)
+})
 const folderContentsCount = computed<{ documents: number; folders: number }>(() => ({
   documents: total.value,
-  folders: visibleSubFolders.value.length,
+  // 面包屑报的是这个文件夹**自己装的东西**，所以这里直接数子文件夹，
+  // 不看 visibleSubFolders —— 那个在文件夹树展开时是空的（文件夹只出现在
+  // 左侧树里），跟着它算会让面包屑在树展开时显示「0 个文件夹」。
+  folders: isFiltering.value ? 0 : childFolders(folderTree.value, selectedFolderPath.value).length,
 }))
 
 // 一个没有子文件夹的文件夹，面包屑会以「/ 0 个文件夹」结尾；那时只说文档数
@@ -1461,13 +1513,20 @@ onUnmounted(() => {
   window.removeEventListener('weknora:knowledge-file-drop', handleKnowledgeFileDrop as EventListener);
   window.removeEventListener('weknora:open-knowledge', handleOpenKnowledgeEvent as EventListener);
   stopMovePoll();
-  if (timeout !== null) {
-    clearTimeout(timeout);
-    timeout = null;
-  }
+  statusPollingDisposed = true;
+  resetStatusPolling();
 });
 watch(() => cardList.value, (newValue) => {
   if (isFAQ.value) return;
+  // 排序、筛选或上传后的列表刷新，可能读到后台尚未更新的旧状态。
+  // 保留已提交文档的 pending，但不延长原来的等待期限。
+  for (const card of newValue) {
+    if (pendingReparseAck.has(card.id) && !isParseInFlight(card.parse_status)) {
+      card.parse_status = 'pending';
+      card.summary_status = undefined;
+      card.description = '';
+    }
+  }
   docListLoading.value = false;
 
   // Auto-open document if navigated with ?knowledge_id=xxx.
@@ -1526,31 +1585,58 @@ const needsStatusPolling = (item: KnowledgeCard) => {
 const pollDelayFor = (items: KnowledgeCard[]) =>
   items.length > 0 && items.every(item => (item.stalled_minutes ?? 0) > 0)
     ? STALLED_POLL_INTERVAL_MS
-    : 1500;
+    : STATUS_POLL_INTERVAL_MS;
 
-const updateStatus = (analyzeList: KnowledgeCard[], delay = 1500) => {
+const updateStatus = (analyzeList: KnowledgeCard[], delay = STATUS_POLL_INTERVAL_MS) => {
   if (timeout !== null) {
     clearTimeout(timeout);
     timeout = null;
   }
-  if (!analyzeList.length) return;
+  if (statusPollingDisposed || statusPollRequest || !analyzeList.length) return;
 
-  let query = ``;
-  for (let i = 0; i < analyzeList.length; i++) {
-    query += `ids=${analyzeList[i].id}&`;
-  }
-  timeout = setTimeout(() => {
-    batchQueryKnowledge(query).then((result: any) => {
+  const generation = statusPollGeneration;
+  const targetKbId = kbId.value;
+  timeout = setTimeout(async () => {
+    timeout = null;
+    if (statusPollingDisposed || generation !== statusPollGeneration) return;
+    // 定时器等待期间可能又提交了一批；发请求时以当前列表为准。
+    const requestedIds = cardList.value.filter(needsStatusPolling).map(item => item.id);
+    if (!requestedIds.length) return;
+    const request = {};
+    statusPollRequest = request;
+    const isCurrentRequest = () => !statusPollingDisposed
+      && generation === statusPollGeneration && statusPollRequest === request;
+
+    try {
       let shouldRefreshWikiStatus = false;
-      if (result.success && result.data) {
+      // 整轮串行查询共用一个请求锁，避免监听器或确认定时器插入重叠轮询。
+      for (let offset = 0; offset < requestedIds.length; offset += STATUS_QUERY_BATCH_SIZE) {
+        if (!isCurrentRequest()) return;
+        const batchIds = requestedIds.slice(offset, offset + STATUS_QUERY_BATCH_SIZE);
+        const batchIdSet = new Set(batchIds);
+        const query = batchIds.map(id => `ids=${encodeURIComponent(id)}`).join('&');
+        // 每个子请求各自记录版本，先前发出的查询不能覆盖其后提交的新一轮重建。
+        const reparseVersions = new Map(batchIds.map(id => [id, reparseVersionById.get(id)]));
+        const hasSameReparse = (id: string) => reparseVersionById.get(id) === reparseVersions.get(id);
+        let result: any;
+        try {
+          result = await batchQueryKnowledge(query, targetKbId);
+        } catch {
+          if (!isCurrentRequest()) return;
+          // 失败子批次保留待查状态；继续查询后续文档，下一轮再重试失败的部分。
+          continue;
+        }
+        if (!isCurrentRequest()) return;
+        if (!result?.success || !Array.isArray(result.data)) continue;
+
         (result.data as KnowledgeCard[]).forEach((item: KnowledgeCard) => {
           const index = cardList.value.findIndex(card => card.id == item.id);
-          if (index == -1) return;
+          if (!batchIdSet.has(item.id) || index == -1 || !hasSameReparse(item.id)) return;
 
           let parseStatus = item.parse_status;
-          if (pendingReparseAck.value.has(item.id)) {
+          if (pendingReparseAck.has(item.id)) {
             if (isParseInFlight(item.parse_status)) {
-              pendingReparseAck.value.delete(item.id);
+              clearReparseAck(item.id);
             } else {
               parseStatus = 'pending';
             }
@@ -1561,49 +1647,37 @@ const updateStatus = (analyzeList: KnowledgeCard[], delay = 1500) => {
           card.stall_state = item.stall_state;
           card.stalled_minutes = stalledMinutes({ parse_status: parseStatus, last_activity_at: item.last_activity_at });
 
-          if (cardList.value[index].parse_status !== parseStatus ||
-            cardList.value[index].summary_status !== item.summary_status ||
-            cardList.value[index].description !== item.description) {
+          if (card.parse_status !== parseStatus ||
+            card.summary_status !== item.summary_status ||
+            card.description !== item.description) {
             shouldRefreshWikiStatus ||= shouldRefreshWikiStatusAfterKnowledgePoll(
-              cardList.value[index],
+              card,
               { ...item, parse_status: parseStatus },
             );
-
-            // Always update the card data
-            cardList.value[index].parse_status = parseStatus;
-            cardList.value[index].summary_status = item.summary_status;
-            cardList.value[index].description = item.description;
+            card.parse_status = parseStatus;
+            card.summary_status = item.summary_status;
+            card.description = item.description;
             delete traceAvailableById[item.id];
-            }
+          }
         });
-        // A requested row the batch no longer returns is gone (deleted
-        // elsewhere, replaced by a data-source sync). Left in the list it
-        // kept its in-flight status, so its spinner and this poll never ended.
+        // 只有成功子批次能判定缺失，未查询、查询失败或重新提交的文档都要保留。
         const returnedIds = new Set((result.data as KnowledgeCard[]).map(item => item.id));
-        const goneIds = new Set(analyzeList.map(item => item.id).filter(id => !returnedIds.has(id)));
+        const goneIds = new Set(batchIds.filter(id => !returnedIds.has(id) && hasSameReparse(id)));
         if (goneIds.size > 0) {
           const before = cardList.value.length;
           cardList.value = cardList.value.filter(card => !goneIds.has(card.id));
           total.value = Math.max(0, total.value - (before - cardList.value.length));
+          goneIds.forEach(clearReparseAck);
         }
       }
-      if (shouldRefreshWikiStatus) {
-        void fetchWikiStatusOnce();
+      if (shouldRefreshWikiStatus) void fetchWikiStatusOnce();
+    } finally {
+      if (isCurrentRequest()) {
+        statusPollRequest = null;
+        const stillPending = cardList.value.filter(needsStatusPolling);
+        if (stillPending.length > 0) updateStatus(stillPending, pollDelayFor(stillPending));
       }
-      // If there are no changes, the watch won't trigger, so we must manually poll again
-      // Even if there are changes, we can manually poll again just to be safe.
-      // The watch will clear this timeout if it triggers.
-      const stillPending = cardList.value.filter(needsStatusPolling);
-      if (stillPending.length > 0) {
-        updateStatus(stillPending, pollDelayFor(stillPending));
-      }
-    }).catch((_err) => {
-      // 错误处理
-      const stillPending = cardList.value.filter(needsStatusPolling);
-      if (stillPending.length > 0) {
-        updateStatus(stillPending, pollDelayFor(stillPending));
-      }
-    });
+    }
   }, delay);
 };
 
@@ -2035,29 +2109,42 @@ const submitReparse = async (id: string, processConfig?: KnowledgeProcessOverrid
   }
 };
 
-const handleScroll = () => {
-  if (isFAQ.value) return;
-  if (docListLoading.value) return;
-  if (scrollLoading) return;
-  const currentKbId = kbId.value;
-  if (!currentKbId) return;
+const fillDocumentViewport = () => {
   const element = knowledgeScroll.value;
-  if (element) {
-    let pageNum = Math.ceil(total.value / pageSize)
-    const { scrollTop, scrollHeight, clientHeight } = element;
-    if (scrollTop + clientHeight >= scrollHeight - 10) {
-      if (cardList.value.length < total.value && page < pageNum) {
-        page++;
-        scrollLoading = true;
-        getKnowled({ page, page_size: pageSize, ...filterParams.value }, currentKbId).finally(() => {
-          if (isCurrentKb(currentKbId)) {
-            scrollLoading = false;
-          }
-        });
-      }
-    }
+  if (element?.clientHeight > 0 && element.scrollHeight <= element.clientHeight) {
+    handleScroll();
   }
 };
+
+const handleScroll = () => {
+  if (isFAQ.value || docListLoading.value || scrollLoading) return;
+  const currentKbId = kbId.value;
+  const element = knowledgeScroll.value;
+  if (!currentKbId || !element || element.clientHeight <= 0) return;
+  const { scrollTop, scrollHeight, clientHeight } = element;
+  if (scrollTop + clientHeight < scrollHeight - 10) return;
+  const previousCount = cardList.value.length;
+  if (previousCount >= total.value || page >= Math.ceil(total.value / pageSize)) return;
+
+  const nextPage = ++page;
+  const generation = documentPageGeneration;
+  scrollLoading = true;
+  getKnowled({ page: nextPage, page_size: pageSize, ...filterParams.value }, currentKbId).finally(async () => {
+    if (!isCurrentKb(currentKbId) || generation !== documentPageGeneration) return;
+    scrollLoading = false;
+    // A failed or empty response must not continuously retry without user input.
+    if (cardList.value.length <= previousCount) {
+      page--;
+      return;
+    }
+    await nextTick();
+    if (generation === documentPageGeneration) fillDocumentViewport();
+  });
+};
+
+// A page that fits entirely in the container cannot emit a scroll event.
+watch([knowledgeScroll, docListLoading, viewMode], fillDocumentViewport, { flush: 'post' });
+
 const getDoc = (page: number) => {
   getfDetails(details.id, page)
 };
@@ -2394,6 +2481,7 @@ const handleKBEditorSuccess = (kbIdValue: string) => {
         :is-lite-mode="authStore.isLiteMode"
         :supported-file-types="[...supportedFileTypes]"
         :unsupported-file-types="unsupportedFileTypes"
+        :can-edit="canEdit"
         :missing-storage-engine="missingStorageEngine"
         @navigate-to-list="handleNavigateToKbList"
         @navigate-current="handleNavigateToCurrentKB"
@@ -2411,7 +2499,7 @@ const handleKBEditorSuccess = (kbIdValue: string) => {
       </div>
 
       <!-- Image Gallery (4th tab) -->
-      <ImageGallery v-if="activeKbTab === 'gallery' && kbId" :knowledge-base-id="kbId" @open-source-doc="openSourceDoc" />
+      <ImageGallery v-if="activeKbTab === 'gallery' && kbId" :knowledge-base-id="kbId" :can-edit="canEdit" @open-source-doc="openSourceDoc" />
 
       <!-- wiki/graph tabs only exist on wiki KBs; a stale tab (?tab= or one
            carried over from a previous KB) falls back to documents. -->
@@ -2591,7 +2679,13 @@ const handleKBEditorSuccess = (kbIdValue: string) => {
                   :show-move-to-folder="canEdit" :folder-options="folderOptions"
                   @cancel="handleBatchCancel" @delete="confirmBatchDelete" @reparse="confirmBatchReparse"
                   @batch-tag="handleBatchTag" @download="handleBatchDownload" @select-loaded="toggleSelectAll(true)"
-                  @move-to-folder="(path: string) => moveKnowledgeIntoFolder(Array.from(selectedIds), path)" />
+                  @move-to-folder="(path: string) => moveKnowledgeIntoFolder(Array.from(selectedIds), path)">
+                  <template #assistant>
+                    <AssistantActionsButton v-if="selectedIds.size" :label="$t('assistant.actions.processSelected')"
+                      :actions="selectedDocumentAssistantActions"
+                      :disabled="batchDeleting || batchReparsing || batchTagging || batchDownloading" />
+                  </template>
+                </DocumentBatchBar>
               </div>
             </div>
           </div>

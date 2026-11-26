@@ -103,6 +103,14 @@ func TestSSRFSafeURL(t *testing.T) {
 			wantOK:        false,
 			wantReasonSub: "port 3306 is blocked for security reasons",
 		},
+		{
+			// The port rule cannot depend on the DNS answer: a name that never
+			// resolves still has to report the blocked port, not a lookup error.
+			name:          "blocked port on an unresolvable hostname",
+			rawURL:        "https://blocked-port.invalid:6379/cache",
+			wantOK:        false,
+			wantReasonSub: "port 6379 is blocked for security reasons",
+		},
 	}
 
 	for _, tt := range tests {
@@ -153,6 +161,12 @@ func TestSSRFSafeURL_AllowPublicDomain(t *testing.T) {
 		// This path depends on runtime DNS/network, not on the policy.
 		if dnsEnvironmentRewritesPublicNames(reason) {
 			t.Skipf("skip: local resolver rewrote or failed the public name: %s", reason)
+		}
+		// Proxied, NAT64 and sandboxed resolvers answer with an address from a
+		// benchmark or private range, which the guard is supposed to reject.
+		// The verdict is right, so the assertion cannot run on such a network.
+		if strings.Contains(reason, "resolves to restricted IP") {
+			t.Skipf("skip because this network resolves example.com to a restricted address: %s", reason)
 		}
 		t.Fatalf("expected public domain to be allowed, got ok=%v reason=%q", ok, reason)
 	}
@@ -297,6 +311,19 @@ func TestIsRestrictedIP_IPv6(t *testing.T) {
 		{"Teredo", "2001:0000:4136:e378:8000:63bf:3fff:fdd2", true, "Teredo"},
 		{"6to4 private", "2002:c0a8:0101::1", true, "6to4"},
 		{"6to4 public", "2002:0808:0808::1", false, ""},
+		// NAT64 well-known prefix (64:ff9b::/96, RFC 6052) wrapping the
+		// cloud-metadata address — regression for issue #4092.
+		{"NAT64 metadata", "64:ff9b::a9fe:a9fe", true, ""},
+		// NAT64 local-use prefix (64:ff9b:1::/48, RFC 8215) wrapping the
+		// cloud-metadata address — refused outright, never globally routable.
+		{"NAT64 local-use metadata", "64:ff9b:1::a9fe:a9fe", true, "NAT64"},
+		// NAT64 wrapping an RFC1918 private address: blocked via embedded payload.
+		{"NAT64 private payload", "64:ff9b::ac10:0a01", true, "NAT64"},
+		// NAT64 wrapping a loopback address: blocked via embedded payload.
+		{"NAT64 loopback payload", "64:ff9b::7f00:0001", true, "loopback"},
+		// NAT64 wrapping a genuinely public address: the payload decides, not
+		// the wrapper, so this must pass.
+		{"NAT64 public payload", "64:ff9b::0808:0808", false, ""},
 		{"public IPv6", "2001:4860:4860::8888", false, ""},
 	}
 

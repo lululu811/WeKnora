@@ -64,6 +64,7 @@ type RouterParams struct {
 	SandboxConfigHandler        *handler.SandboxConfigHandler
 	SandboxSkillHandler         *handler.SandboxSkillHandler
 	MeEnvVarHandler             *handler.MeEnvVarHandler
+	CredentialVaultHandler      *handler.CredentialVaultHandler
 	EvaluationHandler           *handler.EvaluationHandler
 	AuthHandler                 *handler.AuthHandler
 	InitializationHandler       *handler.InitializationHandler
@@ -97,8 +98,9 @@ type RouterParams struct {
 	// report archive). Nil means the route is not registered, matching the
 	// diary handler's contract above: a deployment without the finance stack
 	// must boot without it.
-	HaloHandler                  *handler.HaloHandler
-	GraphSearchHandler           *handler.GraphSearchHandler
+	HaloHandler        *handler.HaloHandler
+	GraphSearchHandler *handler.GraphSearchHandler
+
 	SkillHandler                 *handler.SkillHandler
 	OrganizationHandler          *handler.OrganizationHandler
 	IMHandler                    *handler.IMHandler
@@ -113,6 +115,7 @@ type RouterParams struct {
 	WeKnoraCloudHandler          *handler.WeKnoraCloudHandler
 	WikiPageHandler              *handler.WikiPageHandler
 	MemoryHandler                *handler.MemoryHandler
+	AutomationHandler            *handler.AutomationHandler
 	HostSandbox                  service.HostSandboxManager
 	// HealthInspector serves the readiness/degraded signal. Optional: a nil
 	// inspector simply means the route is not registered, which is why the
@@ -208,8 +211,8 @@ func NewRouter(params RouterParams) *gin.Engine {
 		r.Use(embedFrameAncestorsMiddleware(params.EmbedChannelService))
 	}
 
-	// 前端静态文件（仅 Lite 版本内嵌前端）
-	if handler.Edition == "lite" {
+	// Lite bundles the frontend; other editions can explicitly opt in.
+	if handler.Edition == "lite" || strings.TrimSpace(os.Getenv("WEKNORA_WEB_DIR")) != "" {
 		serveFrontendStatic(r)
 	}
 
@@ -379,6 +382,7 @@ func NewRouter(params RouterParams) *gin.Engine {
 		RegisterModelRoutes(v1, params.ModelHandler, params.ModelCredentialsHandler, rbacGuards)
 		RegisterSandboxConfigRoutes(v1, params.SandboxConfigHandler, params.SandboxSkillHandler, rbacGuards)
 		RegisterMyEnvVarRoutes(v1, params.MeEnvVarHandler)
+		RegisterMyCredentialVaultRoutes(v1, params.CredentialVaultHandler)
 		v1.GET("/me/browser", params.SessionHandler.BrowserSkillAccount)
 		v1.GET("/me/browser/extension", params.SessionHandler.BrowserSkillDownload)
 		v1.POST("/me/browser", params.SessionHandler.BrowserSkillAccount)
@@ -406,6 +410,7 @@ func NewRouter(params RouterParams) *gin.Engine {
 		RegisterWeKnoraCloudRoutes(v1, params.WeKnoraCloudHandler, rbacGuards)
 		RegisterWikiPageRoutes(v1, params.WikiPageHandler, rbacGuards)
 		RegisterMemoryRoutes(v1, params.MemoryHandler, rbacGuards)
+		RegisterAutomationRoutes(v1, params.AutomationHandler, rbacGuards)
 		RegisterChunkerDebugRoutes(v1, rbacGuards)
 
 		// Fail fast if any declared API-key policy points at a route

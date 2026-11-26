@@ -234,7 +234,7 @@ func (p *PluginQueryUnderstand) loadHistory(ctx context.Context, chatManage *typ
 func (p *PluginQueryUnderstand) selectModel(ctx context.Context, chatManage *types.ChatManage, hasImages bool) (chat.Chat, bool) {
 	if hasImages {
 		if chatManage.ChatModelSupportsVision {
-			m, err := p.modelService.GetChatModel(ctx, chatManage.ChatModelID)
+			m, err := p.modelService.GetChatModel(chatManage.ChatModelContext(ctx), chatManage.ChatModelID)
 			if err == nil {
 				return m, true
 			}
@@ -260,20 +260,23 @@ func (p *PluginQueryUnderstand) selectModel(ctx context.Context, chatManage *typ
 	}
 
 	textModelID := chatManage.ChatModelID
+	modelCtx := chatManage.ChatModelContext(ctx)
 	if chatManage.QueryUnderstandModelID != "" {
 		textModelID = chatManage.QueryUnderstandModelID
+		modelCtx = ctx
 	}
-	m, err := p.modelService.GetChatModel(ctx, textModelID)
+	m, err := p.modelService.GetChatModel(modelCtx, textModelID)
 	if err != nil {
 		// Fall back to ChatModelID when a dedicated query-understand model was
 		// configured but cannot be resolved (e.g. deleted / disabled).
-		if chatManage.QueryUnderstandModelID != "" && textModelID != chatManage.ChatModelID {
+		if chatManage.QueryUnderstandModelID != "" {
 			pipelineWarn(ctx, "QueryUnderstand", "query_understand_model_fallback", map[string]interface{}{
 				"session_id":                chatManage.SessionID,
 				"query_understand_model_id": chatManage.QueryUnderstandModelID,
 				"error":                     err.Error(),
 			})
-			if fallback, fbErr := p.modelService.GetChatModel(ctx, chatManage.ChatModelID); fbErr == nil {
+			fallbackCtx := chatManage.ChatModelContext(ctx)
+			if fallback, fbErr := p.modelService.GetChatModel(fallbackCtx, chatManage.ChatModelID); fbErr == nil {
 				return fallback, false
 			}
 		}
@@ -420,9 +423,10 @@ func salvageStructuredQueryOutput(content string) (queryUnderstandOutput, bool) 
 		if closed := m[3] != ""; !closed && !isImageDescriptionField(m[1]) {
 			continue
 		}
-		value := strings.TrimSuffix(m[2], "\\")
+		// The pattern already excludes a dangling escape. A captured trailing
+		// backslash is part of a complete escape and must be preserved.
 		var decoded string
-		if err := json.Unmarshal([]byte(`"`+value+`"`), &decoded); err != nil {
+		if err := json.Unmarshal([]byte(`"`+m[2]+`"`), &decoded); err != nil {
 			continue
 		}
 		encoded, _ := json.Marshal(decoded)

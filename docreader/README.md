@@ -83,6 +83,16 @@ docreader:
 - `DOCREADER_PDF_RENDER_MAX_WORKERS`: 扫描 PDF 渲染为图片的最大并发数（默认：1，设为 0 可关闭限流）
 - `DOCREADER_PDF_RENDER_DPI`: 扫描 PDF 渲染 DPI（默认：200）
 - `DOCREADER_PDF_JPEG_QUALITY`: 扫描 PDF 输出 JPEG 质量（默认：85，范围会自动限制在 1-95）
+- `DOCREADER_DOCX_MAX_PAGES`: DOCX 解析的最大页数（默认：0）
+- `DOCREADER_ODL_MAX_WORKERS`: OpenDataLoader 解析的最大并发数（默认：1；每次转换会启动一个 JVM）
+- `DOCREADER_ODL_HYBRID`: OpenDataLoader 混合模式引擎（如 `docling-fast`；默认：`off`，关闭混合模式）
+- `DOCREADER_ODL_HYBRID_URL`: 混合模式服务地址（默认：`http://127.0.0.1:5002`；启动时会做 `/health` 检查）
+- `DOCREADER_ODL_HYBRID_MODE`: 混合模式的工作模式（默认：`auto`）
+- `DOCREADER_ODL_HYBRID_FALLBACK`: 混合模式失败时是否回退（默认：`false`）
+- `DOCREADER_ODL_MARKDOWN_WITH_HTML`: OpenDataLoader 输出的 Markdown 是否保留 HTML（默认：`false`）
+- `DOCREADER_PDF_RENDER_PARALLELISM`: 单个 PDF 内多页并行渲染的进程数（默认：随 CPU 数量变化，上限 4；pdfium 非线程安全，按进程扇出）
+- `DOCREADER_PDF_RENDER_MAX_EDGE`: 渲染 / 提取页图的最长边上限，单位 px（默认：2000）
+- `DOCREADER_IMAGE_OUTPUT_DIR`: 临时图片输出目录（默认：`/tmp/docreader`；与 Go 应用通过共享卷配合）
 
 ### 上传 HTML 的正文抽取
 
@@ -90,7 +100,27 @@ docreader:
 
 ### OCR / VLM
 
-DocReader 自身不再内置 OCR 与 VLM 后端。扫描 PDF 会被渲染为 JPEG 图片后交由 Go App 侧调用 OCR/VLM 服务处理，相关配置请参考主项目文档。
+扫描 PDF 会被渲染为 JPEG 图片后交由 Go App 调用 VLM 提取文字。DocReader 可选用 RapidOCR 为文档照片做几何预处理，返回摆正、裁剪后的图片；最终文字识别仍由 Go App 的 VLM 完成。
+
+在知识库的「图像处理 → 智能模式 → 文档预处理」中显式选择「自动」或「总是」才会启用。默认「关闭」，未保存该设置的旧知识库也保持关闭。「总是」仍受前面的 OCR 策略限制。此功能需要 gRPC docreader；HTTP/云端 reader 使用原图。
+
+预处理使用独立的 RPC 执行器和受限子进程，不占用普通 `Read` / `ReadStream` 的工作线程。没有可用子进程时立即返回原图，不等待推理队列。一个子进程串行复用一套模型，空闲 60 秒后退出，释放模型内存。关闭服务、请求取消或超过本地/RPC 中较短的截止时间时，终止并回收对应子进程，后续请求会创建替代进程。
+
+| 环境变量 | 默认值 | 含义 |
+|---|---:|---|
+| `DOCREADER_PREPROCESS_MAX_WORKERS` | `1` | 每个 docreader 实例最多同时运行的预处理子进程 |
+| `DOCREADER_PREPROCESS_TIMEOUT_SECONDS` | `30` | 单次处理上限，含启动、模型加载和编码；RPC 截止时间可以进一步缩短 |
+| `DOCREADER_PREPROCESS_THREADS` | `2` | 每个 ONNX 模型的算子内线程数及 OpenCV/数值库线程设置；算子间线程数为 1 |
+| `DOCREADER_PREPROCESS_MEMORY_MB` | `2048` | 每个子进程的内存预算，单位 MiB；Linux 同时设置硬地址空间上限 `RLIMIT_AS`，父进程监测 RSS，超额即终止 |
+| `DOCREADER_PREPROCESS_MAX_PIXELS` | `16000000` | 解码前检查图片头的像素上限，过大的输入直接回退 |
+| `DOCREADER_PREPROCESS_PROBE_EDGE` | `2000` | 仅用于检测的工作图最长边；RapidOCR 自身也把检测器限在 2000，裁切仍回原图 |
+| `DOCREADER_PREPROCESS_MAX_EDGE` | `2000` | 裁切结果的最长边上限，超过才按比例缩小；不改写原图分辨率 |
+
+所有限制必须为正数；非法值回落到默认值，`0` 不会关闭限制。编码后的输入最多为 20 MiB。未启用此功能时不启动子进程、不加载 RapidOCR 模型。
+
+内存预算按子进程计算，部署时还需为主进程和普通解析预留空间。Linux 的地址空间上限包含共享库与映射文件，可能在 RSS 达到预算前拒绝分配；这类失败也会回退原图。macOS 开发环境使用 RSS 监测，监测间隔约 50 ms，不能代替容器的总内存限制。提高并发会同时放大模型内存和 CPU 开销。
+
+`PreprocessImageResponse.status` 会区分 `busy`、`timeout`、`cancelled`、`memory_limit`、`image_too_large`、`worker_failed` 等回退原因。Go 侧沿用原图 OCR 的降级路径。几何阈值 `WEKNORA_PREPROCESS_*` 在预处理子进程启动时记录。
 
 ### 存储配置
 

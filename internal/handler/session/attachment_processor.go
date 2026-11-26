@@ -1,13 +1,13 @@
 package session
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/base64"
 	"fmt"
 	"path/filepath"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/Tencent/WeKnora/internal/common"
 	"github.com/Tencent/WeKnora/internal/infrastructure/docparser"
@@ -21,6 +21,9 @@ import (
 const (
 	// maxTextFileLines is the line limit for inline text content; excess lines are truncated.
 	maxTextFileLines = 500
+	// maxTextFileContentBytes bounds inline text content (same cap as IM attachments);
+	// a single minified-JSON or log line can otherwise be as large as the upload limit.
+	maxTextFileContentBytes = 32 << 10 // 32 KiB
 	// textFileExtensions lists plain-text extensions handled by the line-based reader.
 	textFileExtensions = ".txt,.md,.markdown,.json,.xml,.yaml,.yml,.csv,.log"
 )
@@ -73,12 +76,14 @@ func (p *AttachmentProcessor) ProcessAttachment(
 	}
 
 	ext := strings.ToLower(filepath.Ext(baseName))
-	if ext == "" {
-		ext = ".txt"
-	}
-
 	if !isValidFileType(baseName) {
-		return nil, fmt.Errorf("unsupported file type: %s", ext)
+		// Report what the caller actually sent. Defaulting ext to ".txt" first
+		// made an extension-less file claim that ".txt" was unsupported.
+		reported := ext
+		if reported == "" {
+			reported = "(none)"
+		}
+		return nil, fmt.Errorf("unsupported file type: %s", reported)
 	}
 
 	uniqueFileName := fmt.Sprintf("attachment_%s%s", uuid.New().String()[:12], ext)
@@ -97,10 +102,7 @@ func (p *AttachmentProcessor) ProcessAttachment(
 
 	// Extract text content based on file type; errors are non-fatal.
 	if p.isTextFile(ext) {
-		if err := p.processTextFile(ctx, data, attachment); err != nil {
-			logger.Warnf(ctx, "text file processing failed: %v", err)
-			attachment.Content = fmt.Sprintf("<error><message>Failed to process text file</message><details>%v</details></error>", err)
-		}
+		p.processTextFile(ctx, data, attachment)
 	} else if docparser.IsAudioFormat(ext) {
 		if err := p.processAudioFile(ctx, data, baseName, attachment, asrModelID); err != nil {
 			logger.Warnf(ctx, "audio transcription failed: %v, keeping placeholder", err)
@@ -131,32 +133,38 @@ func (p *AttachmentProcessor) isTextFile(ext string) bool {
 	return strings.Contains(textFileExtensions, ext)
 }
 
-// processTextFile reads plain-text content line by line, truncating at maxTextFileLines.
-func (p *AttachmentProcessor) processTextFile(ctx context.Context, data []byte, attachment *types.MessageAttachment) error {
-	scanner := bufio.NewScanner(bytes.NewReader(data))
-	var lines []string
+// processTextFile reads plain-text content line by line, truncating at maxTextFileLines
+// lines and maxTextFileContentBytes bytes.
+func (p *AttachmentProcessor) processTextFile(ctx context.Context, data []byte, attachment *types.MessageAttachment) {
+	var lines [][]byte
 	lineCount := 0
 
-	for scanner.Scan() {
+	for line := range bytes.Lines(data) {
 		lineCount++
 		if lineCount <= maxTextFileLines {
-			lines = append(lines, scanner.Text())
+			line = bytes.TrimSuffix(line, []byte("\n"))
+			lines = append(lines, bytes.TrimSuffix(line, []byte("\r")))
 		}
 	}
 
-	if err := scanner.Err(); err != nil {
-		return fmt.Errorf("failed to read file content: %w", err)
+	content := bytes.Join(lines, []byte("\n"))
+	truncated := lineCount > maxTextFileLines
+	if len(content) > maxTextFileContentBytes {
+		end := maxTextFileContentBytes
+		for end > 0 && !utf8.RuneStart(content[end]) {
+			end--
+		}
+		content = content[:end]
+		truncated = true
 	}
 
 	attachment.LineCount = lineCount
-	attachment.Content = strings.Join(lines, "\n")
+	attachment.Content = string(content)
 
-	if lineCount > maxTextFileLines {
+	if truncated {
 		attachment.IsTruncated = true
-		logger.Infof(ctx, "text file truncated: total=%d, kept=%d", lineCount, maxTextFileLines)
+		logger.Infof(ctx, "text file truncated: total=%d lines, kept=%d bytes", lineCount, len(content))
 	}
-
-	return nil
 }
 
 // processWithDocParser extracts content via SimpleFormatReader (md, csv, json, images, etc.).
@@ -300,34 +308,35 @@ func (p *AttachmentProcessor) applyLineTruncation(ctx context.Context, content s
 	}
 }
 
-// isValidFileType reports whether fileName has a supported extension.
-// Kept in sync with the frontend SUPPORTED_TYPES list in AttachmentUpload.vue.
+// attachmentInlineExtensions are attached without any document parser: the
+// line-based text reader in this file consumes them directly. They are not in
+// the shared import set because knowledge import needs a parser for every
+// extension it accepts.
+var attachmentInlineExtensions = map[string]struct{}{
+	"xml": {}, "yaml": {}, "yml": {}, "log": {},
+}
+
+// isValidFileType reports whether fileName can be attached to a chat message.
+//
+// The parseable half is the shared import set rather than a second copy of it.
+// A hand-written list here drifted: it refused .xmind even though the upload
+// picker offers it and docreader routes it to XMindParser, and it also refused
+// the other formats the import path accepts (.odt, .rtf, .docm, .xlsm, .ods,
+// .pptm, .odp, .htm), which the picker adds as soon as a parser engine
+// advertises them. Audio is routed to ASR instead of a parser, so it comes from
+// docparser's audio set, and the text extensions above skip parsing entirely.
 func isValidFileType(fileName string) bool {
-	ext := strings.ToLower(filepath.Ext(fileName))
+	ext := secutils.NormalizeImportExtension(filepath.Ext(fileName))
 	if ext == "" {
 		return false
 	}
-	ext = strings.TrimPrefix(ext, ".")
-
-	supportedTypes := []string{
-		// documents
-		"docx", "doc", "pdf", "ppt", "pptx", "epub", "mhtml",
-		// spreadsheets
-		"xlsx", "xls",
-		// text / markup
-		"md", "markdown", "txt", "csv", "json", "xml", "yaml", "yml", "log", "html",
-		// images
-		"jpg", "jpeg", "png", "gif", "bmp", "tiff", "webp",
-		// audio
-		"mp3", "wav", "m4a", "flac", "ogg", "aac",
+	if _, ok := attachmentInlineExtensions[ext]; ok {
+		return true
 	}
-
-	for _, t := range supportedTypes {
-		if ext == t {
-			return true
-		}
+	if docparser.IsAudioFormat(ext) {
+		return true
 	}
-	return false
+	return secutils.IsSupportedImportExtension(ext)
 }
 
 // getParserEngineOverridesFromContext returns parser engine overrides from tenant in context.

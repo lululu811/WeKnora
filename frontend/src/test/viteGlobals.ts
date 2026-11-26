@@ -64,6 +64,23 @@ if (typeof g.window === 'undefined') {
   }
 }
 
+// window.history：vue-router 判定「是浏览器」之后会读 history.state
+//（见 finalizeNavigation）。这里给了 document 与 window 却不给 history，
+//于是任何真的走一次 router.push() 的用例都会在 vue-router 里撞上
+// "history is not defined"。替身只需要不抛异常。
+if (typeof g.history === 'undefined') {
+  g.history = {
+    state: null,
+    length: 1,
+    scrollRestoration: 'auto',
+    pushState() {},
+    replaceState() {},
+    go() {},
+    back() {},
+    forward() {},
+  }
+}
+
 if (typeof g.document === 'undefined') {
   g.document = {
     querySelector: () => null,

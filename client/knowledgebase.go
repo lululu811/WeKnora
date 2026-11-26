@@ -51,9 +51,19 @@ type KnowledgeBaseConfig struct {
 
 // ChunkingConfig represents document chunking configuration
 type ChunkingConfig struct {
+	EnableParentChild         bool     `json:"enable_parent_child,omitempty"`
+	ParentChunkSize           int      `json:"parent_chunk_size,omitempty"`
+	ChildChunkSize            int      `json:"child_chunk_size,omitempty"`
+	Strategy                  string   `json:"strategy,omitempty"`
+	TokenLimit                int      `json:"token_limit,omitempty"`
+	Languages                 []string `json:"languages,omitempty"`
+	TableMetadataInstructions string   `json:"table_metadata_instructions,omitempty"`
+
 	ChunkSize    int      `json:"chunk_size"`    // Chunk size
 	ChunkOverlap int      `json:"chunk_overlap"` // Overlap size
 	Separators   []string `json:"separators"`    // Separators
+	// ParserEngineRules selects the parser engine for each group of file types.
+	ParserEngineRules []ParserEngineRule `json:"parser_engine_rules,omitempty"`
 }
 
 // IndexingStrategy selects which indexing pipelines are active.
@@ -121,6 +131,8 @@ type GraphRelation struct {
 
 // ParserEngineRule maps a set of file types to a specific parser engine.
 type ParserEngineRule struct {
+	XLSXFirstRowAsHeader *bool `json:"xlsx_first_row_as_header,omitempty"`
+
 	FileTypes []string `json:"file_types"`
 	Engine    string   `json:"engine"`
 }
@@ -217,6 +229,8 @@ const (
 // produced each result. Per-channel thresholds (vector_threshold,
 // keyword_threshold) filter pre-fusion at retrieval time, before RRF runs.
 type SearchResult struct {
+	SourceLocators []SourceLocator `json:"source_locators,omitempty"`
+
 	ID                string            `json:"id"`
 	Content           string            `json:"content"`
 	KnowledgeID       string            `json:"knowledge_id"`

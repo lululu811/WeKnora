@@ -24,6 +24,11 @@ const props = withDefaults(defineProps<{
   isLiteMode: boolean
   supportedFileTypes: string[]
   unsupportedFileTypes: string[]
+  /**
+   * 只有能编辑的人才看到「这些格式没有解析引擎」的提示：只读的人上传不了
+   * 新文档，指给他看配置没有意义（上游 #4486）。
+   */
+  canEdit: boolean
   /** 没有任何 storage backend 时给出提示，点击跳到设置。 */
   missingStorageEngine: boolean
 }>(), {
@@ -32,6 +37,7 @@ const props = withDefaults(defineProps<{
   tabs: () => [],
   unsupportedFileTypes: () => [],
   supportedFileTypes: () => [],
+  canEdit: false,
   missingStorageEngine: false,
   canManage: false,
   isLiteMode: false,
@@ -110,7 +116,7 @@ onMounted(() => {
         </div>
       </div>
       <p v-if="kbInfo?.description" class="document-subtitle">{{ kbInfo.description }}</p>
-      <p v-if="unsupportedFileTypes.length" class="parser-hint" @click="emit('go-parser-settings')">
+      <p v-if="canEdit && unsupportedFileTypes.length" class="parser-hint" @click="emit('go-parser-settings')">
         <t-icon name="info-circle" class="parser-hint-icon" />
         <span>{{ t('knowledgeBase.unsupportedTypesHint', { types: unsupportedFileTypes.map((t) => '.' + t).join('、') }) }}</span>
         <span class="parser-hint-link">{{ t('knowledgeBase.goToParserSettings') }} →</span>

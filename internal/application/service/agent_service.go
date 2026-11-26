@@ -11,6 +11,7 @@ import (
 
 	"github.com/Tencent/WeKnora/internal/agent"
 	"github.com/Tencent/WeKnora/internal/agent/approval"
+	"github.com/Tencent/WeKnora/internal/agent/hostreview"
 	"github.com/Tencent/WeKnora/internal/agent/operations"
 	"github.com/Tencent/WeKnora/internal/agent/skills"
 	"github.com/Tencent/WeKnora/internal/agent/tools"
@@ -31,6 +32,7 @@ import (
 	"github.com/Tencent/WeKnora/internal/application/access"
 	"github.com/Tencent/WeKnora/internal/application/attachment"
 	"github.com/Tencent/WeKnora/internal/application/repository"
+	"github.com/Tencent/WeKnora/internal/background"
 	"github.com/Tencent/WeKnora/internal/browserskill"
 	"github.com/Tencent/WeKnora/internal/config"
 	"github.com/Tencent/WeKnora/internal/event"
@@ -110,6 +112,102 @@ func knowledgeBaseScopesForPrompt(config *types.AgentConfig) ([]string, map[stri
 	return config.SearchTargets.GetAllKnowledgeBaseIDs(), kbTenantMap
 }
 
+// agentKBMetadataBatchSize bounds the IN list passed to one metadata lookup.
+// SQLite has a much smaller bound-parameter limit than the production
+// databases, so a scope larger than this is still split into a few queries
+// rather than reverting to one query per KB.
+const agentKBMetadataBatchSize = 500
+
+// agentKnowledgeBaseSnapshot is the per-engine KB metadata read shared by
+// tool capability detection and system-prompt construction. A successful
+// batch is authoritative: an ID missing from it is not looked up again. If a
+// batch fails, lookups fall back to the old per-ID path and cache successful
+// rows for the later consumer.
+type agentKnowledgeBaseSnapshot struct {
+	service  interfaces.KnowledgeBaseService
+	byID     map[string]*types.KnowledgeBase
+	fallback bool
+}
+
+func loadAgentKnowledgeBaseSnapshot(
+	ctx context.Context,
+	service interfaces.KnowledgeBaseService,
+	ids []string,
+) *agentKnowledgeBaseSnapshot {
+	snapshot := &agentKnowledgeBaseSnapshot{
+		service: service,
+		byID:    make(map[string]*types.KnowledgeBase, len(ids)),
+	}
+	if len(ids) == 0 || service == nil {
+		snapshot.fallback = true
+		return snapshot
+	}
+	for start := 0; start < len(ids); start += agentKBMetadataBatchSize {
+		end := min(start+agentKBMetadataBatchSize, len(ids))
+		kbs, err := service.GetKnowledgeBasesByIDsOnly(ctx, ids[start:end])
+		if err != nil {
+			logger.Warnf(ctx, "Failed to batch-load %d knowledge base(s); "+
+				"falling back to per-KB lookups: %v", end-start, err)
+			snapshot.fallback = true
+			continue
+		}
+		for _, kb := range kbs {
+			if kb != nil && kb.ID != "" {
+				snapshot.byID[kb.ID] = kb
+			}
+		}
+	}
+	return snapshot
+}
+
+// agentKnowledgeBaseIDsForEngine returns the union of the prompt scope and
+// SearchTargets. The latter is what tool capability detection reads, while
+// KnowledgeBases can carry the same IDs in a different order.
+func agentKnowledgeBaseIDsForEngine(config *types.AgentConfig) []string {
+	if config == nil {
+		return nil
+	}
+	ids, _ := knowledgeBaseScopesForPrompt(config)
+	ids = append(slices.Clone(ids), config.SearchTargets.GetAllKnowledgeBaseIDs()...)
+	return dedupStrings(ids)
+}
+
+// resolve returns the snapshot copy of id. tenantScoped selects the same
+// lookup path the caller used before this cache existed: prompt metadata uses
+// GetKnowledgeBaseByID while tool capability detection uses the explicitly
+// cross-tenant ByIDOnly variant because SearchTargets was already authorized
+// upstream. Both methods serve the same already-authorized KB ID set.
+func (s *agentKnowledgeBaseSnapshot) resolve(
+	ctx context.Context, id string, tenantScoped bool,
+) (*types.KnowledgeBase, error) {
+	if s == nil {
+		return nil, fmt.Errorf("knowledge base snapshot is nil for %s", id)
+	}
+	kb, ok := s.byID[id]
+	if ok {
+		return kb, nil
+	}
+	if !s.fallback {
+		return nil, fmt.Errorf("knowledge base %s was not returned by the metadata batch", id)
+	}
+	if s.service == nil {
+		return nil, fmt.Errorf("knowledge base service is unavailable for %s", id)
+	}
+	var (
+		row *types.KnowledgeBase
+		err error
+	)
+	if tenantScoped {
+		row, err = s.service.GetKnowledgeBaseByID(ctx, id)
+	} else {
+		row, err = s.service.GetKnowledgeBaseByIDOnly(ctx, id)
+	}
+	if err == nil && row != nil {
+		s.byID[id] = row
+	}
+	return row, err
+}
+
 // agentService implements agent-related business logic
 type agentService struct {
 	browserSkill          *browserskill.Manager
@@ -151,6 +249,26 @@ type agentService struct {
 	zettarancHTTPClient *zettaranc.HTTPClient
 	// HALO 年报事实链路的 HTTP 客户端（同样走 python-service）。
 	haloHTTPClient *halo.HTTPClient
+
+	background *BackgroundWork
+	// shellJobs is an interface so registration can assert ShellJobSubmitter.
+	// *ShellJobService is the production value. && binds tighter than ||, so
+	// the availability check groups RemoteAvailable and LocalAvailable.
+	shellJobs shellJobSource
+
+	// secretHandles backs browser_fill_secret; nil without Redis.
+	secretHandles tools.SecretHandles
+
+	// mcpRevalidator re-lists saved MCP tool directories that may be out of
+	// date. It is shared by every agent engine so its cooldown spans turns.
+	mcpRevalidator *tools.MCPDirectoryRevalidator
+}
+
+// shellJobSource is the part of *ShellJobService the agent asks about
+// availability. Submit is asserted to tools.ShellJobSubmitter at registration.
+type shellJobSource interface {
+	RemoteAvailable() bool
+	LocalAvailable() bool
 }
 
 // NewAgentService creates a new agent service
@@ -181,6 +299,8 @@ func NewAgentService(
 	browserSkill *browserskill.Manager,
 	userRepo interfaces.UserRepository,
 	graphRepo interfaces.RetrieveGraphRepository,
+	backgroundWork *BackgroundWork,
+	shellJobs *ShellJobService,
 	operationDispatcher *operations.HandlerDispatcher,
 	customAgentService interfaces.CustomAgentService,
 	collaboration *AgentCollaboration,
@@ -192,6 +312,7 @@ func NewAgentService(
 		userRepo:             userRepo,
 		graphRepo:            graphRepo,
 		cfg:                  cfg,
+		mcpRevalidator:       newMCPDirectoryRevalidator(cfg),
 		modelService:         modelService,
 		knowledgeBaseService: knowledgeBaseService,
 		knowledgeService:     knowledgeService,
@@ -215,6 +336,8 @@ func NewAgentService(
 		sandboxPolicy:        sandboxPolicy,
 		hostSandbox:          hostSandbox.Manager,
 		hostDesktop:          hostSandbox.Desktop,
+		background:           backgroundWork,
+		shellJobs:            shellJobs,
 	}
 	if hostSandbox.SkillsAvailable() {
 		svc.hostSkillInstaller = hostSandbox.SkillInstaller
@@ -254,12 +377,19 @@ func (s *agentService) CreateAgentEngine(
 			"enable the browser integration or update the input-bar selection")
 	}
 
+	// Load KB metadata once per engine. Tool capability detection and prompt
+	// construction ask about the same scope; batching here also removes the
+	// serial per-KB round trips that used to happen before the first token.
+	kbSnapshot := loadAgentKnowledgeBaseSnapshot(
+		ctx, s.knowledgeBaseService, agentKnowledgeBaseIDsForEngine(config),
+	)
+
 	// 2. Build tool registry
 	toolRegistry := tools.NewToolRegistry()
 	if config.MaxToolOutputChars > 0 {
 		toolRegistry.SetMaxToolOutputSize(config.MaxToolOutputChars)
 	}
-	if err := s.registerTools(ctx, toolRegistry, config, rerankModel, chatModel, sessionID); err != nil {
+	if err := s.registerTools(ctx, toolRegistry, config, rerankModel, chatModel, sessionID, kbSnapshot); err != nil {
 		return nil, fmt.Errorf("failed to register tools: %w", err)
 	}
 	s.registerMCPTools(ctx, toolRegistry, config)
@@ -269,8 +399,10 @@ func (s *agentService) CreateAgentEngine(
 	// Register the shell first: file discovery needs a separate tool only
 	// when no shell is available. File access still follows the sandbox
 	// capability independently of the existing SkillsEnabled execution gate.
-	s.registerSandboxShellIfAllowed(ctx, toolRegistry, sessionID, config)
-	s.registerSandboxFileTools(ctx, toolRegistry, sessionID, config)
+	hostApprovals := s.hostApprovals(chatModel)
+	s.registerSandboxShellIfAllowed(ctx, toolRegistry, sessionID, config, hostApprovals)
+	s.registerSandboxFileTools(ctx, toolRegistry, sessionID, config, hostApprovals)
+	s.registerSecureFormTools(ctx, toolRegistry, sessionID, config)
 	s.registerWebPageFiles(ctx, toolRegistry, config, sessionID, assistantMessageID)
 	attachmentReader := s.registerAttachmentReader(ctx, toolRegistry, config, sessionID)
 	// Advertise cached service summaries independently of @mentions. Concrete
@@ -278,7 +410,7 @@ func (s *agentService) CreateAgentEngine(
 	toolRegistry.PrepareMCPTools(ctx)
 
 	// 3. Resolve knowledge base and selected document metadata
-	kbInfos, selectedDocs := s.resolveKBAndDocInfos(ctx, config)
+	kbInfos, selectedDocs := s.resolveKBAndDocInfos(ctx, config, kbSnapshot)
 
 	// 4. Resolve system prompt template
 	systemPromptTemplate := ""
@@ -364,10 +496,60 @@ func (s *agentService) CreateAgentEngine(
 			return nil, err
 		}
 	}
+	s.attachBackgroundWork(ctx, engine, toolRegistry, sessionID, assistantMessageID)
 	toolRegistry.BindSession(sessionID)
 	engine.SetWorkspaceLayout(s.lookupSessionWorkspaceLayout(ctx, sessionID, config))
+	engine.SetDesktopEnabled(s.lookupSessionDesktopEnabled(ctx, sessionID, config))
 
 	return engine, nil
+}
+
+// attachBackgroundWork gives the run its background-notice tracker and, when
+// the run can submit background work, the work_wait and work_cancel tools.
+// Tools are decided here, once per run, and never change mid-run (D10).
+func (s *agentService) attachBackgroundWork(
+	ctx context.Context, engine *agent.AgentEngine, registry *tools.ToolRegistry,
+	sessionID, assistantMessageID string,
+) {
+	if !s.background.Enabled() {
+		return
+	}
+	tenantID, ok := types.SandboxTenantIDFromContext(ctx)
+	if !ok || tenantID == 0 {
+		return
+	}
+	ref := interfaces.SessionRef{TenantID: tenantID, SessionID: sessionID}
+	run := background.NewRunNotices(ref, s.background.Registry, s.background.Inbox)
+	engine.SetBackgroundRun(run)
+
+	submitters := tools.RegisteredBackgroundSubmitters(registry)
+	if len(submitters) == 0 {
+		return
+	}
+	for _, name := range submitters {
+		tool, err := registry.GetTool(name)
+		if err != nil {
+			continue
+		}
+		if async, ok := tool.(*tools.ShellExecAsyncTool); ok {
+			async.BindBackgroundRun(ref, assistantMessageID, run)
+			continue
+		}
+		// Tests wrap the real tool. The method is the same one: the run's
+		// SessionRef and RunNotices, whose MarkStarted records a running handle.
+		if binder, ok := tool.(interface {
+			BindBackgroundRun(interfaces.SessionRef, string, interface{ MarkStarted(string) })
+		}); ok {
+			binder.BindBackgroundRun(ref, assistantMessageID, run)
+		}
+	}
+	pending := func(ctx context.Context) bool {
+		return engine.HasPendingInput(ctx, sessionID, assistantMessageID)
+	}
+	registry.RegisterTool(tools.NewWorkWaitTool(
+		s.background.Handler, ref, assistantMessageID, run, pending, submitters,
+	))
+	registry.RegisterTool(tools.NewWorkCancelTool(s.background.Handler, ref, run))
 }
 
 // registerMCPTools registers MCP tools from enabled services for this tenant.
@@ -393,7 +575,11 @@ func (s *agentService) registerMCPTools(
 	selectedIDs := append([]string(nil), config.MCPServices...)
 	config.MCPServices = nil
 	if mcpMode == "" {
-		mcpMode = "all"
+		// An unset mode means "none": an agent that never configured MCP
+		// services must not reach every enabled service in the tenant.
+		// This matches the frontend's normalizeSelectionMode and the share
+		// scope guard, both of which treat an empty mode as "none".
+		mcpMode = "none"
 	}
 	if mcpMode == "none" {
 		logger.Infof(ctx, "MCP services disabled by agent config (mode: none)")
@@ -438,7 +624,11 @@ func (s *agentService) registerMCPTools(
 		registered, err := tools.RegisterMCPTools(
 			ctx, toolRegistry, enabledServices, s.mcpManager, s.toolApprovalGate,
 			config.MCPAuthWaitTimeout, s.mcpServiceService.GetMCPServiceByID,
-			&tools.MCPMetadataIO{Get: metadataService.GetMCPMetadata, Put: metadataService.PersistMCPMetadata},
+			&tools.MCPMetadataIO{
+				Get:         metadataService.GetMCPMetadata,
+				Put:         metadataService.PersistMCPMetadata,
+				Revalidator: s.mcpRevalidator,
+			},
 		)
 		if err != nil {
 			logger.Warnf(ctx, "Failed to register MCP directory: %v", err)
@@ -448,24 +638,25 @@ func (s *agentService) registerMCPTools(
 	}
 }
 
+func newMCPDirectoryRevalidator(cfg *config.Config) *tools.MCPDirectoryRevalidator {
+	var agent *config.AgentConfig
+	if cfg != nil {
+		agent = cfg.Agent
+	}
+	return tools.NewMCPDirectoryRevalidator(agent.MCPDirectoryMaxAge())
+}
+
 // resolveKBAndDocInfos loads knowledge base metadata and selected document info for prompt.
 func (s *agentService) resolveKBAndDocInfos(
 	ctx context.Context,
 	config *types.AgentConfig,
+	snapshot *agentKnowledgeBaseSnapshot,
 ) ([]*agent.KnowledgeBaseInfo, []*agent.SelectedDocumentInfo) {
 	kbIDs, kbTenantMap := knowledgeBaseScopesForPrompt(config)
-	kbInfos, err := s.getKnowledgeBaseInfos(ctx, kbIDs, kbTenantMap)
+	kbInfos, err := s.getKnowledgeBaseInfos(ctx, kbIDs, kbTenantMap, snapshot)
 	if err != nil {
-		logger.Warnf(ctx, "Failed to get knowledge base details, using IDs only: %v", err)
+		logger.Warnf(ctx, "Failed to get knowledge base details: %v", err)
 		kbInfos = make([]*agent.KnowledgeBaseInfo, 0, len(kbIDs))
-		for _, kbID := range kbIDs {
-			kbInfos = append(kbInfos, &agent.KnowledgeBaseInfo{
-				ID:          kbID,
-				Name:        kbID,
-				Description: "",
-				DocCount:    0,
-			})
-		}
 	}
 
 	selectedDocs, err := s.getSelectedDocumentInfos(ctx, config.KnowledgeIDs)
@@ -475,6 +666,19 @@ func (s *agentService) resolveKBAndDocInfos(
 	}
 
 	return kbInfos, selectedDocs
+}
+
+// hostApprovals is what Lite host tools use to ask about local actions: the
+// gate for the user and a reviewer on this agent's own chat model for auto.
+func (s *agentService) hostApprovals(chatModel chat.Chat) tools.HostApprovals {
+	out := tools.HostApprovals{}
+	if gate, ok := s.toolApprovalGate.(tools.HostApproval); ok {
+		out.Gate = gate
+	}
+	if chatModel != nil && s.messageService != nil {
+		out.Reviewer = hostreview.New(chatModel, s.messageService)
+	}
+	return out
 }
 
 // registerSandboxFileTools registers list_sandbox_files / read_file /
@@ -570,6 +774,7 @@ func (s *agentService) registerSandboxFileTools(
 	toolRegistry *tools.ToolRegistry,
 	sessionID string,
 	config *types.AgentConfig,
+	hostApprovals tools.HostApprovals,
 ) {
 	if config != nil && config.SkillInstallMode() {
 		logger.Infof(ctx, "Skipping session file tools in skill install mode")
@@ -594,8 +799,8 @@ func (s *agentService) registerSandboxFileTools(
 		toolRegistry.RegisterTool(tools.NewWriteSandboxFileTool(
 			store,
 			types.AgentRoundMaxCompletionTokensFor(config.MaxCompletionTokens, config.SandboxConfigID),
-		))
-		toolRegistry.RegisterTool(tools.NewEditSandboxFileTool(store))
+		).WithHostApprovals(hostApprovals))
+		toolRegistry.RegisterTool(tools.NewEditSandboxFileTool(store).WithHostApprovals(hostApprovals))
 		logger.Infof(ctx, "Registered sandbox file primitives (listing is a no-shell fallback)")
 	} else {
 		logger.Infof(ctx, "Sandbox backend does not advertise session filesystem capability; "+
@@ -668,21 +873,15 @@ func (s *agentService) validInstallDir(config *types.AgentConfig) (string, bool)
 }
 
 // registerSandboxShellIfAllowed registers shell_exec when this run is
-// entitled to a shell: SkillsEnabled, the built-in skill installer, or an
-// agent that declares shell_exec in its own AllowedTools. It does not require
-// a ready skill to already exist, so a fresh sandbox still has a way to
-// inspect its environment.
-//
-// Entitlement decides which executor the tool gets, and the order matters:
-// a resolved sandbox (remote or host) is always preferred, and only a
-// workspace with script execution switched off falls back to a local executor
-// rooted in a per-session temp directory. A sandbox that fails to resolve
-// registers nothing at all — see the fail-closed branch below.
+// entitled to a sandbox shell: SkillsEnabled, or the built-in skill
+// installer. It does not require a ready skill to already exist, so a
+// fresh sandbox still has a way to inspect its environment.
 func (s *agentService) registerSandboxShellIfAllowed(
 	ctx context.Context,
 	toolRegistry *tools.ToolRegistry,
 	sessionID string,
 	config *types.AgentConfig,
+	hostApprovals tools.HostApprovals,
 ) {
 	if config == nil {
 		return
@@ -702,7 +901,7 @@ func (s *agentService) registerSandboxShellIfAllowed(
 		!config.SkillsEnabled && !config.SkillInstallMode() {
 		return
 	}
-	s.registerSandboxShellTool(ctx, toolRegistry, sandboxMgr, config)
+	s.registerSandboxShellTool(ctx, toolRegistry, sandboxMgr, config, hostApprovals)
 }
 
 // resolveOpts is every resolve option this run is entitled to. Only the
@@ -757,6 +956,22 @@ func (s *agentService) lookupSessionWorkspaceLayout(
 	}
 	mgr, err := s.resolveWorkspaceSandbox(ctx, sessionID, config)
 	return sessionWorkspaceLayout(ctx, sessionID, mgr, err, s.hostSandbox, configID)
+}
+
+// lookupSessionDesktopEnabled reports whether the session's sandbox
+// configuration has the desktop switched on. A failed or empty resolution
+// means no desktop section in the prompt.
+func (s *agentService) lookupSessionDesktopEnabled(
+	ctx context.Context,
+	sessionID string,
+	config *types.AgentConfig,
+) bool {
+	mgr, err := s.resolveWorkspaceSandbox(ctx, sessionID, config)
+	if err != nil || mgr == nil {
+		return false
+	}
+	reporter, ok := mgr.(sandbox.SessionDesktopPromptReporter)
+	return ok && reporter.DesktopEnabledForPrompt()
 }
 
 // sessionWorkspaceLayout is the layout prompts and attachment staging share.
@@ -852,6 +1067,11 @@ func (s *agentService) initializeSkillsManager(
 		if shell, ok := tool.(*tools.ShellExecTool); ok {
 			shell.WithSkillEnvironment(skillsManager)
 			shellEnabled = true
+		}
+	}
+	if tool, err := toolRegistry.GetTool(tools.ToolShellExecAsync); err == nil {
+		if async, ok := tool.(*tools.ShellExecAsyncTool); ok {
+			async.WithSkillEnvironment(skillsManager)
 		}
 	}
 	if config.SkillsEnabled {
@@ -952,7 +1172,7 @@ func (s *agentService) loadInstalledSkillBundle(
 // config-wide variables are injected into every execution, skills or not.
 //
 // The repository is constructed from s.db here rather than injected:
-// NewAgentService already takes 23 parameters, and this is the only place in
+// NewAgentService already takes 24 parameters, and this is the only place in
 // the agent path that touches the user env table.
 func (s *agentService) userEnvResolver(
 	ctx context.Context, config *types.AgentConfig,
@@ -1109,6 +1329,7 @@ func (s *agentService) registerSandboxShellTool(
 	toolRegistry *tools.ToolRegistry,
 	sandboxMgr sandbox.Manager,
 	config *types.AgentConfig,
+	hostApprovals tools.HostApprovals,
 ) {
 	if config.SkillInstallMode() {
 		executor := sessionSandboxInstallShellExecutor(sandboxMgr)
@@ -1132,12 +1353,35 @@ func (s *agentService) registerSandboxShellTool(
 	}
 	if executor := sessionSandboxShellExecutor(sandboxMgr); executor != nil {
 		resolver := s.userEnvResolver(ctx, config)
-		toolRegistry.RegisterTool(
-			tools.NewShellExecTool(executor, resolver).WithEnvCapture(s.skillEnvCapture(config)),
-		)
+		shell := tools.NewShellExecTool(executor, resolver).
+			WithEnvCapture(s.skillEnvCapture(config)).
+			WithHostApprovals(hostApprovals)
+		toolRegistry.RegisterTool(shell)
 		logger.Infof(ctx, "Registered shell_exec tool")
+		s.registerShellExecAsync(ctx, toolRegistry, executor, resolver, config)
 	} else {
 		logger.Infof(ctx, "Sandbox backend does not advertise remote shell capability; shell_exec not registered")
+	}
+}
+
+// registerShellExecAsync registers the background shell when this process can
+// submit a job. The submitter assertion and the availability check are both
+// required. && binds tighter than ||, so the availability disjunction is grouped.
+func (s *agentService) registerShellExecAsync(
+	ctx context.Context,
+	toolRegistry *tools.ToolRegistry,
+	executor tools.SandboxCommandExecutor,
+	resolver skills.SkillEnvResolver,
+	config *types.AgentConfig,
+) {
+	if s == nil || !s.background.Enabled() || s.shellJobs == nil {
+		return
+	}
+	if submitter, ok := s.shellJobs.(tools.ShellJobSubmitter); ok &&
+		(s.shellJobs.RemoteAvailable() || s.shellJobs.LocalAvailable()) {
+		toolRegistry.RegisterTool(tools.NewShellExecAsyncTool(submitter, executor, resolver).
+			WithEnvCapture(s.skillEnvCapture(config)))
+		logger.Infof(ctx, "Registered shell_exec_async tool")
 	}
 }
 
@@ -1149,7 +1393,13 @@ func (s *agentService) registerTools(
 	rerankModel rerank.Reranker,
 	chatModel chat.Chat,
 	sessionID string,
+	snapshot *agentKnowledgeBaseSnapshot,
 ) error {
+	if snapshot == nil {
+		snapshot = &agentKnowledgeBaseSnapshot{
+			service: s.knowledgeBaseService, byID: make(map[string]*types.KnowledgeBase), fallback: true,
+		}
+	}
 	// Source of truth policy:
 	//   - `config.AllowedTools` is the explicit, user-editable whitelist —
 	//     populated by the agent-type preset on create and freely editable
@@ -1176,7 +1426,7 @@ func (s *agentService) registerTools(
 		if target == nil || target.KnowledgeBaseID == "" {
 			continue
 		}
-		kb, err := s.knowledgeBaseService.GetKnowledgeBaseByIDOnly(ctx, target.KnowledgeBaseID)
+		kb, err := snapshot.resolve(ctx, target.KnowledgeBaseID, false)
 		if err != nil {
 			continue
 		}
@@ -1251,9 +1501,19 @@ func (s *agentService) registerTools(
 	allowedTools = withoutString(allowedTools, tools.ToolWebSearch)
 	allowedTools = withoutString(allowedTools, tools.ToolWebFetch)
 	// If web search is enabled, add web_search to allowedTools
+	var webClient interfaces.WebClient
 	if config.WebSearchEnabled {
 		allowedTools = append(allowedTools, tools.ToolWebSearch)
 		allowedTools = append(allowedTools, tools.ToolWebFetch)
+		// The provider type selects the web_search schema and the web_fetch reader for this run.
+		if s.webSearchService != nil {
+			client, err := s.webSearchService.Resolve(ctx, config.WebSearchProviderID)
+			if err != nil {
+				logger.Warnf(ctx, "Web search provider %q unavailable: %v", config.WebSearchProviderID, err)
+			} else {
+				webClient = client
+			}
+		}
 	}
 
 	// Long-term memory search follows the memory switches, not the tool list.
@@ -1401,16 +1661,13 @@ func (s *agentService) registerTools(
 		case tools.ToolDatabaseQuery:
 			toolToRegister = tools.NewDatabaseQueryTool(s.db, config.SearchTargets)
 		case tools.ToolWebSearch:
-			toolToRegister = tools.NewWebSearchTool(
-				s.webSearchService,
-				config.WebSearchMaxResults,
-				config.WebSearchProviderID,
-			)
+			toolToRegister = tools.NewWebSearchTool(webClient, config.WebSearchMaxResults)
 			logger.Infof(ctx, "Registered web_search tool for session: %s, maxResults: %d, providerID: %s", sessionID, config.WebSearchMaxResults, config.WebSearchProviderID)
 
 		case tools.ToolWebFetch:
-			toolToRegister = tools.NewWebFetchTool()
-			logger.Infof(ctx, "Registered web_fetch tool for session: %s", sessionID)
+			toolToRegister = tools.NewWebFetchTool(webClient)
+			logger.Infof(ctx, "Registered web_fetch tool for session: %s, providerID: %s",
+				sessionID, config.WebSearchProviderID)
 
 		case tools.ToolDataAnalysis:
 			toolToRegister = tools.NewDataAnalysisTool(s.knowledgeBaseService, s.knowledgeService, s.tenantService, s.fileService, s.duckdb, sessionID, s.storageResolver).
@@ -1655,7 +1912,7 @@ func (s *agentService) registerTools(
 
 		case tools.ToolShellExec, tools.ToolReadFile, tools.LegacyToolReadSkill, tools.LegacyToolExecuteSkillScript,
 			tools.ToolListSandboxFiles, tools.LegacyToolReadSandboxFile, tools.ToolWriteSandboxFile,
-			tools.ToolEditSandboxFile:
+			tools.ToolEditSandboxFile, tools.ToolRequestSecureForm, tools.ToolBrowserFillSecret:
 			// Bound to the resolved sandbox manager in registerSandboxFileTools
 			// / registerSandboxShellIfAllowed / initializeSkillsManager.
 			// Listing them here would warn "Unknown tool: shell_exec" on every
@@ -1738,16 +1995,26 @@ func (s *agentService) ValidateConfig(config *types.AgentConfig) error {
 // getKnowledgeBaseInfos retrieves detailed information for knowledge bases.
 // kbTenantMap carries the tenant each KB should be queried under (source tenant
 // for directly shared KBs); a missing entry falls back to the request tenant.
-func (s *agentService) getKnowledgeBaseInfos(ctx context.Context, kbIDs []string, kbTenantMap map[string]uint64) ([]*agent.KnowledgeBaseInfo, error) {
+func (s *agentService) getKnowledgeBaseInfos(
+	ctx context.Context,
+	kbIDs []string,
+	kbTenantMap map[string]uint64,
+	snapshot *agentKnowledgeBaseSnapshot,
+) ([]*agent.KnowledgeBaseInfo, error) {
 	if len(kbIDs) == 0 {
 		return []*agent.KnowledgeBaseInfo{}, nil
+	}
+	if snapshot == nil {
+		snapshot = &agentKnowledgeBaseSnapshot{
+			service: s.knowledgeBaseService, byID: make(map[string]*types.KnowledgeBase), fallback: true,
+		}
 	}
 
 	kbInfos := make([]*agent.KnowledgeBaseInfo, 0, len(kbIDs))
 
 	for _, kbID := range kbIDs {
 		// Get knowledge base details
-		kb, err := s.knowledgeBaseService.GetKnowledgeBaseByID(ctx, kbID)
+		kb, err := snapshot.resolve(ctx, kbID, true)
 		if err != nil {
 			logger.Warnf(ctx, "Failed to get knowledge base %s: %v", secutils.SanitizeForLog(kbID), err)
 			kbInfos = append(kbInfos, &agent.KnowledgeBaseInfo{

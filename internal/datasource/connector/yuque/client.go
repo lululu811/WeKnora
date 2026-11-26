@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/Tencent/WeKnora/internal/datasource"
 	"github.com/Tencent/WeKnora/internal/logger"
@@ -143,7 +144,7 @@ func (c *client) doRequest(ctx context.Context, method, path string, result inte
 			method, path, resp.StatusCode, len(body), bodyPreview)
 
 		if resp.StatusCode == 429 {
-			wait := parseRetryAfter(resp.Header.Get("Retry-After"), backoff[min(attempt, len(backoff)-1)])
+			wait := parseRetryAfter(resp.Header.Get("Retry-After"), backoff[min(attempt, len(backoff)-1)], time.Now())
 			lastErr = fmt.Errorf("yuque rate limited: status=429 body=%s", bodyPreview)
 			if attempt < maxRetries {
 				if sErr := sleepCtx(ctx, wait); sErr != nil {
@@ -190,20 +191,24 @@ func (c *client) doRequest(ctx context.Context, method, path string, result inte
 	return lastErr
 }
 
-// parseRetryAfter returns the Retry-After duration from the header, or fallback if unparseable.
-// Retry-After: "0" (or negative) is coerced to 100ms so we still yield and don't busy-retry.
-// Note: only integer-seconds form is supported (RFC 7231 also allows HTTP-date — not seen from Yuque).
-func parseRetryAfter(header string, fallback time.Duration) time.Duration {
+// parseRetryAfter accepts a delay in seconds or an HTTP date. A nonpositive
+// delay still yields for 100ms before retrying.
+func parseRetryAfter(header string, fallback time.Duration, now time.Time) time.Duration {
 	if header == "" {
 		return fallback
 	}
-	if secs, err := time.ParseDuration(header + "s"); err == nil {
-		if secs <= 0 {
-			return 100 * time.Millisecond
+	delay, err := time.ParseDuration(header + "s")
+	if err != nil {
+		retryAt, err := http.ParseTime(header)
+		if err != nil {
+			return fallback
 		}
-		return secs
+		delay = retryAt.Sub(now)
 	}
-	return fallback
+	if delay <= 0 {
+		return 100 * time.Millisecond
+	}
+	return delay
 }
 
 // sleepCtx pauses for d, returning early if ctx is cancelled.
@@ -229,7 +234,14 @@ func truncate(s string, maxLen int) string {
 	if len(s) <= maxLen {
 		return s
 	}
-	return s[:maxLen] + "..."
+	// Back off to a rune boundary: a partial multi-byte rune is invalid UTF-8,
+	// and this preview reaches sync_logs / data_sources through the sync error
+	// message, which PostgreSQL rejects. Same rule as #4555.
+	cut := maxLen
+	for cut > 0 && !utf8.RuneStart(s[cut]) {
+		cut--
+	}
+	return s[:cut] + "..."
 }
 
 // buildQuery encodes query parameters, omitting empty values.
@@ -339,17 +351,17 @@ func (c *client) ListBookDocs(ctx context.Context, bookID int64) ([]v2Doc, error
 		if len(resp.Data) < defaultPageSize {
 			break
 		}
-		// meta.total counts the whole listing, so a page that reaches it is the
-		// last one; asking for the next offset would only fetch an empty page.
-		if resp.Meta.Total > 0 && offset+len(resp.Data) >= resp.Meta.Total {
-			break
-		}
 		// Same repeated-page guard as the repo listing: a gateway that ignores
-		// offset hands back the identical full page forever.
+		// offset can hand back the same full page, even at the advertised end.
 		firstID := resp.Data[0].ID
 		if firstID != 0 && firstID == lastFirstID {
 			logger.Warnf(ctx, "[Yuque] %s pagination repeated page at offset %d; aborting", basePath, offset)
 			return nil, fmt.Errorf("yuque %s pagination repeated page at offset %d", basePath, offset)
+		}
+		// meta.total counts the whole listing. Once a new page reaches it,
+		// the next offset would only fetch an empty page.
+		if resp.Meta.Total > 0 && offset+len(resp.Data) >= resp.Meta.Total {
+			break
 		}
 		lastFirstID = firstID
 		offset += defaultPageSize

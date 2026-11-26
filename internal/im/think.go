@@ -1,9 +1,28 @@
 package im
 
 import (
-	"regexp"
+	"context"
 	"strings"
+
+	agenttools "github.com/Tencent/WeKnora/internal/agent/tools"
+	"github.com/Tencent/WeKnora/internal/types"
 )
+
+// ThinkingPlaceholder returns the initial IM progress text for the channel locale.
+func ThinkingPlaceholder(ctx context.Context) string {
+	switch types.NormalizeSupportedLocale(types.LanguageFromContextOrDefault(ctx)) {
+	case "en-US":
+		return "Thinking..."
+	case "ja-JP":
+		return "考え中..."
+	case "ko-KR":
+		return "생각 중..."
+	case "ru-RU":
+		return "Думаю..."
+	default:
+		return "正在思考..."
+	}
+}
 
 // StreamDisplayPhase controls how raw IM stream content is rendered.
 type StreamDisplayPhase int
@@ -13,11 +32,6 @@ const (
 	StreamDisplayIntermediate StreamDisplayPhase = iota
 	// StreamDisplayFinal shows answer-only text (Web: collapsed/hidden intermediate steps).
 	StreamDisplayFinal
-)
-
-var (
-	thinkBlockRe    = regexp.MustCompile(`(?s)<think>.*?</think>`)
-	thinkOpenTailRe = regexp.MustCompile(`(?s)<think>.*$`)
 )
 
 // ragPipelineToolNames mirrors frontend RAG_PIPELINE_TOOL_NAMES.
@@ -32,13 +46,15 @@ func IsRAGPipelineToolName(name string) bool {
 }
 
 // StripThinkBlocks removes <think> blocks for final IM display.
+//
+// It delegates to the agent splitter so Markdown code fences and inline code
+// spans that merely show the tag text survive. A bare regex cannot tell a real
+// reasoning block from an example in the answer, and deleted the example.
 func StripThinkBlocks(content string) string {
 	if content == "" {
 		return ""
 	}
-	cleaned := thinkBlockRe.ReplaceAllString(content, "")
-	cleaned = thinkOpenTailRe.ReplaceAllString(cleaned, "")
-	return trimIMOuterWhitespace(cleaned)
+	return strings.TrimSpace(agenttools.StripThinkBlocks(content))
 }
 
 // IMStreamMode distinguishes agent reasoning from quick-QA RAG pipeline display.
@@ -166,10 +182,6 @@ func FormatIMDisplayContent(raw string, phase StreamDisplayPhase) string {
 	default:
 		return TransformThinkBlocks(raw, MarkdownThinkStyle)
 	}
-}
-
-func trimIMOuterWhitespace(s string) string {
-	return strings.TrimSpace(s)
 }
 
 // ThinkBlockStyle controls how <think>...</think> blocks are rendered.

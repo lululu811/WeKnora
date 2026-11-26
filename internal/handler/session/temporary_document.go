@@ -1,6 +1,7 @@
 package session
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"path/filepath"
@@ -8,11 +9,21 @@ import (
 
 	apperrors "github.com/Tencent/WeKnora/internal/errors"
 	"github.com/Tencent/WeKnora/internal/filetransport"
+	"github.com/Tencent/WeKnora/internal/infrastructure/docparser"
 	"github.com/Tencent/WeKnora/internal/logger"
 	"github.com/Tencent/WeKnora/internal/types"
 	secutils "github.com/Tencent/WeKnora/internal/utils"
 	"github.com/gin-gonic/gin"
 )
+
+// isUploadTooLarge reports whether a multipart error is the body cap firing
+// rather than a malformed or absent part. The parent handler package keeps the
+// same check for its own routes; session is a subpackage of it, so the two
+// cannot share the symbol without an import cycle.
+func isUploadTooLarge(err error) bool {
+	var tooLarge *http.MaxBytesError
+	return errors.As(err, &tooLarge)
+}
 
 // UploadTemporaryDocument accepts one multipart file and immediately returns
 // a session-scoped document ID. Parsing continues in the document worker.
@@ -29,6 +40,15 @@ func (h *Handler) UploadTemporaryDocument(c *gin.Context) {
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxBytes)
 	fileHeader, err := c.FormFile("file")
 	if err != nil {
+		// A capped body fails the multipart parse, so an oversized upload
+		// arrives here rather than in any size check below. Report it as the
+		// limit it hit: "invalid attachment upload" sends the caller looking for
+		// a missing field when the file was sent and refused.
+		if isUploadTooLarge(err) {
+			_ = c.Error(apperrors.NewBadRequestError(fmt.Sprintf(
+				"attachment exceeds the %d MB upload limit", secutils.GetMaxFileSizeMB())))
+			return
+		}
 		c.Error(apperrors.NewBadRequestError(fmt.Sprintf("invalid attachment upload: %v", err)))
 		return
 	}
@@ -198,11 +218,10 @@ func containsFileType(supported []string, ext string) bool {
 	return false
 }
 
+// isAudioExtension reports whether ext is transcribed by ASR rather than
+// parsed. It delegates to docparser so the upload gate and the parse worker
+// agree on the set: the gate used to accept .aac (and enable ASR for it) while
+// docparser.IsAudioFormat, which the worker checks, did not.
 func isAudioExtension(ext string) bool {
-	switch ext {
-	case "mp3", "wav", "m4a", "flac", "ogg", "aac":
-		return true
-	default:
-		return false
-	}
+	return docparser.IsAudioFormat(ext)
 }

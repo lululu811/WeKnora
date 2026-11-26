@@ -30,8 +30,16 @@ func NewConnector(region core.Region) *Connector {
 
 // Feishu supports resumable streaming sync; the service prefers FetchStream over
 // FetchAll/FetchIncremental when a connector implements StreamingConnector.
-var _ datasource.StreamingConnector = (*Connector)(nil)
-var _ datasource.FullStreamingConnector = (*Connector)(nil)
+var (
+	_ datasource.StreamingConnector            = (*Connector)(nil)
+	_ datasource.FullStreamingConnector        = (*Connector)(nil)
+	_ datasource.ItemFailureIsolatingConnector = (*Connector)(nil)
+)
+
+// IsolatesItemIngestFailures reports that the wiki connector tracks each node's
+// edit time independently and can skip advancing a single failed node without
+// aborting the rest of the sync.
+func (c *Connector) IsolatesItemIngestFailures() bool { return true }
 
 // Type returns the connector type identifier.
 func (c *Connector) Type() string {
@@ -140,25 +148,47 @@ func (c *Connector) ResolveResourceAncestors(
 			// there is nothing above it to reveal.
 			continue
 		}
-		// The space's direct children must be loaded to reveal the top-level node.
-		add(spaceID)
 
-		// Walk up from the selection to the top, loading each intermediate
-		// parent so the path down to the selection becomes visible.
+		// Walk up from the selection to the top, collecting each intermediate
+		// parent. Commit spaceID and the parent chain only once the selection
+		// resolves cleanly up to the space root, so a deleted node or an
+		// inaccessible space never returns an unexpandable ancestor in Step 2.
+		var chain []string
 		current := nodeToken
+		broken := false
+		visited := make(map[string]bool)
 		for current != "" {
+			if visited[current] {
+				broken = true
+				break
+			}
+			visited[current] = true
 			node, err := client.GetWikiNode(ctx, spaceID, current)
 			if err != nil {
 				// Best-effort: a broken path just stays collapsed, the rest of
 				// the selections are still revealed.
 				logger.Warnf(ctx, "[Feishu] resolve ancestors: get node %s:%s: %v", spaceID, current, err)
+				broken = true
+				break
+			}
+			if node.SpaceID != "" && node.SpaceID != spaceID {
+				logger.Warnf(ctx, "[Feishu] resolve ancestors: node %s moved from space %s to %s",
+					current, spaceID, node.SpaceID)
+				broken = true
 				break
 			}
 			if node.ParentNodeID == "" {
 				break
 			}
-			add(makeWikiNodeResourceID(spaceID, node.ParentNodeID))
+			chain = append(chain, makeWikiNodeResourceID(spaceID, node.ParentNodeID))
 			current = node.ParentNodeID
+		}
+		if broken {
+			continue
+		}
+		add(spaceID)
+		for i := len(chain) - 1; i >= 0; i-- {
+			add(chain[i])
 		}
 	}
 
@@ -284,8 +314,12 @@ func (o *wikiOps) spaceDirPrefix(ctx context.Context, client *core.Client, space
 
 func (o *wikiOps) List(ctx context.Context, client *core.Client, resourceID string) ([]core.WikiNode, error, error) {
 	spaceID, nodeToken := parseWikiResourceID(resourceID)
-	nodes, err := client.ListWikiNodesRecursiveFrom(ctx, spaceID, nodeToken)
+	nodes, err := client.ListWikiNodesWithShortcuts(ctx, spaceID, nodeToken)
 	if err != nil {
+		if nodeToken != "" && errors.Is(err, datasource.ErrResourceNotFound) {
+			logger.Warnf(ctx, "[Feishu] selected wiki node %s has been deleted, skipping: %v", resourceID, err)
+			return nil, &core.SelectedResourceDeletedError{Token: nodeToken, Cause: err}, nil
+		}
 		var partial *core.PartialWikiNodeListError
 		if !errors.As(err, &partial) {
 			// Total listing failure: nothing usable — abort the sync.
@@ -309,6 +343,7 @@ func (o *wikiOps) List(ctx context.Context, client *core.Client, resourceID stri
 func (o *wikiOps) Token(n core.WikiNode) string   { return n.NodeToken }
 func (o *wikiOps) Title(n core.WikiNode) string   { return n.Title }
 func (o *wikiOps) ObjType(n core.WikiNode) string { return n.ObjType }
+func (o *wikiOps) DirPath(n core.WikiNode) string { return o.dirPaths[n.NodeToken] }
 
 // EditTime is an opaque change key including the effective destination path.
 // An ancestor rename/move changes that path without touching this node's times.
@@ -344,6 +379,9 @@ func (o *wikiOps) Fetch(
 	ctx context.Context, client *core.Client, n core.WikiNode, resourceID string,
 ) ([]*types.FetchedItem, error) {
 	spaceID, _ := parseWikiResourceID(resourceID)
+	if n.SpaceID != "" {
+		spaceID = n.SpaceID
+	}
 	items, err := fetchNodeContent(ctx, client, n, spaceID, resourceID, o.region, o.parseMode)
 	if err != nil {
 		return nil, err
@@ -387,6 +425,10 @@ func (o *wikiOps) EncodeCursor(times map[string]map[string]string, lastSync time
 func appendWikiNodeListFailureItems(items []types.FetchedItem, spaceID string, resourceID string, failures []core.WikiNodeListFailure) []types.FetchedItem {
 	for _, failure := range failures {
 		node := failure.Node
+		nodeSpaceID := node.SpaceID
+		if nodeSpaceID == "" {
+			nodeSpaceID = spaceID
+		}
 		title := node.Title
 		if title == "" {
 			title = node.NodeToken
@@ -398,7 +440,7 @@ func appendWikiNodeListFailureItems(items []types.FetchedItem, spaceID string, r
 			Metadata: core.FeishuErrorItemMeta(failure.Err, map[string]string{
 				"channel":       types.ChannelFeishu,
 				"node_token":    node.NodeToken,
-				"space_id":      spaceID,
+				"space_id":      nodeSpaceID,
 				"failure_stage": "list_children",
 			}),
 		})

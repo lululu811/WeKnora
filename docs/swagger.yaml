@@ -166,6 +166,109 @@ definitions:
           $ref: '#/definitions/github_com_Tencent_WeKnora_internal_application_service.EnvVarView'
         type: array
     type: object
+  github_com_Tencent_WeKnora_internal_application_service.DocumentFailure:
+    properties:
+      fail_count:
+        type: integer
+      failed_at:
+        type: string
+      id:
+        type: integer
+      last_error:
+        type: string
+      task_type:
+        type: string
+    type: object
+  github_com_Tencent_WeKnora_internal_application_service.DocumentProgress:
+    properties:
+      attempt:
+        type: integer
+      can_start:
+        type: boolean
+      failure_count:
+        type: integer
+      id:
+        type: string
+      ingestion_status:
+        type: string
+      knowledge_base_id:
+        type: string
+      knowledge_base_name:
+        type: string
+      parse_status:
+        type: string
+      stages:
+        items:
+          $ref: '#/definitions/github_com_Tencent_WeKnora_internal_application_service.DocumentStageProgress'
+        type: array
+      tenant_id:
+        type: integer
+      title:
+        type: string
+      updated_at:
+        type: string
+      wiki_pending:
+        type: integer
+      wiki_retries:
+        type: integer
+      wiki_status:
+        type: string
+    type: object
+  github_com_Tencent_WeKnora_internal_application_service.DocumentProgressDetail:
+    properties:
+      document:
+        $ref: '#/definitions/github_com_Tencent_WeKnora_internal_application_service.DocumentProgress'
+      failures:
+        items:
+          $ref: '#/definitions/github_com_Tencent_WeKnora_internal_application_service.DocumentFailure'
+        type: array
+      has_more_failures:
+        type: boolean
+    type: object
+  github_com_Tencent_WeKnora_internal_application_service.DocumentProgressResponse:
+    properties:
+      documents:
+        items:
+          $ref: '#/definitions/github_com_Tencent_WeKnora_internal_application_service.DocumentProgress'
+        type: array
+      page:
+        type: integer
+      page_size:
+        type: integer
+      total:
+        type: integer
+    type: object
+  github_com_Tencent_WeKnora_internal_application_service.DocumentStageProgress:
+    properties:
+      error_code:
+        type: string
+      finished_at:
+        type: string
+      name:
+        type: string
+      status:
+        type: string
+    type: object
+  github_com_Tencent_WeKnora_internal_application_service.DocumentWikiStartRequest:
+    properties:
+      count:
+        type: integer
+      knowledge_base_id:
+        type: string
+      knowledge_id:
+        type: string
+      search:
+        type: string
+    type: object
+  github_com_Tencent_WeKnora_internal_application_service.DocumentWikiStartResult:
+    properties:
+      already_queued:
+        type: integer
+      requested:
+        type: integer
+      started:
+        type: integer
+    type: object
   github_com_Tencent_WeKnora_internal_application_service.EnvVarView:
     properties:
       description:
@@ -200,6 +303,12 @@ definitions:
           because the provider could not be reached. The management page must say
           so instead of rendering a reassuring "0 sandboxes".
         type: boolean
+      user_sandbox_count:
+        description: |-
+          UserSandboxCount is how many of SandboxCount are shared user machines.
+          They carry no session id, so SessionIDs alone under-reports what a
+          credential change would affect.
+        type: integer
     type: object
   github_com_Tencent_WeKnora_internal_application_service.SkillCatalogInstallView:
     properties:
@@ -508,6 +617,7 @@ definitions:
     - 2200
     - 2201
     - 2300
+    - 2400
     type: integer
     x-enum-varnames:
     - ErrBadRequest
@@ -534,6 +644,7 @@ definitions:
     - ErrVectorStoreBindingInvalid
     - ErrVectorStoreUnavailable
     - ErrModelInUse
+    - ErrImportPrerequisiteMissing
   github_com_Tencent_WeKnora_internal_handler_dto.CredentialFieldMetadata:
     properties:
       configured:
@@ -773,6 +884,11 @@ definitions:
           Per-field "configured?" map. Omitted for builtin models unless the
           caller is a system administrator. See MCPServiceResponse.Credentials.
         type: object
+      default_for:
+        items:
+          type: string
+        type: array
+        x-agent: true
       description:
         type: string
         x-agent: true
@@ -1336,6 +1452,27 @@ definitions:
     type: object
   github_com_Tencent_WeKnora_internal_types.AgentStep:
     properties:
+      approvals:
+        description: |-
+          Approvals is the user decision for tools in this step. It is stored with
+          the step so a reloaded transcript can show what was allowed or refused.
+        items:
+          $ref: '#/definitions/github_com_Tencent_WeKnora_internal_types.ToolApprovalRecord'
+        type: array
+      background_injections:
+        description: |-
+          BackgroundInjections are background-work messages delivered before this
+          model response, after the step's steered messages, in delivery order.
+        items:
+          $ref: '#/definitions/github_com_Tencent_WeKnora_internal_types.BackgroundInjection'
+        type: array
+      background_seen_ids:
+        description: |-
+          BackgroundSeenIDs are finished background items whose results this
+          step's tool calls (work_wait, work_cancel) returned to the model.
+        items:
+          type: string
+        type: array
       intermediate_answer:
         description: |-
           IntermediateAnswer preserves a plain answer followed by a loop-end steer.
@@ -1344,6 +1481,12 @@ definitions:
       iteration:
         description: Iteration number (0-indexed)
         type: integer
+      progress:
+        description: Progress is user-facing commentary from a non-terminal round.
+          Thought stays intact for model replay.
+        type: string
+      progress_event_id:
+        type: string
       reasoning_content:
         description: |-
           ReasoningContent stores the OpenAI-protocol reasoning_content emitted by the
@@ -1460,6 +1603,41 @@ definitions:
     x-enum-varnames:
     - AnswerStrategyAll
     - AnswerStrategyRandom
+  github_com_Tencent_WeKnora_internal_types.ArtifactLibraryItem:
+    properties:
+      created_at:
+        type: string
+        x-agent: true
+      file_name:
+        type: string
+        x-agent: true
+      file_size:
+        type: integer
+        x-agent: true
+      file_type:
+        type: string
+        x-agent: true
+      handle:
+        type: string
+        x-agent: true
+      index:
+        type: integer
+        x-agent: true
+      message_id:
+        type: string
+        x-agent: true
+      session_id:
+        type: string
+        x-agent: true
+      session_title:
+        type: string
+        x-agent: true
+      source_path:
+        type: string
+      version_count:
+        type: integer
+        x-agent: true
+    type: object
   github_com_Tencent_WeKnora_internal_types.AssistantAccessLevel:
     enum:
     - read_only
@@ -1484,6 +1662,14 @@ definitions:
           MaxAccessLevel is the highest level a member may pick; empty means
           AssistantAccessConfirm.
     type: object
+  github_com_Tencent_WeKnora_internal_types.AttrInject:
+    enum:
+    - always
+    - on_demand
+    type: string
+    x-enum-varnames:
+    - AttrInjectAlways
+    - AttrInjectOnDemand
   github_com_Tencent_WeKnora_internal_types.AttrSpec:
     properties:
       consumers:
@@ -1494,6 +1680,23 @@ definitions:
       description:
         description: one line explaining what the attribute measures
         type: string
+      inject:
+        allOf:
+        - $ref: '#/definitions/github_com_Tencent_WeKnora_internal_types.AttrInject'
+        description: |-
+          Inject says whether this attribute is always part of the describe round's
+          standing questions, or only asked when something is going to act on it.
+          An empty value means AttrInjectAlways, so attributes registered before
+          this field existed keep their behaviour.
+      internal:
+        description: |-
+          Internal marks an attribute that steers this pipeline's own scheduling
+          rather than describing what the image holds. Such attributes are still
+          observed and persisted — the values are what justify a scheduling
+          decision after the fact — but they are kept out of the gallery's filter
+          surface, where they would only add noise: no operator wants to filter a
+          library by "how much margin is left around the text".
+        type: boolean
       label:
         description: human-readable name for the settings panel
         type: string
@@ -1535,6 +1738,12 @@ definitions:
     type: object
   github_com_Tencent_WeKnora_internal_types.AuditAction:
     enum:
+    - memory.subjects_listed
+    - memory.subject_inspected
+    - memory.item_confirmed
+    - memory.item_rejected
+    - memory.subject_cleared
+    - memory.subject_settings_updated
     - rbac.member_added
     - rbac.member_removed
     - rbac.member_role_changed
@@ -1599,6 +1808,12 @@ definitions:
     - faq.import_failed
     type: string
     x-enum-varnames:
+    - AuditActionMemorySubjectsListed
+    - AuditActionMemorySubjectInspected
+    - AuditActionMemoryItemConfirmed
+    - AuditActionMemoryItemRejected
+    - AuditActionMemorySubjectCleared
+    - AuditActionMemorySubjectSettingsUpdated
     - AuditActionMemberAdded
     - AuditActionMemberRemoved
     - AuditActionMemberRoleChanged
@@ -1744,6 +1959,296 @@ definitions:
         type: boolean
         x-agent: auto_tag_skip_if_tagged
     type: object
+  github_com_Tencent_WeKnora_internal_types.Automation:
+    properties:
+      access_level:
+        allOf:
+        - $ref: '#/definitions/github_com_Tencent_WeKnora_internal_types.AssistantAccessLevel'
+        description: |-
+          AccessLevel is how far runs may change data without asking, capped by
+          the workspace's assistant ceiling.
+        x-agent: true
+      active_run_status:
+        description: ActiveRunStatus is projected from live runs and is not persisted.
+        type: string
+        x-agent: true
+        x-agent-response: true
+      approval_timeout_minutes:
+        description: |-
+          ApprovalTimeoutMinutes is how long a run waits for an approval before
+          it fails.
+        type: integer
+        x-agent: true
+      carry_last_result:
+        description: |-
+          CarryLastResult adds the last successful answer to each per-run
+          conversation.
+        type: boolean
+        x-agent: true
+      consecutive_failures:
+        type: integer
+      created_at:
+        type: string
+      description:
+        type: string
+        x-agent: true
+      enabled:
+        type: boolean
+        x-agent: true
+        x-agent-response: true
+      id:
+        type: string
+        x-agent: automation_id
+        x-agent-response: true
+      instruction:
+        description: |-
+          Instruction is the task, sent as the user message of each run after
+          its variables are filled in.
+        type: string
+        x-agent: true
+        x-agent-detail: true
+      last_run_at:
+        type: string
+        x-agent: true
+        x-agent-response: true
+      last_run_status:
+        type: string
+        x-agent: true
+        x-agent-response: true
+      last_success_at:
+        type: string
+        x-agent: true
+        x-agent-response: true
+      limits:
+        $ref: '#/definitions/github_com_Tencent_WeKnora_internal_types.AutomationLimits'
+      misfire_policy:
+        type: string
+        x-agent: true
+      model_id:
+        description: ModelID overrides the assistant's chat model; empty follows the
+          assistant default.
+        type: string
+        x-agent: true
+      name:
+        type: string
+        x-agent: true
+      next_run_at:
+        type: string
+        x-agent: true
+        x-agent-response: true
+      notify_on_success:
+        type: boolean
+        x-agent: true
+      overlap_policy:
+        type: string
+        x-agent: true
+      owner_user_id:
+        description: OwnerUserID is the account the automation runs as.
+        type: string
+      paused_reason:
+        type: string
+        x-agent: true
+        x-agent-response: true
+      persistent_session_id:
+        description: |-
+          PersistentSessionID is the conversation of a persistent automation,
+          created on its first run.
+        type: string
+      session_mode:
+        type: string
+        x-agent: true
+      tenant_id:
+        type: integer
+      trigger:
+        allOf:
+        - $ref: '#/definitions/github_com_Tencent_WeKnora_internal_types.AutomationTrigger'
+        x-agent: true
+      updated_at:
+        type: string
+    type: object
+  github_com_Tencent_WeKnora_internal_types.AutomationLimits:
+    properties:
+      max_duration_minutes:
+        description: |-
+          MaxDurationMinutes caps a run's execution time, not counting time spent
+          waiting for approval. 0 uses the default.
+        type: integer
+        x-agent: true
+    type: object
+  github_com_Tencent_WeKnora_internal_types.AutomationPatch:
+    properties:
+      access_level:
+        allOf:
+        - $ref: '#/definitions/github_com_Tencent_WeKnora_internal_types.AssistantAccessLevel'
+        description: How far runs may change data without asking
+        enum:
+        - read_only
+        - confirm
+        - auto_write
+        x-agent: true
+      approval_timeout_minutes:
+        description: How long a run waits for an approval before it fails, in minutes
+        type: integer
+        x-agent: true
+      carry_last_result:
+        description: Whether each per_run conversation gets the last successful answer
+        type: boolean
+        x-agent: true
+      description:
+        description: What it is for
+        type: string
+        x-agent: true
+      enabled:
+        description: Whether it is scheduled; on update use pause and resume instead
+        type: boolean
+      instruction:
+        description: |-
+          The task, sent as the user message of each run. May name now,
+          last_run_at, last_success_at, run_id or automation_name inside double
+          curly braces to have it filled in
+        type: string
+        x-agent: true
+        x-agent-max-bytes: "32000"
+      limits:
+        $ref: '#/definitions/github_com_Tencent_WeKnora_internal_types.AutomationLimits'
+      misfire_policy:
+        description: What happens to runs missed while the service was down or paused
+        enum:
+        - skip
+        - run_once
+        type: string
+        x-agent: true
+      model_id:
+        description: Optional chat model from model.list; empty follows the assistant
+          default
+        type: string
+        x-agent: true
+      name:
+        description: What the automation is called
+        type: string
+        x-agent: true
+      notify_on_success:
+        description: Whether a successful run notifies the owner
+        type: boolean
+        x-agent: true
+      overlap_policy:
+        description: What happens when a run is due while the previous one is still
+          going
+        enum:
+        - skip
+        - queue
+        type: string
+        x-agent: true
+      session_mode:
+        description: per_run starts a new conversation each run; persistent keeps
+          one
+        enum:
+        - per_run
+        - persistent
+        type: string
+        x-agent: true
+      trigger:
+        allOf:
+        - $ref: '#/definitions/github_com_Tencent_WeKnora_internal_types.AutomationTrigger'
+        description: When it runs
+        x-agent: true
+    type: object
+  github_com_Tencent_WeKnora_internal_types.AutomationRun:
+    properties:
+      answer:
+        description: Answer is the start of the final answer, for listings.
+        type: string
+        x-agent: true
+        x-agent-response: true
+      assistant_message_id:
+        type: string
+      automation_id:
+        type: string
+      cancel_requested:
+        description: CancelRequested stops the run at its next check.
+        type: boolean
+      created_at:
+        type: string
+      error:
+        type: string
+        x-agent: true
+        x-agent-response: true
+      finished_at:
+        type: string
+        x-agent: true
+        x-agent-response: true
+      id:
+        type: string
+        x-agent: run_id
+        x-agent-response: true
+      pending_prompt_id:
+        description: PendingPromptID is the approval a waiting run is suspended on.
+        type: string
+      scheduled_at:
+        description: |-
+          ScheduledAt is when the run was due; for a manual run, when it was
+          asked for.
+        type: string
+        x-agent: true
+        x-agent-response: true
+      session_id:
+        type: string
+        x-agent: true
+        x-agent-response: true
+      started_at:
+        type: string
+        x-agent: true
+        x-agent-response: true
+      status:
+        type: string
+        x-agent: true
+        x-agent-response: true
+      tenant_id:
+        type: integer
+      trigger_kind:
+        type: string
+        x-agent: true
+        x-agent-response: true
+      updated_at:
+        type: string
+      usage:
+        type: object
+      user_message_id:
+        description: UserMessageID and AssistantMessageID are the run's turn in SessionID.
+        type: string
+    type: object
+  github_com_Tencent_WeKnora_internal_types.AutomationTrigger:
+    properties:
+      at:
+        description: |-
+          At is when a once trigger fires, RFC3339 or a wall-clock time in
+          Timezone, such as "2006-01-02T15:04:05" or "2006-01-02 15:04".
+        type: string
+        x-agent: true
+      expr:
+        description: |-
+          Expr is a cron expression: five fields (minute first) or six (seconds
+          first), or a descriptor such as @daily.
+        type: string
+        x-agent: true
+      timezone:
+        description: Timezone is an IANA zone, e.g. Asia/Shanghai; empty means UTC.
+        type: string
+        x-agent: true
+      type:
+        description: Type is cron or once.
+        type: string
+        x-agent: true
+    type: object
+  github_com_Tencent_WeKnora_internal_types.BackgroundInjection:
+    properties:
+      ack_ids:
+        items:
+          type: string
+        type: array
+      content:
+        type: string
+    type: object
   github_com_Tencent_WeKnora_internal_types.COSEngineConfig:
     properties:
       app_id:
@@ -1853,6 +2358,12 @@ definitions:
         type: array
       max_rounds:
         type: integer
+      parent_slot_aggregation:
+        description: |-
+          ParentSlotAggregation collapses hits that share a ParentChunkID into one
+          top-k slot, so sibling children of the same parent cannot crowd out other
+          pages. Set by the knowledge-search API; off by default.
+        type: boolean
       query:
         type: string
       query_understand_model_id:
@@ -2392,6 +2903,14 @@ definitions:
     type: object
   github_com_Tencent_WeKnora_internal_types.CustomAgentConfig:
     properties:
+      access_level:
+        allOf:
+        - $ref: '#/definitions/github_com_Tencent_WeKnora_internal_types.AssistantAccessLevel'
+        description: |-
+          AccessLevel is the highest access level a run of this agent gets: how
+          far it may change data (MCP tools, Wiki writes) without asking. Empty
+          means auto_write. The WeKnora assistant uses the workspace's assistant
+          ceiling instead.
       agent_mode:
         description: |-
           ===== Basic Settings =====
@@ -2554,11 +3073,10 @@ definitions:
         description: |-
           Maximum completion tokens. Quick-answer uses this for the RAG answer.
           Smart-reasoning ReAct rounds send this value as-is (zero becomes
-          DefaultMaxCompletionTokens at call time: 4096, or 24576 with a sandbox).
+          DefaultMaxCompletionTokens at call time: 24576 for smart reasoning).
         type: integer
       max_iterations:
         description: |-
-          ===== Agent Mode Settings =====
           Maximum iterations for the ReAct loop. Zero is unset (filled with a
           default). A negative value is unlimited: the loop runs until the model
           stops, the user cancels, or another guard fires.
@@ -2623,6 +3141,7 @@ definitions:
       rerank_model_id:
         description: ReRank model ID for retrieval
         type: string
+        x-agent: true
       rerank_threshold:
         description: Rerank threshold
         type: number
@@ -2730,6 +3249,20 @@ definitions:
         x-agent: true
         x-agent-detail: true
         x-agent-response: true
+      workbench:
+        description: |-
+          ===== Agent Mode Settings =====
+          Workbench binds this agent to a business domain ("工作台"), which decides
+          the set of UI components its chats render. This is the single source of
+          truth: a session's workbench is derived from its agent, never stored as an
+          independent fact (see sessions.agent_id, which is a materialised copy used
+          only for list filtering).
+
+          Valid values: an ID from WorkbenchRegistry (types/workbench.go), or
+          "shared" for agents available in every workbench. Empty and unknown values
+          both normalise to NoWorkbench via ResolveWorkbench — a mistyped tag degrades
+          to "no workbench" instead of rendering a blank dock forever.
+        type: string
     type: object
   github_com_Tencent_WeKnora_internal_types.DataSource:
     properties:
@@ -2800,6 +3333,30 @@ definitions:
         type: string
       updated_at:
         description: Last update timestamp
+        type: string
+    type: object
+  github_com_Tencent_WeKnora_internal_types.DefaultSettings:
+    properties:
+      asr_model_id:
+        description: ASRModelID is the default ASR model.
+        type: string
+      chat_model_id:
+        description: ChatModelID is the default KnowledgeQA model.
+        type: string
+      embedding_model_id:
+        description: EmbeddingModelID is the default Embedding model.
+        type: string
+      rerank_model_id:
+        description: RerankModelID is the default Rerank model.
+        type: string
+      utility_model_id:
+        description: |-
+          UtilityModelID is the KnowledgeQA model for short generation tasks
+          such as writing MCP usage instructions. Empty follows the chat default.
+        type: string
+      vlm_model_id:
+        description: VLMModelID is the default VLLM or vision-capable KnowledgeQA
+          model.
         type: string
     type: object
   github_com_Tencent_WeKnora_internal_types.DockerSandboxConfig:
@@ -3676,6 +4233,41 @@ definitions:
         description: User query text
         type: string
     type: object
+  github_com_Tencent_WeKnora_internal_types.HostApprovalSnapshot:
+    properties:
+      allow_session:
+        type: boolean
+      command:
+        type: string
+      cwd:
+        type: string
+      denial_snippet:
+        type: string
+      file_path:
+        type: string
+      first_attempt_ran:
+        type: boolean
+      grant_access:
+        type: string
+      grant_path:
+        type: string
+      reason:
+        type: string
+      reviewer:
+        type: string
+      risk_level:
+        type: string
+      session_rules:
+        items:
+          type: string
+        type: array
+      tool:
+        type: string
+      write_bytes:
+        type: integer
+      write_mode:
+        type: string
+    type: object
   github_com_Tencent_WeKnora_internal_types.ImageActionsConfig:
     properties:
       ocr:
@@ -3685,9 +4277,7 @@ definitions:
     properties:
       attrs:
         additionalProperties: {}
-        description: |-
-          Attrs is the observed attribute map (e.g. contain.text, contain.data_visual)
-          produced by the attribute pipeline. Absent keys mean "not observed".
+        description: Attrs 包含模型观察属性和解析器的 source.* 来源位置；缺少来源键表示未知。
         type: object
       caption:
         description: Caption is the model-generated image description.
@@ -3753,16 +4343,6 @@ definitions:
         items:
           $ref: '#/definitions/github_com_Tencent_WeKnora_internal_types.ImageAttrCondition'
         type: array
-      on_unobserved:
-        description: |-
-          OnUnobserved is the OCR decision used when the observation does not
-          answer for one of the attributes the policy reads — the attribute is
-          absent because the model skipped the line, or because the value it wrote
-          was not one of the allowed ones. The default is true: an incomplete
-          observation keeps extracting, so a missed block of text costs one extra
-          call instead of being lost. Turn it off only with a model reliable enough
-          to answer every attribute line.
-        type: boolean
     type: object
   github_com_Tencent_WeKnora_internal_types.ImagePipelineID:
     enum:
@@ -3784,7 +4364,10 @@ definitions:
         description: |-
           ImageActions overrides the built-in attribute→work table (see
           DefaultImageActions). A nil value keeps the conservative default: run OCR
-          for block text, data visuals, and unobserved images.
+          for block text and data visuals. What to do about an image whose
+          attributes were NOT observed is deliberately not part of this table — it
+          is a scheduling decision, so it belongs to the pipeline that observes
+          (`ocr_on_unobserved` in that pipeline's slot).
       image_attrs_enabled:
         description: |-
           ImageAttrsEnabled turns the attribute-observed image pipeline on for this
@@ -3812,13 +4395,14 @@ definitions:
       image_pipeline_params:
         additionalProperties: {}
         description: |-
-          ImagePipelineParams holds the tunables of ImagePipelineID, keyed by the
-          field's own key. The map travels whole: a key a pipeline no longer
-          declares is dropped when the run reads it, so an old stored config stays
-          loadable rather than being rewritten on save.
+          ImagePipelineParams holds the tunables of ImagePipelineID, keyed by each
+          field's slot — the pipeline id joined to the field's own key, built by
+          SlotKey and read back by ImagePipelineParam. The map travels whole: a key
+          a pipeline no longer declares is dropped when the run reads it, so an old
+          stored config stays loadable rather than being rewritten on save.
         type: object
         x-agent: true
-        x-agent-keys: enable_caption|enable_ocr|default.enable_caption|default.enable_ocr
+        x-agent-keys: default.caption_enabled|default.ocr_enabled
         x-agent-response: true
       image_vector_enabled:
         description: |-
@@ -4204,8 +4788,10 @@ definitions:
           by the same model call as the summary and feeds the knowledge-base
           level description aggregation. nil when no summary has been generated.
       source:
-        description: Source of the knowledge (e.g. URL address for url type, "manual"
-          for manual type)
+        description: |-
+          Source of the knowledge: a URL for anything ingested from one, or the
+          literal "manual" when the caller recorded no provenance. Manual entries
+          can carry a URL too — see ManualKnowledgePayload.Source.
         type: string
         x-agent: true
       stall_state:
@@ -5156,6 +5742,12 @@ definitions:
     type: object
   github_com_Tencent_WeKnora_internal_types.MCPTool:
     properties:
+      annotations:
+        allOf:
+        - $ref: '#/definitions/github_com_Tencent_WeKnora_internal_types.MCPToolAnnotations'
+        description: |-
+          Annotations are the hints the service declares in tools/list. They come
+          from outside and only seed the tool's risk.
       description:
         type: string
         x-agent: true
@@ -5171,6 +5763,13 @@ definitions:
           user approves in UI (issue #1173).'
         type: boolean
         x-agent: true
+    type: object
+  github_com_Tencent_WeKnora_internal_types.MCPToolAnnotations:
+    properties:
+      destructiveHint:
+        type: boolean
+      readOnlyHint:
+        type: boolean
     type: object
   github_com_Tencent_WeKnora_internal_types.MCPTransportType:
     enum:
@@ -5204,6 +5803,14 @@ definitions:
         x-agent-required: true
       process_config:
         $ref: '#/definitions/github_com_Tencent_WeKnora_internal_types.KnowledgeProcessOverrides'
+      source:
+        description: |-
+          Source records where the content came from when the caller knows it —
+          the upstream article URL for something pasted out of a reader, for
+          example. Empty means "no provenance recorded" and the row keeps the
+          literal "manual" marker. Stored verbatim; validating that it is
+          well-formed is the service's job, not the type's.
+        type: string
       status:
         description: draft keeps the document out of search; publish indexes it.
         enum:
@@ -5220,6 +5827,14 @@ definitions:
         description: Document title.
         type: string
         x-agent: true
+      vault_path:
+        description: |-
+          VaultPath is the file this content was read from, relative to the
+          configured vault root. It is what lets a relative image reference in
+          Content ("images/fig.png") resolve to a real file at render time without
+          the content being rewritten or the image being copied into storage.
+          Ignored unless the entry is served from a vault.
+        type: string
     type: object
   github_com_Tencent_WeKnora_internal_types.MatchType:
     enum:
@@ -5328,7 +5943,7 @@ definitions:
           records every topic on first sight, which is usually too noisy.
         type: integer
       max_items:
-        description: MaxItems caps active items per subject. 0 means DefaultMemoryMaxItems.
+        description: MaxItems 分别限制每个主体的 active 和 pending 条数；0 使用默认值。
         type: integer
       retrieval_conditioning:
         description: |-
@@ -5469,6 +6084,25 @@ definitions:
         description: WriteMode is the workspace write mode.
         type: string
     type: object
+  github_com_Tencent_WeKnora_internal_types.MemorySubjectSummary:
+    properties:
+      active_count:
+        type: integer
+      enabled:
+        type: boolean
+      id:
+        type: string
+      item_count:
+        type: integer
+      last_activity_at:
+        type: string
+      pending_count:
+        type: integer
+      principal_type:
+        type: string
+      subject_id:
+        type: string
+    type: object
   github_com_Tencent_WeKnora_internal_types.MemoryTopicView:
     properties:
       aliases:
@@ -5551,6 +6185,11 @@ definitions:
         description: Channel indicates the source channel of this message (e.g., "web",
           "api", "im")
         type: string
+      collaboration_status:
+        description: |-
+          CollaborationStatus is projected from durable collaboration state at read
+          time, including completed tasks after the transient stream has expired.
+        type: object
       content:
         description: Message text content
         type: string
@@ -5562,6 +6201,10 @@ definitions:
         type: string
         x-agent: true
         x-agent-response: true
+      delegated_prompts:
+        items:
+          $ref: '#/definitions/github_com_Tencent_WeKnora_internal_types.PendingPromptView'
+        type: array
       deleted_at:
         allOf:
         - $ref: '#/definitions/gorm.DeletedAt'
@@ -5606,11 +6249,14 @@ definitions:
           turn. It is useful for reproducibility and suggestion generation.
         type: string
       pending_prompt:
-        allOf:
-        - $ref: '#/definitions/github_com_Tencent_WeKnora_internal_types.PendingPromptView'
+        $ref: '#/definitions/github_com_Tencent_WeKnora_internal_types.PendingPromptView'
+      prompt_history:
         description: |-
           PendingPrompt is the prompt an awaiting_input message waits on. The
           message list fills it in for the prompt's owner; it is never stored.
+        items:
+          $ref: '#/definitions/github_com_Tencent_WeKnora_internal_types.PendingPromptView'
+        type: array
       request_id:
         description: Request identifier for tracking API requests
         type: string
@@ -6497,6 +7143,9 @@ definitions:
       mineru_cloud_model:
         description: MinerU 云 API 解析参数
         type: string
+      mineru_effort:
+        description: 'hybrid: medium/high; empty = server default'
+        type: string
       mineru_enable_formula:
         type: boolean
       mineru_enable_ocr:
@@ -6597,7 +7246,11 @@ definitions:
     type: object
   github_com_Tencent_WeKnora_internal_types.PendingPromptView:
     properties:
+      close_reason:
+        type: string
       created_at:
+        type: string
+      delegated_task:
         type: string
       expires_at:
         type: string
@@ -6607,6 +7260,10 @@ definitions:
         type: string
       request:
         type: object
+      response:
+        type: object
+      status:
+        type: string
       tool_call_id:
         type: string
     type: object
@@ -6674,6 +7331,11 @@ definitions:
           indexed beside the chunk.
         type: boolean
         x-agent: question_generation_enabled
+      model_id:
+        description: ModelID selects a chat model for questions. Empty inherits the
+          summary model.
+        type: string
+        x-agent: question_model_id
       question_count:
         description: QuestionCount is how many questions to write per chunk, from
           1 to 10.
@@ -7202,6 +7864,12 @@ definitions:
     type: object
   github_com_Tencent_WeKnora_internal_types.SandboxCheckpoint:
     properties:
+      background_active:
+        description: |-
+          BackgroundActive marks a commit taken while background work was live in
+          the session. The work may have been mid-write, so fork and rewind never
+          roll a workspace back to it.
+        type: boolean
       commit_sha:
         type: string
       committed_at:
@@ -7348,6 +8016,15 @@ definitions:
       end_at:
         description: End at
         type: integer
+      evidence_handles:
+        description: |-
+          EvidenceHandles records storage references that citation sources of this
+          result expose to the model even though merge scoping kept them out of
+          Content and ImageInfo. The message-scoped file proxy reads them as
+          retrieval evidence (#5069); prompts and UI do not consume them.
+        items:
+          type: string
+        type: array
       id:
         description: ID
         type: string
@@ -7463,6 +8140,19 @@ definitions:
     type: object
   github_com_Tencent_WeKnora_internal_types.Session:
     properties:
+      agent_id:
+        description: |-
+          AgentID is the agent this session is bound to — the one its FIRST
+          message used. It is written once (see
+          repository.sessionRepository.UpdateLastRequestState, which uses
+          COALESCE(NULLIF(agent_id, ''), ?) so a later message switching agents
+          cannot rewrite the session's identity) and read back by the sidebar to
+          group conversations by agent.
+
+          Empty means unbound: either the session predates the column, or it has
+          not been used with an agent yet. The sidebar renders those under an
+          explicit "no agent" group rather than dropping them.
+        type: string
       created_at:
         type: string
         x-agent: true
@@ -7521,6 +8211,14 @@ definitions:
           that reopening the session can restore the original request context to
           the chat UI. Stored in the legacy sessions.agent_config JSONB column to
           avoid a new migration; the shape used today is `SessionLastRequestState`.
+      owner_auth_source:
+        description: |-
+          OwnerAuthSource records, server-side, how UserID was authenticated when
+          the session was created or its owner first bound (AuthSource*).
+          Per-user sandbox allocation reads it; client input never sets it
+          (CreateSession overwrites). Empty on rows created before the column
+          existed, which means "unknown".
+        type: string
       parent_session_id:
         description: |-
           ParentSessionID names the session this one was forked from. Empty for
@@ -7600,6 +8298,19 @@ definitions:
     type: object
   github_com_Tencent_WeKnora_internal_types.SessionListItem:
     properties:
+      agent_id:
+        description: |-
+          AgentID is the agent this session is bound to — the one its FIRST
+          message used. It is written once (see
+          repository.sessionRepository.UpdateLastRequestState, which uses
+          COALESCE(NULLIF(agent_id, ''), ?) so a later message switching agents
+          cannot rewrite the session's identity) and read back by the sidebar to
+          group conversations by agent.
+
+          Empty means unbound: either the session predates the column, or it has
+          not been used with an agent yet. The sidebar renders those under an
+          explicit "no agent" group rather than dropping them.
+        type: string
       created_at:
         type: string
         x-agent: true
@@ -7663,6 +8374,14 @@ definitions:
           that reopening the session can restore the original request context to
           the chat UI. Stored in the legacy sessions.agent_config JSONB column to
           avoid a new migration; the shape used today is `SessionLastRequestState`.
+      owner_auth_source:
+        description: |-
+          OwnerAuthSource records, server-side, how UserID was authenticated when
+          the session was created or its owner first bound (AuthSource*).
+          Per-user sandbox allocation reads it; client input never sets it
+          (CreateSession overwrites). Empty on rows created before the column
+          existed, which means "unknown".
+        type: string
       parent_session_id:
         description: |-
           ParentSessionID names the session this one was forked from. Empty for
@@ -8302,6 +9021,11 @@ definitions:
         - $ref: '#/definitions/github_com_Tencent_WeKnora_internal_types.CredentialsConfig'
         description: 'Credentials config: third-party provider credentials (e.g. WeKnoraCloud
           AppID/AppSecret)'
+      default_settings:
+        allOf:
+        - $ref: '#/definitions/github_com_Tencent_WeKnora_internal_types.DefaultSettings'
+        description: 'Default settings: the workspace''s default model for each type
+          and purpose'
       default_storage_backend_id:
         description: DefaultStorageBackendID is the workspace default concrete storage
           instance.
@@ -8493,6 +9217,14 @@ definitions:
     - TenantRoleViewer
   github_com_Tencent_WeKnora_internal_types.TenantSandboxConfig:
     properties:
+      allocation_mode:
+        description: |-
+          AllocationMode decides how a session that has not yet used a sandbox
+          of this config is placed: "session" (default) gives it a machine of its
+          own, "user" lets one verified owner's sessions share a machine. A
+          session never changes mode after its first use; see
+          internal/sandbox/allocation.
+        type: string
       allow_private_endpoints:
         description: |-
           AllowPrivateEndpoints permits this workspace config to reach RFC1918 or
@@ -8553,6 +9285,7 @@ definitions:
           SkillRolloutNextTurn rebuild on the next chat turn. SkillRolloutNewSession
           leaves those sandboxes on the previous image; only sessions that start
           afterwards boot the new snapshot.
+          User allocation always keeps existing shared machines, regardless of this setting.
         type: string
       terminal_idle_disconnect_sec:
         description: |-
@@ -8561,6 +9294,12 @@ definitions:
           connection so the sandbox can pause on its provider TTL. Terminal
           counts keystrokes and PTY output; desktop counts mouse and keyboard.
           0 uses the built-in default (15 minutes). Not an identity field.
+        type: integer
+      user_sandbox_empty_retention_days:
+        description: |-
+          UserSandboxEmptyRetentionDays is how long a user machine with no live
+          session is kept before the reclaim job deletes it. 0 means the default
+          (7); values above 90 are rejected.
         type: integer
       volume_mount:
         allOf:
@@ -8602,6 +9341,43 @@ definitions:
         type: integer
       total_tokens:
         type: integer
+    type: object
+  github_com_Tencent_WeKnora_internal_types.ToolApprovalRecord:
+    properties:
+      approved:
+        type: boolean
+      args_json:
+        type: string
+      canceled:
+        type: boolean
+      description:
+        type: string
+      host:
+        $ref: '#/definitions/github_com_Tencent_WeKnora_internal_types.HostApprovalSnapshot'
+      kind:
+        type: string
+      mcp_tool_name:
+        type: string
+      pending_id:
+        type: string
+      reason:
+        type: string
+      requested_at:
+        type: integer
+      resolved:
+        type: boolean
+      risk_level:
+        type: string
+      scope:
+        type: string
+      service_name:
+        type: string
+      timed_out:
+        type: boolean
+      timeout_seconds:
+        type: integer
+      tool_call_id:
+        type: string
     type: object
   github_com_Tencent_WeKnora_internal_types.ToolCall:
     properties:
@@ -9039,6 +9815,16 @@ definitions:
         description: 需要重新初始化的原因
         type: string
     type: object
+  github_com_Tencent_WeKnora_internal_types.WebSearchClients:
+    properties:
+      fetch:
+        description: Fetch is the provider type whose API reads pages, or "local"
+          for WeKnora's own reader.
+        type: string
+      search:
+        description: Search is the provider type whose API runs searches.
+        type: string
+    type: object
   github_com_Tencent_WeKnora_internal_types.WebSearchConfig:
     properties:
       api_key:
@@ -9184,6 +9970,9 @@ definitions:
     - metaso
     - bocha
     - serply
+    - minimax
+    - deepseek
+    - searchapi
     type: string
     x-enum-varnames:
     - WebSearchProviderTypeBrave
@@ -9200,8 +9989,16 @@ definitions:
     - WebSearchProviderTypeMetaso
     - WebSearchProviderTypeBocha
     - WebSearchProviderTypeSerply
+    - WebSearchProviderTypeMiniMax
+    - WebSearchProviderTypeDeepSeek
+    - WebSearchProviderTypeSearchAPI
   github_com_Tencent_WeKnora_internal_types.WebSearchProviderTypeInfo:
     properties:
+      clients:
+        allOf:
+        - $ref: '#/definitions/github_com_Tencent_WeKnora_internal_types.WebSearchClients'
+        description: Search and fetch readers registered for this type; nil when the
+          type is not registered.
       config_fields:
         description: Provider-specific non-secret configuration rendered dynamically
           by the frontend.
@@ -9249,6 +10046,13 @@ definitions:
     type: object
   github_com_Tencent_WeKnora_internal_types.WikiConfig:
     properties:
+      auto_generate:
+        default: true
+        description: |-
+          AutoGenerate disables background Wiki generation when false. Omitted means true.
+          Manual page APIs and Wiki retrieval remain available while Wiki is enabled.
+        type: boolean
+        x-agent: wiki_auto_generate
       content_instructions:
         description: ContentInstructions sets tone and emphasis for generated Wiki
           prose. Citations stay fixed.
@@ -10028,12 +10832,62 @@ definitions:
         description: Valid is true if Time is not NULL
         type: boolean
     type: object
+  internal_handler.AcceptStockWatchDiaryRequest:
+    properties:
+      to_state:
+        description: |-
+          ToState is where the human is moving the symbol. It is validated against
+          the diary's own verdict set, so a client cannot use "accept" as a
+          back door for an arbitrary state change: accepting "buy" can only mean
+          holding, and accepting "exit" can only mean dropping.
+        type: string
+      trade_date:
+        description: |-
+          TradeDate is the trading day of the diary being adopted, YYYY-MM-DD.
+
+          It is required rather than defaulted to "the latest" so that the event
+          log records which observation the human acted on. Defaulting to the
+          newest row would make an adoption from the drawer ambiguous the moment
+          a new diary lands overnight.
+        type: string
+    required:
+    - to_state
+    - trade_date
+    type: object
   internal_handler.AddFavoriteRequest:
     properties:
       id:
         type: string
       type:
         type: string
+    type: object
+  internal_handler.AddStockWatchConditionRequest:
+    properties:
+      field:
+        type: string
+      op:
+        type: string
+      value:
+        type: number
+    type: object
+  internal_handler.AddStockWatchRequest:
+    properties:
+      exchange:
+        type: string
+      name:
+        type: string
+      note:
+        type: string
+      thscode:
+        type: string
+    type: object
+  internal_handler.AdminMemorySettingsRequest:
+    properties:
+      enabled:
+        example: false
+        type: boolean
+    required:
+    - enabled
     type: object
   internal_handler.AgentChunkDetail:
     properties:
@@ -10283,6 +11137,88 @@ definitions:
         x-agent: true
     required:
     - name
+    type: object
+  internal_handler.CreateAutomationRequest:
+    properties:
+      access_level:
+        allOf:
+        - $ref: '#/definitions/github_com_Tencent_WeKnora_internal_types.AssistantAccessLevel'
+        description: How far runs may change data without asking; default confirm
+        enum:
+        - read_only
+        - confirm
+        - auto_write
+        x-agent: true
+      approval_timeout_minutes:
+        description: How long a run waits for an approval before it fails, in minutes;
+          default 1440
+        type: integer
+        x-agent: true
+      carry_last_result:
+        description: Whether each per_run conversation gets the last successful answer
+        type: boolean
+        x-agent: true
+      description:
+        description: What it is for
+        type: string
+        x-agent: true
+      instruction:
+        description: |-
+          The task, sent as the user message of each run. May name now,
+          last_run_at, last_success_at, run_id or automation_name inside double
+          curly braces to have it filled in
+        type: string
+        x-agent: true
+        x-agent-max-bytes: "32000"
+      limits:
+        $ref: '#/definitions/github_com_Tencent_WeKnora_internal_types.AutomationLimits'
+      misfire_policy:
+        description: What happens to runs missed while the service was down; default
+          skip
+        enum:
+        - skip
+        - run_once
+        type: string
+        x-agent: true
+      model_id:
+        description: Optional chat model from model.list; empty follows the assistant
+          default
+        type: string
+        x-agent: true
+      name:
+        description: What the automation is called
+        type: string
+        x-agent: true
+      notify_on_success:
+        description: Whether a successful run notifies the owner; failures always
+          do
+        type: boolean
+        x-agent: true
+      overlap_policy:
+        description: What happens when a run is due while the previous one is still
+          going; default skip
+        enum:
+        - skip
+        - queue
+        type: string
+        x-agent: true
+      session_mode:
+        description: per_run (default) starts a new conversation each run; persistent
+          keeps one
+        enum:
+        - per_run
+        - persistent
+        type: string
+        x-agent: true
+      trigger:
+        allOf:
+        - $ref: '#/definitions/github_com_Tencent_WeKnora_internal_types.AutomationTrigger'
+        description: When it runs
+        x-agent: true
+    required:
+    - instruction
+    - name
+    - trigger
     type: object
   internal_handler.CreateKnowledgeFromURLRequest:
     properties:
@@ -10673,6 +11609,12 @@ definitions:
       db_version:
         type: string
         x-agent: true
+      docreader_commit_id:
+        type: string
+        x-agent: true
+      docreader_version:
+        type: string
+        x-agent: true
       edition:
         type: string
         x-agent: true
@@ -10714,6 +11656,13 @@ definitions:
       success:
         example: true
         type: boolean
+    type: object
+  internal_handler.IgnoreStockWatchDiaryRequest:
+    properties:
+      trade_date:
+        type: string
+    required:
+    - trade_date
     type: object
   internal_handler.ImageAttrSchemaData:
     properties:
@@ -10879,7 +11828,14 @@ definitions:
   internal_handler.KBModelConfigRequest:
     properties:
       asr_config:
-        $ref: '#/definitions/github_com_Tencent_WeKnora_internal_types.ASRConfig'
+        properties:
+          enabled:
+            type: boolean
+          language:
+            type: string
+          model_id:
+            type: string
+        type: object
       documentSplitting:
         description: 文档分块配置
         properties:
@@ -10958,6 +11914,8 @@ definitions:
             type: string
           enabled:
             type: boolean
+          modelId:
+            type: string
           questionCount:
             type: integer
         type: object
@@ -10967,7 +11925,24 @@ definitions:
         description: 存储引擎选择（"local" | "minio" | "cos"），影响文档上传与文档内图片存储，参数从全局设置读取
         type: string
       vlm_config:
-        $ref: '#/definitions/github_com_Tencent_WeKnora_internal_types.VLMConfig'
+        properties:
+          api_key:
+            type: string
+          base_url:
+            type: string
+          custom_instructions:
+            type: string
+          description_language:
+            type: string
+          enabled:
+            type: boolean
+          interface_type:
+            type: string
+          model_id:
+            type: string
+          model_name:
+            type: string
+        type: object
     required:
     - llmModelId
     type: object
@@ -11370,6 +12345,18 @@ definitions:
       total:
         type: integer
     type: object
+  internal_handler.ListMemorySubjectsResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/github_com_Tencent_WeKnora_internal_types.MemorySubjectSummary'
+        type: array
+      success:
+        example: true
+        type: boolean
+      total:
+        type: integer
+    type: object
   internal_handler.ListOrganizationSharedAgentsResponse:
     properties:
       data:
@@ -11548,6 +12535,13 @@ definitions:
         items:
           type: string
         type: array
+    type: object
+  internal_handler.MemoryAdminErrorResponse:
+    properties:
+      error: {}
+      success:
+        example: false
+        type: boolean
     type: object
   internal_handler.MessageResponse:
     properties:
@@ -11850,6 +12844,10 @@ definitions:
         x-agent: true
       name:
         description: Agent name
+        type: string
+        x-agent: true
+      rerank_model_id:
+        description: Rerank model for knowledge retrieval; empty clears the selection
         type: string
         x-agent: true
       selected_skills:
@@ -12914,6 +13912,23 @@ definitions:
       parameters:
         $ref: '#/definitions/github_com_Tencent_WeKnora_internal_types.WebSearchProviderParameters'
     type: object
+  internal_handler.UpdateStockWatchRequest:
+    properties:
+      name:
+        type: string
+      note:
+        description: Note is the user's reason for tracking the symbol; "" clears
+          it.
+        type: string
+      sort_order:
+        type: integer
+      state:
+        description: |-
+          State is the pool's manual state machine; only the values in
+          types.StockWatchState* are accepted, and only a legal move from the
+          row's current state (同一个事务里校验).
+        type: string
+    type: object
   internal_handler.UpdateStoreRequest:
     properties:
       name:
@@ -12949,6 +13964,25 @@ definitions:
         type: boolean
       user:
         $ref: '#/definitions/github_com_Tencent_WeKnora_internal_types.UserInfo'
+    type: object
+  internal_handler.ValidateTriggerRequest:
+    properties:
+      trigger:
+        allOf:
+        - $ref: '#/definitions/github_com_Tencent_WeKnora_internal_types.AutomationTrigger'
+        description: The trigger to check
+        x-agent: true
+    required:
+    - trigger
+    type: object
+  internal_handler.ValidateTriggerResult:
+    properties:
+      next_runs:
+        description: The next times the trigger fires, in UTC
+        items:
+          type: string
+        type: array
+        x-agent: true
     type: object
   internal_handler.WebSearchProviderTestResponse:
     properties:
@@ -13204,6 +14238,34 @@ definitions:
     required:
     - name
     type: object
+  internal_handler.credentialVaultCreateRequest:
+    properties:
+      domains:
+        items:
+          type: string
+        type: array
+      password:
+        type: string
+      site:
+        type: string
+      title:
+        type: string
+      username:
+        type: string
+    type: object
+  internal_handler.credentialVaultUpdateRequest:
+    properties:
+      domains:
+        items:
+          type: string
+        type: array
+      password:
+        type: string
+      title:
+        type: string
+      username:
+        type: string
+    type: object
   internal_handler.faqDeleteRequest:
     properties:
       ids:
@@ -13216,6 +14278,73 @@ definitions:
         x-agent-maximum: "20"
     required:
     - ids
+    type: object
+  internal_handler.haloArchiveRequest:
+    properties:
+      include_external:
+        description: |-
+          IncludeExternal 默认 false，但**可以显式打开**。
+
+          两融（东财稳定档）与北向（同花顺）都挂在 external 上，所以不打开时报告里
+          就没有这两节 —— 这是刻意的默认：external 里还包含 push2his（资金流，易封档，
+          实测已被 IP 级封禁），归档一次报告不该顺手把请求打到那里去。
+          需要那两节的调用方显式传 true，并接受一次外网往返。
+        type: boolean
+      knowledge_base_id:
+        type: string
+      period:
+        type: string
+      publish:
+        description: |-
+          Publish 默认 false：归档先落成草稿。
+
+          报告里约三成内容是 AI 判断（7 个定性维度及其子项），且自带 30 天有效期
+          （见模板免责声明）。直接 publish 等于把一批会过期的模型判断放进可检索、
+          可被引用的层。人工过一眼再发布，代价很小。
+        type: boolean
+      report_type:
+        type: string
+      scope:
+        type: string
+      thscode:
+        type: string
+    type: object
+  internal_handler.haloReportRequest:
+    properties:
+      include_announcements:
+        description: |-
+          IncludeAnnouncements 用指针是为了区分「没传」与「显式传 false」。
+          未传时按 true 处理：面板要展示的就是完整报告，而公告只多一次巨潮请求
+          （单页）。显式传 false 是给「不想为一次预览打外网」的调用方留的出口。
+        type: boolean
+      include_external:
+        description: |-
+          IncludeExternal 默认 false，理由同归档：external 里有 push2his 易封档，
+          而两融/北向要它。需要那两节的调用方显式传 true。
+        type: boolean
+      period:
+        type: string
+      report_type:
+        type: string
+      scope:
+        type: string
+      thscode:
+        type: string
+    type: object
+  internal_handler.haloSyncRequest:
+    properties:
+      force:
+        description: |-
+          Force 默认 false。缓存键是 (thscode, report_type, year)，年报一年只变一次，
+          所以日常同步几乎必然命中缓存；只有抽取逻辑修好后需要重跑才开。
+        type: boolean
+      report_type:
+        description: |-
+          ReportType 默认 annual —— 年报是唯一含员工人数的口径，而 HALO 的
+          资本-劳动力比率要员工数，所以面板同步固定走年报。
+        type: string
+      thscode:
+        type: string
     type: object
   internal_handler.imageListRequestBody:
     properties:
@@ -13793,15 +14922,16 @@ definitions:
         description: Minimum keyword score
         type: number
       knowledge_base_id:
-        description: Single knowledge base ID (for backward compatibility)
+        description: KnowledgeBaseID is a single KB (for backward compatibility).
         type: string
       knowledge_base_ids:
-        description: IDs of knowledge bases to search (multi-KB support)
+        description: KnowledgeBaseIDs lists the KBs to search (multi-KB support).
         items:
           type: string
         type: array
       knowledge_ids:
-        description: IDs of specific knowledge (files) to search
+        description: KnowledgeIDs narrows the search to specific knowledge (file)
+          IDs.
         items:
           type: string
         type: array
@@ -13809,19 +14939,32 @@ definitions:
         description: Number of results to return
         type: integer
       mentioned_items:
-        description: Optional scoped tag mentions
+        description: MentionedItems carries optional scoped tag mentions.
         items:
           $ref: '#/definitions/internal_handler_session.MentionedItemRequest'
         type: array
+      parent_slot_aggregation:
+        description: |-
+          ParentSlotAggregation gives one top-k slot to all hits sharing a parent
+          chunk, returning the parent body with the matched child ids.
+        type: boolean
       query:
-        description: Query text to search for
+        description: |-
+          Query is the text query. It is required unless QueryImage is set: an
+          image-only request searches by visual similarity.
+        type: string
+      query_image:
+        description: |-
+          QueryImage is a base64 (optionally a data URI) image used as the vector
+          query instead of Query text. When both are set the image drives vector
+          recall and the text drives keyword recall and rerank.
         type: string
       rerank:
         allOf:
         - $ref: '#/definitions/github_com_Tencent_WeKnora_internal_types.RerankOptions'
         description: Rerank override
       tag_ids:
-        description: Tag IDs for filtering within a single KB
+        description: TagIDs filters within a single KB.
         items:
           type: string
         type: array
@@ -13829,8 +14972,6 @@ definitions:
         description: Optional overrides of the tenant retrieval config. Omitted fields
           keep it.
         type: number
-    required:
-    - query
     type: object
   internal_handler_session.SteerMessageRequest:
     properties:
@@ -13862,6 +15003,21 @@ definitions:
         type: string
     required:
     - message_id
+    type: object
+  internal_handler_session.artifactLibraryResponse:
+    properties:
+      data: {}
+      page:
+        type: integer
+        x-agent: true
+      page_size:
+        type: integer
+        x-agent: true
+      success:
+        type: boolean
+      total:
+        type: integer
+        x-agent: true
     type: object
   internal_handler_session.batchDeleteRequest:
     properties:
@@ -13899,6 +15055,263 @@ info:
   title: WeKnora API
   version: "1.0"
 paths:
+  /admin/memory/subjects:
+    get:
+      description: 仅允许 JWT 登录的租户管理员或所有者访问；返回主体 UUID、开关、分类计数与最近活动时间，不返回记忆正文
+      parameters:
+      - default: 50
+        description: 每页条数，默认 50，最大 200
+        in: query
+        name: limit
+        type: integer
+      - default: 0
+        description: 非负偏移量
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_handler.ListMemorySubjectsResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/internal_handler.MemoryAdminErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_handler.MemoryAdminErrorResponse'
+      security:
+      - Bearer: []
+      summary: 列出租户记忆主体
+      tags:
+      - 记忆管理
+  /admin/memory/subjects/{subject_id}/items:
+    delete:
+      description: 仅允许 JWT 登录的租户管理员或所有者访问；支持清空已关闭记忆的主体，不阻止未来新消息产生记忆
+      parameters:
+      - description: 记忆主体 UUID
+        in: path
+        name: subject_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_handler.ClearResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/internal_handler.MemoryAdminErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_handler.MemoryAdminErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_handler.MemoryAdminErrorResponse'
+      security:
+      - Bearer: []
+      summary: 清空指定主体的记忆
+      tags:
+      - 记忆管理
+    get:
+      description: 仅允许 JWT 登录的租户管理员或所有者访问；subject_id 是主体 UUID，并非 principal storage
+        ID
+      parameters:
+      - description: 记忆主体 UUID
+        in: path
+        name: subject_id
+        required: true
+        type: string
+      - description: 状态过滤
+        enum:
+        - active
+        - superseded
+        - archived
+        - pending
+        in: query
+        name: status
+        type: string
+      - default: 50
+        description: 每页条数，默认 50，最大 200
+        in: query
+        name: limit
+        type: integer
+      - default: 0
+        description: 非负偏移量
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_handler.ListItemsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_handler.MemoryAdminErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/internal_handler.MemoryAdminErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_handler.MemoryAdminErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_handler.MemoryAdminErrorResponse'
+      security:
+      - Bearer: []
+      summary: 查看指定主体的记忆
+      tags:
+      - 记忆管理
+  /admin/memory/subjects/{subject_id}/items/{id}/confirm:
+    post:
+      description: 仅允许 JWT 登录的租户管理员或所有者访问；确认 pending 条目，已生效条目可幂等重试，其他状态冲突返回 409
+      parameters:
+      - description: 记忆主体 UUID
+        in: path
+        name: subject_id
+        required: true
+        type: string
+      - description: 记忆条目 ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_handler.DataResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_Tencent_WeKnora_internal_types.MemoryItem'
+              type: object
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/internal_handler.MemoryAdminErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_handler.MemoryAdminErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/internal_handler.MemoryAdminErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_handler.MemoryAdminErrorResponse'
+      security:
+      - Bearer: []
+      summary: 确认指定主体的待审核记忆
+      tags:
+      - 记忆管理
+  /admin/memory/subjects/{subject_id}/items/{id}/reject:
+    post:
+      description: 仅允许 JWT 登录的租户管理员或所有者访问；只有 pending 条目可否决，状态冲突返回 409
+      parameters:
+      - description: 记忆主体 UUID
+        in: path
+        name: subject_id
+        required: true
+        type: string
+      - description: 记忆条目 ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_handler.SuccessResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/internal_handler.MemoryAdminErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_handler.MemoryAdminErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/internal_handler.MemoryAdminErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_handler.MemoryAdminErrorResponse'
+      security:
+      - Bearer: []
+      summary: 否决指定主体的待审核记忆
+      tags:
+      - 记忆管理
+  /admin/memory/subjects/{subject_id}/settings:
+    put:
+      consumes:
+      - application/json
+      description: 仅允许 JWT 登录的租户管理员或所有者访问；enabled 必须显式传入布尔值，允许 false
+      parameters:
+      - description: 记忆主体 UUID
+        in: path
+        name: subject_id
+        required: true
+        type: string
+      - description: 记忆开关
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.AdminMemorySettingsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_handler.SuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_handler.MemoryAdminErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/internal_handler.MemoryAdminErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_handler.MemoryAdminErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_handler.MemoryAdminErrorResponse'
+      security:
+      - Bearer: []
+      summary: 更新指定主体的记忆设置
+      tags:
+      - 记忆管理
   /agent-chat/{session_id}:
     post:
       consumes:
@@ -13941,6 +15354,58 @@ paths:
       summary: Agent问答
       tags:
       - 问答
+  /agent/grants:
+    get:
+      description: 列出当前用户在某个会话（根会话）中通过“本会话允许”记住的授权，包括其委派子任务上批准的授权。
+      parameters:
+      - description: 根会话 ID
+        in: query
+        name: session_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 授权列表
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/github_com_Tencent_WeKnora_internal_errors.AppError'
+      security:
+      - Bearer: []
+      summary: 列出会话内的 Agent 授权
+      tags:
+      - Agent
+  /agent/grants/{id}:
+    delete:
+      description: 撤销当前用户的一条授权；之后同类调用会重新询问。
+      parameters:
+      - description: 授权 ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 撤销结果
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: 授权不存在
+          schema:
+            $ref: '#/definitions/github_com_Tencent_WeKnora_internal_errors.AppError'
+      security:
+      - Bearer: []
+      summary: 撤销 Agent 授权
+      tags:
+      - Agent
   /agent/mcp-oauth-resolutions/{pending_id}:
     post:
       consumes:
@@ -14015,7 +15480,7 @@ paths:
         tool_approval 为 {approved: bool, modified_args?: object, reason?: string, allow_in_session?: bool}；
         page_action 为 {declined?, error?, location?, snapshot?, applied?: [{ref, label?, summary?}],
         stayed?, return_path?}。
-        返回 resumed=true 表示运行已挂起并在本次回答后恢复，客户端需重新接入该消息的事件流
+        返回 resumed=true 表示挂起的运行已请求恢复（自动化由调度器恢复），客户端需携带 resume_pending_id 重新接入该消息的事件流
       parameters:
       - description: 交互 ID（事件中的 pending_id）
         in: path
@@ -14049,6 +15514,39 @@ paths:
       - Bearer: []
       - ApiKeyAuth: []
       summary: 回答 Agent 的交互请求
+      tags:
+      - Agent
+  /agent/secure-forms/{prompt_id}:
+    post:
+      consumes:
+      - application/json
+      description: 提交 agent 发起的加密凭据表单（secure_form）。值只用于生成句柄或存入保险库，响应不回显任何值。
+      parameters:
+      - description: 交互 ID（事件中的 pending_id）
+        in: path
+        name: prompt_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: '{success: true, resumed: bool}'
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: 请求不合法或交互已结束
+          schema:
+            $ref: '#/definitions/github_com_Tencent_WeKnora_internal_errors.AppError'
+        "409":
+          description: 凭据已保存，但交互已结束
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      summary: 提交加密凭据表单
       tags:
       - Agent
   /agent/tool-approvals/{pending_id}:
@@ -14162,7 +15660,8 @@ paths:
         risk: write
       x-agent-hint: Creates a smart-reasoning agent with default settings, owned by
         the user. It can call MCP services and skills. Configure it afterwards with
-        agent.update.
+        agent.update, including model_id and, for knowledge search, rerank_model_id.
+        Creating an agent does not mean its model configuration is complete.
   /agents/{id}:
     delete:
       consumes:
@@ -14306,12 +15805,16 @@ paths:
         agent_mode is quick-answer or smart-reasoning; MCP services and skills only
         run in smart-reasoning, and switching to it turns multi-turn on. system_prompt
         replaces the whole prompt, so start from the full prompt agent.get returns.
-        Take model_id from model.list (a KnowledgeQA model), knowledge base ids from
-        knowledge_base.list and MCP service ids from mcp_service.list. Take web_search_provider_id
-        from web_search_provider.list; an empty value follows the workspace default,
-        and selecting a provider does not change web_search_enabled. Take skill names
-        exactly from skill.list with the agent's sandbox_config_id. knowledge_base_ids,
-        mcp_service_ids or selected_skills alone also switch that scope to selected.
+        Take model_id from model.list (a KnowledgeQA model) and rerank_model_id from
+        a Rerank model in that list. Empty rerank_model_id clears the selection; omitting
+        it preserves the saved value. For knowledge-search agents, report a missing
+        chat or rerank model explicitly instead of claiming setup is complete. Take
+        knowledge base ids from knowledge_base.list and MCP service ids from mcp_service.list.
+        Take web_search_provider_id from web_search_provider.list; an empty value
+        follows the workspace default, and selecting a provider does not change web_search_enabled.
+        Take skill names exactly from skill.list with the agent's sandbox_config_id.
+        knowledge_base_ids, mcp_service_ids or selected_skills alone also switch that
+        scope to selected.
     put:
       consumes:
       - application/json
@@ -14596,32 +16099,56 @@ paths:
         in: query
         name: keyword
         type: string
+        x-agent: true
       - description: 逗号分隔的扩展名，如 .pdf,.pptx
         in: query
         name: file_types
         type: string
+        x-agent: true
       - description: 页码
         in: query
+        minimum: 1
         name: page
         type: integer
+        x-agent: true
+        x-agent-maximum: "10000"
       - description: 每页数量（最大 100）
         in: query
+        maximum: 100
+        minimum: 1
         name: page_size
         type: integer
+        x-agent: true
+        x-agent-maximum: "20"
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            additionalProperties: true
-            type: object
+            allOf:
+            - $ref: '#/definitions/internal_handler_session.artifactLibraryResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/github_com_Tencent_WeKnora_internal_types.ArtifactLibraryItem'
+                  type: array
+              type: object
       security:
       - Bearer: []
       - ApiKeyAuth: []
       summary: 列出我的产物
       tags:
       - 会话
+      x-agent:
+        id: artifact.list
+        risk: read
+      x-agent-hint: Files generated by agents across the user's conversations, newest
+        first. This is the Artifacts library, not the current chat's sandbox. keyword
+        matches file names; file_types is a comma-separated list of extensions such
+        as .pdf,.pptx,.md. Each item has file_name, created_at, session_title and
+        session_id. Do not use generated-file or sandbox tools to answer what is on
+        this page.
   /auth/auto-setup:
     post:
       consumes:
@@ -15072,6 +16599,540 @@ paths:
       summary: 验证令牌
       tags:
       - 认证
+  /automation-runs/{id}:
+    get:
+      parameters:
+      - description: 运行 ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 运行记录
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_handler.DataResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_Tencent_WeKnora_internal_types.AutomationRun'
+              type: object
+      security:
+      - Bearer: []
+      summary: 获取运行记录
+      tags:
+      - 自动化
+  /automation-runs/{id}/cancel:
+    post:
+      description: 排队或等待审批的运行立即结束；执行中的运行在下一次检查时停止
+      parameters:
+      - description: 运行 ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 运行记录
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_handler.DataResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_Tencent_WeKnora_internal_types.AutomationRun'
+              type: object
+      security:
+      - Bearer: []
+      summary: 停止运行
+      tags:
+      - 自动化
+  /automations:
+    get:
+      description: 列出当前用户在本空间创建的自动化（定时任务），最新的在前
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 自动化列表
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_handler.DataResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/github_com_Tencent_WeKnora_internal_types.Automation'
+                  type: array
+              type: object
+      security:
+      - Bearer: []
+      summary: 列出我的自动化
+      tags:
+      - 自动化
+      x-agent:
+        id: automation.list
+        max_items: 100
+        risk: read
+      x-agent-hint: 'Lists the user''s automations: scheduled tasks the WeKnora assistant
+        runs on their behalf, with next and last run.'
+    post:
+      consumes:
+      - application/json
+      description: 创建一个按计划由 WeKnora 助手以当前用户身份运行的任务
+      parameters:
+      - description: 自动化
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.CreateAutomationRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: 创建的自动化
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_handler.DataResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_Tencent_WeKnora_internal_types.Automation'
+              type: object
+        "400":
+          description: 参数不合法
+          schema:
+            $ref: '#/definitions/github_com_Tencent_WeKnora_internal_errors.AppError'
+      security:
+      - Bearer: []
+      summary: 创建自动化
+      tags:
+      - 自动化
+      x-agent:
+        always_confirm: true
+        id: automation.create
+        label_param: name
+        risk: write
+        role: viewer
+      x-agent-hint: 'Creates an automation the WeKnora assistant runs as the user.
+        If work requires other agents, name them and their assignments in the instruction
+        so the assistant can delegate. Turn the user''s wording into a cron expression
+        (five fields, minute first) and an IANA timezone, and check it with automation.validate_trigger
+        first, telling the user the next run times it returns. Runs are unattended:
+        write the instruction as a complete task, since nobody can answer questions
+        during a run. access_level defaults to confirm, where each change waits for
+        the user''s approval; only set auto_write when the user asks for it.'
+  /automations/{id}:
+    delete:
+      description: 停止进行中的运行，删除自动化及其运行记录、会话和长期授权
+      parameters:
+      - description: 自动化 ID
+        in: path
+        name: id
+        required: true
+        type: string
+        x-agent: automation_id
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 删除成功
+          schema:
+            $ref: '#/definitions/internal_handler.SuccessResponse'
+        "404":
+          description: 不存在
+          schema:
+            $ref: '#/definitions/github_com_Tencent_WeKnora_internal_errors.AppError'
+      security:
+      - Bearer: []
+      summary: 删除自动化
+      tags:
+      - 自动化
+      x-agent:
+        id: automation.delete
+        label: name
+        risk: destructive
+        role: viewer
+        target: automation.get
+      x-agent-hint: Deletes an automation with its run history and conversations.
+        Cannot be undone; automation.pause keeps it.
+    get:
+      parameters:
+      - description: 自动化 ID
+        in: path
+        name: id
+        required: true
+        type: string
+        x-agent: automation_id
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 自动化
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_handler.DataResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_Tencent_WeKnora_internal_types.Automation'
+              type: object
+        "404":
+          description: 不存在
+          schema:
+            $ref: '#/definitions/github_com_Tencent_WeKnora_internal_errors.AppError'
+      security:
+      - Bearer: []
+      summary: 获取自动化
+      tags:
+      - 自动化
+      x-agent:
+        id: automation.get
+        risk: read
+      x-agent-hint: Returns one automation, including its instruction.
+    put:
+      consumes:
+      - application/json
+      description: 只修改请求中出现的字段，其余保持不变
+      parameters:
+      - description: 自动化 ID
+        in: path
+        name: id
+        required: true
+        type: string
+        x-agent: automation_id
+      - description: 要修改的字段
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_Tencent_WeKnora_internal_types.AutomationPatch'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 修改后的自动化
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_handler.DataResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_Tencent_WeKnora_internal_types.Automation'
+              type: object
+        "400":
+          description: 参数不合法
+          schema:
+            $ref: '#/definitions/github_com_Tencent_WeKnora_internal_errors.AppError'
+      security:
+      - Bearer: []
+      summary: 修改自动化
+      tags:
+      - 自动化
+      x-agent:
+        always_confirm: true
+        id: automation.update
+        label: name
+        risk: write
+        role: viewer
+        target: automation.get
+      x-agent-hint: Changes the listed fields of an automation; a field left out is
+        kept. Check a new trigger with automation.validate_trigger first. Use automation.pause
+        and automation.resume to switch it off and on.
+  /automations/{id}/grant-candidates:
+    get:
+      description: 列出本自动化的运行请求过审批、尚未长期授权的调用；需每次审批的调用不在其中
+      parameters:
+      - description: 自动化 ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 候选调用
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      summary: 列出可设为长期授权的调用
+      tags:
+      - 自动化
+  /automations/{id}/grants:
+    get:
+      description: 列出以后的运行无需确认即可执行的调用，以及失效原因
+      parameters:
+      - description: 自动化 ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 长期授权
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      summary: 列出自动化的长期授权
+      tags:
+      - 自动化
+    post:
+      consumes:
+      - application/json
+      description: 让以后的运行无需确认即可执行某次运行请求过审批的调用；Agent 配置或所有者角色变化后失效
+      parameters:
+      - description: 自动化 ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: '{prompt_id}'
+        in: body
+        name: request
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 授权
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      summary: 添加长期授权
+      tags:
+      - 自动化
+  /automations/{id}/pause:
+    post:
+      description: 停止按计划触发；进行中的运行不受影响
+      parameters:
+      - description: 自动化 ID
+        in: path
+        name: id
+        required: true
+        type: string
+        x-agent: automation_id
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 暂停后的自动化
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_handler.DataResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_Tencent_WeKnora_internal_types.Automation'
+              type: object
+      security:
+      - Bearer: []
+      summary: 暂停自动化
+      tags:
+      - 自动化
+      x-agent:
+        id: automation.pause
+        label: name
+        risk: write
+        role: viewer
+        target: automation.get
+      x-agent-hint: Stops an automation from running on schedule until automation.resume.
+  /automations/{id}/resume:
+    post:
+      description: 从现在起重新按计划触发，并清零连续失败计数
+      parameters:
+      - description: 自动化 ID
+        in: path
+        name: id
+        required: true
+        type: string
+        x-agent: automation_id
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 恢复后的自动化
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_handler.DataResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_Tencent_WeKnora_internal_types.Automation'
+              type: object
+      security:
+      - Bearer: []
+      summary: 恢复自动化
+      tags:
+      - 自动化
+      x-agent:
+        always_confirm: true
+        id: automation.resume
+        label: name
+        risk: write
+        role: viewer
+        target: automation.get
+      x-agent-hint: Schedules a paused automation again from now; missed runs are
+        not caught up.
+  /automations/{id}/run:
+    post:
+      description: 排队一次手动运行；已有运行在排队或进行中时拒绝
+      parameters:
+      - description: 自动化 ID
+        in: path
+        name: id
+        required: true
+        type: string
+        x-agent: automation_id
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: 排队的运行
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_handler.DataResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_Tencent_WeKnora_internal_types.AutomationRun'
+              type: object
+        "409":
+          description: 已有运行
+          schema:
+            $ref: '#/definitions/github_com_Tencent_WeKnora_internal_errors.AppError'
+      security:
+      - Bearer: []
+      summary: 立即运行自动化
+      tags:
+      - 自动化
+      x-agent:
+        always_confirm: true
+        id: automation.run_now
+        label: name
+        risk: write
+        role: viewer
+        target: automation.get
+      x-agent-hint: Queues a run now, in the background; follow it with automation.list_runs.
+  /automations/{id}/runs:
+    get:
+      parameters:
+      - description: 自动化 ID
+        in: path
+        name: id
+        required: true
+        type: string
+        x-agent: automation_id
+      - description: 页码，从 1 开始
+        in: query
+        name: page
+        type: integer
+        x-agent: true
+      - description: 每页条数，最多 100
+        in: query
+        name: page_size
+        type: integer
+        x-agent: true
+        x-agent-maximum: "20"
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 运行记录
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_handler.PageResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/github_com_Tencent_WeKnora_internal_types.AutomationRun'
+                  type: array
+              type: object
+      security:
+      - Bearer: []
+      summary: 列出运行记录
+      tags:
+      - 自动化
+      x-agent:
+        id: automation.list_runs
+        risk: read
+      x-agent-hint: Lists an automation's runs, newest first, with status, error and
+        the start of the answer.
+  /automations/by-session/{session_id}:
+    get:
+      description: 返回这次会话所属的自动化，供会话页跳回
+      parameters:
+      - description: 会话 ID
+        in: path
+        name: session_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 自动化
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_handler.DataResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_Tencent_WeKnora_internal_types.Automation'
+              type: object
+        "404":
+          description: 不存在
+          schema:
+            $ref: '#/definitions/github_com_Tencent_WeKnora_internal_errors.AppError'
+      security:
+      - Bearer: []
+      summary: 按会话查找自动化
+      tags:
+      - 自动化
+  /automations/validate-trigger:
+    post:
+      consumes:
+      - application/json
+      description: 校验 cron 或一次性触发器，返回未来 3 次触发时间
+      parameters:
+      - description: 触发器
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.ValidateTriggerRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 未来触发时间
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_handler.DataResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/internal_handler.ValidateTriggerResult'
+              type: object
+        "400":
+          description: 触发器不合法
+          schema:
+            $ref: '#/definitions/github_com_Tencent_WeKnora_internal_errors.AppError'
+      security:
+      - Bearer: []
+      summary: 校验触发器
+      tags:
+      - 自动化
+      x-agent:
+        id: automation.validate_trigger
+        risk: probe
+      x-agent-hint: Checks a trigger and returns its next three run times in UTC;
+        convert them to the trigger's timezone for the user.
   /chunker/preview:
     post:
       consumes:
@@ -15599,8 +17660,9 @@ paths:
       x-agent:
         id: data_source.get
         risk: read
-      x-agent-hint: Read a configured data source and its sync state; credentials
-        and connector configuration are not returned.
+      x-agent-hint: Read a configured data source and its sync state; credentials,
+        connector settings and raw upstream errors are omitted. For detailed failures
+        use the data source settings page.
     put:
       consumes:
       - application/json
@@ -15633,6 +17695,83 @@ paths:
       summary: Update a data source
       tags:
       - DataSource
+  /datasource/{id}/credentials:
+    put:
+      consumes:
+      - application/json
+      description: 整体写入 credentials 映射，必须非空
+      parameters:
+      - description: 数据源 ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: '{credentials: {字段: 值}}（必须非空）'
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 写入后的凭据状态
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_handler.DataResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_Tencent_WeKnora_internal_handler_dto.CredentialsResponse'
+              type: object
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/github_com_Tencent_WeKnora_internal_errors.AppError'
+        "404":
+          description: 数据源不存在
+          schema:
+            $ref: '#/definitions/github_com_Tencent_WeKnora_internal_errors.AppError'
+      security:
+      - Bearer: []
+      - ApiKeyAuth: []
+      summary: 设置数据源凭据
+      tags:
+      - 数据源
+  /datasource/{id}/credentials/{field}:
+    delete:
+      description: 清除整个凭据映射；当前仅支持 field=credentials
+      parameters:
+      - description: 数据源 ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: 字段名（credentials）
+        in: path
+        name: field
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: 字段名非法
+          schema:
+            $ref: '#/definitions/github_com_Tencent_WeKnora_internal_errors.AppError'
+        "404":
+          description: 数据源不存在
+          schema:
+            $ref: '#/definitions/github_com_Tencent_WeKnora_internal_errors.AppError'
+      security:
+      - Bearer: []
+      - ApiKeyAuth: []
+      summary: 清除数据源凭据
+      tags:
+      - 数据源
   /datasource/{id}/logs:
     get:
       description: Retrieve sync history for a data source
@@ -15679,8 +17818,9 @@ paths:
       x-agent:
         id: data_source.list_sync_logs
         risk: read
-      x-agent-hint: Read recent sync results, counts and errors. Use limit and offset
-        for older records.
+      x-agent-hint: Read recent sync status and counts. Use limit and offset for older
+        records. Raw upstream errors are omitted; detailed failures remain on the
+        data source settings page.
   /datasource/{id}/pause:
     post:
       description: Pause a data source's scheduled syncs
@@ -15966,9 +18106,10 @@ paths:
       x-agent:
         id: data_source.get_sync_log
         risk: read
-      x-agent-hint: Read the current status, counts and errors of a sync_log_id returned
-        by data_source.sync or data_source.list_sync_logs. A started job is not a
-        completed sync.
+      x-agent-hint: Read the current status and counts of a sync_log_id returned by
+        data_source.sync or data_source.list_sync_logs. A started job is not a completed
+        sync. Raw upstream errors are omitted; detailed failures remain on the data
+        source settings page.
   /datasource/types:
     get:
       description: Get list of available data source connectors
@@ -16113,6 +18254,110 @@ paths:
       summary: 获取FAQ导入进度
       tags:
       - FAQ管理
+  /halo/archive:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        取该股票的年报评分结果，把预渲染的 markdown 落成知识库中的一条
+        手动知识（默认草稿）。同一 (标的, 报告期) 重复归档为**原地更新**，
+        不产生副本。
+      parameters:
+      - description: 归档参数
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.haloArchiveRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: 该股票没有已落库的年报事实（无可归档内容）
+          schema:
+            $ref: '#/definitions/github_com_Tencent_WeKnora_internal_errors.AppError'
+      security:
+      - Bearer: []
+      - ApiKeyAuth: []
+      summary: 归档 HALO 报告到知识库
+      tags:
+      - HALO
+  /halo/report:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        取该股票的评分结果与预渲染 markdown，供工作台面板展示。
+        只读：不写知识库，因此不做 KB 访问校验，只依赖路由上的认证。
+      parameters:
+      - description: 查询参数
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.haloReportRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: 参数错误或该股票无年报事实
+          schema:
+            $ref: '#/definitions/github_com_Tencent_WeKnora_internal_errors.AppError'
+      security:
+      - Bearer: []
+      - ApiKeyAuth: []
+      summary: 取 HALO 报告（渲染，不落库）
+      tags:
+      - HALO
+  /halo/sync:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        抓取年报 PDF → 抽取 → 对账 → 落表。这是 /halo/report 返回
+        ok=false 时「先同步年报」那一步的 HTTP 出口。
+        慢：单份年报下载 + 逐页解析约 1–3 分钟，服务端超时给到 10 分钟。
+        并发保护见 halo.syncGate：同一标的重复触发直接拒绝（不排队），
+        不同标的全局并发上限 2。
+      parameters:
+      - description: 同步参数
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.haloSyncRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/github_com_Tencent_WeKnora_internal_errors.AppError'
+        "409":
+          description: 该标的正在同步中
+          schema:
+            $ref: '#/definitions/github_com_Tencent_WeKnora_internal_errors.AppError'
+      security:
+      - Bearer: []
+      - ApiKeyAuth: []
+      summary: 同步巨潮年报并把事实落库
+      tags:
+      - HALO
   /im-channels/{id}:
     delete:
       description: 删除指定 IM 渠道
@@ -18586,8 +20831,9 @@ paths:
         label: name
         risk: write
         target: knowledge_base.get
-      x-agent-hint: Creates a Markdown document. Send the full content, and status
-        draft to keep it out of search or publish to index it.
+      x-agent-hint: Creates a source document from complete Markdown. Set status publish
+        to start asynchronous ingestion; omitted status defaults to draft without
+        indexing. Use draft only when requested. Check knowledge.get_parse_progress.
   /knowledge-bases/{id}/knowledge/url:
     post:
       consumes:
@@ -18638,9 +20884,8 @@ paths:
         label: name
         risk: write
         target: knowledge_base.get
-      x-agent-hint: Fetches a public web page or file into the knowledge base and
-        parses it in the background; follow with knowledge.get_parse_progress. Only
-        use a URL the user gave.
+      x-agent-hint: Imports a user-provided public web page or file URL as a source
+        document; ingests asynchronously. Check knowledge.get_parse_progress.
   /knowledge-bases/{id}/move-targets:
     get:
       description: 返回与源知识库 Type 一致、EmbeddingModelID 一致、非临时且不是自身的目标知识库列表
@@ -18780,6 +21025,46 @@ paths:
         target: knowledge_base.get
       x-agent-hint: Regenerates the AI summary of what the knowledge base covers,
         with one model call. A description the user wrote is kept.
+  /knowledge-bases/{id}/rebuild-index:
+    post:
+      description: |-
+        索引策略变更后，把知识库下全部文档提交重新解析。前端知识库设置弹窗
+        (KnowledgeBaseEditorModal) 在保存新策略后调用此接口，此前该路由在后端缺失，调用返回 404。
+      parameters:
+      - description: 知识库ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 任务已提交
+          schema:
+            $ref: '#/definitions/internal_handler.DataResponse'
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/github_com_Tencent_WeKnora_internal_errors.AppError'
+        "403":
+          description: 权限不足
+          schema:
+            $ref: '#/definitions/github_com_Tencent_WeKnora_internal_errors.AppError'
+        "404":
+          description: 知识库不存在
+          schema:
+            $ref: '#/definitions/github_com_Tencent_WeKnora_internal_errors.AppError'
+        "409":
+          description: 有文档正在迁移中
+          schema:
+            $ref: '#/definitions/github_com_Tencent_WeKnora_internal_errors.AppError'
+      security:
+      - Bearer: []
+      - ApiKeyAuth: []
+      summary: 重建整个知识库的索引
+      tags:
+      - 知识管理
   /knowledge-bases/{id}/shares:
     get:
       description: 获取知识库的所有共享记录
@@ -21121,6 +23406,28 @@ paths:
       summary: 获取 MCP 端点工具目录
       tags:
       - MCP端点
+  /mcp-oauth/callback:
+    get:
+      description: 接收授权服务器回调并完成 code 交换，随后重定向回前端
+      parameters:
+      - description: 授权码
+        in: query
+        name: code
+        type: string
+      - description: 状态参数
+        in: query
+        name: state
+        type: string
+      - description: 授权错误码
+        in: query
+        name: error
+        type: string
+      responses:
+        "302":
+          description: Found
+      summary: MCP OAuth 回调
+      tags:
+      - MCP服务
   /mcp-services:
     get:
       consumes:
@@ -21733,8 +24040,10 @@ paths:
     put:
       consumes:
       - application/json
-      description: 为指定 MCP 服务下的某个工具更新启用状态和/或人工审批要求。至少提供 require_approval 或 enabled
-        之一；省略的字段保持原值。
+      description: |-
+        为指定 MCP 服务下的某个工具更新启用状态、人工审批要求和/或风险等级。
+        至少提供 require_approval、enabled、risk 之一；省略的字段保持原值。
+        risk 为 read/probe/write/destructive，空字符串表示改回按服务注解推断。
       parameters:
       - description: MCP 服务 ID
         in: path
@@ -21746,7 +24055,7 @@ paths:
         name: tool_name
         required: true
         type: string
-      - description: '{require_approval?: bool, enabled?: bool}'
+      - description: '{require_approval?: bool, enabled?: bool, risk?: string}'
         in: body
         name: request
         required: true
@@ -21820,28 +24129,104 @@ paths:
         is needed; to synchronize it use mcp_service.refresh_metadata. Use it to check
         that a service can do what an agent needs before binding it. An error means
         the service is unreachable; mcp_service.test says why.
-  /mcp-services/oauth/callback:
+  /me/credential-vault:
     get:
-      description: 接收授权服务器回调并完成 code 交换，随后重定向回前端
+      description: 只返回元数据（站点、域名、用户名、最近使用时间），不返回密码。available 表示服务端是否可以保存凭据。
       parameters:
-      - description: 授权码
+      - description: 只列出该站点
         in: query
-        name: code
+        name: site
         type: string
-      - description: 状态参数
-        in: query
-        name: state
-        type: string
-      - description: 授权错误码
-        in: query
-        name: error
-        type: string
+      produces:
+      - application/json
       responses:
-        "302":
-          description: Found
-      summary: MCP OAuth 回调
+        "200":
+          description: '{success, data, available}'
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      summary: 列出我保存的登录凭据
       tags:
-      - MCP服务
+      - Me
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 站点、域名、用户名与密码
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.credentialVaultCreateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 保存的元数据
+          schema:
+            additionalProperties: true
+            type: object
+        "409":
+          description: 该站点与用户名已存在
+          schema:
+            $ref: '#/definitions/github_com_Tencent_WeKnora_internal_errors.AppError'
+      security:
+      - Bearer: []
+      summary: 保存一条登录凭据
+      tags:
+      - Me
+  /me/credential-vault/{id}:
+    delete:
+      parameters:
+      - description: 凭据 ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 已删除
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      summary: 删除一条登录凭据
+      tags:
+      - Me
+    patch:
+      consumes:
+      - application/json
+      description: 可修改标题、域名、用户名，或设置新密码（只写不读）。
+      parameters:
+      - description: 凭据 ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: 要修改的字段
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.credentialVaultUpdateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 修改后的元数据
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      summary: 修改一条登录凭据
+      tags:
+      - Me
   /me/env-vars:
     get:
       description: List every sandbox config of this workspace with the caller's own
@@ -22569,6 +24954,35 @@ paths:
         risk: read
       x-agent-hint: The latest messages of one of the user's conversations, oldest
         first. For earlier ones, pass the created_at of the first message as before_time.
+  /messages/chat-history-index/clear:
+    post:
+      description: 暂停消息索引，删除索引知识、分块和向量，保留原始会话和消息。失败后保持暂停，可重试。
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_handler.DataResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_Tencent_WeKnora_internal_types.ChatHistoryKBStats'
+              type: object
+        "403":
+          description: 需要空间管理权限
+          schema:
+            $ref: '#/definitions/github_com_Tencent_WeKnora_internal_errors.AppError'
+        "500":
+          description: 清理未完成，查看当前状态后可重试
+          schema:
+            $ref: '#/definitions/github_com_Tencent_WeKnora_internal_errors.AppError'
+      security:
+      - Bearer: []
+      - ApiKeyAuth: []
+      summary: 清空当前空间的历史消息索引
+      tags:
+      - 消息
   /messages/chat-history-stats:
     get:
       consumes:
@@ -22941,10 +25355,85 @@ paths:
         local models are reused without downloading again; copying an unfinished or
         failed local model starts a background download, so read the returned model_id
         with model.get until its status is active or download_failed.
-  /models/catalog/resolve:
-    get:
+  /models/{id}/credentials:
+    put:
       consumes:
       - application/json
+      description: 写入 api_key 或 app_secret；省略的字段保留原值
+      parameters:
+      - description: 模型 ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: '{api_key?, app_secret?: string}'
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 写入后的凭据状态
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_handler.DataResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_Tencent_WeKnora_internal_handler_dto.CredentialsResponse'
+              type: object
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/github_com_Tencent_WeKnora_internal_errors.AppError'
+        "404":
+          description: 模型不存在
+          schema:
+            $ref: '#/definitions/github_com_Tencent_WeKnora_internal_errors.AppError'
+      security:
+      - Bearer: []
+      - ApiKeyAuth: []
+      summary: 设置模型凭据
+      tags:
+      - 模型管理
+  /models/{id}/credentials/{field}:
+    delete:
+      description: 删除指定字段的存储凭据；删除已为空的字段是幂等的
+      parameters:
+      - description: 模型 ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: 字段名（api_key | app_secret）
+        in: path
+        name: field
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: 字段名非法
+          schema:
+            $ref: '#/definitions/github_com_Tencent_WeKnora_internal_errors.AppError'
+        "404":
+          description: 模型不存在
+          schema:
+            $ref: '#/definitions/github_com_Tencent_WeKnora_internal_errors.AppError'
+      security:
+      - Bearer: []
+      - ApiKeyAuth: []
+      summary: 移除模型的单个凭据字段
+      tags:
+      - 模型管理
+  /models/catalog/resolve:
+    get:
       description: 根据厂商、模型名、Base URL 与 extra_config 返回目录解析结果（协议、思考等级、上下文等），供模型编辑器实时展示
       parameters:
       - description: 厂商标识
@@ -22976,6 +25465,36 @@ paths:
       - Bearer: []
       - ApiKeyAuth: []
       summary: 解析模型的有效接入配置
+      tags:
+      - 模型管理
+    post:
+      consumes:
+      - application/json
+      description: 与 GET 同函数；参数走 JSON 请求体，支持可选 spec 覆盖
+      parameters:
+      - description: '{provider, model?, base_url?, model_type?, spec?: {api?, reasoning?,
+          input?, context_window?, max_output_tokens?, thinking_levels?, compat?}}'
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 解析结果
+          schema:
+            $ref: '#/definitions/internal_handler.DataResponse'
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/github_com_Tencent_WeKnora_internal_errors.AppError'
+      security:
+      - Bearer: []
+      - ApiKeyAuth: []
+      summary: 解析模型的有效接入配置（JSON 请求体）
       tags:
       - 模型管理
   /models/providers:
@@ -23103,6 +25622,72 @@ paths:
       summary: 检查 WeKnoraCloud 凭证状态
       tags:
       - WeKnoraCloud
+  /notifications:
+    get:
+      parameters:
+      - description: 条数，最多 100
+        in: query
+        name: limit
+        type: integer
+      - description: 上一页返回的 next_cursor
+        in: query
+        name: cursor
+        type: string
+      - description: 只看未读
+        in: query
+        name: unread
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: '{items, pending, unread, read_count, next_cursor}'
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      summary: 列出我的通知
+      tags:
+      - 通知
+  /notifications/read:
+    delete:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      summary: 清理已读通知
+      tags:
+      - 通知
+    post:
+      consumes:
+      - application/json
+      description: ids 为空时将全部通知记录标为已读，不改变待处理事项
+      parameters:
+      - description: '{ids}'
+        in: body
+        name: request
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 结果
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      summary: 标记通知已读
+      tags:
+      - 通知
   /organizations:
     get:
       description: 获取当前空间所属的所有组织，并附带各空间内知识库/智能体数量
@@ -24585,6 +27170,74 @@ paths:
       summary: Follow an install's agent transcript
       tags:
       - SandboxConfig
+  /sandbox-configs/{id}/user-sandboxes:
+    get:
+      description: List the config's shared user machines with live session counts
+        and the empty-retention clock.
+      parameters:
+      - description: Sandbox config ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Shared user sandboxes
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      - ApiKeyAuth: []
+      summary: List shared user sandboxes
+      tags:
+      - SandboxConfig
+  /sandbox-configs/{id}/user-sandboxes/{digest}/release:
+    post:
+      description: Delete one shared user machine now; each session gets a fresh machine
+        on next use. Refused while busy.
+      parameters:
+      - description: Sandbox config ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: User machine digest
+        in: path
+        name: digest
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Released
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "409":
+          description: User sandbox is busy
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      - ApiKeyAuth: []
+      summary: Release a shared user sandbox
+      tags:
+      - SandboxConfig
   /sessions:
     get:
       consumes:
@@ -24968,6 +27621,41 @@ paths:
       summary: 分叉会话
       tags:
       - 会话
+  /sessions/{session_id}/generate_title:
+    post:
+      consumes:
+      - application/json
+      description: 根据消息内容自动生成会话标题
+      parameters:
+      - description: 会话ID
+        in: path
+        name: session_id
+        required: true
+        type: string
+      - description: 生成请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler_session.GenerateTitleRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 生成的标题
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/github_com_Tencent_WeKnora_internal_errors.AppError'
+      security:
+      - Bearer: []
+      - ApiKeyAuth: []
+      summary: 生成会话标题
+      tags:
+      - 会话
   /sessions/{session_id}/messages/{message_id}/artifacts:
     get:
       responses: {}
@@ -25310,41 +27998,6 @@ paths:
       summary: 上报推荐问题事件
       tags:
       - 会话
-  /sessions/{session_id}/title:
-    post:
-      consumes:
-      - application/json
-      description: 根据消息内容自动生成会话标题
-      parameters:
-      - description: 会话ID
-        in: path
-        name: session_id
-        required: true
-        type: string
-      - description: 生成请求
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/internal_handler_session.GenerateTitleRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 生成的标题
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: 请求参数错误
-          schema:
-            $ref: '#/definitions/github_com_Tencent_WeKnora_internal_errors.AppError'
-      security:
-      - Bearer: []
-      - ApiKeyAuth: []
-      summary: 生成会话标题
-      tags:
-      - 会话
   /sessions/batch:
     delete:
       consumes:
@@ -25391,6 +28044,10 @@ paths:
         name: message_id
         required: true
         type: string
+      - description: 等待此审批恢复后的事件流
+        in: query
+        name: resume_pending_id
+        type: string
       - default: handle
         description: 文件引用形式，public 返回可加载直链
         enum:
@@ -25410,12 +28067,59 @@ paths:
           description: 会话或消息不存在
           schema:
             $ref: '#/definitions/github_com_Tencent_WeKnora_internal_errors.AppError'
+        "409":
+          description: 审批恢复后的事件流尚未就绪
+          schema:
+            $ref: '#/definitions/github_com_Tencent_WeKnora_internal_errors.AppError'
       security:
       - Bearer: []
       - ApiKeyAuth: []
       summary: 继续流式响应
       tags:
       - 问答
+  /sessions/transcriptions:
+    post:
+      consumes:
+      - multipart/form-data
+      description: 使用当前智能体配置的 ASR 模型将一段录音转写为文本，用于填充对话输入框。智能体需开启音频上传并选择 ASR 模型。
+      parameters:
+      - description: 录音文件（推荐 16kHz 单声道 WAV）
+        in: formData
+        name: file
+        required: true
+        type: file
+      - description: 智能体ID
+        in: formData
+        name: agent_id
+        required: true
+        type: string
+      - description: 共享智能体所属空间ID
+        in: formData
+        name: agent_source_tenant_id
+        type: string
+      - description: 界面语言（如 zh-CN、ja-JP）；取主语言（zh、ja）作为识别语言提示
+        in: formData
+        name: locale
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 'data: VoiceTranscriptionResponse'
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: 智能体未启用语音识别或文件无效
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      - ApiKeyAuth: []
+      summary: 语音输入转写
+      tags:
+      - 会话
   /shared-agents:
     get:
       description: 返回所有共享给当前用户所在组织的智能体
@@ -26404,6 +29108,147 @@ paths:
       summary: Revoke system administrator privileges from a user
       tags:
       - System Admin
+  /system/admin/runtime/documents:
+    get:
+      description: SystemAdmin metadata view with separate current attempts and historical
+        failures. No raw payloads.
+      parameters:
+      - default: 1
+        description: Page number
+        in: query
+        name: page
+        type: integer
+      - default: 25
+        description: Page size, at most 100
+        in: query
+        name: page_size
+        type: integer
+      - default: unfinished
+        description: Document filter
+        enum:
+        - all
+        - unfinished
+        - failed
+        - completed
+        in: query
+        name: status
+        type: string
+      - description: Knowledge-base ID
+        in: query
+        name: kb_id
+        type: string
+      - description: Title, filename or knowledge-base search, at most 200 characters
+        in: query
+        name: search
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_handler.DataResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_Tencent_WeKnora_internal_application_service.DocumentProgressResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - Bearer: []
+      summary: List document ingestion and durable Wiki progress
+      tags:
+      - System Admin
+  /system/admin/runtime/documents/{knowledge_id}:
+    get:
+      description: Returns up to 50 original failures with bounded error previews.
+        Excludes bodies and task payloads.
+      parameters:
+      - description: Knowledge ID
+        in: path
+        name: knowledge_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_handler.DataResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_Tencent_WeKnora_internal_application_service.DocumentProgressDetail'
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - Bearer: []
+      summary: Read a document's current stages and historical failures
+      tags:
+      - System Admin
+  /system/admin/runtime/documents/wiki-start:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        Schedules up to 100 eligible documents, oldest first, under existing worker claims and limits.
+        Ingestion and failure history are retained. Partial handoff errors include accepted counts.
+      parameters:
+      - description: One knowledge ID or a bounded count and optional filters
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_Tencent_WeKnora_internal_application_service.DocumentWikiStartRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_handler.DataResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_Tencent_WeKnora_internal_application_service.DocumentWikiStartResult'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "503":
+          description: Service Unavailable
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_handler.DataResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_Tencent_WeKnora_internal_application_service.DocumentWikiStartResult'
+              type: object
+      security:
+      - Bearer: []
+      summary: Request immediate Wiki work for existing durable document operations
+      tags:
+      - System Admin
   /system/admin/runtime/queues:
     get:
       description: 返回各 asynq 队列的实时深度（pending/active/scheduled/retry 等）与 worker 并发配置，仅系统管理员可见
@@ -26674,9 +29519,8 @@ paths:
   /system/admin/tenants/apply-default-storage-quota:
     post:
       description: |-
-        Reads the current value of `tenant.default_storage_quota_gb`
-        (3-tier resolver: DB > ENV > default) and writes that many
-        GiB into storage_quota for every row in tenants. Bypasses
+        Resolves the MB override or legacy GB default (DB > ENV > default per setting)
+        and writes the effective byte quota to every existing workspace. Bypasses
         the per-workspace PUT whitelist, which forbids storage_quota
         edits by Owners. SystemAdmin only.
         Idempotent — running twice with the same setting is a no-op.
@@ -26699,9 +29543,15 @@ paths:
     get:
       description: |-
         Retrieve a paginated list of every user across tenants (SystemAdmin only).
-        Supports `offset` (default 0) and `limit` (default 50, max 200).
+        Supports `offset` (default 0), `limit` (default 50, max 200), and optional `q`.
+        `q` performs case-insensitive substring matching against username or email.
         Password/hashes are never serialised — only the redacted UserInfo shape.
       parameters:
+      - description: Filter by username or email
+        in: query
+        name: q
+        type: string
+        x-agent: true
       - default: 0
         description: Page offset
         in: query
@@ -26740,10 +29590,10 @@ paths:
         risk: read
         root: users
         system_admin: true
-      x-agent-hint: 'Lists platform users across workspaces, including account enabled
-        state and system administrator flag. Follow has_more using offset + limit.
-        tenant_id is the home workspace, not a list of memberships. No search or role
-        filter is supported: paginate before drawing conclusions.'
+      x-agent-hint: Lists platform users across workspaces, including account enabled
+        state and system administrator flag. q filters username or email (not role);
+        follow has_more using offset + limit. tenant_id is the home workspace, not
+        a list of memberships.
   /system/admin/users/create:
     post:
       consumes:
@@ -26925,10 +29775,12 @@ paths:
         id: system.get_info
         risk: read
       x-agent-hint: Reads the backend version, edition, build, runtime, database migration
-        status and configured engines. Empty or unknown means unavailable information.
-        Engine configuration does not prove connectivity. Raw migration errors are
-        omitted. Frontend build/version is separate and is not reported by this API;
-        do not infer frontend/backend version agreement or available upgrades.
+        status and configured engines. Docreader build information is omitted when
+        its service is unavailable or does not support GetInfo. Empty or unknown means
+        unavailable information. Engine configuration does not prove connectivity.
+        Raw migration errors are omitted. Frontend build/version is separate and is
+        not reported by this API; do not infer frontend/backend version agreement
+        or available upgrades.
   /system/parser-engines:
     get:
       produces:
@@ -27021,6 +29873,20 @@ paths:
           schema:
             $ref: '#/definitions/internal_handler.GetStorageEngineStatusResponse'
       summary: 获取存储引擎状态
+      tags:
+      - 系统
+  /system/workspaces:
+    get:
+      description: 返回后端注册的全部工作台（业务域）及其组件/工具白名单。前端据此构建「工作台 → 面板」映射，只保留组件实现而不保留词表。
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 标准 code/msg/data 包装，data 为 []types.WorkbenchDef
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 获取工作台清单
       tags:
       - 系统
   /tenants:
@@ -27757,7 +30623,10 @@ paths:
     get:
       consumes:
       - application/json
-      description: 获取空间级别的KV配置（支持web-search-config、prompt-templates、parser-engine-config、storage-engine-config、chat-history-config、retrieval-config）
+      description: |-
+        获取空间级别的KV配置。支持 web-search-config、prompt-templates、parser-engine-config、
+        storage-engine-config、chat-history-config、retrieval-config、memory-config、
+        assistant-config、default-settings。
       parameters:
       - description: 配置键名
         in: path
@@ -27785,7 +30654,9 @@ paths:
     put:
       consumes:
       - application/json
-      description: 更新空间级别的KV配置（支持web-search-config、parser-engine-config、storage-engine-config、chat-history-config、retrieval-config）
+      description: |-
+        更新空间级别的KV配置。支持 web-search-config、parser-engine-config、storage-engine-config、
+        chat-history-config、retrieval-config、memory-config、assistant-config、default-settings。
       parameters:
       - description: 配置键名
         in: path
@@ -28260,6 +31131,259 @@ paths:
       summary: List vector store types
       tags:
       - VectorStore
+  /watchlist:
+    get:
+      description: Lists the calling user's watched symbols in the current workspace,
+        in display order
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: List my watchlist
+      tags:
+      - User
+    post:
+      description: Adds a symbol to the calling user's watchlist; re-adding refreshes
+        the stored name
+      parameters:
+      - description: Symbol to watch
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.AddStockWatchRequest'
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Watch a symbol
+      tags:
+      - User
+  /watchlist/{thscode}:
+    delete:
+      parameters:
+      - description: Symbol, e.g. 600519.SH
+        in: path
+        name: thscode
+        required: true
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Stop watching a symbol
+      tags:
+      - User
+    put:
+      description: Renames a row or moves it in the display order
+      parameters:
+      - description: Symbol, e.g. 600519.SH
+        in: path
+        name: thscode
+        required: true
+        type: string
+      - description: Fields to patch
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.UpdateStockWatchRequest'
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Update a watched symbol
+      tags:
+      - User
+  /watchlist/{thscode}/conditions:
+    get:
+      description: Lists the calling user's authored conditions for one tracked symbol
+      parameters:
+      - description: Symbol, e.g. 600519.SH
+        in: path
+        name: thscode
+        required: true
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: List a symbol's conditions
+      tags:
+      - User
+    post:
+      description: Adds one threshold the daily job watches; re-adding the same one
+        is idempotent
+      parameters:
+      - description: Symbol, e.g. 600519.SH
+        in: path
+        name: thscode
+        required: true
+        type: string
+      - description: field/op/value
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.AddStockWatchConditionRequest'
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Add a numeric condition to a symbol
+      tags:
+      - User
+  /watchlist/{thscode}/conditions/{id}:
+    delete:
+      parameters:
+      - description: Symbol, e.g. 600519.SH
+        in: path
+        name: thscode
+        required: true
+        type: string
+      - description: Condition id
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Remove a condition
+      tags:
+      - User
+  /watchlist/{thscode}/diaries:
+    get:
+      description: Returns the daily LLM observations for a watched symbol, newest
+        trading day first
+      parameters:
+      - description: Symbol, e.g. 600519.SH
+        in: path
+        name: thscode
+        required: true
+        type: string
+      - description: Max rows (default 30, max 250)
+        in: query
+        name: limit
+        type: integer
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: List one symbol's observation diaries
+      tags:
+      - User
+  /watchlist/{thscode}/diaries/accept:
+    post:
+      description: Moves the symbol to the state the user chose, and records the adoption
+        in the pool's event log
+      parameters:
+      - description: Symbol, e.g. 600519.SH
+        in: path
+        name: thscode
+        required: true
+        type: string
+      - description: Verdict to adopt
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.AcceptStockWatchDiaryRequest'
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Adopt an observation diary's verdict
+      tags:
+      - User
+  /watchlist/{thscode}/diaries/ignore:
+    post:
+      description: Records that the user saw the verdict and did not act on it; the
+        pool state is unchanged
+      parameters:
+      - description: Symbol, e.g. 600519.SH
+        in: path
+        name: thscode
+        required: true
+        type: string
+      - description: Diary to decline
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.IgnoreStockWatchDiaryRequest'
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Decline an observation diary's verdict
+      tags:
+      - User
+  /watchlist/events:
+    get:
+      description: Lists the append-only event log of the calling user's tracking
+        pool, newest first
+      parameters:
+      - description: Narrow to one symbol, e.g. 600519.SH
+        in: query
+        name: thscode
+        type: string
+      - description: Max rows (default 50, max 200)
+        in: query
+        name: limit
+        type: integer
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Read my pool's event history
+      tags:
+      - User
+  /watchlist/ranking:
+    get:
+      description: Returns the highest-scored diaries for the given trade_date, ordered
+        by final_score DESC
+      parameters:
+      - description: Trading day YYYY-MM-DD (defaults to today)
+        in: query
+        name: trade_date
+        type: string
+      - description: Max rows (default 50, max 200)
+        in: query
+        name: limit
+        type: integer
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Top N ranked diaries for a trading day
+      tags:
+      - User
   /web-search-providers:
     get:
       produces:
@@ -28445,6 +31569,83 @@ paths:
       summary: 更新网络搜索 Provider
       tags:
       - 网络搜索
+  /web-search-providers/{id}/credentials:
+    put:
+      consumes:
+      - application/json
+      description: 写入 api_key；省略时返回当前配置状态
+      parameters:
+      - description: 服务商 ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: '{api_key?: string}'
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 写入后的凭据状态
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_handler.DataResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/github_com_Tencent_WeKnora_internal_handler_dto.CredentialsResponse'
+              type: object
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/github_com_Tencent_WeKnora_internal_errors.AppError'
+        "404":
+          description: 服务商不存在
+          schema:
+            $ref: '#/definitions/github_com_Tencent_WeKnora_internal_errors.AppError'
+      security:
+      - Bearer: []
+      - ApiKeyAuth: []
+      summary: 设置联网搜索服务商凭据
+      tags:
+      - 联网搜索
+  /web-search-providers/{id}/credentials/{field}:
+    delete:
+      description: 删除指定字段的存储凭据；当前仅支持 api_key；删除已为空的字段是幂等的
+      parameters:
+      - description: 服务商 ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: 字段名（api_key）
+        in: path
+        name: field
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: 字段名非法
+          schema:
+            $ref: '#/definitions/github_com_Tencent_WeKnora_internal_errors.AppError'
+        "404":
+          description: 服务商不存在
+          schema:
+            $ref: '#/definitions/github_com_Tencent_WeKnora_internal_errors.AppError'
+      security:
+      - Bearer: []
+      - ApiKeyAuth: []
+      summary: 移除联网搜索服务商的凭据字段
+      tags:
+      - 联网搜索
   /web-search-providers/{id}/test:
     post:
       description: 使用数据库中已保存的凭证测试连通性

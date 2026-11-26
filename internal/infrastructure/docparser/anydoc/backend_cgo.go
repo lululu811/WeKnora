@@ -3,6 +3,7 @@
 package anydoc
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -13,11 +14,31 @@ import (
 // (vendored under third_party/anydoc-go until they are published as a module).
 // Conversion runs in-process: no subprocess, no HTTP hop, no Python.
 
+// *ConvertError must keep implementing resourceLimiter so Convert can classify
+// a parser budget failure without this file's build tag.
+var _ resourceLimiter = (*upstream.ConvertError)(nil)
+
 func backendAvailable() bool { return true }
 
 func backendUnavailableReason() string { return "" }
 
 func backendVersion() string { return upstream.Version }
+
+func backendPDFInvalidStructure(err error) (malformed, typed bool) {
+	var convertErr *upstream.ConvertError
+	if !errors.As(err, &convertErr) {
+		return false, false
+	}
+	return convertErr != nil && convertErr.Kind == "malformed", true
+}
+
+func markEncrypted(err error) error {
+	var convertErr *upstream.ConvertError
+	if errors.As(err, &convertErr) && convertErr != nil && convertErr.Kind == "encrypted" {
+		return fmt.Errorf("%w: %w", ErrEncrypted, err)
+	}
+	return err
+}
 
 func backendConvert(data []byte, opts Options) (*Result, error) {
 	format, err := upstreamFormat(opts.Format)
@@ -28,7 +49,7 @@ func backendConvert(data []byte, opts Options) (*Result, error) {
 	if !opts.WithAssets {
 		markdown, err := upstream.ToMarkdownBytes(data, format)
 		if err != nil {
-			return nil, fmt.Errorf("anydoc: markdown conversion failed: %w", err)
+			return nil, fmt.Errorf("anydoc: markdown conversion failed: %w", markEncrypted(err))
 		}
 		return &Result{Markdown: markdown}, nil
 	}
@@ -40,7 +61,7 @@ func backendConvert(data []byte, opts Options) (*Result, error) {
 	if err != nil {
 		markdown, mdErr := upstream.ToMarkdownBytes(data, format)
 		if mdErr != nil {
-			return nil, fmt.Errorf("anydoc: markdown conversion failed: %w", mdErr)
+			return nil, fmt.Errorf("anydoc: markdown conversion failed: %w", markEncrypted(mdErr))
 		}
 		return &Result{
 			Markdown:    markdown,

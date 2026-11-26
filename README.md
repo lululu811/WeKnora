@@ -83,7 +83,7 @@ OPENAI_BASE_URL=https://api.deepseek.com/v1
 # 或用本地 Ollama（先 `ollama serve`）：
 OLLAMA_BASE_URL=http://127.0.0.1:11434
 
-# Set WEKNORA_VERSION in .env to the target release (e.g. 0.8.3), or keep latest
+# Set WEKNORA_VERSION in .env to the target release (e.g. v0.9.1), or keep latest
 docker compose pull     # Pull images matching WEKNORA_VERSION
 docker compose up -d    # Recreate containers with new images
 ```

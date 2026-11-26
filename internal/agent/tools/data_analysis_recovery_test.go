@@ -17,8 +17,10 @@ import (
 func TestDataAnalysisRegistryRetriesFailedCSVLoad(t *testing.T) {
 	ctx := context.Background()
 	knowledge := &types.Knowledge{ID: "retry-doc", FileType: "csv", FilePath: "retry.csv"}
+	// Legacy bytes now decode successfully. Exceed DuckDB's line-size limit
+	// instead to keep exercising a real CREATE failure followed by recovery.
 	files := &csvFileService{files: map[string]string{
-		knowledge.FilePath: "id,amount\n1,\xff\n",
+		knowledge.FilePath: "id,amount\n1," + strings.Repeat("x", 3*1024*1024) + "\n",
 	}}
 	tool := NewDataAnalysisTool(nil,
 		&mapKnowledgeService{docs: map[string]*types.Knowledge{knowledge.ID: knowledge}},
@@ -55,6 +57,17 @@ func TestLoadFromExcelRetriesFailedCreate(t *testing.T) {
 	tool := &DataAnalysisTool{db: newTestDuckDB(t), sessionID: "test-excel-load-retry"}
 	t.Cleanup(func() { tool.Cleanup(ctx) })
 	path := filepath.Join(t.TempDir(), "retry.xlsx")
+	writeWorkbook(t, path, map[string][][]any{
+		"Sales": {{"id", "amount"}, {1, 10}},
+	}, []string{"Sales"})
+	// Keep the workbook directory readable so the failure reaches CREATE.
+	// A missing file now fails earlier, during worksheet discovery.
+	rewriteExcelParts(t, path, func(name string, data []byte) (string, []byte) {
+		if strings.HasPrefix(name, "xl/worksheets/sheet") && strings.HasSuffix(name, ".xml") {
+			data = []byte(`<worksheet><sheetData>`)
+		}
+		return name, data
+	})
 
 	if _, err := tool.LoadFromExcel(ctx, path, "excel_retry"); err == nil ||
 		!strings.Contains(err.Error(), "failed to create table from Excel") {
@@ -163,6 +176,9 @@ func TestDataAnalysisLoadRetainsReadyTableAfterSchemaError(t *testing.T) {
 			tool := &DataAnalysisTool{db: db, sessionID: "test-schema-read-retry"}
 			load := tool.LoadFromCSV
 			path := "source." + format
+			if format == "csv" {
+				path = writeCSV(t, "source.csv", "id", "1", "2")
+			}
 			if format == "xlsx" {
 				load = tool.LoadFromExcel
 				mock.ExpectQuery(`SELECT UNNEST\(layers\).name FROM st_read_meta`).WillReturnRows(
@@ -204,7 +220,8 @@ func TestDataAnalysisCleanupIncludesFailedCreate(t *testing.T) {
 	tool := &DataAnalysisTool{db: db, sessionID: "test-failed-create-cleanup"}
 	createErr := errors.New("creation failed")
 	mock.ExpectExec(`CREATE TABLE "uncertain" AS SELECT`).WillReturnError(createErr)
-	if _, err := tool.LoadFromCSV(context.Background(), "source.csv", "uncertain"); !errors.Is(err, createErr) {
+	path := writeCSV(t, "source.csv", "id", "1")
+	if _, err := tool.LoadFromCSV(context.Background(), path, "uncertain"); !errors.Is(err, createErr) {
 		t.Fatalf("load must preserve the CREATE error: %v", err)
 	}
 	mock.ExpectExec(`DROP TABLE IF EXISTS "uncertain"`).WillReturnResult(sqlmock.NewResult(0, 0))
@@ -212,5 +229,28 @@ func TestDataAnalysisCleanupIncludesFailedCreate(t *testing.T) {
 	tool.Cleanup(context.Background())
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestDataAnalysisCleanupAfterRequestCancellation(t *testing.T) {
+	db := newPlainDuckDB(t)
+	path := writeCSV(t, "aborted.csv", "id,amount", "1,10", "2,20")
+	tool := &DataAnalysisTool{db: db, sessionID: "test-aborted-request"}
+	if _, err := tool.LoadFromCSV(context.Background(), path, "k_aborted"); err != nil {
+		t.Fatalf("initial load: %v", err)
+	}
+
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	tool.Cleanup(canceled)
+
+	retryTool := &DataAnalysisTool{db: db, sessionID: "test-retry-after-abort"}
+	defer retryTool.Cleanup(context.Background())
+	schema, err := retryTool.LoadFromCSV(context.Background(), path, "k_aborted")
+	if err != nil {
+		t.Fatalf("reload after request cancellation: %v", err)
+	}
+	if schema.RowCount != 2 {
+		t.Fatalf("row count after reload = %d, want 2", schema.RowCount)
 	}
 }

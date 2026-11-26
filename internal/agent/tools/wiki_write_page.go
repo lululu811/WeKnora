@@ -31,10 +31,16 @@ func NewWikiWritePageTool(
 	return &wikiWritePageTool{
 		BaseTool: NewBaseTool(
 			ToolWikiWritePage,
-			"Create a new Wiki page or completely overwrite an existing one. Automatically handles outbound links.",
+			"Revise or consolidate a Wiki page after reading it. Creation is for missing derived pages "+
+				"from already ingested sources; search first. Maintains Wiki links, "+
+				"but does not ingest documents or create document chunks/indexes.",
 			json.RawMessage(`{
 				"type": "object",
 				"properties": {
+					"knowledge_base_id": {
+						"type": "string",
+						"description": "Optional kb://N handle from search/read results to disambiguate the slug."
+					},
 					"slug": {
 						"type": "string",
 						"description": "The slug of the Wiki page (e.g. 'entity/hunyuan-damoxing')"
@@ -58,12 +64,15 @@ func NewWikiWritePageTool(
 					"aliases": {
 						"type": "array",
 						"items": {"type": "string"},
-						"description": "A list of aliases for the page (optional). If provided, these will COMPLETELY REPLACE the existing aliases of the page."
+						"description": "A list of aliases for the page (optional). If provided, `+
+				`these will COMPLETELY REPLACE the existing aliases of the page."
 					},
 					"source_refs": {
 						"type": "array",
 						"items": {"type": "string"},
-						"description": "A list of short dN source document IDs that contributed to this page. If provided, these will COMPLETELY REPLACE the existing source_refs of the page."
+						"description": "A list of doc://N `+
+				`source document handles that contributed to this page. If provided, these `+
+				`will COMPLETELY REPLACE the existing source_refs of the page."
 					}
 				},
 				"required": ["slug", "title", "summary", "content", "page_type"]
@@ -89,13 +98,14 @@ func (t *wikiWritePageTool) Execute(ctx context.Context, args json.RawMessage) (
 	// revision history distinguishes agent edits from pipeline/user ones.
 	ctx = types.WithWikiEditSource(ctx, types.WikiEditSourceAgent)
 	var params struct {
-		Slug       string    `json:"slug"`
-		Title      string    `json:"title"`
-		Summary    string    `json:"summary"`
-		Content    string    `json:"content"`
-		PageType   string    `json:"page_type"`
-		Aliases    *[]string `json:"aliases"`
-		SourceRefs *[]string `json:"source_refs"`
+		KnowledgeBaseID string    `json:"knowledge_base_id"`
+		Slug            string    `json:"slug"`
+		Title           string    `json:"title"`
+		Summary         string    `json:"summary"`
+		Content         string    `json:"content"`
+		PageType        string    `json:"page_type"`
+		Aliases         *[]string `json:"aliases"`
+		SourceRefs      *[]string `json:"source_refs"`
 	}
 
 	if err := json.Unmarshal(args, &params); err != nil {
@@ -118,9 +128,14 @@ func (t *wikiWritePageTool) Execute(ctx context.Context, args json.RawMessage) (
 	}
 	params.Slug = normalizedSlug
 
+	kbIDs, scopeErr := wikiMutationKBs(t.kbIDs, params.KnowledgeBaseID)
+	if scopeErr != nil {
+		return &types.ToolResult{Success: false, Error: scopeErr.Error()}, nil
+	}
+
 	// Resolve and authorize provenance before choosing a creation target. In a
-	// multi-Wiki Agent, source documents provide a server-owned KB hint and
-	// remove the need for a model-visible knowledge_base_id argument.
+	// multi-Wiki Agent, source documents provide a server-owned KB hint when
+	// no explicit knowledge base was selected.
 	var sourceDocs []wikiSourceDocument
 	var resolvedRefs []string
 	var err error
@@ -133,17 +148,16 @@ func (t *wikiWritePageTool) Execute(ctx context.Context, args json.RawMessage) (
 		}
 		resolvedRefs = wikiSourceRefs(sourceDocs)
 	}
-	// Resolve existing pages across every legal Wiki KB. Cached provenance only
-	// influences lookup order; ambiguous slugs are never silently written to
-	// the first KB. New pages require one unambiguous creation target.
-	existingPage, kbID, err := resolveUniqueWikiPage(ctx, t.wikiPageService, params.Slug, t.kbIDs, t.routes)
+	// Resolve within the selected scope. Without an explicit KB, cached
+	// provenance only affects lookup order and ambiguous slugs are rejected.
+	existingPage, kbID, err := resolveUniqueWikiPage(ctx, t.wikiPageService, params.Slug, kbIDs, t.routes)
 	if errors.Is(err, errWikiPageNotFoundInScope) {
 		existingPage = nil
 		sourceKBHints, sourceErr := wikiKnowledgeBasesForSourceDocuments(sourceDocs, t.kbIDs)
 		if sourceErr != nil {
 			return &types.ToolResult{Success: false, Error: "Failed to resolve source_refs routing: " + sourceErr.Error()}, nil
 		}
-		kbID, err = resolveWikiCreateKB(params.Slug, t.kbIDs, t.routes, sourceKBHints...)
+		kbID, err = resolveWikiCreateKB(params.Slug, kbIDs, t.routes, sourceKBHints...)
 	}
 	if err != nil {
 		return &types.ToolResult{Success: false, Error: "Failed to resolve wiki target: " + err.Error()}, nil
@@ -158,9 +172,8 @@ func (t *wikiWritePageTool) Execute(ctx context.Context, args json.RawMessage) (
 		(isSummaryNamespace(params.Slug) || strings.EqualFold(params.PageType, types.WikiPageTypeSummary)) {
 		return &types.ToolResult{
 			Success: false,
-			Error: "summary pages are generated automatically from source documents and cannot be created manually. " +
-				"Use page_type 'synthesis'/'comparison'/'entity'/'concept' for authored pages, " +
-				"or target an existing summary page to update it.",
+			Error: "summary pages are generated by document ingestion. " +
+				"To edit one, target an existing summary page.",
 		}, nil
 	}
 

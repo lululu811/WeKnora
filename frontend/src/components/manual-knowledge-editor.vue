@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { ref, reactive, computed, watch, nextTick, onBeforeUnmount, h } from 'vue'
+import { ref, reactive, computed, watch, nextTick, onBeforeUnmount } from 'vue'
 import SettingDrawer from '@/components/settings/SettingDrawer.vue'
 import { marked } from 'marked'
-import { DialogPlugin, MessagePlugin, Icon as TIcon } from 'tdesign-vue-next'
+import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
 import { registerUnsavedChanges } from '@/utils/unsavedChanges'
 import { useUIStore } from '@/stores/ui'
+import { resolvePreferredKnowledgeBaseId } from '@/utils/manualKnowledgeDraft'
 import {
   getKnowledgeDetails,
   getKnowledgeBaseById,
@@ -18,7 +19,7 @@ import type { KnowledgeProcessOverrides } from '@/types/knowledgeProcess'
 import { sanitizeHTML, safeMarkdownToHTML, hydrateProtectedFileImages } from '@/utils/security'
 import { continueListOnEnter, countContent, indentOnTab } from '@/utils/markdownEditing'
 import { useI18n } from 'vue-i18n'
-import { useAssistantStore } from '@/stores/assistant'
+import AssistantActionsButton from '@/components/assistant/AssistantActionsButton.vue'
 
 interface KnowledgeBaseOption {
   label: string
@@ -61,35 +62,12 @@ const uploadConfirmStore = useUploadConfirmStore()
 const organizationStore = useOrganizationStore()
 const chatResources = useChatResourcesStore()
 const { t } = useI18n()
-const assistant = useAssistantStore()
-
-// Asks the assistant beside the editor; it writes into the editor and the
-// user saves. "open" only moves to its input box.
-const ASSISTANT_ACTIONS = ['continue', 'outline', 'polish', 'summarize'] as const
-const ASSISTANT_ACTION_ICONS: Record<typeof ASSISTANT_ACTIONS[number], string> = {
-  continue: 'pen',
-  outline: 'tree-list',
-  polish: 'ai-edit',
-  summarize: 'bulletpoint',
-}
-const menuIcon = (name: string) => () => h(TIcon, { name, size: '16px' })
-// A dropdown divider is drawn below its item, so it sits on the last action.
-const assistantMenu = computed(() => [
-  ...ASSISTANT_ACTIONS.map((action, i) => ({
-    content: t(`manualEditor.assistant.${action}`),
-    value: action,
-    prefixIcon: menuIcon(ASSISTANT_ACTION_ICONS[action]),
-    divider: i === ASSISTANT_ACTIONS.length - 1,
-  })),
-  { content: t('manualEditor.assistant.open'), value: 'open', prefixIcon: menuIcon('chat-bubble') },
-])
-const handleAssistantMenu = (selected: unknown) => {
-  const value = (selected as { value?: string } | null)?.value
-  if (value === 'open') assistant.focusComposer()
-  else if (ASSISTANT_ACTIONS.includes(value as typeof ASSISTANT_ACTIONS[number])) {
-    assistant.ask(t(`manualEditor.assistant.prompts.${value}`))
-  }
-}
+// The assistant fills the open editor; the user saves the result.
+const assistantActions = computed(() => ['continue', 'outline', 'polish', 'summarize'].map(action => ({
+  key: action,
+  label: t(`manualEditor.assistant.${action}`),
+  query: t(`manualEditor.assistant.prompts.${action}`),
+})))
 
 const visible = computed({
   get: () => uiStore.manualEditorVisible,
@@ -119,6 +97,10 @@ const contentLoading = ref(false)
 const saving = ref(false)
 const savingAction = ref<ManualStatus>('draft')
 const lastUpdatedAt = ref<string>('')
+// Closing and reopening the drawer starts a new visit, even for the same ID.
+// Reads from an older visit must never replace the current editable document.
+let loadVersion = 0
+const isCurrentLoad = (version: number) => version === loadVersion && visible.value
 
 // ---------- view mode ----------
 type ViewMode = 'edit' | 'split' | 'preview'
@@ -627,11 +609,12 @@ const lastUpdatedText = computed(() =>
   lastUpdatedAt.value ? t('manualEditor.status.lastUpdated', { time: lastUpdatedAt.value }) : '',
 )
 
-const loadKnowledgeBases = async () => {
+const loadKnowledgeBases = async (version: number) => {
   kbLoading.value = true
   try {
     // ensureKnowledgeBases 同时刷新自己的与共享的知识库快照。
     await chatResources.ensureKnowledgeBases()
+    if (!isCurrentLoad(version)) return
     const sharedKbs = organizationStore.sharedKnowledgeBases
 
     const isDocumentKb = (type?: string) => !type || type === 'document'
@@ -656,6 +639,9 @@ const loadKnowledgeBases = async () => {
     kbOptions.value = list
 
     if (mode.value === 'create') {
+      // Explicit kbId (KB-page callers) keeps the historical force-insert path.
+      // Chat preferences are soft: only select an id already in the writable
+      // candidate list, otherwise fall back to list[0].
       const presetKbId = uiStore.manualEditorKBId
       if (presetKbId) {
         const exists = list.find((item) => item.value === presetKbId)
@@ -667,14 +653,18 @@ const loadKnowledgeBases = async () => {
         }
         form.kbId = presetKbId
       } else {
-        form.kbId = list[0]?.value ?? ''
+        form.kbId = resolvePreferredKnowledgeBaseId(
+          uiStore.manualEditorPreferredKbIds,
+          list.map((item) => item.value),
+        )
       }
     }
   } catch (error) {
+    if (!isCurrentLoad(version)) return
     console.error('[ManualEditor] Failed to load knowledge base list:', error)
     kbOptions.value = []
   } finally {
-    kbLoading.value = false
+    if (isCurrentLoad(version)) kbLoading.value = false
   }
 }
 
@@ -703,13 +693,14 @@ const parseManualMetadata = (
   return null
 }
 
-const loadKnowledgeContent = async () => {
+const loadKnowledgeContent = async (version: number) => {
   if (!currentKnowledgeId.value) {
     return
   }
   contentLoading.value = true
   try {
     const res: any = await getKnowledgeDetails(currentKnowledgeId.value)
+    if (!isCurrentLoad(version)) return
     const data: KnowledgeDetailResponse | undefined = res?.data
     if (!data) {
       MessagePlugin.error(t('manualEditor.error.fetchDetailFailed'))
@@ -737,10 +728,11 @@ const loadKnowledgeContent = async () => {
       })
     }
   } catch (error) {
+    if (!isCurrentLoad(version)) return
     console.error('[ManualEditor] Failed to load manual knowledge:', error)
     MessagePlugin.error(t('manualEditor.error.fetchDetailFailed'))
   } finally {
-    contentLoading.value = false
+    if (isCurrentLoad(version)) contentLoading.value = false
   }
 }
 
@@ -764,23 +756,30 @@ const generateDefaultTitle = () => {
   return `${t('manualEditor.defaultTitlePrefix')}-${new Date().toLocaleString()}`
 }
 
-const initialize = async () => {
+const initialize = async (version: number) => {
   resetForm()
-  await loadKnowledgeBases()
+  await loadKnowledgeBases(version)
+  if (!isCurrentLoad(version)) return
 
   if (mode.value === 'edit') {
-    await loadKnowledgeContent()
+    await loadKnowledgeContent(version)
   } else {
     const presetKbId = uiStore.manualEditorKBId
     if (presetKbId) {
       form.kbId = presetKbId
-    } else if (!form.kbId && kbOptions.value.length) {
-      form.kbId = kbOptions.value[0].value
+    } else {
+      // Re-resolve preferences against the loaded candidates (resetForm may have
+      // left form.kbId empty; do not re-apply a preferred id missing from the list).
+      form.kbId = resolvePreferredKnowledgeBaseId(
+        uiStore.manualEditorPreferredKbIds,
+        kbOptions.value.map((item) => item.value),
+      )
     }
     form.title = form.title || generateDefaultTitle()
     form.content = form.content || ''
   }
 
+  if (!isCurrentLoad(version)) return
   initialLoaded.value = true
   markPristine()
 }
@@ -930,10 +929,15 @@ const handleClose = () => {
 }
 
 watch(visible, async (val) => {
+  const version = ++loadVersion
+  kbLoading.value = false
+  contentLoading.value = false
   if (val) {
     await nextTick()
-    await initialize()
+    if (!isCurrentLoad(version)) return
+    await initialize(version)
     await nextTick()
+    if (!isCurrentLoad(version)) return
     const length = form.content ? form.content.length : 0
     setSelectionRange(length, length)
   } else {
@@ -942,6 +946,7 @@ watch(visible, async (val) => {
 })
 
 onBeforeUnmount(() => {
+  ++loadVersion
   editorAreaObserver?.disconnect()
   editorAreaObserver = null
 })
@@ -1080,20 +1085,8 @@ onBeforeUnmount(() => {
             </template>
           </div>
           <div class="editor-toolbar__view">
-            <t-dropdown
-              v-if="assistant.pageAccess"
-              :options="assistantMenu"
-              trigger="click"
-              :min-column-width="112"
-              :popup-props="{ attach: 'body', zIndex: 2600, overlayInnerClassName: 'editor-assistant-menu' }"
-              @click="(selected: unknown) => handleAssistantMenu(selected)"
-            >
-              <button type="button" class="toolbar-assistant" :aria-label="$t('manualEditor.assistant.tooltip')"
-                @mousedown.prevent>
-                <t-icon name="ai-edit" />
-                <span>{{ $t('manualEditor.assistant.button') }}</span>
-              </button>
-            </t-dropdown>
+            <AssistantActionsButton :label="$t('manualEditor.assistant.button')"
+              :title="$t('manualEditor.assistant.tooltip')" :actions="assistantActions" @mousedown.prevent />
             <t-tooltip placement="top-right" :show-arrow="false">
               <template #content>
                 <div class="shortcut-sheet">
@@ -1438,43 +1431,6 @@ onBeforeUnmount(() => {
   }
 }
 
-.toolbar-assistant {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  height: 26px;
-  padding: 0 8px;
-  border: none;
-  border-radius: var(--app-radius-sm);
-  background: transparent;
-  color: var(--td-text-color-secondary);
-  font: inherit;
-  font-size: var(--app-text-sm);
-  font-weight: 500;
-  white-space: nowrap;
-  cursor: pointer;
-  transition: background var(--app-motion-fast) ease, color var(--app-motion-fast) ease;
-
-  .t-icon {
-    color: var(--td-brand-color);
-    font-size: var(--app-text-md);
-  }
-
-  &:hover {
-    background: var(--td-bg-color-container-hover);
-    color: var(--td-text-color-primary);
-  }
-
-  &:active {
-    background: var(--td-bg-color-container-active);
-  }
-
-  &:focus-visible {
-    outline: none;
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--td-brand-color) 25%, transparent);
-  }
-}
-
 /* 快捷键速查：和视图切换同处工具栏右端，省掉一整条状态栏 */
 .toolbar-shortcuts {
   display: flex;
@@ -1732,37 +1688,6 @@ onBeforeUnmount(() => {
     font-family: var(--app-font-family-mono);
     font-size: var(--app-text-xs);
     opacity: 0.9;
-  }
-}
-
-/* 工具栏下拉跟工具栏同尺寸，全局下拉样式是按侧边栏菜单定的 */
-.t-popup__content.editor-assistant-menu {
-  .t-dropdown__menu {
-    min-width: 0;
-  }
-
-  .t-dropdown__item {
-    padding: 5px 8px;
-    line-height: 18px;
-
-    .t-dropdown__item-text {
-      font-size: var(--app-text-md) !important;
-      line-height: 18px !important;
-    }
-
-    .t-dropdown__item-icon {
-      margin-right: 6px;
-
-      .t-icon {
-        font-size: var(--app-text-base);
-        width: var(--app-text-base);
-        height: var(--app-text-base);
-      }
-    }
-  }
-
-  .t-divider {
-    margin: 3px 6px;
   }
 }
 

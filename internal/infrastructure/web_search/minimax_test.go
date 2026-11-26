@@ -48,7 +48,9 @@ func TestMiniMaxProviderSearch(t *testing.T) {
 		region:  "cn",
 	}
 
-	results, err := provider.Search(context.Background(), " WeKnora ", 2, true)
+	results, err := provider.Search(context.Background(), types.WebSearchRequest{
+		Query: " WeKnora ", MaxResults: 2, IncludeDate: true,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,7 +102,9 @@ func TestMiniMaxProviderSearchDates(t *testing.T) {
 			defer server.Close()
 
 			p := &MiniMaxProvider{client: server.Client(), baseURL: server.URL, apiKey: "sk-test", region: "cn"}
-			results, err := p.Search(context.Background(), "test", 1, tt.includeDate)
+			results, err := p.Search(context.Background(), types.WebSearchRequest{
+				Query: "test", MaxResults: 1, IncludeDate: tt.includeDate,
+			})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -162,7 +166,7 @@ func TestMiniMaxProviderSearchError(t *testing.T) {
 	defer server401.Close()
 
 	p401 := &MiniMaxProvider{client: server401.Client(), baseURL: server401.URL, apiKey: "bad", region: "cn"}
-	_, err := p401.Search(context.Background(), "test", 1, false)
+	_, err := p401.Search(context.Background(), types.WebSearchRequest{Query: "test", MaxResults: 1})
 	if err == nil || !strings.Contains(err.Error(), "invalid api key") {
 		t.Fatalf("expected 401 error with message, got: %v", err)
 	}
@@ -175,7 +179,7 @@ func TestMiniMaxProviderSearchError(t *testing.T) {
 	defer serverBaseErr.Close()
 
 	pBaseErr := &MiniMaxProvider{client: serverBaseErr.Client(), baseURL: serverBaseErr.URL, apiKey: "key", region: "cn"}
-	_, err = pBaseErr.Search(context.Background(), "test", 1, false)
+	_, err = pBaseErr.Search(context.Background(), types.WebSearchRequest{Query: "test", MaxResults: 1})
 	if err == nil || !strings.Contains(err.Error(), "insufficient balance") {
 		t.Fatalf("expected base_resp error, got: %v", err)
 	}
@@ -183,7 +187,7 @@ func TestMiniMaxProviderSearchError(t *testing.T) {
 
 func TestMiniMaxProviderEmptyQuery(t *testing.T) {
 	p := &MiniMaxProvider{client: http.DefaultClient, baseURL: "http://example.com", apiKey: "key", region: "cn"}
-	_, err := p.Search(context.Background(), "   ", 1, false)
+	_, err := p.Search(context.Background(), types.WebSearchRequest{Query: "   ", MaxResults: 1})
 	if err == nil || !strings.Contains(err.Error(), "query is empty") {
 		t.Fatalf("expected empty query error, got: %v", err)
 	}
@@ -219,14 +223,18 @@ func TestMiniMaxProviderRegions(t *testing.T) {
 
 func TestMiniMaxRegistry(t *testing.T) {
 	r := NewRegistry()
-	r.Register("minimax", NewMiniMaxProvider)
-	provider, err := r.CreateProvider("minimax", types.WebSearchProviderParameters{
+	r.Add(Spec{Type: "minimax", Search: NewMiniMaxProvider})
+	provider, err := r.NewSearcher("minimax", types.WebSearchProviderParameters{
 		APIKey: "sk-test",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if provider.Name() != "minimax" {
-		t.Fatalf("expected minimax, got %s", provider.Name())
+	minimax, ok := provider.(*MiniMaxProvider)
+	if !ok {
+		t.Fatalf("expected *MiniMaxProvider, got %T", provider)
+	}
+	if minimax.Name() != "minimax" {
+		t.Fatalf("expected minimax, got %s", minimax.Name())
 	}
 }

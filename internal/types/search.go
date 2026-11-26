@@ -197,6 +197,11 @@ type SearchResult struct {
 	// MatchedImages survives merging, deduplication and stored reference replay.
 	// It contains storage references, never image bytes.
 	MatchedImages []MatchedImage `json:"matched_images,omitempty" gorm:"-"`
+	// EvidenceHandles records storage references that citation sources of this
+	// result expose to the model even though merge scoping kept them out of
+	// Content and ImageInfo. The message-scoped file proxy reads them as
+	// retrieval evidence (#5069); prompts and UI do not consume them.
+	EvidenceHandles []string `json:"evidence_handles,omitempty" gorm:"-"`
 
 	// Knowledge file name
 	// Used for file type knowledge, contains the original file name
@@ -211,6 +216,11 @@ type SearchResult struct {
 
 	// ChunkMetadata stores chunk-level metadata (e.g., generated questions)
 	ChunkMetadata JSON `json:"chunk_metadata,omitempty"`
+	// SkipGeneratedQuestions keeps generated questions out of the rerank
+	// passage. Search sets it when the knowledge base's question generation
+	// switch is off, including bases that were turned off before the index
+	// rows were disabled.
+	SkipGeneratedQuestions bool `json:"-" gorm:"-"`
 	// ContextHeader is the chunk's heading breadcrumb, part of what was
 	// embedded (Chunk.EmbeddingContent) but not of Content. Internal only.
 	ContextHeader string `json:"-"`

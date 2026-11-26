@@ -18,6 +18,24 @@ Wiki 将知识库资料整理为相互链接的 Markdown 页面。文档入库�
 
 Wiki 生成会增加模型调用，用量取决于文档规模和抽取密度。可在知识库 Wiki 配置中选择 `focused`、`standard` 或 `exhaustive`，详细说明见[抽取粒度](#抽取粒度)。
 
+如果只需要保留手工维护的 Wiki 页面，可以在 Wiki 设置中关闭「自动生成 Wiki 页面」。该设置默认开启，关闭后仍可浏览、搜索、编辑、回滚页面，也可以通过 Wiki API 或 Agent 工具手工创建和维护页面；新文档以及复制或移动到该知识库的文档不会自动调用 LLM 生成或更新 Wiki 页面。关闭前已经排队的自动 Wiki 任务会被清理，避免继续修改手工页面。
+
+## 新增资料入库与修订 Wiki 页面 {#ingest-or-edit}
+
+需要长期保存的新报告、笔记、研究总结或网页，应先作为源文档加入知识库。文档处理管道负责分块、建立已启用的检索索引；知识库开启 Wiki 索引时，还会生成或更新带来源引用的 Wiki 页面及页面间链接。
+
+使用助手时，按内容选择入口：
+
+| 任务 | 入口 |
+| --- | --- |
+| 保存新的文本或 Markdown 内容 | `knowledge.create_manual`，传入完整正文和 `status: publish` |
+| 导入用户提供的网页或文件 URL | `knowledge.create_from_url` |
+| 修订、合并已存在的 Wiki 页面 | 先读取页面，再使用 `wiki_write_page` 整页更新或 `wiki_replace_text` 局部替换 |
+
+手工文档省略 `status` 时默认为 `draft`，只保存草稿，不启动索引。发布和 URL 导入都是异步处理，通过 `knowledge.get_parse_progress` 查看进度。
+
+直接写 Wiki 页面仍可维护链接、出现在 Wiki 图谱中并被 Wiki 搜索命中；但不会创建源文档、分块或文档检索索引，不能替代入库。
+
 ## 浏览 Wiki 图谱 {#wiki-graph}
 
 <Screenshot
@@ -191,12 +209,12 @@ migration `000061_wiki_page_hierarchy.up.sql` 引入独立的 `wiki_folders` 表
 | --- | --- | --- |
 | `wiki_read_page` | 按 slug 批量读取页面全文 | `slugs: string[]` |
 | `wiki_search` | 搜索页面（标题 / slug / 别名 / 摘要 / 内容；`query` 按大小写不敏感的 POSIX 正则解释，不是合法正则的文本如 `C++` 按字面匹配；`regex=false` 强制字面匹配） | `query`、`regex?`、`knowledge_base_ids?`、`limit?`（旧参数 `queries`、`knowledge_base_id` 仍接受） |
-| `wiki_write_page` | 创建/整页覆盖（`synthesis`、`comparison` 页只能由此创建） | `slug`、`title`、`summary`、`content`、`page_type`、`aliases?`、`source_refs?` |
-| `wiki_replace_text` | 页内精确文本替换 | `slug`、`old_text`、`new_text` |
-| `wiki_rename_page` | 重命名 slug，自动更新反向链接 | `slug`、`new_slug` |
-| `wiki_delete_page` | 删除页面并清理死链 | `slug` |
+| `wiki_write_page` | 整页修订或合并已有页面；也支持从已入库来源重建缺失衍生页，不执行文档入库 | `slug`、`title`、`summary`、`content`、`page_type`、`aliases?`、`source_refs?`、`knowledge_base_id?` |
+| `wiki_replace_text` | 页内精确文本替换 | `slug`、`old_text`、`new_text`、`knowledge_base_id?` |
+| `wiki_rename_page` | 重命名 slug，自动更新反向链接 | `slug`、`new_slug`、`knowledge_base_id?` |
+| `wiki_delete_page` | 删除页面并清理死链 | `slug`、`knowledge_base_id?` |
 | `read_document` | 回读源文档原文：元数据头 + 分块，可分页或用 `query` 在文档内定位（替代原 `wiki_read_source_doc`；仅 Wiki 的知识库同样可用，因为分块总会落库） | `id`（`dN` / `cN`）、`offset?`、`limit?`、`query?`、`regex?`、`context?` |
-| `wiki_flag_issue` | 标记页面问题 | `slug`、`issue_type ∈ {mixed_entities, contradictory_facts, out_of_date, other}`、`description` |
+| `wiki_flag_issue` | 标记页面问题 | `slug`、`issue_type ∈ {mixed_entities, contradictory_facts, out_of_date, other}`、`description`、`knowledge_base_id?` |
 | `wiki_read_issue` | 查看问题详情 | 问题 ID |
 | `wiki_update_issue` | 更新问题状态 | 问题 ID、`status ∈ {pending, ignored, resolved}` |
 
@@ -205,6 +223,7 @@ migration `000061_wiki_page_hierarchy.up.sql` 引入独立的 `wiki_folders` 表
 配套机制：
 
 - **Wiki Scope**：Agent 会话内维护 wiki KB 白名单，支持通过 `@mention` 把范围收窄到特定文档/标签，工具执行时自动过滤 `source_refs`（`internal/agent/tools/wiki_tools.go`）；
+- **编辑目标**：`wiki_write_page`、`wiki_replace_text`、`wiki_rename_page`、`wiki_delete_page` 和 `wiki_flag_issue` 支持可选的 `knowledge_base_id`（模型使用检索/读取结果中的句柄，如 `kb://1`）。跨知识库存在相同 slug 时，用它明确指定目标；该参数只能收窄到当前可写范围内的知识库。省略时仍自动定位，重名则报错并提示指定知识库。改名与删除的入链处理仅发生在选定知识库内。
 - **写权限**：检索范围只需要读权限，而改写类工具（`wiki_write_page`、`wiki_replace_text`、`wiki_rename_page`、`wiki_delete_page`、`wiki_flag_issue`、`wiki_update_issue`）只作用于调用方可编辑的知识库，即本空间的知识库，或通过组织分享获得 editor 及以上权限的知识库。调用方本身还要有写权限：空间角色 Contributor 及以上，受限 API key 需要 `ingest` 能力。以 Viewer 身份运行的 IM、网页嵌入和 MCP 端点因此只读。范围内没有可编辑的 wiki 知识库时，这些工具不会注册。共享智能体始终只读；
 - **Wiki Fixer**：内置 Agent（`types.BuiltinWikiFixerID`），负责自动修复 wiki 问题（死链、实体混淆等）。跨租户访问共享 KB 时要求租户角色 ≥ Editor，并自动提升到源租户上下文（`internal/handler/session/wiki_fixer_scope.go`）。提升后使用内置默认配置，只针对这一个 KB，不启用 MCP、技能、沙箱和联网搜索，模型回退到该 KB 自己的模型，调用方对 fixer 的自定义配置不会带进源空间；
 - **问题闭环**：`wiki_page_issues` 表 + lint 接口 + `auto-fix`，人和 Agent 都可以报告/处理问题。

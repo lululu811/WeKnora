@@ -2,6 +2,13 @@
 
 WeKnora 由 Web 前端、Go 主服务和 Python 文档解析服务组成，使用数据库保存业务数据，通过 Redis 调度异步任务。向量存储、对象存储、知识图谱和模型服务可按部署需求配置。
 
+
+## 助手与持续任务
+
+内置 WeKnora 助手在现有 Agent 引擎之上使用管理操作目录和随应用打包的产品文档。页面上下文帮助理解任务，实际操作仍经过角色与资源授权。协作实例、审批及运行挂起状态会持久化；自动化调度器以任务所有者身份启动助手会话，并保存运行记录和站内通知。
+
+用户入口见[助手](../03-features/26-weknora-assistant.md)、[自动化](../03-features/27-automations.md)和[执行权限](../03-features/28-agent-permissions.md)。
+
 ## 系统组成 {#_1-系统组成}
 
 WeKnora 采用"主服务 + 前端 + 文档解析微服务"的三进程核心架构，外加 PostgreSQL 与 Redis 两个基础设施依赖；其余组件（向量库、知识图谱、联网搜索等）均为可选，通过 Docker Compose profile 按需启用。
@@ -58,12 +65,12 @@ WeKnora 采用"主服务 + 前端 + 文档解析微服务"的三进程核心架�
 | 配置 | `github.com/spf13/viper` + `config/config.yaml` + 环境变量 | — |
 | 可观测 | OpenTelemetry + Langfuse（`internal/tracing/langfuse`） | LLM 调用级 trace |
 | gRPC | `google.golang.org/grpc` v1.81.0 | 调用 docreader |
-| LLM 接入 | 自研协议层 `internal/models/api`（OpenAI / Anthropic / Gemini / DashScope 等线格式各一个包）、Ollama、腾讯云 LKE SDK 等 | 27 家厂商由 `internal/models/providers` 声明，见[模型管理](../03-features/06-models.md) |
+| LLM 接入 | 自研协议层 `internal/models/api`（OpenAI / Anthropic / Gemini / DashScope 等线格式各一个包）、Ollama、腾讯云 LKE SDK 等 | 31 家厂商由 `internal/models/providers` 声明，见[模型管理](../03-features/06-models.md) |
 | 向量/检索 | pgvector、ES v7/v8、OpenSearch、Qdrant、Milvus、Weaviate、Doris、腾讯 VectorDB、sqlite-vec | 由 `RETRIEVE_DRIVER` 与 `vector_stores` 表动态装配 |
 | 知识图谱 | `neo4j-go-driver/v6` | 可选 |
 | 数据分析 | DuckDB（`duckdb-go/v2`）、`pg_query_go` SQL 校验 | Agent 数据分析工具 |
 | 协程池 | `panjf2000/ants/v2` | 文档处理并发池（`CONCURRENCY_POOL_SIZE`） |
-| MCP | `mark3labs/mcp-go` v0.52.0 | Agent 外接 MCP 工具（含 OAuth） |
+| MCP | `mark3labs/mcp-go` v1.1.1 | Agent 外接 MCP 工具（含 OAuth） |
 | API 文档 | swaggo/gin-swagger | 非 release 模式暴露 `/swagger` |
 | 前端框架 | Vue 3（^3.5）+ TypeScript + Vite 7 | `frontend/package.json` |
 | 前端 UI/状态 | TDesign Vue Next、Pinia、Vue Router 4、vue-i18n | Marked/KaTeX/Mermaid/highlight.js 渲染富文本 |

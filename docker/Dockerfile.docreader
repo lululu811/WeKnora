@@ -112,6 +112,10 @@ RUN chmod +x docreader/scripts/generate_proto.sh && \
 # =========================
 FROM python:3.10.18-bookworm AS runner
 
+ARG VERSION_ARG=unknown
+ARG COMMIT_ID_ARG=unknown
+ENV DOCREADER_VERSION=${VERSION_ARG} DOCREADER_COMMIT_ID=${COMMIT_ID_ARG}
+
 ARG APT_MIRROR=""
 
 # Configure mirror first if provided, then install ca-certificates

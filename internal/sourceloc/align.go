@@ -22,29 +22,57 @@ const alignMinRunes = 2
 
 // Align maps complete source units, never extending a hit through unmatched
 // content. Unknown gaps must stay unknown: assigning them to the preceding
-// block can point a citation at an entirely different page.
+// block can point a citation at an entirely different page. A unit whose
+// text only survives in a displaced spot (a caption, a summary, a table the
+// renderer moved) must not orphan the units after it either: matching it
+// there would jump the cursor past their only occurrences, so one bad
+// match would cascade into a whole section losing its locators. Such a
+// unit is skipped instead and the units after it still align.
 func Align(markdown string, units []Unit) []types.SourceBlock {
 	norm := normalizeMarkdown(markdown)
 	runes := []rune(markdown)
 	var blocks []types.SourceBlock
 	cursor, floor := 0, 0
 	counts := make(map[string]int)
-	matches := make(map[string][]int)
 	for _, u := range units {
 		counts[normalizeKey(u.Text)]++
 	}
-	for _, u := range units {
+	matches := indexNormalizedMatches(norm.text, counts)
+	// lastOccurrence[i] is the last normalized offset at which unit i's
+	// text occurs, or -1 when the unit cannot be placed at all (too short,
+	// absent, or ambiguous). suffixMinLast[i] is the earliest such offset
+	// among the placeable units from i on.
+	lastOccurrence := make([]int, len(units))
+	for i, u := range units {
+		key := normalizeKey(u.Text)
+		lastOccurrence[i] = -1
+		if utf8.RuneCountInString(key) < alignMinRunes {
+			continue
+		}
+		positions := matches[key]
+		if len(positions) != counts[key] {
+			continue
+		}
+		lastOccurrence[i] = positions[len(positions)-1]
+	}
+	suffixMinLast := make([]int, len(units)+1)
+	suffixMinLast[len(units)] = -1
+	for i := len(units) - 1; i >= 0; i-- {
+		m := suffixMinLast[i+1]
+		if lastOccurrence[i] >= 0 && (m < 0 || lastOccurrence[i] < m) {
+			m = lastOccurrence[i]
+		}
+		suffixMinLast[i] = m
+	}
+	for i, u := range units {
 		key := normalizeKey(u.Text)
 		if utf8.RuneCountInString(key) < alignMinRunes {
 			continue
 		}
-		// Repeated source text is safe only when every occurrence is accounted
-		// for by a source unit in reading order (not a TOC or an omitted block).
-		positions, known := matches[key]
-		if !known {
-			positions = normalizedMatches(norm.text, key)
-			matches[key] = positions
-		}
+		// A unit may only be placed when every occurrence of its text in the
+		// document is accounted for by a source unit (not a TOC or an omitted
+		// block). The occurrence index is built in one pass over the document.
+		positions := matches[key]
 		if len(positions) != counts[key] {
 			continue
 		}
@@ -54,6 +82,13 @@ func Align(markdown string, units []Unit) []types.SourceBlock {
 		}
 		at := positions[matchIndex]
 		endByte := at + len(key)
+		// If a later unit's text only occurs before this match ends, it
+		// could still be placed now but never after the cursor jumps, so
+		// this match is a displaced copy, not the unit's own occurrence.
+		// Skip the unit instead of orphaning the rest of the section.
+		if next := suffixMinLast[i+1]; next >= cursor && next < endByte {
+			continue
+		}
 		start := lineLeadStart(runes, norm.pos[at], floor)
 		end := norm.end[endByte-1]
 		// Include trailing markup/URLs on the matched line and blank lines,
@@ -79,31 +114,61 @@ func Align(markdown string, units []Unit) []types.SourceBlock {
 	return blocks
 }
 
-// normalizedMatches rejects a number embedded in a different numeric value.
-func normalizedMatches(text, key string) []int {
-	var out []int
-	if key == "" {
-		return out
+// alignIndexPrefixBytes bounds the prefix used to bucket patterns. Long unit
+// keys in tables and office documents usually diverge in their first few
+// cells, so a fixed prefix gives an O(1) candidate lookup per document
+// position while keeping the full key comparison as the correctness check.
+const alignIndexPrefixBytes = 32
+
+// indexNormalizedMatches finds every occurrence of the requested normalized
+// keys in one pass. Align used to call normalizedMatches once per distinct
+// unit, so a table with one unit per row scanned the whole document once per
+// row. Long keys are bucketed by a fixed byte prefix; short keys are grouped
+// by their first rune and checked directly.
+func indexNormalizedMatches(text string, counts map[string]int) map[string][]int {
+	long := make(map[string][]string)
+	short := make(map[rune][]string)
+	for key := range counts {
+		if utf8.RuneCountInString(key) < alignMinRunes {
+			continue
+		}
+		if len(key) >= alignIndexPrefixBytes {
+			long[key[:alignIndexPrefixBytes]] = append(long[key[:alignIndexPrefixBytes]], key)
+			continue
+		}
+		first, _ := utf8.DecodeRuneInString(key)
+		short[first] = append(short[first], key)
 	}
+
+	matches := make(map[string][]int)
+	for at := 0; at < len(text); {
+		first, size := utf8.DecodeRuneInString(text[at:])
+		for _, key := range short[first] {
+			if strings.HasPrefix(text[at:], key) && normalizedBoundaryOK(text, at, key) {
+				matches[key] = append(matches[key], at)
+			}
+		}
+		if end := at + alignIndexPrefixBytes; end <= len(text) {
+			for _, key := range long[text[at:end]] {
+				if strings.HasPrefix(text[at:], key) && normalizedBoundaryOK(text, at, key) {
+					matches[key] = append(matches[key], at)
+				}
+			}
+		}
+		at += size
+	}
+	return matches
+}
+
+// normalizedBoundaryOK rejects a key embedded in a different numeric value.
+func normalizedBoundaryOK(text string, at int, key string) bool {
 	first, _ := utf8.DecodeRuneInString(key)
 	last, _ := utf8.DecodeLastRuneInString(key)
-	for from := 0; from <= len(text)-len(key); {
-		i := strings.Index(text[from:], key)
-		if i < 0 {
-			break
-		}
-		at := from + i
-		before, _ := utf8.DecodeLastRuneInString(text[:at])
-		after, _ := utf8.DecodeRuneInString(text[at+len(key):])
-		left := unicode.IsDigit(first) && (unicode.IsDigit(before) || strings.ContainsRune(".,:/+−-", before))
-		right := unicode.IsDigit(last) && (unicode.IsDigit(after) || strings.ContainsRune(".,:/%‰", after))
-		if !left && !right {
-			out = append(out, at)
-		}
-		_, size := utf8.DecodeRuneInString(text[at:])
-		from = at + size
-	}
-	return out
+	before, _ := utf8.DecodeLastRuneInString(text[:at])
+	after, _ := utf8.DecodeRuneInString(text[at+len(key):])
+	left := unicode.IsDigit(first) && (unicode.IsDigit(before) || strings.ContainsRune(".,:/+−-", before))
+	right := unicode.IsDigit(last) && (unicode.IsDigit(after) || strings.ContainsRune(".,:/%‰", after))
+	return !left && !right
 }
 
 // lineLeadStart moves pos back to the start of its line when everything

@@ -74,8 +74,8 @@ var toolHandlePolicies = map[string]toolHandlePolicy{
 		sourceIDKeys: map[string]struct{}{"knowledge_base_ids": {}},
 		sourceOutput: true,
 	},
-	// read_document takes one id that may name a document (dN) or a chunk
-	// (cN); the "id" key resolves against both handle tables.
+	// read_document takes one id that may name a document (doc://N) or a chunk
+	// (chunk://N); the "id" key resolves against both handle tables.
 	"read_document": {
 		sourceIDKeys: map[string]struct{}{"id": {}},
 		sourceOutput: true,
@@ -139,13 +139,13 @@ var toolHandlePolicies = map[string]toolHandlePolicy{
 		sourceOutput: true,
 	},
 	"wiki_write_page": {
-		sourceIDKeys: map[string]struct{}{"source_refs": {}},
+		sourceIDKeys: map[string]struct{}{"knowledge_base_id": {}, "source_refs": {}},
 	},
 	"wiki_replace_text": {
-		sourceIDKeys: map[string]struct{}{"source_refs": {}},
+		sourceIDKeys: map[string]struct{}{"knowledge_base_id": {}, "source_refs": {}},
 	},
 	"wiki_flag_issue": {
-		sourceIDKeys: map[string]struct{}{"suspected_knowledge_ids": {}},
+		sourceIDKeys: map[string]struct{}{"knowledge_base_id": {}, "suspected_knowledge_ids": {}},
 	},
 	"wiki_search": {
 		sourceIDKeys: map[string]struct{}{"knowledge_base_id": {}, "knowledge_base_ids": {}},
@@ -196,12 +196,14 @@ var toolHandlePolicies = map[string]toolHandlePolicy{
 		sourceOutput: true,
 	},
 	// Mutation tools echo the slug they acted on and surface validation errors
-	// that can quote a durable KB or document ID. They own no source arguments,
-	// but their output must still be compacted before the model sees it.
+	// that can quote a durable KB or document ID. Decode the optional KB selector
+	// and compact their output before the model sees it.
 	"wiki_rename_page": {
+		sourceIDKeys: map[string]struct{}{"knowledge_base_id": {}},
 		sourceOutput: true,
 	},
 	"wiki_delete_page": {
+		sourceIDKeys: map[string]struct{}{"knowledge_base_id": {}},
 		sourceOutput: true,
 	},
 	// Agent-private bookkeeping tools echo model-authored text. They need
@@ -222,7 +224,10 @@ var toolHandlePolicies = map[string]toolHandlePolicy{
 	"execute_skill_script": {},
 	// Sandbox shell/file tools return whatever a skill script produced, so they
 	// carry the same unknown-shape caveat as skill output above.
-	"shell_exec":         {},
+	"shell_exec": {},
+	// shell_exec_async results carry opaque work handles (sj_...) that the
+	// work_wait / work_cancel tools consume; they are not source identities.
+	"shell_exec_async":   {},
 	"list_sandbox_files": {},
 	"read_sandbox_file":  {},
 	"write_sandbox_file": {},
@@ -231,6 +236,10 @@ var toolHandlePolicies = map[string]toolHandlePolicy{
 	// caveat: they echo paths and byte counts, never knowledge identifiers.
 	"write_skill_file": {},
 	"edit_skill_file":  {},
+	// Background-work tools echo work IDs, states and command output; they
+	// never carry knowledge identifiers.
+	"work_wait":   {},
+	"work_cancel": {},
 }
 
 // HasToolPolicy reports whether a tool has an explicit model-handle policy.
@@ -248,6 +257,17 @@ func sourceArgumentAllowed(toolName, key string) bool {
 		return false
 	}
 	_, ok = policy.sourceIDKeys[strings.ToLower(key)]
+	return ok
+}
+
+// sourceBareTextAllowed reports structured-text arguments (SQL) whose handles
+// must decode to bare durable IDs rather than weknora:// URIs.
+func sourceBareTextAllowed(toolName, key string) bool {
+	policy, ok := toolHandlePolicies[toolName]
+	if !ok {
+		return false
+	}
+	_, ok = policy.sourceTextKeys[strings.ToLower(key)]
 	return ok
 }
 
@@ -269,23 +289,20 @@ func sourceCompactionAllowed(toolName string) bool {
 	return ok && !policy.opaqueOutput
 }
 
-// decodeToolPolicies handles the deliberately small set of arguments whose
-// model handles are embedded in structured text or belong to a tool-private
-// identity space. Generic free text is never rewritten.
+// decodeToolPolicies handles arguments whose model handles belong to a
+// tool-private identity space. Source handles are decoded for every tool by
+// the source codec, because their scheme syntax cannot collide with prose.
 func (r *Registry) decodeToolPolicies(call *types.LLMToolCall) {
 	if r == nil || call == nil {
 		return
 	}
 	policy, ok := toolHandlePolicies[call.Function.Name]
-	if !ok {
+	if !ok || len(policy.decodedIssueIDKeys) == 0 {
 		return
 	}
 	call.Function.Arguments = rewriteJSONStringValues(
 		call.Function.Arguments,
 		func(key, value string) string {
-			if _, ok := policy.sourceTextKeys[key]; ok {
-				return r.sources.DecodeKnownQuotedText(value)
-			}
 			if _, ok := policy.decodedIssueIDKeys[key]; ok && issueHandleShapeRE.MatchString(strings.TrimSpace(value)) {
 				if durable, ok := r.issues.Resolve(value); ok {
 					return durable
@@ -327,15 +344,12 @@ func (r *Registry) unresolvedPrivateToolHandles(toolName, raw string) []string {
 		return nil
 	}
 	policy, ok := toolHandlePolicies[toolName]
-	if !ok || (len(policy.decodedIssueIDKeys) == 0 && len(policy.sourceTextKeys) == 0) {
+	if !ok || len(policy.decodedIssueIDKeys) == 0 {
 		return nil
 	}
 	var unresolved []string
 	_ = walkJSONStringValues(raw, func(key, value string) string {
 		value = strings.TrimSpace(value)
-		if _, ok := policy.sourceTextKeys[key]; ok {
-			unresolved = append(unresolved, r.sources.UnresolvedQuotedTextHandles(value)...)
-		}
 		if _, ok := policy.decodedIssueIDKeys[key]; ok && issueHandleShapeRE.MatchString(value) {
 			if _, ok := r.issues.Resolve(value); !ok {
 				unresolved = append(unresolved, value)
@@ -419,7 +433,7 @@ func walkJSONValue(key string, value interface{}, rewrite func(key, value string
 }
 
 // Some providers double-encode items. Unwrap only this built-in's array before
-// resolving source handles; doing it at Execute time leaves nested wN values
+// resolving source handles; doing it at Execute time leaves nested url://N values
 // unresolved. ModelArguments has already retained the exact provider payload.
 func normalizeWebFetchItems(calls []types.LLMToolCall) {
 	for i := range calls {

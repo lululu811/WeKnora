@@ -38,14 +38,14 @@ _SENTENCE_END = tuple("。．.!?！？：:；;」』”)）")
 
 
 def _fold(ch: str) -> str:
-    """Letters and digits only, lower-cased, full-width folded."""
-    if not ch.isalnum():
+    """Letters, digits and combining marks in a decomposed projection."""
+    if not ch.isalnum() and not unicodedata.category(ch).startswith("M"):
         return ""
-    return unicodedata.normalize("NFKC", ch).lower()
+    return unicodedata.normalize("NFKD", ch).lower()
 
 
 def normalize_with_positions(text: str) -> Tuple[str, List[int]]:
-    """Project text onto letters and digits.
+    """Project text onto decomposed letters, digits and combining marks.
 
     Returns the projection and, for each of its characters, the offset in
     ``text`` of the character it came from.
@@ -72,6 +72,23 @@ def normalize_with_positions(text: str) -> Tuple[str, List[int]]:
         for f in folded:
             out.append(f)
             pos.append(i)
+    # Decomposing individual characters retains original offsets, but marks
+    # from adjacent characters still need canonical combining-class order.
+    start = 0
+    while start < len(out):
+        if not unicodedata.combining(out[start]):
+            start += 1
+            continue
+        stop = start + 1
+        while stop < len(out) and unicodedata.combining(out[stop]):
+            stop += 1
+        ordered = sorted(
+            zip(out[start:stop], pos[start:stop]),
+            key=lambda item: unicodedata.combining(item[0]),
+        )
+        out[start:stop] = [item[0] for item in ordered]
+        pos[start:stop] = [item[1] for item in ordered]
+        start = stop
     return "".join(out), pos
 
 
@@ -80,6 +97,7 @@ def normalize(text: str) -> str:
 
 
 def _key_weight(key: str) -> int:
+    key = unicodedata.normalize("NFC", key)
     return sum(4 if unicodedata.east_asian_width(ch) in ("W", "F") else 1 for ch in key)
 
 
@@ -95,7 +113,9 @@ def _column_cursor(boxes, idx: int, ends: List[Optional[int]]) -> Optional[int]:
     return None
 
 
-def _numeric_safe_matches(text: str, key: str) -> List[int]:
+def _numeric_safe_matches(
+    text: str, key: str, positions: Sequence[int], page_text: str
+) -> List[int]:
     out = []
     if not key:
         return out
@@ -104,8 +124,20 @@ def _numeric_safe_matches(text: str, key: str) -> List[int]:
         before = text[at - 1] if at else ""
         end = at + len(key)
         after = text[end] if end < len(text) else ""
-        left = key[0].isdigit() and bool(before) and (before.isdigit() or before in ".,:/+−-")
-        right = key[-1].isdigit() and bool(after) and (after.isdigit() or after in ".,:/%‰")
+        # The projection removes line breaks. Check the original text to
+        # distinguish numeric neighbors on separate lines.
+        left = (
+            key[0].isdigit()
+            and at > 0
+            and (before.isdigit() or before in ".,:/+−-")
+            and "\n" not in page_text[positions[at - 1]:positions[at]]
+        )
+        right = (
+            key[-1].isdigit()
+            and end < len(text)
+            and (after.isdigit() or after in ".,:/%‰")
+            and "\n" not in page_text[positions[end - 1]:positions[end]]
+        )
         if not left and not right:
             out.append(at)
         start = at + 1
@@ -132,10 +164,10 @@ def locate_lines(
     ends: List[Optional[int]] = []
     cursor = 0
     counts = Counter(normalize(line) for line in line_texts)
-    occurrences = {key: _numeric_safe_matches(norm, key) for key in counts}
+    occurrences = {key: _numeric_safe_matches(norm, key, pos, page_text) for key in counts}
     for idx, line in enumerate(line_texts):
         key = normalize(line)
-        if len(key) < _MIN_KEY_CHARS or len(occurrences[key]) != counts[key] or (
+        if len(unicodedata.normalize("NFC", key)) < _MIN_KEY_CHARS or len(occurrences[key]) != counts[key] or (
             _key_weight(key) < _SHORT_KEY_WEIGHT and len(occurrences[key]) > 1
         ):
             hits.append(None)
@@ -299,13 +331,12 @@ def page_blocks(
     usual_gap = min(statistics.median(gaps), line_h * 1.5) if gaps else line_h * 0.5
 
     norm, positions = normalize_with_positions(page_text)
-    def line_end(at, line):
+    def line_end(at, line, norm_start):
         key = normalize(line["text"])
-        norm_start = next((i for i, p in enumerate(positions) if p >= at), len(norm))
         hit = norm.find(key, norm_start)
         if hit < 0:
             return at
-        end_at = positions[hit + len(key) - 1] + 1
+        end_at = max(positions[hit:hit + len(key)]) + 1
         while end_at < len(page_text) and not page_text[end_at].isalnum():
             if page_text[end_at] == "\n":
                 return end_at + 1
@@ -313,8 +344,14 @@ def page_blocks(
         return end_at
 
     paragraphs: List[Tuple[int, List[dict]]] = []
+    norm_start = 0
     for at, ln in placed:
-        ln = {**ln, "_source_end": line_end(at, ln)}
+        # Line starts are sorted, so earlier offsets cannot qualify again.
+        # This also works when combining-mark reordering makes positions
+        # locally non-monotonic.
+        while norm_start < len(positions) and positions[norm_start] < at:
+            norm_start += 1
+        ln = {**ln, "_source_end": line_end(at, ln, norm_start)}
         if paragraphs:
             prev = paragraphs[-1][1][-1]
             col_right = max(p["bbox"][2] for p in paragraphs[-1][1])

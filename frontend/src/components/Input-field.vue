@@ -12,16 +12,21 @@ import BrowserIcon from '@/components/icons/BrowserIcon.vue';
 import { useMenuStore } from '@/stores/menu';
 import { listKnowledgeBases, searchKnowledge, batchQueryKnowledge, listKnowledgeTags } from '@/api/knowledge-base';
 import { listMCPServices, type MCPService } from '@/api/mcp-service';
-import { stopSession } from '@/api/chat';
+import { stopSession, transcribeVoice } from '@/api/chat';
 import type { SteerQueueItem } from '@/api/chat/steer';
 import { chatSubmitShortcut } from '@/utils/chatSubmitShortcut';
+import { loadPreference, savePreference, safeRemoveItem, userKey } from '@/composables/preferenceStorage';
 import { useOrganizationStore } from '@/stores/organization';
 import KnowledgeBaseSelector from './KnowledgeBaseSelector.vue';
 import MentionSelector from './MentionSelector.vue';
+import { useAuthStore } from '@/stores/auth';
+import type { BrowserKnowledgeBase } from '@/utils/mentionFileBrowser';
 import AgentSelector from './AgentSelector.vue';
+import HostApprovalModeSelect from './HostApprovalModeSelect.vue';
 import { getCaretCoordinates } from '@/utils/caret';
 import { getRootZoom, rectToCssPx, cssViewportSize } from '@/utils/zoom';
 import { type ModelConfig } from '@/api/model';
+import { selectInitialModelId } from '@/utils/modelDefaults';
 import {
   formatContextWindow,
   isDefaultContextWindow,
@@ -59,6 +64,9 @@ import { formatLocalizedList } from '@/utils/format-list';
 import { SKILL_ICON, type MentionItem, type MentionItemType, type MentionRequestItem } from '@/types/mention';
 import { toolboxLocation } from '@/config/toolbox';
 import { supportedLevels, levelLabelKey, levelFromLegacy, clampLevel, type ReasoningLevel } from '@/utils/reasoningEffort';
+import { customAgentStreamMode } from '@/utils/agent-mode';
+import { isVoiceInputSupported, useVoiceInput, type VoiceInputError } from '@/composables/useVoiceInput';
+import { createHoldToTalk, voiceHotkeyLabel } from '@/utils/voiceHotkey';
 
 /** 附件按钮：原内联表达式搬家，行为不变。AttachmentUpload 通过 InputEditor 的
  *  默认插槽渲染，模板 ref 仍属于本组件，因此直接取本组件的 attachmentUploadRef。 */
@@ -74,6 +82,7 @@ const composerTargetEl = ref<HTMLElement | null>(null);
 const route = useRoute();
 const router = useRouter();
 const settingsStore = useSettingsStore();
+const mentionAuth = useAuthStore();
 const browserConnection = useBrowserConnectionStore();
 const uiStore = useUIStore();
 const orgStore = useOrganizationStore();
@@ -486,6 +495,118 @@ const showWebSearchButton = computed(() => {
 });
 const showImageUploadButton = computed(() => isImageUploadEnabledByAgent.value);
 
+// 语音输入：复用智能体的「音频上传 + ASR 模型」配置
+const voiceInputSupported = isVoiceInputSupported();
+const showVoiceButton = computed(() => {
+  if (props.embeddedMode || !voiceInputSupported || !hasAgentConfig.value) return false;
+  const config = currentAgentConfig.value;
+  return config?.audio_upload_enabled === true && !!config?.asr_model_id;
+});
+const voiceHotkeyText = voiceHotkeyLabel();
+// Where the transcript lands: the caret when recording started, else the end.
+let voiceInsertRange: { start: number; end: number } | null = null;
+
+const insertVoiceText = (text: string) => {
+  const current = query.value;
+  const range = voiceInsertRange ?? { start: current.length, end: current.length };
+  const start = Math.min(range.start, current.length);
+  const end = Math.min(Math.max(range.end, start), current.length);
+  const before = current.slice(0, start);
+  const after = current.slice(end);
+  const lead = before && !/\s$/.test(before) && !/^[\u3000-\u303f\uff00-\uffef]/.test(text) ? ' ' : '';
+  const inserted = lead + text;
+  query.value = before + inserted + after;
+  voiceInsertRange = null;
+  nextTick(() => {
+    const textarea = getTextareaEl();
+    if (!textarea) return;
+    textarea.focus({ preventScroll: true });
+    const caret = before.length + inserted.length;
+    textarea.setSelectionRange(caret, caret);
+  });
+};
+
+const voiceErrorMessages: Record<VoiceInputError, string> = {
+  unsupported: 'input.voiceUnsupported',
+  insecure: 'input.voiceInsecureContext',
+  permission: 'input.voicePermissionDenied',
+  device: 'input.voiceDeviceError',
+  decode: 'input.voiceDecodeError',
+  transcribe: 'input.voiceTranscribeFailed',
+  empty: 'input.voiceEmptyResult',
+  releasedEarly: 'input.voiceReleasedEarly',
+};
+
+const voiceInput = useVoiceInput({
+  target: () => showVoiceButton.value
+    ? {
+      agentId: selectedAgentId.value,
+      agentSourceTenantId: settingsStore.selectedAgentSourceTenantId ?? undefined,
+      locale: locale.value,
+    }
+    : null,
+  transcribe: async (wav, target) => {
+    const res = await transcribeVoice(wav, target.agentId, target.agentSourceTenantId, target.locale);
+    return res?.data?.text ?? '';
+  },
+  onText: insertVoiceText,
+  onError: (error, detail) => {
+    if (detail) console.warn('[voice input]', error, detail);
+    const message = t(voiceErrorMessages[error]);
+    if (error === 'empty' || error === 'releasedEarly') MessagePlugin.info(message);
+    else MessagePlugin.warning(message);
+  },
+});
+const voiceState = voiceInput.state;
+const voiceElapsedText = computed(() => {
+  const seconds = Math.floor(voiceInput.elapsedMs.value / 1000);
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+});
+
+const startVoiceInput = () => {
+  if (!showVoiceButton.value || voiceState.value !== 'idle') return;
+  const textarea = getTextareaEl();
+  voiceInsertRange = textarea && document.activeElement === textarea
+    ? { start: textarea.selectionStart, end: textarea.selectionEnd }
+    : null;
+  void voiceInput.start();
+};
+const stopVoiceInput = () => voiceInput.stop();
+
+// The hotkey only targets this input: skip when it is hidden (another chat
+// view owns the page) or when focus sits in some other field or dialog.
+const voiceHotkeyAllowed = () => {
+  if (!showVoiceButton.value || voiceState.value !== 'idle') return false;
+  const textarea = getTextareaEl();
+  if (!textarea?.isConnected || textarea.offsetParent === null) return false;
+  const active = document.activeElement as HTMLElement | null;
+  if (active && active !== textarea && active !== document.body) {
+    if (active.closest('[role="dialog"], .t-dialog, .t-drawer')) return false;
+    if (active.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(active.tagName)) return false;
+  }
+  return !isComposing.value;
+};
+const voiceHold = createHoldToTalk({
+  enabled: voiceHotkeyAllowed,
+  onStart: startVoiceInput,
+  onStop: stopVoiceInput,
+});
+const onVoiceKeydown = (e: KeyboardEvent) => voiceHold.keydown(e);
+const onVoiceKeyup = (e: KeyboardEvent) => voiceHold.keyup(e);
+const onVoiceWindowBlur = () => voiceHold.release();
+const onVoiceVisibilityChange = () => {
+  if (document.visibilityState === 'hidden') voiceHold.release();
+};
+
+// Press-and-hold on the mic button mirrors the keyboard shortcut.
+const onVoiceButtonPointerDown = (e: PointerEvent) => {
+  if (e.button !== 0) return;
+  e.preventDefault();
+  (e.currentTarget as HTMLElement)?.setPointerCapture?.(e.pointerId);
+  startVoiceInput();
+};
+const onVoiceButtonPointerUp = () => stopVoiceInput();
+
 // 模型选择是否被智能体锁定 - 已移除锁定逻辑，允许用户自由切换模型
 const isModelLockedByAgent = computed(() => {
   return false;
@@ -510,6 +631,7 @@ const mentionGroupCounts = ref<Partial<Record<MentionItemType, number>>>({});
 // 当前 @ 会话可见的 KB ID 集合（含工具兼容性过滤），分页加载文件时复用，
 // 避免 append 请求把不兼容 KB 的文件漏进来。`null` 表示"不受限制"（非智能体场景）
 const mentionAllowedKbIds = ref<Set<string> | null>(null);
+const mentionBrowserKbs = ref<BrowserKnowledgeBase[]>([]);
 const mentionLoading = ref(false);
 const mentionOffset = ref(0);
 const MENTION_PAGE_SIZE = 20;
@@ -581,6 +703,10 @@ const props = defineProps({
     default: false
   }
 });
+
+const hostApprovalModeVisible = computed(() =>
+  !props.embeddedMode && !!props.sessionId && deploymentCapabilities.isSupported('settings.sandbox.host'),
+);
 
 const isAgentEnabled = computed(() => settingsStore.isAgentEnabled);
 const isWebSearchEnabled = computed(() => settingsStore.isWebSearchEnabled);
@@ -768,7 +894,6 @@ const composerModelId = computed(() => {
   if (!props.embeddedMode) return selectedModelId.value;
   return composerModel.value?.id || '';
 });
-const modelsLoading = ref(false);
 const showModelSelector = ref(false);
 const modelButtonRef = ref<HTMLElement>();
 const modelDropdownStyle = ref<Record<string, string>>({});
@@ -956,15 +1081,37 @@ const loadWebSearchConfig = async (force = false) => {
   }
 };
 
+// 选中的自定义智能体可能刚在编辑页改过运行模式。对话页回到前台时列表会刷新，
+// 但 isAgentEnabled 只在“选择智能体”那一刻同步过，仍是旧值，请求因而走错管线
+// （#4803）。列表刷新后按智能体当前配置纠正一次。
+const syncSelectedAgentModeFromConfig = () => {
+  if (props.embeddedMode) return;
+  const agent = selectedAgent.value;
+  // 列表尚未加载时 selectedAgent 会回退到快速问答占位对象，不能用它推断模式。
+  if (!agent || agent.id !== selectedAgentId.value) return;
+  const shouldEnable = customAgentStreamMode(selectedAgentId.value, agent.config);
+  if (shouldEnable === null || shouldEnable === settingsStore.isAgentEnabled) return;
+  settingsStore.toggleAgent(shouldEnable);
+};
+
 // 加载智能体列表（我的 + 共享，供选中态与就绪检查用）
 const loadAgents = async (force = false) => {
   try {
     await chatResources.ensureAgents(force);
     ensureSelectedAgentNotDisabled();
+    syncSelectedAgentModeFromConfig();
   } catch (error) {
     console.error('Failed to load agents:', error);
   }
 };
+
+// 会话恢复会按 last_request_state 覆盖 isAgentEnabled，可能把它改回编辑前的旧值；
+// 选中智能体变化时也要重新对齐。挂载后的首次同步由 loadAgents 完成，这里兜住
+// 之后任何一次漂移。
+watch(
+  () => [selectedAgentId.value, currentAgentConfig.value?.agent_mode, settingsStore.isAgentEnabled] as const,
+  () => syncSelectedAgentModeFromConfig(),
+);
 
 // 默认选中的 builtin（builtin-quick-answer）也可能被当前空间管理员停用。
 // 列表加载完后做一次纠偏：若当前选中的是本空间停用的 agent（仅限「我的/builtin」，
@@ -1002,33 +1149,24 @@ const enabledAgents = computed(() =>
   agents.value.filter(a => !disabledOwnAgentIds.value.includes(a.id))
 );
 
-// LAST_CHAT_MODEL_KEY scopes the per-user "last selected chat model"
-// to localStorage. The previous implementation wrote this back to the
-// tenant-level KV /tenants/kv/conversation-config — which (a) required
-// Admin+ to mutate, so a Viewer/Contributor switching models in the
-// chat input got a 403, and (b) silently overwrote the tenant default
-// for everyone else. localStorage is per-user-per-browser, which is
-// what "remember my last pick" actually wants.
-const LAST_CHAT_MODEL_KEY = 'weknora_last_chat_model_id'
+// The "last selected chat model" lives in localStorage so it survives
+// reloads without a KV round-trip. localStorage is per-browser, not
+// per-user, so the key is namespaced by the active user id via
+// preferenceStorage — otherwise two accounts sharing a browser inherit
+// each other's pick (logout and tenant-switch never cover session-expiry
+// or crash recovery). The un-namespaced legacy key from before this
+// scoping is removed on write so other readers cannot resurrect it.
+const LAST_CHAT_MODEL_LEGACY_KEY = 'weknora_last_chat_model_id'
 
-const readLastChatModelID = (): string => {
-  try {
-    return localStorage.getItem(LAST_CHAT_MODEL_KEY) || ''
-  } catch {
-    return ''
-  }
-}
+const readLastChatModelID = (): string => loadPreference('last_chat_model') || ''
 
 const writeLastChatModelID = (id: string) => {
-  try {
-    if (id) {
-      localStorage.setItem(LAST_CHAT_MODEL_KEY, id)
-    } else {
-      localStorage.removeItem(LAST_CHAT_MODEL_KEY)
-    }
-  } catch {
-    // localStorage may be disabled in incognito mode; ignore.
+  if (id) {
+    savePreference('last_chat_model', id)
+  } else {
+    safeRemoveItem(userKey('last_chat_model'))
   }
+  safeRemoveItem(LAST_CHAT_MODEL_LEGACY_KEY)
 }
 
 // Initial chat-model selection priority: per-user last pick
@@ -1046,39 +1184,39 @@ const initChatModelSelection = () => {
     selectedChatModelId: initialSelection,
     rerankModelId: '',
   });
-  if (!selectedModelId.value) {
-    selectedModelId.value = initialSelection;
-  }
   ensureModelSelection();
 };
 
 const loadChatModels = async (force = false) => {
-  if (modelsLoading.value) return;
-  modelsLoading.value = true;
   try {
     await chatResources.ensureChatModels(force);
     ensureModelSelection();
   } catch (error) {
     console.error('Failed to load chat models:', error);
     chatResources.invalidate('models');
-  } finally {
-    modelsLoading.value = false;
   }
 };
 
 const ensureModelSelection = () => {
-  if (selectedModelId.value) {
-    return;
-  }
+  // An empty list is authoritative only after a successful load. Shared agents
+  // may name a model that is intentionally absent from the local catalog.
+  if (props.embeddedMode || !chatResources.isLoaded('models')) return;
+  const shared = !!settingsStore.selectedAgentSourceTenantId;
+  if (shared && !selectedSharedAgent.value) return;
+  const isAvailable = (id: string | null | undefined) =>
+    !!id && ((shared && id === agentModelId.value) || availableModels.value.some(model => model.id === id));
   const lastPick = readLastChatModelID();
-  if (lastPick) {
-    selectedModelId.value = lastPick;
-    return;
-  }
-  if (availableModels.value.length > 0) {
-    selectedModelId.value = availableModels.value[0].id || '';
+  if (lastPick && !isAvailable(lastPick)) writeLastChatModelID('');
+  if (isAvailable(selectedModelId.value)) return;
+  const replacement = [lastPick, agentModelId.value].find(isAvailable)
+    || selectInitialModelId(availableModels.value, 'KnowledgeQA') || '';
+  if (replacement !== selectedModelId.value) {
+    settingsStore.updateConversationModels({ selectedChatModelId: replacement, summaryModelId: replacement });
   }
 };
+
+// Settings can replace the catalog while this composer is already mounted.
+watch(availableModels, ensureModelSelection);
 
 // 智能体身份或其数据到位时，把对话模型同步到智能体配置的 model_id。
 // 修复场景：导航离开再返回时，initChatModelSelection 会用 localStorage 的 lastPick
@@ -1088,7 +1226,13 @@ const ensureModelSelection = () => {
 watch(
   [selectedAgentId, () => settingsStore.selectedAgentSourceTenantId, agentModelId],
   ([, sourceTenantId, newModelId]) => {
-    if (!newModelId || newModelId.trim() === '') return;
+    // 上游把「没有智能体模型 id」改成走 ensureModelSelection() 兜底恢复；
+    // 本地额外把「只有空白字符」的 id 也当成空（上游只判 !newModelId）。
+    if (props.embeddedMode) return;
+    if (!newModelId || newModelId.trim() === '') {
+      ensureModelSelection();
+      return;
+    }
 
     const lastPick = readLastChatModelID();
     const isSharedAgent = !!sourceTenantId;
@@ -1098,6 +1242,7 @@ watch(
       lastPick &&
       selectedModelId.value === lastPick &&
       lastPick !== newModelId &&
+      (!chatResources.isLoaded('models') || availableModels.value.some(model => model.id === lastPick)) &&
       (!isSharedAgent || agentModelInList)
     ) {
       return;
@@ -1106,6 +1251,7 @@ watch(
     if (newModelId !== selectedModelId.value) {
       selectedModelId.value = newModelId;
     }
+    ensureModelSelection();
   },
   { immediate: true }
 );
@@ -1130,7 +1276,8 @@ const handleModelChange = (value: string | number | Array<string | number> | und
     return;
   }
   if (val === '__add_model__') {
-    selectedModelId.value = readLastChatModelID();
+    // 上游删掉了这里的「回填 lastPick」：模型恢复改由 ensureModelSelection()
+    // 统一负责（避免把一个已下线的模型再写回选中项）。本地沿用上游做法。
     handleGoToConversationModels();
     return;
   }
@@ -1326,6 +1473,30 @@ const updateModelDropdownPosition = () => {
 let lastMentionQuery = '';
 // 关键词变化时旧请求可能晚于新请求返回；只采纳最新一次加载的结果
 let mentionLoadSeq = 0;
+const mentionBrowserContext = computed(() => ({
+  key: JSON.stringify([mentionAuth.user?.id, mentionAuth.selectedTenantId, mentionAuth.tenant?.id,
+    props.sessionId, selectedAgentId.value, settingsStore.selectedAgentSourceTenantId,
+    agentKBSelectionMode.value, [...agentKnowledgeBases.value].sort(), [...agentAllowedTools.value].sort(),
+    [...agentSupportedFileTypes.value].sort()]),
+  agent_id: settingsStore.selectedAgentSourceTenantId ? selectedAgentId.value || undefined : undefined,
+  agent_source_tenant_id: settingsStore.selectedAgentSourceTenantId || undefined,
+}));
+watch(() => mentionBrowserContext.value.key, () => {
+  showMention.value = false;
+  ++mentionLoadSeq;
+  mentionBrowserKbs.value = [];
+  mentionItems.value = [];
+  mentionLoading.value = false;
+}, { flush: 'sync' });
+watch(showMention, visible => {
+  if (!visible) {
+    ++mentionLoadSeq;
+    if (mentionSearchTimer) clearTimeout(mentionSearchTimer);
+    mentionSearchTimer = null;
+    mentionBrowserKbs.value = [];
+    mentionLoading.value = false;
+  }
+}, { flush: 'sync' });
 const loadMentionItems = async (q: string, resetIndex = true, append = false) => {
   console.log('[Mention] loadMentionItems called with query:', q, 'append:', append);
 
@@ -1349,6 +1520,7 @@ const loadMentionItems = async (q: string, resetIndex = true, append = false) =>
       // 共享智能体：按 agent_id 拉取该智能体配置的知识库范围（后端从共享关系解析空间）
       try {
         const list = await chatResources.ensureAgentKnowledgeBases(agentId, sourceTenantId);
+        if (isStale()) return;
         const orgLabel = sharedAgentOrgName.value || '';
         // 保留 capabilities / indexing_strategy，后面过滤时要用
         availableKbs = list.map((kb: any) => ({
@@ -1369,6 +1541,7 @@ const loadMentionItems = async (q: string, resetIndex = true, append = false) =>
           chunk_count: kb.chunk_count
         }));
       } catch (e) {
+        if (isStale()) return;
         console.error('[Mention] listKnowledgeBases(agent_id) error:', e);
         availableKbs = [];
         sharedAgentKbList.value = [];
@@ -1426,6 +1599,10 @@ const loadMentionItems = async (q: string, resetIndex = true, append = false) =>
       ? new Set(availableKbs.map((kb: any) => String(kb.id)))
       : null;
 
+    if (isStale()) return;
+    const canBrowseFiles = !hasAgentConfig.value || (agentKBSelectionMode.value !== 'none' && toolsConsumeFiles(agentAllowedTools.value));
+    mentionBrowserKbs.value = canBrowseFiles ? availableKbs.filter((kb: any) => !kb.type || kb.type === 'document')
+      .map((kb: any) => ({ id: String(kb.id), name: kb.name, orgName: kb.org_name })) : [];
     const kbs = availableKbs.filter((kb: any) =>
       !q || (kb.name && kb.name.toLowerCase().includes(q.toLowerCase()))
     );
@@ -1449,6 +1626,7 @@ const loadMentionItems = async (q: string, resetIndex = true, append = false) =>
         orgName: kb.org_name || sharedAgentOrgName.value || undefined
       };
     }));
+    if (isStale()) return;
     nextGroupCounts.kb = kbItems.length;
 
     const tagKeyword = q.trim();
@@ -1472,6 +1650,7 @@ const loadMentionItems = async (q: string, resetIndex = true, append = false) =>
       console.error('[Mention] listKnowledgeTags error:', e);
       tagItems = [];
     }
+    if (isStale()) return;
 
     const mcpMode = agentMCPSelectionMode.value;
     if (mcpMode !== 'none') {
@@ -1487,6 +1666,7 @@ const loadMentionItems = async (q: string, resetIndex = true, append = false) =>
       // workspace, where they are actually installed. Lite agents store no
       // sandbox config id; their skills live on the host target.
       await deploymentCapabilities.ensureLoaded();
+      if (isStale()) return;
       await editorResources.ensureSkills(
         mentionSkillTargetId(
           hostSkillsOnly(
@@ -1497,6 +1677,7 @@ const loadMentionItems = async (q: string, resetIndex = true, append = false) =>
         ),
         currentAgentScope.value,
       );
+      if (isStale()) return;
       skillItems = editorResources.skills
         .filter(skill => isSkillAllowedByAgent(skill.name))
         .map(skill => ({
@@ -1516,6 +1697,7 @@ const loadMentionItems = async (q: string, resetIndex = true, append = false) =>
   }
 
   // Fetch Files from API
+  if (isStale()) return;
   // 仅当满足以下两点才加载文件：
   //   1. 智能体确实会用到知识库（kb_selection_mode !== 'none'）；
   //   2. 智能体启用的工具里至少有一个能消费 @ 的文件 ID
@@ -1838,6 +2020,7 @@ const triggerMention = () => {
 };
 
 const onMentionSelect = (item: any) => {
+  if (!showMention.value) return;
   if (item.type === 'kb') {
     settingsStore.addKnowledgeBase(item.id);
   } else if (item.type === 'file') {
@@ -1966,6 +2149,12 @@ onMounted(() => {
   // Embed 渠道由宿主注入 agent/KB，勿拉取需 JWT 的平台资源
   if (props.embeddedMode) return;
 
+  // Capture phase so Option+Space is cancelled before the textarea types U+00A0.
+  window.addEventListener('keydown', onVoiceKeydown, true);
+  window.addEventListener('keyup', onVoiceKeyup, true);
+  window.addEventListener('blur', onVoiceWindowBlur);
+  document.addEventListener('visibilitychange', onVoiceVisibilityChange);
+
   browserConnection.watchStatus();
 
   // 并行拉取；若 platform 已预取且缓存未过期则直接复用
@@ -1996,14 +2185,13 @@ onMounted(() => {
     settingsStore.addKnowledgeBase(kbId);
   }
 
-  const prefill = menuStore.consumePrefillQuery();
-  if (prefill) {
-    query.value = prefill;
-    nextTick(() => {
-      const textarea = getTextareaEl();
-      if (textarea) textarea.focus();
-    });
-  }
+  // Searches can target this already-mounted composer.
+  watch(() => menuStore.prefillQuery, (prefill) => {
+    if (!prefill || route.path !== '/platform/creatChat') return;
+    query.value = menuStore.consumePrefillQuery();
+    // Let the closing search panel finish its autofocus before taking focus.
+    requestAnimationFrame(() => { void focusInput(); });
+  }, { immediate: true });
 
   // 监听点击外部关闭下拉菜单
   document.addEventListener('click', closeAgentModeSelector);
@@ -2039,6 +2227,10 @@ onBeforeUnmount(() => {
 });
 
 onUnmounted(() => {
+  window.removeEventListener('keydown', onVoiceKeydown, true);
+  window.removeEventListener('keyup', onVoiceKeyup, true);
+  window.removeEventListener('blur', onVoiceWindowBlur);
+  document.removeEventListener('visibilitychange', onVoiceVisibilityChange);
   if (!props.embeddedMode) browserConnection.unwatchStatus();
   window.removeEventListener(CHAT_FILE_DROP_EVENT, handleChatFileDrop as EventListener);
   document.removeEventListener('click', closeAgentModeSelector);
@@ -2220,6 +2412,7 @@ const createSession = async (
   const imageFiles = uploadedImages.value.map(img => img.file);
   const attachmentFiles = uploadedAttachments.value;
 
+  ensureModelSelection();
   emit('send-msg', val, selectedModelId.value, mentionedItems, imageFiles, attachmentFiles, options);
 
   // Clean up image previews
@@ -2420,6 +2613,7 @@ const handleSelectAgent = async (agent: CustomAgent, sourceTenantId?: string) =>
       selectedModelId.value = lastPick;
     }
   }
+  ensureModelSelection();
 
   showAgentModeSelector.value = false;
 
@@ -2944,7 +3138,10 @@ defineExpose({
       <MentionSelector ref="mentionSelectorRef" :visible="showMention" :style="mentionStyle" :items="mentionItems" :hasMore="mentionHasMore"
         :loading="mentionLoading" :emptyHint="mentionEmptyHint" :query="mentionQuery" :searchable="isMentionTriggeredByButton"
         :group-counts="mentionGroupCounts" v-model:activeIndex="mentionActiveIndex"
-        @update:query="onMentionSearchInput" @close="closeMentionFromPopup"
+        :browser-knowledge-bases="mentionBrowserKbs" :browser-context="mentionBrowserContext"
+        :browser-file-types="agentSupportedFileTypes" :browser-selected-ids="selectedFileIds"
+        :browser-whole-kb-ids="settingsStore.getSelectedKnowledgeBases()" :browser-tag-kb-ids="selectedTags.map(tag => tag.kbId)"
+        @update:query="onMentionSearchInput" @close="closeMentionFromPopup" @focus-input="getTextareaEl()?.focus()"
         @select="onMentionSelect" @loadMore="loadMoreMentionItems" />
     </Teleport>
 

@@ -177,7 +177,7 @@ type WikiNode struct {
 	ObjType        string `json:"obj_type"`  // "doc", "sheet", "mindnote", "bitable", "file", "docx", "slides"
 	ParentNodeID   string `json:"parent_node_token"`
 	NodeType       string `json:"node_type"` // "origin" or "shortcut"
-	OriginNodeID   string `json:"origin_node_id"`
+	OriginNodeID   string `json:"origin_node_token"`
 	OriginSpaceID  string `json:"origin_space_id"`
 	HasChild       bool   `json:"has_child"`
 	Title          string `json:"title"`
@@ -297,6 +297,9 @@ type DriveFile struct {
 	// be doc/sheet/mindnote/bitable/file/docx (Feishu does not allow shortcuts to
 	// folders, verified) - see ADR-0002 / glossary shortcut entry.
 	ShortcutInfo *driveShortcutInfo `json:"shortcut_info,omitempty"`
+	// ShortcutToken retains the original shortcut entry token after
+	// ExpandDriveShortcut replaces Token with ShortcutInfo.TargetToken.
+	ShortcutToken string `json:"-"`
 }
 
 // driveShortcutInfo is the target metadata of a Drive shortcut.

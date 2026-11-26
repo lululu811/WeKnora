@@ -101,6 +101,26 @@ func TestGetWebSearchProviderTypesIncludesBocha(t *testing.T) {
 	}
 }
 
+func TestGetWebSearchProviderTypesIncludesDeepSeek(t *testing.T) {
+	var deepseek *WebSearchProviderTypeInfo
+	providerTypes := GetWebSearchProviderTypes()
+	for i := range providerTypes {
+		if providerTypes[i].ID == string(WebSearchProviderTypeDeepSeek) {
+			deepseek = &providerTypes[i]
+			break
+		}
+	}
+	if deepseek == nil {
+		t.Fatal("DeepSeek provider type not found")
+	}
+	if !deepseek.RequiresAPIKey || deepseek.SupportsOptionalAPIKey || !deepseek.SupportsProxy {
+		t.Fatalf("unexpected DeepSeek metadata: %+v", deepseek)
+	}
+	if deepseek.RequiresEngineID || deepseek.RequiresBaseURL || len(deepseek.ConfigFields) != 0 {
+		t.Fatalf("unexpected DeepSeek fields: %+v", deepseek)
+	}
+}
+
 func TestGetWebSearchProviderTypesIncludesSerply(t *testing.T) {
 	var serply *WebSearchProviderTypeInfo
 	providerTypes := GetWebSearchProviderTypes()
@@ -139,5 +159,23 @@ func TestGetWebSearchProviderTypesIncludesMiniMax(t *testing.T) {
 	region := minimax.ConfigFields[0]
 	if region.Key != "region" || region.Default != "cn" || len(region.Options) != 2 {
 		t.Fatalf("unexpected region config metadata: %+v", region)
+	}
+}
+
+func TestGetWebSearchProviderTypesIncludesSearchAPI(t *testing.T) {
+	var searchAPI *WebSearchProviderTypeInfo
+	providerTypes := GetWebSearchProviderTypes()
+	for i := range providerTypes {
+		if providerTypes[i].ID == string(WebSearchProviderTypeSearchAPI) {
+			searchAPI = &providerTypes[i]
+			break
+		}
+	}
+	if searchAPI == nil {
+		t.Fatal("SearchApi provider type not found")
+	}
+	if !searchAPI.RequiresAPIKey || !searchAPI.SupportsProxy ||
+		searchAPI.RequiresEngineID || searchAPI.RequiresBaseURL {
+		t.Fatalf("unexpected SearchApi metadata: %+v", searchAPI)
 	}
 }
