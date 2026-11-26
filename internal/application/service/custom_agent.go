@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"math/rand"
+	"slices"
 	"strings"
 	"time"
 
@@ -146,6 +147,9 @@ func (s *customAgentService) GetAgentByID(ctx context.Context, id string) (*type
 			// Found in database, overlay locale-specific name/description/avatar
 			agent.EnsureDefaults()
 			types.ApplyBuiltinAgentLocalization(ctx, agent)
+			// 出厂白名单扩充后，已存的行不会自己更新——把出厂新增的工具并进来
+			// 并落库，否则模型照着系统提示调一个没注册的工具。
+			s.syncBuiltinAllowedTools(ctx, agent)
 			return agent, nil
 		}
 		// Not in database, return default built-in agent from registry (i18n-aware)
@@ -223,6 +227,9 @@ func (s *customAgentService) ListAgents(ctx context.Context) ([]*types.CustomAge
 			for _, agent := range allAgents {
 				if agent.ID == builtinID {
 					types.ApplyBuiltinAgentLocalization(ctx, agent)
+					// 出厂白名单扩充后，已存的行不会自己更新——把出厂新增的工具
+					// 并进来并落库。
+					s.syncBuiltinAllowedTools(ctx, agent)
 					result = append(result, agent)
 					break
 				}
@@ -354,6 +361,47 @@ func (s *customAgentService) checkSharedAgentKBScope(
 	updated.Config = config
 	userID, _ := types.UserIDFromContext(ctx)
 	return checkAgentKBScopeShareable(ctx, s.kbService.GetKnowledgeBasesByIDsOnly, existing, &updated, userID)
+}
+
+// syncBuiltinAllowedTools 把出厂工具白名单并进已存的内置 agent 配置，并落库。
+//
+// 为什么要有它：内置 agent 的工具白名单有**两个来源**——出厂的写在
+// config/builtin_agents.yaml，租户改的写在 custom_agents 表里。出厂那份扩充后，
+// 已存在的 DB 行不会自己更新（"DB 有行就用 DB 的"），于是出厂新增的工具：
+// 系统提示里写着（提示也来自 yaml）、模型看得见、却调不到，表现为
+// "tool not found"。
+//
+// 为什么是并集而不是覆盖：租户可以在 UI 里给内置 agent 加自己的工具，那些
+// 不能被出厂配置抹掉。代价是**出厂新增的工具会自动勾上**，租户手动取消勾选的
+// 内置工具会被重新勾回——那是"自动同步"的定义，不是副作用。
+//
+// stored 为 nil（从没设过白名单）时不合并：nil 的语义是"回落到
+// DefaultAllowedTools()"，塞进出厂清单会把那条语义改掉。
+//
+// 落库是幂等的：并集与已存相同时不写。写失败只记日志——读取路径不该因为一次
+// 同步失败而失败，那会把"白名单少了几个工具"升级成"agent 加载不出来"。
+func (s *customAgentService) syncBuiltinAllowedTools(ctx context.Context, agent *types.CustomAgent) {
+	if agent == nil || !types.IsBuiltinAgentID(agent.ID) {
+		return
+	}
+	if agent.Config.AllowedTools == nil {
+		return
+	}
+	builtin := types.GetBuiltinAgentWithContext(ctx, agent.ID, agent.TenantID)
+	if builtin == nil {
+		return
+	}
+	merged := types.MergeBuiltinAllowedTools(agent.Config.AllowedTools, builtin.Config.AllowedTools)
+	if slices.Equal(merged, agent.Config.AllowedTools) {
+		return
+	}
+	agent.Config.AllowedTools = merged
+	if err := s.repo.UpdateAgent(ctx, agent); err != nil {
+		logger.Warnf(ctx, "[builtin_agent] sync allowed tools failed, agent=%s: %v", agent.ID, err)
+		return
+	}
+	logger.Infof(ctx, "[builtin_agent] synced allowed tools, agent=%s, now %d tools",
+		agent.ID, len(merged))
 }
 
 // updateBuiltinAgent updates a built-in agent's configuration (but not basic info)

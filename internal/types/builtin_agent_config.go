@@ -151,6 +151,40 @@ func ApplyBuiltinAgentLocalization(ctx context.Context, agent *CustomAgent) {
 	agent.Avatar = localized.Avatar
 }
 
+// MergeBuiltinAllowedTools 把出厂工具白名单与已存白名单求并集。
+//
+// 为什么需要它：内置 agent 的配置落在 custom_agents 表里，而出厂白名单在
+// config/builtin_agents.yaml 里，两者是**各写各的**。出厂白名单扩充后，
+// 已存在的 DB 行不会被更新——ListAgents 与 GetAgentByID 都是「DB 有行就用
+// DB 的」。于是出厂新增的工具：系统提示里写着（提示也来自 yaml）、模型看得见、
+// 却调不到，表现为 "tool not found"。
+//
+// 为什么是并集而不是覆盖：租户可以在 UI 里给内置 agent 加自己的工具，那些
+// 不能被出厂配置抹掉。代价是「租户主动删掉的内置工具」会回来——那条路要走
+// updateBuiltinAgent，与本函数无关。
+//
+// 顺序：已存的在前（租户看到的顺序不动），出厂新增的追加在后。
+func MergeBuiltinAllowedTools(stored []string, builtinAllowed []string) []string {
+	if len(builtinAllowed) == 0 {
+		return stored
+	}
+	out := make([]string, 0, len(stored)+len(builtinAllowed))
+	seen := make(map[string]struct{}, len(stored)+len(builtinAllowed))
+	for _, list := range [][]string{stored, builtinAllowed} {
+		for _, name := range list {
+			if name == "" {
+				continue
+			}
+			if _, dup := seen[name]; dup {
+				continue
+			}
+			seen[name] = struct{}{}
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
 var builtinAgentEntriesTestMu sync.Mutex
 
 // OverrideBuiltinAgentEntriesForTest replaces the in-memory YAML registry.
