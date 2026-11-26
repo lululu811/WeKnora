@@ -2,6 +2,7 @@ package hithink_finance
 
 import (
 	"io/fs"
+	pathpkg "path"
 	"regexp"
 	"sort"
 	"strings"
@@ -56,7 +57,7 @@ func DeadColumns() []DeadColumn {
 	dead := make(map[string]*entry)
 	live := make(map[string]bool)
 
-	walkToolSources(func(path, src string) {
+	walkToolSources(func(path, src, pkgSrc string) {
 		spans := sqlLiteralSpans(src)
 		sqls := indicatorSQLLiterals(src)
 		if len(sqls) == 0 {
@@ -70,7 +71,11 @@ func DeadColumns() []DeadColumn {
 		inSQL := readColumnsInSource(src)
 		// A tool that hands the model the whole result set is using every
 		// column it selected — the model reads them, not the Go code.
-		passthrough := wholeResultPassthrough(stripSpans(src, spans))
+		//
+		// 判定按包算，不按文件：spec 包里 SQL 与执行器分处两个文件，按文件判定
+		// 会把整个 spec 包判成"非透传"，那批指标列就会被误报成死列。
+		pkgSpans := sqlLiteralSpans(pkgSrc)
+		passthrough := wholeResultPassthrough(stripSpans(pkgSrc, pkgSpans))
 
 		for _, sql := range sqls {
 			if passthrough {
@@ -380,9 +385,26 @@ func stripSpans(src string, spans [][2]int) string {
 	return b.String()
 }
 
+// pkgSource is one embedded source file together with its path in the tree.
+type pkgSource struct {
+	path string
+	text string
+}
+
 // walkToolSources walks the same embedded source FS discover.go uses and
-// calls fn for every non-test .go file in the tool subpackages.
-func walkToolSources(fn func(path, src string)) {
+// calls fn for every non-test .go file in the tool subpackages, together with
+// the combined source of the package that file belongs to.
+//
+// 为什么多传一份整包源码：透传判定（"工具把整份结果原样交给模型"）要看得出
+// 一个包里有没有 Query 调用和裸标识符载荷。原来按文件判定，是因为一个文件就
+// 是一个工具；spec 包把十一个工具的 SQL 和共用的一段执行器放在一处，SQL 与
+// 载荷不再同文件，按文件判定会判成"非透传"，于是那批指标列会被误报成死列。
+//
+// 对现有每一个包，按包判定与按文件判定等价：唯一混合的 query 包里，非透传的
+// 那个文件是生成的目录说明（sql_query_catalog.go），它零个 SELECT，本来就不
+// 产出任何列。
+func walkToolSources(fn func(path, src, pkgSrc string)) {
+	byPkg := map[string][]pkgSource{}
 	_ = fs.WalkDir(toolSourceFS, ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".go") ||
 			strings.HasSuffix(path, "_test.go") {
@@ -393,9 +415,21 @@ func walkToolSources(fn func(path, src string)) {
 		if readErr != nil {
 			return nil
 		}
-		fn(path, string(src))
+		pkg := pathpkg.Dir(path)
+		byPkg[pkg] = append(byPkg[pkg], pkgSource{path: path, text: string(src)})
 		return nil
 	})
+	for _, files := range byPkg {
+		var b strings.Builder
+		for _, f := range files {
+			b.WriteString(f.text)
+			b.WriteString("\n")
+		}
+		pkgSrc := b.String()
+		for _, f := range files {
+			fn(f.path, f.text, pkgSrc)
+		}
+	}
 }
 
 // indicatorSQLLiterals returns the SQL literals in src that read
@@ -406,7 +440,7 @@ func indicatorSQLLiterals(src string) []string {
 	var out []string
 	for _, m := range toolSQLLiteralRe.FindAllStringSubmatch(src, -1) {
 		sql := m[1]
-		if looksLikeGoCode(sql) || !containsObject(sql, indicatorView) {
+		if looksLikeGoCode(sql) || !containsObject(sql, IndicatorView) {
 			continue
 		}
 		if sqlSelectListRe.FindStringSubmatch(sql) == nil {

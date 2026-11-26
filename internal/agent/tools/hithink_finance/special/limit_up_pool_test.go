@@ -3,8 +3,11 @@ package special
 import (
 	"context"
 	"encoding/json"
+	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/Tencent/WeKnora/internal/agent/tools/hithink_finance/spec"
 )
 
 // 回归闸门：trade_date 曾经被 fmt.Sprintf 直接拼进 SQL，
@@ -58,15 +61,28 @@ func TestLimitUpPoolRejectsOverflowLimit(t *testing.T) {
 }
 
 func TestTradeDateReAcceptsOnlyCanonicalDate(t *testing.T) {
+	// 格式约束现在在声明里（spec.SpecialLimitUpPool 的 trade_date 参数），
+	// 不再是包级的一个正则变量——声明才是唯一一处。
+	pattern := ""
+	for _, p := range spec.SpecialLimitUpPool.Params {
+		if p.Name == "trade_date" {
+			pattern = p.Pattern
+		}
+	}
+	if pattern == "" {
+		t.Fatal("声明里没有 trade_date 的格式约束")
+	}
+	re := regexp.MustCompile(pattern)
+
 	good := []string{"2026-09-24", "2020-01-01", "1999-12-31"}
 	bad := []string{"2026-9-24", "26-09-24", "2026-09-24 ", " 2026-09-24", "2026-09-24T00:00:00"}
 	for _, s := range good {
-		if !tradeDateRe.MatchString(s) {
+		if !re.MatchString(s) {
 			t.Errorf("%q 应当被接受", s)
 		}
 	}
 	for _, s := range bad {
-		if tradeDateRe.MatchString(s) {
+		if re.MatchString(s) {
 			t.Errorf("%q 不该被接受", s)
 		}
 	}

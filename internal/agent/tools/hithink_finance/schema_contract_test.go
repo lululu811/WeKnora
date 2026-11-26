@@ -77,6 +77,9 @@ var (
 		"true": true, "false": true, "int": true, "integer": true, "double": true,
 		"between": true, "like": true, "distinct": true, "case": true, "when": true,
 		"then": true, "else": true, "end": true, "interval": true,
+		// 计算列用的函数：它们不是列，校验时不该按列名去快照里找。
+		"round": true, "nullif": true, "lag": true, "row_number": true,
+		"over": true, "window": true, "partition": true, "qualify": true,
 	}
 )
 
@@ -326,8 +329,12 @@ func TestToolSQLMatchesSchema(t *testing.T) {
 				if sel == nil {
 					continue
 				}
+				// 去掉字符串字面量：`'000001.SH'` 里的内容不是列名。
+				// 单引号在 SQL 里是字符串（双引号才是标识符），所以剥单引号
+				// 不会误伤真正的列名——带引号的列名在 PG 里本来就要写双引号。
+				cleaned := regexp.MustCompile(`'[^']*'`).ReplaceAllString(sel[1], " ")
 				// 去掉别名：`x AS y` 只校验 x；`CAST(x AS VARCHAR) AS y` 同理。
-				cleaned := regexp.MustCompile(`(?is)\bAS\s+[a-zA-Z_][a-zA-Z0-9_]*`).ReplaceAllString(sel[1], " ")
+				cleaned = regexp.MustCompile(`(?is)\bAS\s+[a-zA-Z_][a-zA-Z0-9_]*`).ReplaceAllString(cleaned, " ")
 				// 去掉表别名前缀：`c.thscode` 只校验 thscode。c/u 是表别名而不是列，
 				// 不剥掉就会凭空报「不存在的列 c」。
 				// 用捕获组而不是 `(?=)` 前瞻——Go 的 regexp 是 RE2，不支持前瞻。

@@ -1,98 +1,52 @@
 package analysis
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"math"
 
 	"github.com/Tencent/WeKnora/internal/agent/tools/hithink_finance"
+	"github.com/Tencent/WeKnora/internal/agent/tools/hithink_finance/spec"
 	"github.com/Tencent/WeKnora/internal/types"
 )
 
 // VolumeAnalysisTool performs Wyckoff-based volume-price analysis.
 type VolumeAnalysisTool struct {
-	config *hithink_finance.Config
+	spec.Tool
 }
 
-// NewVolumeAnalysisTool creates a new VolumeAnalysisTool.
 func NewVolumeAnalysisTool(config *hithink_finance.Config) *VolumeAnalysisTool {
-	return &VolumeAnalysisTool{config: config}
-}
-
-func (t *VolumeAnalysisTool) Name() string {
-	return "hithink.finance.analysis.volume"
-}
-
-func (t *VolumeAnalysisTool) Description() string {
-	return `量价分析工具。基于威科夫方法和量价关系理论，分析资金流向和主力行为。
-
-分析内容：
-- 微观量价：重剑双上五四态（双上五/阴量上五/量上五价未上/价上五量未上/双下五）
-- 威科夫阶段判断：吸筹/派发/上涨(Markup)/下跌(Markdown)
-- 量价关系：量价齐升、量价背离、缩量回调、放量突破
-- 假突破检测：Spring(向下假突破)/Upthrust(向上假突破)
-- OBV 能量潮：趋势方向、与价格背离
-- 资金流向：CMF/MFI 多空力量分析
-- VWAP 偏离：价格相对 VWAP 的位置
-
-使用示例：thscode="600519.SH", days=60`
-}
-
-func (t *VolumeAnalysisTool) Parameters() json.RawMessage {
-	schema := map[string]interface{}{
-		"type": "object",
-		"properties": map[string]interface{}{
-			"thscode": map[string]interface{}{
-				"type":        "string",
-				"description": "同花顺股票代码",
-			},
-			"days": map[string]interface{}{
-				"type":        "integer",
-				"description": "查询天数（默认 60，最大 250）",
-				"default":     60,
-			},
+	t := &VolumeAnalysisTool{}
+	t.Tool = spec.Tool{
+		Config: config,
+		Spec:   spec.AnalysisVolume,
+		Fetch:  fetchMarketData,
+		Compose: func(rows any, values map[string]any) (*types.ToolResult, error) {
+			return t.compose(rows.([]marketRow), values)
 		},
-		"required": []string{"thscode"},
 	}
-	data, _ := json.Marshal(schema)
-	return data
+	return t
 }
 
-func (t *VolumeAnalysisTool) Execute(ctx context.Context, args json.RawMessage) (*types.ToolResult, error) {
-	if err := hithink_finance.CheckSyncWindow(); err != nil {
-		return &types.ToolResult{Success: false, Error: err.Error()}, nil
-	}
+func (t *VolumeAnalysisTool) Name() string { return "hithink.finance.analysis.volume" }
 
-	var params struct {
-		Thscode string `json:"thscode"`
-		Days    int    `json:"days"`
-	}
-	if err := json.Unmarshal(args, &params); err != nil {
-		return &types.ToolResult{Success: false, Error: fmt.Sprintf("参数解析失败：%v", err)}, nil
-	}
+func (t *VolumeAnalysisTool) Description() string { return spec.Description(t.Spec) }
 
-	if params.Thscode == "" {
-		return &types.ToolResult{Success: false, Error: "参数错误：thscode 不能为空"}, nil
-	}
-	if params.Days <= 0 {
-		params.Days = 60
-	}
-	if params.Days > 250 {
-		params.Days = 250
-	}
+func (t *VolumeAnalysisTool) Parameters() json.RawMessage { return spec.Parameters(t.Spec) }
 
-	rows, err := FetchMarketData(ctx, t.config, params.Thscode, params.Days)
-	if err != nil {
-		return &types.ToolResult{Success: false, Error: err.Error()}, nil
-	}
+// compose 是这个工具自己的分析：把取回来的行情与指标算成最终输出。
+//
+// 取数与参数解析在 spec 包那边（Fetch / Compose 两个钩子），这里只剩
+// 「算」这一件事——它本来就是这个工具的价值所在。
+func (t *VolumeAnalysisTool) compose(rows []marketRow, values map[string]any) (*types.ToolResult, error) {
+	thscode, _ := values["thscode"].(string)
 
 	if len(rows) < 10 {
 		return &types.ToolResult{Success: false, Error: "数据不足：至少需要 10 天数据"}, nil
 	}
 
 	result := map[string]interface{}{
-		"thscode":         params.Thscode,
+		"thscode":         thscode,
 		"wyckoff_phase":   t.analyzeWyckoffPhase(rows),
 		"volume_price":    t.analyzeVolumePrice(rows),
 		"dual_above_5":    t.analyzeDualAbove5(rows),

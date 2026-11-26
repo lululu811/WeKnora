@@ -2,6 +2,7 @@ package pattern
 
 import (
 	"fmt"
+	"github.com/Tencent/WeKnora/internal/agent/tools/hithink_finance/spec"
 	"math"
 )
 
@@ -846,103 +847,18 @@ func pviNviSpread(latest, base row) pviNviEdge {
 	return e
 }
 
-// declaredSignalNames 是 detectSignals **实际会发出**的全部信号名，一一对应，一
-// 个不多一个不少。
+// declaredSignalNames 是 detectSignals **实际会发出**的全部信号名，一一对应，一个
+// 多少一个不少。
 //
-// 这份清单是 signals.go 与 scan.go 之间的契约：scan.go 的 Description() 是逐字
-// 交给 LLM 的，写错一个名字模型就会去调、拿不到、再自己编一个。历史上有四个信号
-// （PSAR翻转 / VWAP突破 / 量价齐升 / 量价背离）是"描述里广告了、代码里没实现"。
-//
-// 单子靠三个方向由 signals_contract_test.go 把关，测试里没有正则：
-//  1. 清单里每一条都必须被某组构造数据真正打出来（少写了 → 达不到 / 被删了 → 立刻红）
-//  2. detectSignals 打出来的每一条都必须在清单里（新加了信号忘了登记 → 立刻红）
-//  3. 清单里的每一条都必须出现在 Description() 的正文里
-//
-// 增删信号时改这里，同时改 scan.go 的 Description()。
-var declaredSignalNames = []string{
-	// Momentum
-	"MACD金叉", "MACD死叉",
-	"KDJ超卖金叉", "KDJ超买死叉",
-	"J超卖回中", "J超买回中",
-	"RSI6超卖", "RSI6超买",
-	"RSI14超卖回升", "RSI14超买回落",
-	"MACD动能衰减",
-	"Stochastic超卖金叉", "Stochastic超买死叉",
-	"CCI超卖", "CCI超买",
-	"Williams%R超卖", "Williams%R超买",
-	"MFI超卖", "MFI超买",
-	"ER转高效", "ER转低效",
-	// Trend
-	"Supertrend翻转", "Supertrend翻空",
-	"PSAR翻多", "PSAR翻空",
-	"ADX多头趋势", "ADX空头趋势",
-	"DI金叉", "DI死叉",
-	"Aroon多头排列", "Aroon空头排列",
-	"Vortex金叉", "Vortex死叉",
-	"白线金叉黄线", "白线死叉黄线", "收盘上穿黄线", "收盘下穿黄线",
-	"CHOP进入震荡", "CHOP重回趋势",
-	"KC中轨多头带", "KC中轨空头带",
-	// Volatility
-	"布林带收口", "布林中轨收复", "布林中轨跌破",
-	"Donchian上轨突破", "Donchian下轨跌破",
-	"Keltner挤压", "Keltner挤压向上突破", "Keltner挤压向下突破",
-	"NATR进入高波动档位", "NATR退出高波动档位",
-	"ATR扩张",
-	// Volume
-	"CMF资金流入", "CMF资金流出",
-	"上穿VWAP", "下穿VWAP",
-	"价量背离", "缩量下跌吸筹",
-	"PVI强于NVI吸筹", "NVI强于PVI派发",
-	// 高级形态（阈值逐条来自 a-stock/strategies/sql/p9_needle_screen.sql）
-	"单针下20",
-	// Statistics
-	"Z-Score超卖", "Z-Score超买",
-	"线性回归上升", "线性回归下降",
-	// Candlestick
-	"Morning Star晨星", "Evening Star暮星", "Hammer锤子线", "Shooting Star流星",
-	"Doji十字星", "Engulfing吞没", "Harami孕线", "Piercing刺透",
-	"Dark Cloud乌云盖顶", "Three White Soldiers三白兵", "Three Black Crows三乌鸦",
-}
+// 清单住在 spec 包——那边的说明文字要拿它算信号总数，写死那个数广告就会与实现
+// 脱节；这里是本地别名，pattern 包的测试与实现都还用这个名字。
+var declaredSignalNames = spec.DeclaredSignalNames
 
 // noisySignalNames 是"触发频率高到不再携带信息"的信号，默认**不**返回。
 //
-// 为什么要有这层：信号是按 bar 注入模型上下文的。一条在 20% 以上的 bar 上都成立
-// 的信号，报的是**当前市场状态**（"趋势线斜率为正"）而不是**转折事件**；连续
-// 若干天读到同一句话，模型会学会无视它 —— 真正的转折（1%~5% 那一档）就被淹没。
-// 所以默认只给 informative，需要时用 include_noisy 显式索取。
-//
-// ⚠️ **名单的权威来源是 signal_frequency_audit.md**，由
-// signal_frequency_audit_test.go 跑**真实的 detectSignals** 量出（300 只票跨步
-// 抽样、279,360 个 7-bar 窗口、2022-08 起跨 2022 熊市与 2024-26 行情）。
-//
-// **不要用 scripts/classify_signals.py 决定这份名单。** 那个脚本是用 SQL 重写
-// 判据的旁路，分母是"bar 数"而审计是"7-bar 窗口数"，同一条件下两者能差一倍
-// （MACD动能衰减：SQL 20.43% vs 审计 10.25%，前者越过 20% 阈值、后者没越）。
-// 2026-10-01 正是先信了 SQL 那一版，把 MACD动能衰减 错折了、又漏折了
-// Donchian下轨跌破。SQL 脚本只能用来**核对判据有没有抄错**，不能定名单。
-//
-// 本名单 2026-10-01 改过两次，都是把 SQL 的结果换成审计的：
-//
-//	第一次（判据抄错）: 11 条 → 8 条。MACD动能衰减 原写成 hist>0、
-//	  Aroon多头排列 原写成 up>down、CMF 门槛原写成 ±0.05、RSI6超卖 原写 <30、
-//	  Keltner挤压 原写成状态量（真实是首次进入）。修正后 Aroon多头排列 /
-//	  CMF资金流入 / Keltner挤压 掉出名单。
-//	第二次（换权威）: 8 条 → 8 条，但**换了两条**。MACD动能衰减 掉出
-//	  （审计 10.25%，informative）；Donchian下轨跌破 进来（审计 27.72%）。
-//
-// 名单是**数据结论**，不是价值判断：线性回归 47%/51% 报的是趋势方向，用户在
-// "这只票现在什么趋势"的问题上可能真的想要它们。所以它们被**默认折叠**，不是
-// 被删除 —— include_noisy=true 拿得到全量。
-var noisySignalNames = []string{
-	"线性回归下降",       // 51.75%
-	"线性回归上升",       // 46.70%
-	"CMF资金流出",      // 31.90%
-	"Donchian下轨跌破", // 26.99%
-	"Williams%R超卖", // 26.14%
-	"ADX多头趋势",      // 25.58%
-	"Aroon空头排列",    // 23.90%
-	"CCI超卖",        // 21.65%
-}
+// 名单的来龙去脉（权威来源、为什么不能拿 SQL 脚本定名单、两次改名的历史）都写在
+// spec 包的同名清单上；这里是本地别名。
+var noisySignalNames = spec.NoisySignalNames
 
 // isNoisySignal 报告某个信号名是否在默认折叠名单里。
 func isNoisySignal(name string) bool {

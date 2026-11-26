@@ -3,6 +3,8 @@ package financial
 import (
 	"strings"
 	"testing"
+
+	"github.com/Tencent/WeKnora/internal/agent/tools/hithink_finance/spec"
 )
 
 // 本测试锁住三张报表的时间序与报告期文案。
@@ -17,12 +19,14 @@ import (
 // 排序错误对单期查询（periods=1）不显形，所以一直没被发现，直到下游要做
 // 成长性同比这类依赖时间序列的分析。修一次容易，忘了就会退回原状——
 // 这些断言就是防退回的。
+//
+// 查询与文案现在住在 spec 包里（声明才是唯一一处），断言改成从那里读。
 
 func TestStatementQueriesOrderByPeriodEnd(t *testing.T) {
 	queries := map[string]string{
-		"balanceSheetQuery":    balanceSheetQuery,
-		"incomeStatementQuery": incomeStatementQuery,
-		"cashFlowQuery":        cashFlowQuery,
+		"FinancialBalanceSheet":    spec.FinancialBalanceSheet.SQL,
+		"FinancialIncomeStatement": spec.FinancialIncomeStatement.SQL,
+		"FinancialCashFlow":        spec.FinancialCashFlow.SQL,
 	}
 
 	for name, q := range queries {
@@ -46,25 +50,25 @@ func TestStatementQueriesOrderByPeriodEnd(t *testing.T) {
 
 // 三张表都有 period_end_ms，缺一说明 schema 漂移或视图改名了。
 func TestPeriodOrderDependsOnRealColumn(t *testing.T) {
-	if !strings.Contains(periodOrderBy, "period_end_ms") {
-		t.Fatalf("periodOrderBy 必须以 period_end_ms 为排序基准，当前：%s", periodOrderBy)
+	if !strings.Contains(spec.FinancialPeriodOrderBy, "period_end_ms") {
+		t.Fatalf("FinancialPeriodOrderBy 必须以 period_end_ms 为排序基准，当前：%s",
+			spec.FinancialPeriodOrderBy)
 	}
 }
 
 func TestStatementDescriptionsExplainPeriodCorrectly(t *testing.T) {
-	descs := map[string]func() string{
-		"balanceSheetDesc":    NewBalanceSheetTool(nil).Description,
-		"incomeStatementDesc": NewIncomeStatementTool(nil).Description,
-		"cashFlowDesc":        NewCashFlowStatementTool(nil).Description,
+	descs := map[string]string{
+		"FinancialBalanceSheet":    spec.FinancialBalanceSheet.Description,
+		"FinancialIncomeStatement": spec.FinancialIncomeStatement.Description,
+		"FinancialCashFlow":        spec.FinancialCashFlow.Description,
 	}
 
 	// 旧文案的错法：告诉模型 period 形如 2026Q2。
 	// 实际 period 是 annual/quarterly，模型照着理解会把年度和季度混为一谈。
 	wrong := "period（形如 2026Q2"
 
-	for name, fn := range descs {
+	for name, d := range descs {
 		t.Run(name, func(t *testing.T) {
-			d := fn()
 			if strings.Contains(d, wrong) {
 				t.Errorf("%s 仍在声称 period 形如 2026Q2，但该列只有 annual/quarterly。"+
 					"模型会据此误读报告期。", name)
@@ -85,9 +89,9 @@ func TestStatementDescriptionsExplainPeriodCorrectly(t *testing.T) {
 // 不同报告期、或误以为年报是第四季度的增量数据。
 func TestDescriptionsDisambiguateAnnualVsQ4(t *testing.T) {
 	for name, d := range map[string]string{
-		"balanceSheetDesc":    balanceSheetDesc,
-		"incomeStatementDesc": incomeStatementDesc,
-		"cashFlowDesc":        cashFlowDesc,
+		"FinancialBalanceSheet":    spec.FinancialBalanceSheet.Description,
+		"FinancialIncomeStatement": spec.FinancialIncomeStatement.Description,
+		"FinancialCashFlow":        spec.FinancialCashFlow.Description,
 	} {
 		if !strings.Contains(d, "年报") || !strings.Contains(d, "FY") {
 			t.Errorf("%s 未交代 FY（年报）与 Q4 是同一报告期的两种口径", name)

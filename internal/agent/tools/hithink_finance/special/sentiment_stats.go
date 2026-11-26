@@ -1,60 +1,55 @@
 package special
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 
 	"github.com/Tencent/WeKnora/internal/agent/tools/hithink_finance"
+	"github.com/Tencent/WeKnora/internal/agent/tools/hithink_finance/spec"
 	"github.com/Tencent/WeKnora/internal/types"
 )
 
 // SentimentStatsTool 获取短线市场情绪统计指标。
+//
+// 这个工具是"多查询 + Go 侧聚合"那一族的代表：三条查询（涨停池 / 跌停池 /
+// 炸板池）在声明里，执行器跑；炸板率与最高连板在这里算。
 type SentimentStatsTool struct {
-	config *hithink_finance.Config
+	spec.Tool
 }
 
 // NewSentimentStatsTool 创建 SentimentStatsTool。
 func NewSentimentStatsTool(config *hithink_finance.Config) *SentimentStatsTool {
-	return &SentimentStatsTool{config: config}
-}
-
-func (t *SentimentStatsTool) Name() string {
-	return "hithink.finance.special.sentiment.stats"
-}
-
-func (t *SentimentStatsTool) Description() string {
-	return `获取市场短线情绪综合统计（涨停家数、跌停家数、炸板家数、炸板率、最高连板高度等）。
-
-用于研判短线情绪周期（启动/发酵/高潮/退潮）。`
-}
-
-func (t *SentimentStatsTool) Parameters() json.RawMessage {
-	schema := map[string]interface{}{
-		"type":       "object",
-		"properties": map[string]interface{}{},
-		"required":   []string{},
+	t := &SentimentStatsTool{}
+	t.Tool = spec.Tool{
+		Config: config,
+		Spec:   spec.SpecialSentimentStats,
+		Compose: func(rows any, values map[string]any) (*types.ToolResult, error) {
+			return t.compose(rows)
+		},
 	}
-	data, _ := json.Marshal(schema)
-	return data
+	return t
 }
 
-func (t *SentimentStatsTool) Execute(ctx context.Context, args json.RawMessage) (*types.ToolResult, error) {
-	if err := hithink_finance.CheckSyncWindow(); err != nil {
-		return &types.ToolResult{Success: false, Error: err.Error()}, nil
+// Name 返回工具名。
+func (t *SentimentStatsTool) Name() string { return "hithink.finance.special.sentiment.stats" }
+
+// Description 返回给模型看的说明。
+func (t *SentimentStatsTool) Description() string { return spec.Description(t.Spec) }
+
+// Parameters 返回给模型看的参数 schema。
+func (t *SentimentStatsTool) Parameters() json.RawMessage { return spec.Parameters(t.Spec) }
+
+// compose 是这个工具自己的聚合：把三张池子的行算成情绪统计。
+//
+// 三条查询在声明里（spec.SpecialSentimentStats），由执行器跑；这里只剩"算"。
+func (t *SentimentStatsTool) compose(rows any) (*types.ToolResult, error) {
+	sets, ok := rows.(map[string][]map[string]any)
+	if !ok {
+		return &types.ToolResult{Success: false, Error: "取数结果不是分组行集"}, nil
 	}
-
-	upQuery := `SELECT trade_date, thscode, name, continue_day_cnt, seal_money FROM v_limit_up_pool WHERE trade_date = (SELECT MAX(trade_date) FROM v_limit_up_pool)`
-	upRows, err := hithink_finance.QueryDuckDBParams(ctx, t.config, "special", upQuery)
-	if err != nil {
-		return &types.ToolResult{Success: false, Error: hithink_finance.FriendlyQueryError(err, t.Name())}, nil
-	}
-
-	downQuery := `SELECT trade_date, thscode, name, price_change_ratio FROM v_limit_down_pool WHERE trade_date = (SELECT MAX(trade_date) FROM v_limit_down_pool)`
-	downRows, _ := hithink_finance.QueryDuckDBParams(ctx, t.config, "special", downQuery)
-
-	breakQuery := `SELECT trade_date, thscode, name, open_times, price_change_ratio FROM v_limit_break_pool WHERE trade_date = (SELECT MAX(trade_date) FROM v_limit_break_pool)`
-	breakRows, _ := hithink_finance.QueryDuckDBParams(ctx, t.config, "special", breakQuery)
+	upRows := sets["limit_up"]
+	downRows := sets["limit_down"]
+	breakRows := sets["limit_break"]
 
 	tradeDate := ""
 	limitUpCount := len(upRows)

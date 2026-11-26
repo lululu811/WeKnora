@@ -3,6 +3,8 @@ package financial
 import (
 	"strings"
 	"testing"
+
+	"github.com/Tencent/WeKnora/internal/agent/tools/hithink_finance/spec"
 )
 
 // 本测试锁住财务能力指标工具的排序来源。
@@ -28,32 +30,34 @@ import (
 // 这个测试的存在意义是**防误改**：它拦住的不是回归，是一次「照着债务登记册
 // 执行修复」造成的生产事故。登记册条目已附证据改判，但代码里的护栏必须留着——
 // 下一个人未必会先查库再动手。
+//
+// 查询与文案现在住在 spec 包里（声明才是唯一一处），断言改成从那里读。
 
 func TestIndicatorDetailQueryOrdersByReportDesc(t *testing.T) {
-	if !strings.Contains(financialIndicatorDetailQuery, "ORDER BY report DESC") {
-		t.Errorf("财务能力指标查询必须按 report 倒序，第一行才是最新一期。\n实际 SQL：\n%s",
-			financialIndicatorDetailQuery)
+	q := spec.FinancialIndicatorDetail.SQL
+	if !strings.Contains(q, "ORDER BY report DESC") {
+		t.Errorf("财务能力指标查询必须按 report 倒序，第一行才是最新一期。\n实际 SQL：\n%s", q)
 	}
 }
 
 func TestIndicatorDetailQueryDoesNotUsePeriodOrderBy(t *testing.T) {
+	q := spec.FinancialIndicatorDetail.SQL
 	// v_financial_indicators_detail 没有 period / period_end_ms 列，
 	// 套用 period.go 的排序会 binder 报错。债务登记册曾要求这么改，是错的。
 	for _, bad := range []string{
 		"ORDER BY period_end_ms",
 		"ORDER BY period",
-		periodOrderBy,
+		spec.FinancialPeriodOrderBy,
 	} {
-		if strings.Contains(financialIndicatorDetailQuery, bad) {
+		if strings.Contains(q, bad) {
 			t.Errorf("查询出现了 %q——本视图无 period / period_end_ms 列，"+
-				"用 period.go 的排序会报错。\n实际 SQL：\n%s",
-				bad, financialIndicatorDetailQuery)
+				"用 period.go 的排序会报错。\n实际 SQL：\n%s", bad, q)
 		}
 	}
 
-	// 反向自证：本包三张报表的排序常量与本查询不同，且两者都不该被混用。
-	if periodOrderBy == "ORDER BY report DESC" {
-		t.Errorf("periodOrderBy 不应等于本查询的排序——两者服务的表不同")
+	// 反向自证：三张报表的排序常量与本查询不同，且两者都不该被混用。
+	if spec.FinancialPeriodOrderBy == "ORDER BY report DESC" {
+		t.Errorf("FinancialPeriodOrderBy 不应等于本查询的排序——两者服务的表不同")
 	}
 }
 
@@ -64,7 +68,7 @@ func TestIndicatorDetailQueryDoesNotUsePeriodOrderBy(t *testing.T) {
 // 不同（"报告期字段是 report（不是 period）"），没说格式，也没说 FY 映射。
 // 模型拿不到这个信息，join 静默返回空时无从排查。
 func TestIndicatorDetailDescriptionDocumentsReportFormat(t *testing.T) {
-	desc := (&FinancialIndicatorDetailTool{}).Description()
+	desc := spec.FinancialIndicatorDetail.Description
 
 	if !strings.Contains(desc, "YYYY-N") {
 		t.Errorf("工具描述未说明 report 的 YYYY-N 格式")

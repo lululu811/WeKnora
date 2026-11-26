@@ -1,13 +1,13 @@
 package analysis
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"math"
 	"sort"
 
 	"github.com/Tencent/WeKnora/internal/agent/tools/hithink_finance"
+	"github.com/Tencent/WeKnora/internal/agent/tools/hithink_finance/spec"
 	"github.com/Tencent/WeKnora/internal/types"
 )
 
@@ -16,50 +16,27 @@ import (
 // moving averages, round numbers, Bollinger bands and VWAP, then highlights
 // price zones where several indicators converge.
 type LevelsAnalysisTool struct {
-	config *hithink_finance.Config
+	spec.Tool
 }
 
-// NewLevelsAnalysisTool constructs a LevelsAnalysisTool.
 func NewLevelsAnalysisTool(config *hithink_finance.Config) *LevelsAnalysisTool {
-	return &LevelsAnalysisTool{config: config}
+	t := &LevelsAnalysisTool{}
+	t.Tool = spec.Tool{
+		Config: config,
+		Spec:   spec.AnalysisLevels,
+		Fetch:  fetchMarketData,
+		Compose: func(rows any, values map[string]any) (*types.ToolResult, error) {
+			return t.compose(rows.([]marketRow), values)
+		},
+	}
+	return t
 }
 
 func (t *LevelsAnalysisTool) Name() string { return "hithink.finance.analysis.levels" }
 
-func (t *LevelsAnalysisTool) Description() string {
-	return `支撑阻力位分析工具。自动识别关键价格位，辅助买卖点判断。
+func (t *LevelsAnalysisTool) Description() string { return spec.Description(t.Spec) }
 
-分析内容：
-- 枢轴点（Pivot Points）：基于最新交易日的 H/L/C 计算 R1/R2/R3 和 S1/S2/S3
-- 斐波那契回撤：基于近期波段高低点计算 23.6%/38.2%/50%/61.8%/78.6% 回撤位
-- 前高前低：近期显著高低点作为支撑阻力
-- 均线支撑阻力：MA5/10/20/60/120/250 作为动态支撑阻力
-- 整数关口：心理价位（如 1300、1250 等）
-- 布林带边界：BB Upper/Lower 作为动态阻力支撑
-- VWAP：机构成本线
-
-使用示例：thscode="600519.SH", days=120`
-}
-
-func (t *LevelsAnalysisTool) Parameters() json.RawMessage {
-	schema := map[string]interface{}{
-		"type": "object",
-		"properties": map[string]interface{}{
-			"thscode": map[string]interface{}{
-				"type":        "string",
-				"description": "同花顺股票代码",
-			},
-			"days": map[string]interface{}{
-				"type":        "integer",
-				"description": "分析回溯天数（默认 120，最大 250）",
-				"default":     120,
-			},
-		},
-		"required": []string{"thscode"},
-	}
-	data, _ := json.Marshal(schema)
-	return data
-}
+func (t *LevelsAnalysisTool) Parameters() json.RawMessage { return spec.Parameters(t.Spec) }
 
 // pivotPoints holds classic pivot point levels.
 type pivotPoints struct {
@@ -99,34 +76,14 @@ type nearestLevel struct {
 	Type  string  `json:"type"`
 }
 
-func (t *LevelsAnalysisTool) Execute(ctx context.Context, args json.RawMessage) (*types.ToolResult, error) {
-	if err := hithink_finance.CheckSyncWindow(); err != nil {
-		return &types.ToolResult{Success: false, Error: err.Error()}, nil
-	}
-
-	var params struct {
-		Thscode string `json:"thscode"`
-		Days    int    `json:"days"`
-	}
-	if err := json.Unmarshal(args, &params); err != nil {
-		return &types.ToolResult{Success: false, Error: fmt.Sprintf("参数解析失败：%v", err)}, nil
-	}
-	if params.Thscode == "" {
-		return &types.ToolResult{Success: false, Error: "参数错误：thscode 不能为空"}, nil
-	}
-	if params.Days <= 0 {
-		params.Days = 120
-	}
-	if params.Days > 250 {
-		params.Days = 250
-	}
-
-	rows, err := FetchMarketData(ctx, t.config, params.Thscode, params.Days)
-	if err != nil {
-		return &types.ToolResult{Success: false, Error: err.Error()}, nil
-	}
+// compose 是这个工具自己的分析：把取回来的行情与指标算成最终输出。
+//
+// 取数与参数解析在 spec 包那边（Fetch / Compose 两个钩子），这里只剩
+// 「算」这一件事——它本来就是这个工具的价值所在。
+func (t *LevelsAnalysisTool) compose(rows []marketRow, values map[string]any) (*types.ToolResult, error) {
+	thscode, _ := values["thscode"].(string)
 	if len(rows) == 0 {
-		return &types.ToolResult{Success: false, Error: fmt.Sprintf("未找到数据：%s", params.Thscode)}, nil
+		return &types.ToolResult{Success: false, Error: fmt.Sprintf("未找到数据：%s", thscode)}, nil
 	}
 
 	latest := rows[0]
@@ -213,8 +170,14 @@ func (t *LevelsAnalysisTool) Execute(ctx context.Context, args json.RawMessage) 
 	for _, s := range supportSwings {
 		addLevel("SwingLow_"+s.Date, s.Price)
 	}
-	for k, v := range maLevels {
-		addLevel("MA_"+k, v)
+	// 按键序遍历——遍历 map 的顺序是随机的，汇合区的成员顺序会跟着抖。
+	maKeys := make([]string, 0, len(maLevels))
+	for k := range maLevels {
+		maKeys = append(maKeys, k)
+	}
+	sort.Strings(maKeys)
+	for _, k := range maKeys {
+		addLevel("MA_"+k, maLevels[k])
 	}
 	for _, v := range roundAbove {
 		addLevel(fmt.Sprintf("Round_%g", v), v)
@@ -240,7 +203,7 @@ func (t *LevelsAnalysisTool) Execute(ctx context.Context, args json.RawMessage) 
 	verdict := generateVerdict(price, pivot, maLevels, nearestSup, nearestRes)
 
 	output := map[string]interface{}{
-		"thscode":       params.Thscode,
+		"thscode":       thscode,
 		"current_price": price,
 		"pivot_points":  pivot,
 		"fibonacci":     fib,
@@ -356,7 +319,14 @@ func clusterLevels(levels []namedLevel, tol float64) []confluenceZone {
 	// Work on a copy we can sort.
 	sorted := make([]namedLevel, len(levels))
 	copy(sorted, levels)
-	sort.Slice(sorted, func(i, j int) bool { return sorted[i].price < sorted[j].price })
+	// 价格相同的时候按名字定序：sort.Slice 不稳定，同价元素的相对顺序是随机的，
+	// 于是同一个输入每次给出的汇合区成员顺序可能不同。
+	sort.Slice(sorted, func(i, j int) bool {
+		if sorted[i].price != sorted[j].price {
+			return sorted[i].price < sorted[j].price
+		}
+		return sorted[i].name < sorted[j].name
+	})
 
 	var zones []confluenceZone
 	cluster := []int{0}
@@ -378,7 +348,10 @@ func clusterLevels(levels []namedLevel, tol float64) []confluenceZone {
 		if len(zones[i].Levels) != len(zones[j].Levels) {
 			return len(zones[i].Levels) > len(zones[j].Levels)
 		}
-		return zones[i].Price < zones[j].Price
+		if zones[i].Price != zones[j].Price {
+			return zones[i].Price < zones[j].Price
+		}
+		return zones[i].Levels[0] < zones[j].Levels[0]
 	})
 	return zones
 }

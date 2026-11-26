@@ -1,83 +1,44 @@
 package analysis
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"math"
 
 	"github.com/Tencent/WeKnora/internal/agent/tools/hithink_finance"
+	"github.com/Tencent/WeKnora/internal/agent/tools/hithink_finance/spec"
 	"github.com/Tencent/WeKnora/internal/types"
 )
 
 type ChartPatternTool struct {
-	config *hithink_finance.Config
+	spec.Tool
 }
 
 func NewChartPatternTool(config *hithink_finance.Config) *ChartPatternTool {
-	return &ChartPatternTool{config: config}
+	t := &ChartPatternTool{}
+	t.Tool = spec.Tool{
+		Config: config,
+		Spec:   spec.AnalysisPattern,
+		Fetch:  fetchMarketData,
+		Compose: func(rows any, values map[string]any) (*types.ToolResult, error) {
+			return t.compose(rows.([]marketRow), values)
+		},
+	}
+	return t
 }
 
 func (t *ChartPatternTool) Name() string { return "hithink.finance.analysis.pattern" }
 
-func (t *ChartPatternTool) Description() string {
-	return `图表形态识别工具。基于经典技术分析理论，自动识别重要图表形态。
+func (t *ChartPatternTool) Description() string { return spec.Description(t.Spec) }
 
-检测形态：
-- 反转形态：头肩顶/底、双顶/底
-- 持续形态：三角形整理（收敛区间）、楔形、旗形
-- 蜡烛图形态：Hammer、Shooting Star、Doji、Engulfing、Morning/Evening Star 等
-- 布林带形态：收口（变盘前兆）、触轨（超买超卖）
-- 突破信号：价格突破形态边界 + 量能确认
+func (t *ChartPatternTool) Parameters() json.RawMessage { return spec.Parameters(t.Spec) }
 
-使用示例：thscode="600519.SH", days=120`
-}
-
-func (t *ChartPatternTool) Parameters() json.RawMessage {
-	schema := map[string]interface{}{
-		"type": "object",
-		"properties": map[string]interface{}{
-			"thscode": map[string]interface{}{
-				"type":        "string",
-				"description": "同花顺代码，如 600519.SH",
-			},
-			"days": map[string]interface{}{
-				"type":        "integer",
-				"description": "分析天数（默认 120，最大 250）",
-				"default":     120,
-			},
-		},
-		"required": []string{"thscode"},
-	}
-	data, _ := json.Marshal(schema)
-	return data
-}
-
-func (t *ChartPatternTool) Execute(ctx context.Context, args json.RawMessage) (*types.ToolResult, error) {
-	if err := hithink_finance.CheckSyncWindow(); err != nil {
-		return &types.ToolResult{Success: false, Error: err.Error()}, nil
-	}
-	var params struct {
-		Thscode string `json:"thscode"`
-		Days    int    `json:"days"`
-	}
-	if err := json.Unmarshal(args, &params); err != nil {
-		return &types.ToolResult{Success: false, Error: fmt.Sprintf("参数解析失败：%v", err)}, nil
-	}
-	if params.Thscode == "" {
-		return &types.ToolResult{Success: false, Error: "thscode 不能为空"}, nil
-	}
-	if params.Days <= 0 {
-		params.Days = 120
-	}
-	if params.Days > 250 {
-		params.Days = 250
-	}
-
-	rows, err := FetchMarketData(ctx, t.config, params.Thscode, params.Days)
-	if err != nil {
-		return &types.ToolResult{Success: false, Error: err.Error()}, nil
-	}
+// compose 是这个工具自己的分析：把取回来的行情与指标算成最终输出。
+//
+// 取数与参数解析在 spec 包那边（Fetch / Compose 两个钩子），这里只剩
+// 「算」这一件事——它本来就是这个工具的价值所在。
+func (t *ChartPatternTool) compose(rows []marketRow, values map[string]any) (*types.ToolResult, error) {
+	thscode, _ := values["thscode"].(string)
 	if len(rows) < 10 {
 		return &types.ToolResult{Success: false, Error: "数据不足（需要至少 10 个交易日）"}, nil
 	}
@@ -132,7 +93,7 @@ func (t *ChartPatternTool) Execute(ctx context.Context, args json.RawMessage) (*
 	}
 
 	output := map[string]interface{}{
-		"thscode":             params.Thscode,
+		"thscode":             thscode,
 		"patterns":            patterns,
 		"candlestick_signals": candleSignals,
 		"bollinger_status":    bbStatus,

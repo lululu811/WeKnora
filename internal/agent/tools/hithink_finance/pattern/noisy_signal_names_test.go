@@ -123,13 +123,13 @@ func TestNoisyListMatchesTheAudit(t *testing.T) {
 	for n := range auditNoisy {
 		if !got[n] {
 			t.Errorf("%q 在审计里是 noisy（%.2f%%），但不在 noisySignalNames 里 —— "+
-				"该折叠的没折叠。审计重跑后请同步 signals.go。", n, auditNoisy[n])
+				"该折叠的没折叠。审计重跑后请同步 spec/pattern.go 的 NoisySignalNames。", n, auditNoisy[n])
 		}
 	}
 	for _, n := range noisySignalNames {
 		if _, ok := auditNoisy[n]; !ok {
 			t.Errorf("%q 在 noisySignalNames 里，但审计判定它不是 noisy —— "+
-				"该折叠的折错了对象。审计重跑后请同步 signals.go。", n)
+				"该折叠的折错了对象。审计重跑后请同步 spec/pattern.go 的 NoisySignalNames。", n)
 		}
 	}
 
@@ -139,7 +139,7 @@ func TestNoisyListMatchesTheAudit(t *testing.T) {
 		pat := regexp.MustCompile(`"` + regexp.QuoteMeta(n) + `",\s*//\s*([\d.]+)%`)
 		m := pat.FindStringSubmatch(sourceOfSignalsGo(t))
 		if m == nil {
-			t.Errorf("signals.go 的 noisySignalNames 里 %q 缺少百分比注释", n)
+			t.Errorf("spec/pattern.go 的 NoisySignalNames 里 %q 缺少百分比注释", n)
 			continue
 		}
 		got, _ := strconv.ParseFloat(m[1], 64)
@@ -168,13 +168,16 @@ func repoRootForTest(t *testing.T) string {
 	return ""
 }
 
+// sourceOfSignalsGo 读信号清单的源码。
+//
+// 清单住在 spec 包（那边要拿它算说明文字里的信号总数），pattern 包这边是别名。
 func sourceOfSignalsGo(t *testing.T) string {
 	t.Helper()
 	p := filepath.Join(repoRootForTest(t),
-		"internal/agent/tools/hithink_finance/pattern/signals.go")
+		"internal/agent/tools/hithink_finance/spec/pattern.go")
 	b, err := os.ReadFile(p)
 	if err != nil {
-		t.Fatalf("读 signals.go 失败: %v", err)
+		t.Fatalf("读 spec/pattern.go 失败: %v", err)
 	}
 	return string(b)
 }

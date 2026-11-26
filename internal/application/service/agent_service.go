@@ -17,6 +17,7 @@ import (
 	"github.com/Tencent/WeKnora/internal/agent/tools/halo"
 	"github.com/Tencent/WeKnora/internal/agent/tools/hithink_finance"
 	"github.com/Tencent/WeKnora/internal/agent/tools/hithink_finance/analysis"
+	"github.com/Tencent/WeKnora/internal/agent/tools/hithink_finance/discover"
 	"github.com/Tencent/WeKnora/internal/agent/tools/hithink_finance/financial"
 	"github.com/Tencent/WeKnora/internal/agent/tools/hithink_finance/fund"
 	"github.com/Tencent/WeKnora/internal/agent/tools/hithink_finance/futures"
@@ -1503,7 +1504,7 @@ func (s *agentService) registerTools(
 			case "hithink.finance.discover":
 				// WithConfig: kind="columns" 要实时读 DuckDB 的 information_schema，
 				// 走的是与其它 hithink 工具同一条 python-service 连接。
-				toolToRegister = hithink_finance.NewDiscoverToolWithConfig(registry, s.hithinkConfig)
+				toolToRegister = discover.NewToolWithConfig(registry, s.hithinkConfig)
 			case "hithink.finance.market.price.snapshot":
 				toolToRegister = market.NewPriceSnapshotTool(s.hithinkConfig)
 			case "hithink.finance.market.price.historical":

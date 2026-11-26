@@ -8,7 +8,7 @@ import (
 // 本测试锁住工具描述里的排序范例。
 //
 // financial/period_test.go 已经把三张报表的 SQL 排序锁住了，但那里锁不到
-// 本文件：sql_query.go 的 Description() 是模型唯一能看到的 schema 目录，它在
+// 本文件：自由 SQL 工具的 Description() 是模型唯一能看到的 schema 目录，它在
 // 生成目录的**尾部**手写了两条 financials 趋势范例，而那两条范例当年跟着
 // period.go 一起修过——只有三张报表的 SQL 改了，描述里的范例没跟着改，于是
 // 退化排序原封不动地继续教给模型。
@@ -29,7 +29,7 @@ const barePeriodOrder = "ORDER BY period DESC"
 const correctPeriodOrder = "ORDER BY period_end_ms DESC, period ASC"
 
 func TestDescriptionHasNoDegeneratePeriodOrder(t *testing.T) {
-	desc := (&SQLQueryTool{}).Description()
+	desc := NewSQLQueryTool(nil).Description()
 
 	if strings.Contains(desc, barePeriodOrder) {
 		t.Errorf("工具描述里出现了 %s。\n"+
@@ -40,7 +40,7 @@ func TestDescriptionHasNoDegeneratePeriodOrder(t *testing.T) {
 }
 
 func TestDescriptionStatesThePeriodOrderingRule(t *testing.T) {
-	desc := (&SQLQueryTool{}).Description()
+	desc := NewSQLQueryTool(nil).Description()
 
 	// 规则本身必须在描述里，否则模型只知道「别这么写」却不知道「该怎么写」。
 	if !strings.Contains(desc, correctPeriodOrder) {
@@ -59,7 +59,7 @@ func TestDescriptionStatesThePeriodOrderingRule(t *testing.T) {
 // 只断言全文字符串会太松：模型可能把正确排序写在别处、范例却仍是坏的。
 // 这里逐条锁死「范例自身」的排序。
 func TestFinancialTrendExamplesAreOrdered(t *testing.T) {
-	desc := (&SQLQueryTool{}).Description()
+	desc := NewSQLQueryTool(nil).Description()
 
 	examples := []struct {
 		name   string

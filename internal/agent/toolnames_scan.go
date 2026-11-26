@@ -28,7 +28,7 @@ import (
 // zettaranc/.omc/ out of the binary.
 //
 // The cost is roughly a megabyte of embedded source. That is the same
-// trade hithink_finance/discover.go already makes for the tool subpackages,
+// trade hithink_finance/discover/ already makes for the tool subpackages,
 // and it buys the property that matters: the set cannot drift, because
 // go:embed re-collects on every build. A hand-maintained or generated list
 // would drift, and a list that has drifted reports tools that do not exist

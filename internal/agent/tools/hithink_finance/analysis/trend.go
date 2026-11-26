@@ -1,92 +1,46 @@
 package analysis
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"math"
 
 	"github.com/Tencent/WeKnora/internal/agent/tools/hithink_finance"
+	"github.com/Tencent/WeKnora/internal/agent/tools/hithink_finance/spec"
 	"github.com/Tencent/WeKnora/internal/types"
 )
 
 // TrendAnalysisTool performs classical trend analysis based on Dow Theory,
 // moving averages, and trend strength indicators.
 type TrendAnalysisTool struct {
-	config *hithink_finance.Config
+	spec.Tool
 }
 
-// NewTrendAnalysisTool creates a new trend analysis tool.
 func NewTrendAnalysisTool(config *hithink_finance.Config) *TrendAnalysisTool {
-	return &TrendAnalysisTool{config: config}
-}
-
-func (t *TrendAnalysisTool) Name() string {
-	return "hithink.finance.analysis.trend"
-}
-
-func (t *TrendAnalysisTool) Description() string {
-	return `经典趋势分析工具。基于道氏理论、均线系统和趋势强度指标，判断股票的趋势方向、强度和潜在转折。
-
-分析内容：
-- 道氏理论：识别HH/HL（上升趋势）或LH/LL（下降趋势）结构
-- 重剑 518 均线系统：5日/18日均线交叉、开口与金叉次数语义（一次反弹/二次突破/三次跃迁）
-- 均线排列：多头排列（MA5>MA10>MA20>MA60）/ 空头排列 / 均线粘合
-- 均线交叉：短期均线上穿/下穿长期均线
-- 葛兰碧法则：价格与MA20的关系（突破/跌破/回踩/反弹）
-- 趋势强度：ADX分级、趋势持续性判断
-- Supertrend：当前趋势方向
-- 趋势转折信号：均线金叉死叉、价格突破关键均线
-
-返回结构化JSON，包含趋势判断、均线状态、关键信号和操作建议。
-
-使用示例：thscode="600519.SH", days=120`
-}
-
-func (t *TrendAnalysisTool) Parameters() json.RawMessage {
-	schema := map[string]interface{}{
-		"type": "object",
-		"properties": map[string]interface{}{
-			"thscode": map[string]interface{}{
-				"type":        "string",
-				"description": "同花顺股票代码，如 600519.SH（茅台）、300750.SZ（宁德时代）",
-			},
-			"days": map[string]interface{}{
-				"type":        "integer",
-				"description": "分析时间窗口（交易日），默认120，最大250",
-				"default":     120,
-				"maximum":     250,
-			},
+	t := &TrendAnalysisTool{}
+	t.Tool = spec.Tool{
+		Config: config,
+		Spec:   spec.AnalysisTrend,
+		Fetch:  fetchMarketDataLabelled,
+		Compose: func(rows any, values map[string]any) (*types.ToolResult, error) {
+			return t.compose(rows.([]marketRow), values)
 		},
-		"required": []string{"thscode"},
 	}
-	data, _ := json.Marshal(schema)
-	return data
+	return t
 }
 
-func (t *TrendAnalysisTool) Execute(ctx context.Context, args json.RawMessage) (*types.ToolResult, error) {
-	if err := hithink_finance.CheckSyncWindow(); err != nil {
-		return &types.ToolResult{Success: false, Error: err.Error()}, nil
-	}
+func (t *TrendAnalysisTool) Name() string { return "hithink.finance.analysis.trend" }
 
-	var params struct {
-		Thscode string `json:"thscode"`
-		Days    int    `json:"days"`
-	}
-	if err := json.Unmarshal(args, &params); err != nil {
-		return &types.ToolResult{Success: false, Error: fmt.Sprintf("参数解析失败：%v", err)}, nil
-	}
-	if params.Thscode == "" {
-		return &types.ToolResult{Success: false, Error: "thscode 不能为空"}, nil
-	}
-	if params.Days <= 0 {
-		params.Days = 120
-	}
+func (t *TrendAnalysisTool) Description() string { return spec.Description(t.Spec) }
 
-	rows, err := FetchMarketData(ctx, t.config, params.Thscode, params.Days)
-	if err != nil {
-		return &types.ToolResult{Success: false, Error: fmt.Sprintf("数据加载失败：%v", err)}, nil
-	}
+func (t *TrendAnalysisTool) Parameters() json.RawMessage { return spec.Parameters(t.Spec) }
+
+// compose 是这个工具自己的分析：把取回来的行情与指标算成最终输出。
+//
+// 取数与参数解析在 spec 包那边（Fetch / Compose 两个钩子），这里只剩
+// 「算」这一件事——它本来就是这个工具的价值所在。
+func (t *TrendAnalysisTool) compose(rows []marketRow, values map[string]any) (*types.ToolResult, error) {
+	thscode, _ := values["thscode"].(string)
 	if len(rows) < 20 {
 		return &types.ToolResult{Success: false, Error: fmt.Sprintf("数据不足：%d 条，至少需要 20 条", len(rows))}, nil
 	}
@@ -124,7 +78,7 @@ func (t *TrendAnalysisTool) Execute(ctx context.Context, args json.RawMessage) (
 	verdict, confidence, keySignals := buildSummary(dowDir, alignment, priceVsMA20, crossovers, granville, strengthLabel, stDir, latest)
 
 	result := map[string]interface{}{
-		"thscode": params.Thscode,
+		"thscode": thscode,
 		"trend": map[string]interface{}{
 			"direction":     dowDir,
 			"dow_structure": dowDesc,
