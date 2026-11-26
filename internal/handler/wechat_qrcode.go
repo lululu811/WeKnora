@@ -5,6 +5,7 @@ import (
 
 	"github.com/Tencent/WeKnora/internal/im/wechat"
 	"github.com/Tencent/WeKnora/internal/logger"
+	"github.com/Tencent/WeKnora/internal/utils"
 	"github.com/gin-gonic/gin"
 )
 
@@ -30,7 +31,7 @@ func (h *IMHandler) WeChatGetQRCode(c *gin.Context) {
 	result, err := qrCodeService.GetLoginQRCode(ctx)
 	if err != nil {
 		logger.Errorf(ctx, "[WeChat] Failed to generate QR code: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate QR code: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate QR code: " + utils.SanitizeForClient(http.StatusInternalServerError, err)})
 		return
 	}
 

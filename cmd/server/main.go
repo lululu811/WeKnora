@@ -55,6 +55,13 @@ func main() {
 	runtime.LogStartupEnv(context.Background())
 	runtime.MarkServerStarted()
 
+	// 启动期校验必须的密钥。JWT_SECRET 缺失或仍是公开示例值时**拒绝启动**：
+	// 未配的后果是每次重启全员被登出、多副本部署则随机掉线；公开示例值则
+	// 等于没有密钥——任何知道它的人都能伪造管理员的 token。
+	if err := runtime.ValidateStartupSecrets(); err != nil {
+		logger.Fatalf(context.Background(), "启动校验失败：%v", err)
+	}
+
 	// Build dependency injection container
 	c := container.BuildContainer(runtime.GetContainer())
 

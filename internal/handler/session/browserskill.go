@@ -11,6 +11,7 @@ import (
 
 	"github.com/Tencent/WeKnora/internal/browserskill"
 	"github.com/Tencent/WeKnora/internal/types"
+	"github.com/Tencent/WeKnora/internal/utils"
 	"github.com/gin-gonic/gin"
 )
 
@@ -146,7 +147,7 @@ func (h *Handler) BrowserSkillConnection(c *gin.Context) {
 	if c.Request.Method == http.MethodGet {
 		status, err := h.browserSkill.GetStatus(ctx, scope, id)
 		if err != nil {
-			c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
+			utils.WriteError(c, http.StatusServiceUnavailable, err)
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{"success": true, "data": status})
@@ -182,12 +183,12 @@ func (h *Handler) BrowserSkillConnection(c *gin.Context) {
 		return
 	}
 	if err != nil {
-		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		utils.WriteError(c, http.StatusConflict, err)
 		return
 	}
 	status, err := h.browserSkill.GetStatus(ctx, scope, id)
 	if err != nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
+		utils.WriteError(c, http.StatusServiceUnavailable, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": status})
@@ -235,7 +236,7 @@ func (h *Handler) BrowserSkillAccount(c *gin.Context) {
 	case "pair":
 		link, err := h.browserSkill.Pair(ctx, scope, pairingOrigin(c.Request, input.Origin))
 		if err != nil {
-			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+			utils.WriteError(c, http.StatusConflict, err)
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{"success": true, "data": gin.H{"pairing_link": link}})

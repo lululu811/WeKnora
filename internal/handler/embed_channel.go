@@ -121,11 +121,11 @@ func (h *EmbedChannelHandler) CreateEmbedChannel(c *gin.Context) {
 	tenantID := c.GetUint64(types.TenantIDContextKey.String())
 	var req embedChannelRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		secutils.WriteError(c, http.StatusBadRequest, err)
 		return
 	}
 	if err := validateAllowedOrigins(req.AllowedOrigins); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		secutils.WriteError(c, http.StatusBadRequest, err)
 		return
 	}
 	originsJSON, _ := json.Marshal(req.AllowedOrigins)
@@ -207,20 +207,20 @@ func (h *EmbedChannelHandler) UpdateEmbedChannel(c *gin.Context) {
 	tenantID := c.GetUint64(types.TenantIDContextKey.String())
 	var req embedChannelRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		secutils.WriteError(c, http.StatusBadRequest, err)
 		return
 	}
 	// Only validate when the caller intends to change the allowlist. A nil slice
 	// means "leave unchanged"; a present slice must still be a valid allowlist.
 	if req.AllowedOrigins != nil {
 		if err := validateAllowedOrigins(req.AllowedOrigins); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			secutils.WriteError(c, http.StatusBadRequest, err)
 			return
 		}
 	}
 	if req.WebhookURL != nil {
 		if err := service.ValidateEmbedWebhookURL(*req.WebhookURL); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			secutils.WriteError(c, http.StatusBadRequest, err)
 			return
 		}
 	}
@@ -788,7 +788,7 @@ func (h *EmbedChannelHandler) GetEmbedChannelStats(c *gin.Context) {
 		PageSize: 1,
 	})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		secutils.WriteError(c, http.StatusInternalServerError, err)
 		return
 	}
 	total := result
@@ -835,7 +835,7 @@ func writeEmbedMgmtError(c *gin.Context, err error) {
 	case errors.Is(err, service.ErrEmbedChannelNotFound):
 		c.JSON(http.StatusNotFound, gin.H{"error": "embed channel not found"})
 	case errors.Is(err, service.ErrEmbedWebhookURLInvalid):
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		secutils.WriteError(c, http.StatusBadRequest, err)
 	default:
 		var appErr *apperrors.AppError
 		if errors.As(err, &appErr) && appErr.Code == apperrors.ErrNotFound {

@@ -481,25 +481,9 @@ func SanitizeForLog(input string) string {
 		return ""
 	}
 
-	// 替换换行符(LF, CR, CRLF)为空格,防止日志注入
-	sanitized := strings.ReplaceAll(input, "\n", " ")
-	sanitized = strings.ReplaceAll(sanitized, "\r", " ")
-
-	// 替换制表符为空格
-	sanitized = strings.ReplaceAll(sanitized, "\t", " ")
-
-	// 移除其他控制字符(ASCII 0-31,除了空格已处理的)
-	var builder strings.Builder
-	for _, r := range sanitized {
-		// 保留可打印字符和常用Unicode字符
-		if r >= 32 || r == ' ' {
-			builder.WriteRune(r)
-		}
-	}
-
-	sanitized = builder.String()
-
-	return sanitized
+	// 换行/制表/控制字符的清理与响应侧共用一份实现——两边的诉求相同，
+	// 只是去处不同（日志 vs 响应体）。
+	return StripControlChars(input)
 }
 
 // SanitizeForLogArray 清理日志输入数组,防止日志注入攻击

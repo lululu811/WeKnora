@@ -9,6 +9,7 @@ import (
 	"github.com/Tencent/WeKnora/internal/handler/dto"
 	"github.com/Tencent/WeKnora/internal/types"
 	"github.com/Tencent/WeKnora/internal/types/interfaces"
+	"github.com/Tencent/WeKnora/internal/utils"
 	"github.com/gin-gonic/gin"
 )
 
@@ -114,7 +115,7 @@ func (h *DataSourceHandler) CreateDataSource(c *gin.Context) {
 
 	ds, err := h.service.CreateDataSource(ctx, &req)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		utils.WriteError(c, http.StatusBadRequest, err)
 		return
 	}
 
@@ -227,7 +228,7 @@ func (h *DataSourceHandler) UpdateDataSource(c *gin.Context) {
 	req.KnowledgeBaseID = existing.KnowledgeBaseID
 	ds, err := h.service.UpdateDataSource(ctx, &req)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		utils.WriteError(c, http.StatusBadRequest, err)
 		return
 	}
 
@@ -296,7 +297,7 @@ func (h *DataSourceHandler) ValidateConnection(c *gin.Context) {
 	}
 
 	if err := h.service.ValidateConnection(ctx, id); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		utils.WriteError(c, http.StatusBadRequest, err)
 		return
 	}
 
@@ -335,7 +336,7 @@ func (h *DataSourceHandler) ValidateCredentials(c *gin.Context) {
 	}
 
 	if err := h.service.ValidateCredentials(ctx, req.Type, req.Credentials); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		utils.WriteError(c, http.StatusBadRequest, err)
 		return
 	}
 
@@ -413,13 +414,13 @@ func (h *DataSourceHandler) ResolveResourceAncestors(c *gin.Context) {
 
 	var req resolveAncestorsRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		utils.WriteError(c, http.StatusBadRequest, err)
 		return
 	}
 
 	ancestors, err := h.service.ResolveResourceAncestors(ctx, id, req.ResourceIDs)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		utils.WriteError(c, http.StatusBadRequest, err)
 		return
 	}
 
@@ -461,7 +462,7 @@ func (h *DataSourceHandler) ManualSync(c *gin.Context) {
 
 	syncLog, err := h.service.ManualSync(ctx, id)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		utils.WriteError(c, http.StatusBadRequest, err)
 		return
 	}
 
@@ -494,7 +495,7 @@ func (h *DataSourceHandler) PauseDataSource(c *gin.Context) {
 	}
 
 	if err := h.service.PauseDataSource(ctx, id); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		utils.WriteError(c, http.StatusBadRequest, err)
 		return
 	}
 
@@ -527,7 +528,7 @@ func (h *DataSourceHandler) ResumeDataSource(c *gin.Context) {
 	}
 
 	if err := h.service.ResumeDataSource(ctx, id); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		utils.WriteError(c, http.StatusBadRequest, err)
 		return
 	}
 
@@ -582,7 +583,7 @@ func (h *DataSourceHandler) GetSyncLogs(c *gin.Context) {
 
 	logs, err := h.service.GetSyncLogs(ctx, id, limit, offset)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		utils.WriteError(c, http.StatusBadRequest, err)
 		return
 	}
 

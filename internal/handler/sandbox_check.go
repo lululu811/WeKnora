@@ -14,6 +14,7 @@ import (
 	"github.com/Tencent/WeKnora/internal/logger"
 	"github.com/Tencent/WeKnora/internal/sandbox"
 	"github.com/Tencent/WeKnora/internal/types"
+	"github.com/Tencent/WeKnora/internal/utils"
 )
 
 // --- Sandbox connectivity check ---
@@ -117,7 +118,7 @@ func (h *SystemHandler) CheckSandboxConfig(c *gin.Context) {
 		}
 		entity, err := h.sandboxConfigSvc.Get(ctx, tenant.ID, req.ConfigID)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": err.Error()})
+			c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": utils.SanitizeForClient(http.StatusBadRequest, err)})
 			return
 		}
 		if entity == nil {
@@ -134,12 +135,12 @@ func (h *SystemHandler) CheckSandboxConfig(c *gin.Context) {
 	}
 	merged, err := service.SanitizeSandboxConfig(incoming, stored)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": utils.SanitizeForClient(http.StatusBadRequest, err)})
 		return
 	}
 	effective, err := sandbox.ResolveEffectiveConfig(merged, sandbox.DefaultConfig())
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": utils.SanitizeForClient(http.StatusBadRequest, err)})
 		return
 	}
 

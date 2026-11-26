@@ -10,6 +10,7 @@ import (
 	"github.com/Tencent/WeKnora/internal/datasource"
 	"github.com/Tencent/WeKnora/internal/handler/dto"
 	"github.com/Tencent/WeKnora/internal/types"
+	"github.com/Tencent/WeKnora/internal/utils"
 	"github.com/gin-gonic/gin"
 )
 
@@ -193,7 +194,7 @@ func (h *DataSourceHandler) PatchSyncSettings(c *gin.Context) {
 	}
 	updated, err := patch.apply(existing)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		utils.WriteError(c, http.StatusBadRequest, err)
 		return
 	}
 	fields := []string{}
@@ -212,7 +213,7 @@ func (h *DataSourceHandler) PatchSyncSettings(c *gin.Context) {
 	}
 	saved, err := h.service.PatchDataSourceSyncSettings(c.Request.Context(), existing, updated, fields)
 	if errors.Is(err, types.ErrDataSourceSettingsConflict) {
-		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		utils.WriteError(c, http.StatusConflict, err)
 		return
 	}
 	if err != nil {

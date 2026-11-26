@@ -664,7 +664,7 @@ func (h *MCPServiceHandler) TestMCPService(c *gin.Context) {
 			"success": true,
 			"data": types.MCPTestResult{
 				Success: false,
-				Message: "Test failed: " + err.Error(),
+				Message: "Test failed: " + secutils.SanitizeForClient(http.StatusOK, err),
 			},
 		})
 		return

@@ -5,6 +5,7 @@ import (
 
 	"github.com/Tencent/WeKnora/internal/types"
 	"github.com/Tencent/WeKnora/internal/types/interfaces"
+	"github.com/Tencent/WeKnora/internal/utils"
 	"github.com/gin-gonic/gin"
 )
 
@@ -44,12 +45,12 @@ type weKnoraCloudCredentialsRequest struct {
 func (h *WeKnoraCloudHandler) SaveCredentials(c *gin.Context) {
 	var req weKnoraCloudCredentialsRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		utils.WriteError(c, http.StatusBadRequest, err)
 		return
 	}
 
 	if err := h.svc.SaveCredentials(c.Request.Context(), req.AppID, req.AppSecret); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		utils.WriteError(c, http.StatusBadRequest, err)
 		return
 	}
 
@@ -72,7 +73,7 @@ func (h *WeKnoraCloudHandler) SaveCredentials(c *gin.Context) {
 func (h *WeKnoraCloudHandler) Status(c *gin.Context) {
 	result, err := h.svc.CheckStatus(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		utils.WriteError(c, http.StatusInternalServerError, err)
 		return
 	}
 	c.JSON(http.StatusOK, result)

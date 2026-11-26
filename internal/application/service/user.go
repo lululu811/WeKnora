@@ -77,19 +77,31 @@ const (
 	DetailSamePassword       = "same_password"
 )
 
-// getJwtSecret retrieves the JWT secret from the environment, falling back to a securely generated random secret.
+// getJwtSecret retrieves the JWT secret from the environment, falling back to a
+// securely generated random secret.
+//
+// 环境变量优先；没配、或配的是**公开示例值**时，退回到进程级随机密钥。
+//
+// 公开示例值必须当没配：配置生成器写进 .env 的是 "change-me-in-production"，
+// 它曾不在旧名单里，于是被拿去真的签 token——而这个值写在仓库里，任何知道
+// 它的人都能伪造任意用户的 token。名单现在只有一份，在 utils.PlaceholderSecrets。
+//
+// 那个退路**只在开发与测试里成立**：生产部署未配 JWT_SECRET 会在启动期被
+// 拒绝（runtime.ValidateStartupSecrets）——未配的后果是每次重启全员被登出，
+// 多副本部署则表现为随机掉线。
 func getJwtSecret() string {
 	jwtSecretOnce.Do(func() {
 		envSecret := strings.TrimSpace(os.Getenv("JWT_SECRET"))
-		if envSecret != "" && envSecret != "weknora-jwt-secret" && envSecret != "CHANGE-ME-jwt-secret" {
+		if envSecret != "" && !secutils.IsPlaceholderSecret(envSecret) {
 			jwtSecret = envSecret
 			return
 		}
 
+		// crypto/rand.Read 自 Go 1.24 起保证不返回 error：失败时它自己
+		// runtime.fatal（不可 recover），所以这里没有可处理的错误分支——
+		// 原来那个 panic 分支既是死代码，真触发时也救不回来。
 		randomBytes := make([]byte, 32)
-		if _, err := rand.Read(randomBytes); err != nil {
-			panic(fmt.Sprintf("failed to generate JWT secret: %v", err))
-		}
+		_, _ = rand.Read(randomBytes)
 		jwtSecret = base64.StdEncoding.EncodeToString(randomBytes)
 	})
 

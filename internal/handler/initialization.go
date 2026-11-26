@@ -1074,7 +1074,7 @@ func (h *InitializationHandler) CheckOllamaStatus(c *gin.Context) {
 			"success": true,
 			"data": gin.H{
 				"available": false,
-				"error":     err.Error(),
+				"error":     utils.SanitizeForClient(http.StatusOK, err),
 				"baseUrl":   baseURL,
 			},
 		})
@@ -2507,7 +2507,7 @@ func (h *InitializationHandler) TestMultimodalFunction(c *gin.Context) {
 			"success": true,
 			"data": gin.H{
 				"success":         false,
-				"message":         err.Error(),
+				"message":         utils.SanitizeForClient(http.StatusOK, err),
 				"processing_time": processingTime,
 			},
 		})

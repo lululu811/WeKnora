@@ -74,7 +74,7 @@ func ensureDesktopSigningKeyInDir(dir string) error {
 // AES key), so sessions get their own persisted secret.
 func ensureDesktopJWTSecret(dir string, signingKey []byte) error {
 	jwtSecret := strings.TrimSpace(os.Getenv("JWT_SECRET"))
-	if jwtSecret != "" && jwtSecret != "weknora-jwt-secret" && jwtSecret != "CHANGE-ME-jwt-secret" {
+	if jwtSecret != "" && !utils.IsPlaceholderSecret(jwtSecret) {
 		return nil
 	}
 	secret := string(signingKey)

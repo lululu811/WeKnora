@@ -315,7 +315,7 @@ build-lite:
 # Run Lite version with .env.lite defaults
 run-lite: build-lite
 	@if [ ! -f .env.lite ]; then echo "Error: .env.lite not found"; exit 1; fi
-	@set -a && . ./.env.lite && set +a && ./$(BINARY_NAME)-lite
+	@set -a && . ./.env.lite && set +a && WEKNORA_ALLOW_EPHEMERAL_JWT_SECRET="$${WEKNORA_ALLOW_EPHEMERAL_JWT_SECRET:-true}" ./$(BINARY_NAME)-lite
 
 # Package Lite version into distributable tarball
 package-lite:

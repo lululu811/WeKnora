@@ -1319,7 +1319,7 @@ func (h *SystemHandler) PromoteUserToSystemAdmin(c *gin.Context) {
 
 	var req PromoteUserToSystemAdminRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request: " + err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request: " + secutils.SanitizeForClient(http.StatusBadRequest, err)})
 		return
 	}
 
@@ -1409,7 +1409,7 @@ func (h *SystemHandler) RevokeSystemAdmin(c *gin.Context) {
 
 	var req RevokeSystemAdminRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request: " + err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request: " + secutils.SanitizeForClient(http.StatusBadRequest, err)})
 		return
 	}
 
@@ -1629,7 +1629,7 @@ func (h *SystemHandler) SetUserStatus(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
 		case errors.Is(err, service.ErrCannotDisableSelf),
 			errors.Is(err, service.ErrCannotDisableLastAdmin):
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			secutils.WriteError(c, http.StatusBadRequest, err)
 		default:
 			logger.Errorf(ctx, "Error setting user status: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update user status"})
@@ -1677,7 +1677,7 @@ func (h *SystemHandler) ResetUserPassword(c *gin.Context) {
 	req.Email = strings.TrimSpace(req.Email)
 
 	if err := service.ValidatePasswordPolicy(req.NewPassword, h.complexPasswordEnabled(ctx)); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		secutils.WriteError(c, http.StatusBadRequest, err)
 		return
 	}
 
@@ -1694,7 +1694,7 @@ func (h *SystemHandler) ResetUserPassword(c *gin.Context) {
 
 	if err := h.userSvc.AdminResetPassword(ctx, user.ID, req.NewPassword); err != nil {
 		if service.IsPasswordPolicyError(err) {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			secutils.WriteError(c, http.StatusBadRequest, err)
 			return
 		}
 		logger.Errorf(ctx, "Failed to reset password for user %s: %v", user.ID, err)
@@ -1780,9 +1780,9 @@ func (h *SystemHandler) CreateSystemUser(c *gin.Context) {
 			})
 			c.JSON(http.StatusOK, CreateSystemUserResponse{User: user.ToUserInfo()})
 		case errors.Is(err, service.ErrPasswordPolicy):
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			secutils.WriteError(c, http.StatusBadRequest, err)
 		case errors.Is(err, service.ErrUserIdentityConflict):
-			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+			secutils.WriteError(c, http.StatusConflict, err)
 		default:
 			logger.Errorf(ctx, "Failed to create user: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user"})
@@ -2376,7 +2376,7 @@ func (h *SystemHandler) GetSystemSetting(c *gin.Context) {
 		// Service-layer "unknown key" surfaces as a generic error here;
 		// distinguish via the error string rather than typed errors so
 		// we don't grow a sentinel package for a single error class.
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		secutils.WriteError(c, http.StatusBadRequest, err)
 		return
 	}
 	if row == nil {
@@ -2418,7 +2418,7 @@ func (h *SystemHandler) UpdateSystemSetting(c *gin.Context) {
 
 	var req UpdateSystemSettingRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request: " + err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request: " + secutils.SanitizeForClient(http.StatusBadRequest, err)})
 		return
 	}
 	if req.Value == nil {
@@ -2431,7 +2431,7 @@ func (h *SystemHandler) UpdateSystemSetting(c *gin.Context) {
 		// Whether this is "unknown key" / "type mismatch" / "DB error"
 		// is encoded in the error message at the service layer; surface
 		// it verbatim. UI captures it as the toast text.
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		secutils.WriteError(c, http.StatusBadRequest, err)
 		return
 	}
 	h.enrichSettingsModifiedBy(ctx, []*types.SystemSetting{row})
@@ -2523,7 +2523,7 @@ func (h *SystemHandler) ResetSystemSetting(c *gin.Context) {
 		// every error as 400 so the UI captures it as a toast. A real
 		// DB failure here is rare and indistinguishable from "bad key"
 		// at this layer — operators see the message either way.
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		secutils.WriteError(c, http.StatusBadRequest, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true})

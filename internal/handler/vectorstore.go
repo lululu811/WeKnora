@@ -9,6 +9,7 @@ import (
 	"github.com/Tencent/WeKnora/internal/logger"
 	"github.com/Tencent/WeKnora/internal/types"
 	"github.com/Tencent/WeKnora/internal/types/interfaces"
+	"github.com/Tencent/WeKnora/internal/utils"
 	"github.com/gin-gonic/gin"
 )
 
@@ -385,7 +386,7 @@ func (h *VectorStoreHandler) TestStoreByID(c *gin.Context) {
 		version, err := h.service.TestConnection(ctx, envStore.EngineType, envStore.ConnectionConfig)
 		if err != nil {
 			logger.Warnf(ctx, "Vector store connection test failed: %v", err)
-			c.JSON(http.StatusOK, gin.H{"success": false, "error": err.Error()})
+			c.JSON(http.StatusOK, gin.H{"success": false, "error": utils.SanitizeForClient(http.StatusOK, err)})
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{"success": true, "version": version})
@@ -402,7 +403,7 @@ func (h *VectorStoreHandler) TestStoreByID(c *gin.Context) {
 	version, err := h.service.TestConnection(ctx, store.EngineType, store.ConnectionConfig)
 	if err != nil {
 		logger.Warnf(ctx, "Vector store connection test failed: %v", err)
-		c.JSON(http.StatusOK, gin.H{"success": false, "error": err.Error()})
+		c.JSON(http.StatusOK, gin.H{"success": false, "error": utils.SanitizeForClient(http.StatusOK, err)})
 		return
 	}
 
@@ -450,7 +451,7 @@ func (h *VectorStoreHandler) TestStoreRaw(c *gin.Context) {
 	version, err := h.service.TestRawConnection(ctx, req.EngineType, req.ConnectionConfig)
 	if err != nil {
 		logger.Warnf(ctx, "Vector store connection test failed: %v", err)
-		c.JSON(http.StatusOK, gin.H{"success": false, "error": err.Error()})
+		c.JSON(http.StatusOK, gin.H{"success": false, "error": utils.SanitizeForClient(http.StatusOK, err)})
 		return
 	}
 

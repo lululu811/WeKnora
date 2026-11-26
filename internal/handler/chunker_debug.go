@@ -15,6 +15,7 @@ import (
 	"github.com/Tencent/WeKnora/internal/infrastructure/chunker"
 	"github.com/Tencent/WeKnora/internal/infrastructure/docparser"
 	"github.com/Tencent/WeKnora/internal/logger"
+	"github.com/Tencent/WeKnora/internal/utils"
 	"github.com/gin-gonic/gin"
 )
 
@@ -127,7 +128,7 @@ func PreviewChunking(c *gin.Context) {
 
 	var req PreviewChunkingRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "invalid request body: " + err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "invalid request body: " + utils.SanitizeForClient(http.StatusBadRequest, err)})
 		return
 	}
 

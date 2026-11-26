@@ -10,6 +10,7 @@ import (
 	"github.com/Tencent/WeKnora/internal/im"
 	"github.com/Tencent/WeKnora/internal/logger"
 	"github.com/Tencent/WeKnora/internal/types"
+	"github.com/Tencent/WeKnora/internal/utils"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
@@ -72,7 +73,7 @@ func (h *IMHandler) CreateIMChannel(c *gin.Context) {
 		Enabled         *bool      `json:"enabled"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		utils.WriteError(c, http.StatusBadRequest, err)
 		return
 	}
 
@@ -82,7 +83,7 @@ func (h *IMHandler) CreateIMChannel(c *gin.Context) {
 	}
 	locale, err := normalizeIMLocale(req.Locale)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		utils.WriteError(c, http.StatusBadRequest, err)
 		return
 	}
 
@@ -134,7 +135,7 @@ func (h *IMHandler) CreateIMChannel(c *gin.Context) {
 	if err := h.imService.CreateChannel(channel); err != nil {
 		logger.Errorf(c.Request.Context(), "[IM] Create channel failed: %v", err)
 		if strings.HasPrefix(err.Error(), "duplicate_bot:") {
-			c.JSON(http.StatusConflict, gin.H{"error": strings.TrimPrefix(err.Error(), "duplicate_bot: ")})
+			utils.WriteError(c, http.StatusConflict, err)
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create channel"})
@@ -233,7 +234,7 @@ func (h *IMHandler) UpdateIMChannel(c *gin.Context) {
 		AgentID         *string    `json:"agent_id"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		utils.WriteError(c, http.StatusBadRequest, err)
 		return
 	}
 
@@ -249,7 +250,7 @@ func (h *IMHandler) UpdateIMChannel(c *gin.Context) {
 	if req.Locale != nil {
 		locale, err := normalizeIMLocale(*req.Locale)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			utils.WriteError(c, http.StatusBadRequest, err)
 			return
 		}
 		channel.Locale = locale
@@ -284,7 +285,7 @@ func (h *IMHandler) UpdateIMChannel(c *gin.Context) {
 	if err := h.imService.UpdateChannel(channel); err != nil {
 		logger.Errorf(c.Request.Context(), "[IM] Update channel failed: %v", err)
 		if strings.HasPrefix(err.Error(), "duplicate_bot:") {
-			c.JSON(http.StatusConflict, gin.H{"error": strings.TrimPrefix(err.Error(), "duplicate_bot: ")})
+			utils.WriteError(c, http.StatusConflict, err)
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update channel"})

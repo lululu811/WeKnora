@@ -416,7 +416,7 @@ func (h *WebSearchProviderHandler) TestProviderRaw(c *gin.Context) {
 
 	if err := h.doTestSearch(ctx, req.Provider, req.Parameters); err != nil {
 		logger.Warnf(ctx, "Web search provider test failed: %v", err)
-		c.JSON(http.StatusOK, gin.H{"success": false, "error": err.Error()})
+		c.JSON(http.StatusOK, gin.H{"success": false, "error": secutils.SanitizeForClient(http.StatusOK, err)})
 		return
 	}
 

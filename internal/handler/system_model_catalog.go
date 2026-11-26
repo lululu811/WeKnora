@@ -6,6 +6,7 @@ import (
 
 	"github.com/Tencent/WeKnora/internal/application/repository"
 	"github.com/Tencent/WeKnora/internal/application/service"
+	"github.com/Tencent/WeKnora/internal/utils"
 	"github.com/gin-gonic/gin"
 )
 
@@ -85,9 +86,9 @@ func (h *SystemHandler) changeModelCatalog(c *gin.Context, publish bool) {
 	if err != nil {
 		switch {
 		case errors.Is(err, repository.ErrCatalogVersionConflict):
-			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+			utils.WriteError(c, http.StatusConflict, err)
 		case errors.Is(err, service.ErrInvalidCatalog):
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			utils.WriteError(c, http.StatusBadRequest, err)
 		default:
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update model catalog"})
 		}

@@ -238,6 +238,12 @@ func main() {
 	if err := ensureDesktopSigningKey(); err != nil {
 		panic(fmt.Sprintf("initialize desktop signing key: %v", err))
 	}
+	// 桌面壳自己持久化了签名密钥（ensureDesktopSigningKey → ensureDesktopJWTSecret），
+	// 所以这里只会通过；留着这道校验是为了桌面壳哪天不持久化时能有话可说，
+	// 而不是静默退回到进程级随机密钥。
+	if err := runtime.ValidateStartupSecrets(); err != nil {
+		panic(fmt.Sprintf("validate startup secrets: %v", err))
+	}
 	runtime.LogStartupEnv(context.Background())
 
 	// Build dependency injection container

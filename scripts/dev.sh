@@ -463,6 +463,13 @@ start_app() {
         log_error ".env 文件不存在，请先创建配置文件"
         return 1
     fi
+
+    # 开发期允许临时密钥：本地反复重启时登录态不丢。
+    #
+    # 它是**显式打开的开关**，不是偷偷塞进去的固定密钥——服务启动时会打一条
+    # 警告说清后果（重启即全员登出、多副本会随机掉线）。生产部署不要设它：
+    # 那里服务会拒绝启动，逼着部署者真的配一个 JWT_SECRET。
+    export WEKNORA_ALLOW_EPHEMERAL_JWT_SECRET="${WEKNORA_ALLOW_EPHEMERAL_JWT_SECRET:-true}"
     
     # 本地 docker-compose.dev 模式：把容器服务名映射到宿主机回环地址
     # 远程开发模式（DEV_REMOTE_HOST 或 .env.local 已设地址）则保留 .env/.env.local 中的值

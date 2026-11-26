@@ -2,10 +2,11 @@
 // It provides utilities for managing and validating WeKnora configuration.
 //
 // Commands:
-//   weknora config validate    - Validate configuration files
-//   weknora config show        - Display current configuration (redacted)
-//   weknora config init        - Initialize a new configuration from template
-//   weknora config diff        - Compare two configuration files
+//
+//	weknora config validate    - Validate configuration files
+//	weknora config show        - Display current configuration (redacted)
+//	weknora config init        - Initialize a new configuration from template
+//	weknora config diff        - Compare two configuration files
 package main
 
 import (
@@ -342,11 +343,11 @@ func redactConfig(cfg *config.Config) map[string]interface{} {
 	// Conversation
 	if cfg.Conversation != nil {
 		redacted["conversation"] = map[string]interface{}{
-			"max_rounds":       cfg.Conversation.MaxRounds,
-			"embedding_top_k":  cfg.Conversation.EmbeddingTopK,
-			"rerank_top_k":     cfg.Conversation.RerankTopK,
-			"enable_rewrite":   cfg.Conversation.EnableRewrite,
-			"enable_rerank":    cfg.Conversation.EnableRerank,
+			"max_rounds":      cfg.Conversation.MaxRounds,
+			"embedding_top_k": cfg.Conversation.EmbeddingTopK,
+			"rerank_top_k":    cfg.Conversation.RerankTopK,
+			"enable_rewrite":  cfg.Conversation.EnableRewrite,
+			"enable_rerank":   cfg.Conversation.EnableRerank,
 		}
 	}
 
@@ -504,7 +505,9 @@ RETRIEVE_DRIVER=sqlite
 STREAM_MANAGER_TYPE=memory
 
 # Authentication
-JWT_SECRET=change-me-in-production
+# JWT_SECRET 未设置时服务**拒绝启动**：未配的后果是每次重启全员被登出，
+# 多副本部署则随机掉线。生成一个：openssl rand -base64 32
+JWT_SECRET=
 SYSTEM_AES_KEY=change-me-in-production-32b
 
 # Optional: Ollama for local LLM
@@ -538,7 +541,9 @@ MINIO_BUCKET_NAME=weknora
 RETRIEVE_DRIVER=postgres
 
 # Authentication
-JWT_SECRET=change-me-in-production
+# JWT_SECRET 未设置时服务**拒绝启动**：未配的后果是每次重启全员被登出，
+# 多副本部署则随机掉线。生成一个：openssl rand -base64 32
+JWT_SECRET=
 SYSTEM_AES_KEY=change-me-in-production-32b
 
 # Document Parser
@@ -568,13 +573,17 @@ STORAGE_TYPE=${STORAGE_TYPE}
 # ... storage-specific variables
 
 # Authentication
+# JWT_SECRET 未设置时服务**拒绝启动**：未配的后果是每次重启全员被登出，
+# 多副本部署则随机掉线。生成一个：openssl rand -base64 32
 JWT_SECRET=${JWT_SECRET}
 SYSTEM_AES_KEY=${SYSTEM_AES_KEY}
 `
 
 	default:
 		return `# WeKnora Minimal Environment Variables
-JWT_SECRET=change-me
+# JWT_SECRET 未设置时服务**拒绝启动**：未配的后果是每次重启全员被登出，
+# 多副本部署则随机掉线。生成一个：openssl rand -base64 32
+JWT_SECRET=
 SYSTEM_AES_KEY=change-me-32-bytes-long!!
 `
 	}

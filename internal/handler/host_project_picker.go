@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"sync"
 
+	"github.com/Tencent/WeKnora/internal/utils"
 	"github.com/gin-gonic/gin"
 )
 
@@ -43,7 +44,7 @@ func (*SystemHandler) PickHostProjectDir(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"success": false,
-			"error":   gin.H{"message": err.Error()},
+			"error":   gin.H{"message": utils.SanitizeForClient(http.StatusInternalServerError, err)},
 		})
 		return
 	}
