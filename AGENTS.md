@@ -112,6 +112,60 @@ invariants as load-bearing.
 fund / futures). Registration is an allowlist switch in `agent_service.go`; a tool that is not on an
 agent's `allowed_tools` is neither in the model's tool schema nor callable.
 
+**Tools of the same shape live in `hithink_finance/spec/`, not in the tool files.** A tool
+that is "one code + one count + one table" is a `Spec` literal in `spec/<family>.go`; the
+six steps (sync window → parse → clamp → query → shape) live in `spec/execute.go`; the
+family package keeps a four-line adapter whose `Name()` returns a **string literal** (the
+zettaranc whitelist test scrapes names out of source and cannot follow a lookup). Adding a
+tool of that shape means adding a `Spec`, not a file.
+
+The spec carries the variations as data: `Param.Over` (超范围是钳到上限还是换回缺省值
+— **the two are not the same thing**), `Param.Blank` (算"没给"的取值，如 "latest"),
+`Param.Pattern` (格式校验), `Param.Explicit` (取值回落), `Param.Enum` (取值集合，
+**只发布给模型看**，不是运行时约束), `Param.RuntimeDefault` (运行时真正用的缺省值 ——
+与模型看到的 `Default` 不一致时两者都在), `Param.ZeroMeansUnset` (数值参数的 0 算
+"没给"), `Param.NoDefault` (缺省按模式定，声明不兜底), `Param.Multi` (逗号分隔的
+多值参数), `Spec.Filters` (可选 WHERE), `Spec.OrderBy` (按参数选排序), `Spec.Variants`
+(按参数选 SQL 形态), `Spec.Derive` (算出来的绑定值), `Spec.Queries` (多查询),
+`Spec.SQLFromParam` / `Spec.DBFromParam` (自由 SQL：语句与库名都是模型给的),
+`Spec.SkipSyncWindow` (不受同步窗口拦截 — discover 查的是工具清单，不是行情),
+`Envelope.RowEcho` (回显结果行的哪一列), `Envelope.EchoIfSet` (只在非空时回显),
+`Envelope.Single` (输出是那一行), `Envelope.Compact` (紧凑 JSON — 输出是模型读到的
+契约，缩不缩进不是排版偏好), `Envelope.Freshness` (数据新鲜度告警). `spec/contract_test.go` holds the invariants — name in three places, spec
+set == adapter set, schema and description byte-identical to the pre-migration snapshot,
+the window's effective value identical to the pre-migration one, and the SQL, the bound
+values **and the JSON the model actually receives** identical under two probes per tool.
+`analysis/` 的四个技术分析工具是**结果不是行**的那一族（道氏理论、威科夫、形态
+识别）：取数要查两个 DuckDB 再在 Go 里按日期合并，合并与分析都是 Go 代码，于是
+以 `Fetch` / `Compose` 两个钩子的形式留在 `analysis` 包那边；进声明的是这个
+工具的身份与契约。`spec.Spec.Composed` 标记这一族，契约测试据此知道它们没有
+SQL、没有绑定参数。
+
+`analysis/levels.go` 里三处排序曾是不确定的（遍历 map + 不稳定排序），同一个
+输入可能给出不同的输出顺序——已改成全序。
+
+`index/sector.constituents` 的 `sector` 参数有**两种形态**（板块代码走 thscode
+列、中文名走 name 列）——`Variant.Match` 的 "suffix:.TI" 就是判这个的。
+`index/sector.membership` 的 `tags` 是**多值参数**（逗号分隔），过滤在 Go 侧做
+（`Param.Multi`），输出里的 `tags` 字段是算出来的。
+
+`special/sentiment.stats` 是**多查询**那一族的代表：三条池子查询在声明里
+（`spec.Spec.Queries`），执行器跑，聚合在工具那边。`Query.Optional` 保留着
+迁移前"后两条查询的错误被静默吞掉"的行为 —— 只有涨停池查不到才致命。
+
+`discover/` 单独一个包（原来在 `hithink_finance` 包根）：它的**声明**要住在
+`spec` 包，而 `spec` 包单向依赖包根（执行器要用 `Config` 与查询函数），包根反过来
+依赖 `spec` 就成了环。它依赖包根与 `spec` 包，谁也不依赖谁。包根留下的只有
+"哪些列被现成工具消费"那道判定 —— 它靠 `//go:embed */*.go` 读各工具子包的源码，
+而**子包里够不到兄弟目录**。
+
+`financial/` 的三张报表共用 `spec.FinancialPeriodOrderBy` 与
+`spec.FinancialPeriodFieldDoc` 两个常量——**`financial.indicator.detail` 刻意不用
+它们**（那张视图没有 period / period_end_ms 列，套用会 binder 报错；债务登记册里
+要求"统一排序来源"的那条记载本身是错的）。
+Read [`docs/design/finance-tool-spec.md`](docs/design/finance-tool-spec.md) before
+changing anything there.
+
 Two traps that have already cost real debugging:
 
 - **`period` is not the report period.** In `v_balance_sheet` / `v_income_statement` /

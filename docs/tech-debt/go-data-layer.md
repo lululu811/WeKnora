@@ -217,7 +217,7 @@
 
 ### [S3] 契约测试只扫描子目录，根包里的 `discover.go` SQL 不在保护范围内
 
-- **位置**：`internal/agent/tools/hithink_finance/schema_contract_test.go:145`、`internal/agent/tools/hithink_finance/discover.go:292`
+- **位置**：`internal/agent/tools/hithink_finance/schema_contract_test.go:145`、`internal/agent/tools/hithink_finance/discover/tool.go`
 - **证据**：测试遍历 `os.ReadDir(".")` 后 `if !entry.IsDir() { continue }`（`:145`），只扫子包。根包的 `discover.go:292` 持有一条真实查询：
 
   ```go

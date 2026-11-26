@@ -113,7 +113,7 @@ day/week/month × 有/无起始日 共 6 条分支，三处差异由适配器一
 **由 `testdata/schema.json` 生成**：
 
 ```bash
-go generate ./internal/agent/tools/hithink_finance/query   # 或 cd 该目录 && go run ./gencatalog
+go generate ./internal/agent/tools/hithink_finance/spec   # 或 cd 该目录 && go run ./gencatalog
 ```
 
 产物是静态字符串 `query/sql_query_catalog.go`（不依赖运行时文件系统）。生成器入口

@@ -3,6 +3,12 @@
 8 个只读 subagent 分片审计 + 主进程逐条复核。每条都有 file:line 证据；标 `[已复核]` 的由主进程直接 grep / 实测确认。
 分片明细见同目录 8 份报告 + `corrections.md`。
 
+> **2026-10-25 更新**：复核了其中 14 条的**当前**状态，发现 6 条其实已经修好但
+> 登记表没回填（python-service 文件外读、IM QA worker 的 panic 边界、SQLite
+> `tenant_members` 部分唯一索引、SQLite 缺 `mcp_metadata`、`halo.fetch_external`
+> 的 `to_thread`、`message.go` 的 limit 钳制）。本次又结案两条：**#12**（响应侧
+> 错误净化）与 **#17**（JWT_SECRET）。其余未复核的条目状态未知。
+
 ## 总览
 
 | 维度 | 数字 |
@@ -74,6 +80,47 @@
 
 ---
 
+## S1 — 建议本周处理
+
+### 7. **库的 `schema_migrations` 版本可能被"快进"，导致 schema 落后于版本号** `[2026-10-25 实测]`
+- **位置**：`migrations/versioned/000121_session_kind.up.sql`；`internal/application/repository/session.go:186`
+- **证据**（实测这个部署环境）：`schema_migrations` 版本被**手工快进**到 121，
+  于是 **119、120、121 三条迁移被永久跳过**——版本号说"跑过了"，实际变更一条没做。
+  实测缺失：`agent_prompts` / `agent_run_suspensions` 两张表、
+  `messages.run_state` / `tenants.assistant_config` 两列、`sessions.kind` 一列。
+  （122-134 的结构都在库里——它们是快进之后真跑过的。）
+- **表现**：新代码查不存在的东西 →
+  `messages.run_state` 不在 → 聊天发消息 INSERT 报 `column does not exist` →
+  **流式对话整个 500**（"流式连接失败: HTTP 500"）；
+  `sessions.kind` 不在 → 会话列表接口 500 → 前端「对话全没了」（数据其实一条不少）。
+- **为什么难发现**：旧镜像（代码早于 10-15）不查 `s.kind`，列出来一切正常；换新镜像才炸。
+  同一个现象还有第二种形态——前端拿到 502（nginx 缓存旧上游 IP）时，页面同样"空空如也"。
+  **两种都长得像"数据没了"，而数据其实在库里。**
+- **修复**：新增两条幂等补齐迁移，把这类"版本快进了但变更没做"的库补齐：
+  `000135_sessions_kind_backfill.up.sql`（121 的 `sessions.kind`）与
+  `000136_agent_prompts_backfill.up.sql`（119 + 120 的原样重放——它们的语句本身
+  全是 `IF NOT EXISTS`，天然幂等）。
+  SQLite 侧**不需要**这两条：它的迁移从 0 连续执行，`000039_session_kind` 必然落地。
+- **残留风险**：版本快进通常来自"从别处恢复/导入库"或手工改 `schema_migrations`。
+  **凡是恢复过库的部署，都该核对一遍 schema 与代码是否对得上**——
+  现在没有能自动发现这类缺口的闸门（`schema_contract_test.go` 只查工具的 SQL 列名，
+  不查业务表的列）。
+
+### 8. **内置 agent 的工具白名单没有出厂→数据库的同步通道** `[2026-10-25 实测并已修]`
+- **位置**：`internal/application/service/custom_agent.go`（`GetAgentByID` / `ListAgents`）；
+  `internal/types/builtin_agent_config.go`（`MergeBuiltinAllowedTools`）；ADR 0004
+- **证据**：内置 agent 的白名单有两个来源——出厂的写在 `config/builtin_agents.yaml`，
+  租户改的写在 `custom_agents` 表。读路径一律是「DB 里有行就用 DB 的」，于是
+  **出厂清单扩充后已存在的行永远停在旧版**。实测这个环境：Z哥 的 DB 行只有 25 个
+  工具、yaml 里是 50 个；HALO 16 vs 18；Smart Reasoning 5 vs 9。**合计 32 个工具
+  模型看得见（系统提示也写着）却调不到** —— 表现为 `tool not found: <名字>`。
+  2026-10-19 那次提交（`1fd105a19`「补齐 Z哥白名单」）只改了 yaml，没有配套同步，
+  所以那次扩充对所有已有租户都是无效的。
+- **修法**：读内置 agent 时把出厂白名单与已存白名单求并集并落库（幂等）。
+  并集而不是覆盖 —— 租户自己加的工具不能被出厂配置抹掉。
+- **状态**：已修（2026-10-25）。**代价**：出厂新增的工具会自动勾上，租户手动
+  取消勾选的内置工具会被重新勾回 —— 那是"自动同步"的定义。
+
 ## S2 — 建议本迭代处理
 
 | # | 债项 | 位置 | 关键事实 | 工作量 |
@@ -83,12 +130,12 @@
 | 9 | **tos/minio 完全没有传输层超时与上限** `[已复核修正]` | `file/tos.go:104-108,122-132`、`file/minio.go:36-40,58,63` | 5 个 S3 系 provider 都有 `objectStorageTransferContext`×5，`tos`/`minio` 是 **0**；`config.Timeout` 只在 `utils/security.go:805` 的 `NewSSRFSafeHTTPClientWithTransport` 里被消费，而 tos/minio 传的是 `RoundTripper` 根本不走 `http.Client` → **既无 30s 截断，也无 30min 兜底**。对象存储端点 accept 后静默时 worker/goroutine 可被无限期 pin 住 | S |
 | 10 | **23 处 `UpdateKnowledge` 返回值被丢弃 → 文档卡 processing 永不终结** | `knowledge_process.go` 21 处 + `:637` | `ParseStatus="failed"` 后直接丢弃写结果并 `return nil`（asynq 认为成功不再重试）→ DB 抖动时留下僵尸文档，前端进度条永远转圈，日志里既无错误也无文档 ID | M |
 | 11 | **删除路径跨 5 个数据源无事务** | `knowledge_delete.go:426-620,626-704` | 10.4 万行 service 层只有 3 处 `.Transaction(`，全在 storagebackend/vectorstore。`DeleteKnowledgeList` 成功但 `AdjustStorageUsed` 失败 → 配额永久虚高，无管理入口可修，只能改库 | M |
-| 12 | **172 处把 `err.Error()` 原样回显给客户端** `[已复核]` | `middleware/error_handler.go:26-33`；`WithDetails(err.Error())` **152 处** + 裸 `c.JSON(500, err.Error())` **22 处** | gorm 错误形如 `Error 1146 (42S02): Table 'weknora.kb_shares' doesn't exist`、`dial tcp 10.0.3.17:5432: connection refused` 进响应体。日志侧已有 `SanitizeForLog`，响应侧无对等处理 | M |
+| 12 | ~~172 处把 `err.Error()` 原样回显给客户端~~ **已修复（2026-10-25）** | `internal/utils/client_error.go`；`internal/middleware/error_handler.go` | 实测当前是 **255 处**（164 处 `WithDetails(err.Error())` + 91 处 `c.JSON(..., gin.H{"error": err.Error()})`），登记表的「172」与「22 处裸 c.JSON」两个数字都对不上。修法：① 新增 `utils.SanitizeForClient`——按**内容**认出内部痕迹（SQL 报错、连接失败、绝对路径、Go 运行时、栈帧）并换成通用文案，**用户面向的文案原样保留**（按状态码一刀切会误伤「参数错误：xxx 不能为空」）；② `ErrorHandler` 中间件统一净化 `Details`（**结构化** details 是给客户端看的字段值，原样下发）→ 160 处 WithDetails 一处收口；③ 110 处直接回显改走 `utils.WriteError(c, status, err)`；④ `internal/handler/error_echo_guard_test.go` 守卫：handler 层再出现裸回显即红 | 已结案 |
 | 13 | **`LoadMessages` 的 `limit` 传负数会让 LIMIT 子句消失** `[已复核]` | `handler/message.go:87,103-107` → `repository/message.go:81-89` | handler 只判 `convErr != nil`，`limit=-5` 原样传给 gorm，`clause/limit.go:16` 的 `>= 0` 守卫把它丢弃 → 返回该 session **全部**消息。`limit=100000000` 则真发该上界。路由挂 `apiKeyChat` 能力 | S |
 | 14 | **CORS `AllowOrigins:["*"]` + `AllowCredentials:true`** `[已复核]` | `internal/router/router.go:139-150` | gin-contrib/cors v1.7.7 在 AllowAllOrigins 时同时发 `Allow-Origin:*` 与 `Allow-Credentials:true`。当前靠浏览器拒绝而无害，但代码注释自己写着"若引入 cookie 认证必须先换受控清单"——是注释里写清楚了、代码里留着地雷的形态 | S |
 | 15 | **mysql/paradedb 迁移从未接线 + schema 漂移零守卫** | `migrations/mysql/`（README 自述不被执行）、`internal/database/migration_sqlite_versioned_schema_test.go:23,49` | parity 测试只断言**手写**的 22 表 + 21 表白名单。实测 PG 有 / SQLite 无：`embeddings, mcp_metadata, organization_members, wiki_log_entries` —— `mcp_metadata` 即第 4 条，至今无声 | M |
 | 16 | **3 处无方言判断的 Postgres 专有 SQL，Lite 上必 500** | `repository/wiki_page.go:370`（`to_tsvector`）、`organization.go:96`（`ILIKE`+`id::text`）、`user.go:265` | 同文件 `wikiSearchMatchOp()` 已正确做方言分支 → 是遗漏非设计。`wiki_page_test.go` 三个 `List` 测试都**不设 `Query` 字段**，CI 里零覆盖 | S |
-| 17 | **`getJwtSecret` 在 `rand.Read` 失败时 panic；未配 `JWT_SECRET` 时静默降级为每进程随机** | `application/service/user.go:81-95`，7 个调用点 | `sync.Once` 遇 panic 不标记已完成 → 每次调用重新 panic。在 `ValidateToken`（每个鉴权请求）上。**更常见**：多副本各自随机密钥 → A 签的 token 在 B 验签失败，用户表现为"随机掉线"，重启全掉 | S |
+| 17 | ~~`getJwtSecret` 在 `rand.Read` 失败时 panic；未配 `JWT_SECRET` 时静默降级为每进程随机~~ **已修复（2026-10-25）** | `internal/runtime/secrets.go`；`internal/utils/secrets.go`；`application/service/user.go` | 修掉的是**三件**事，不是一件：① **公开示例值被当真密钥**——配置生成器写进 .env 的是 `change-me-in-production`，而旧占位符名单只认 `weknora-jwt-secret` / `CHANGE-ME-jwt-secret`，于是它被拿去真的签 token（该值写在仓库里 → 任何人可伪造管理员 token）。现在占位符清单只有一份（`utils.PlaceholderSecrets`），**公开示例值无条件拒绝启动**。② 未配置时不再静默降级：默认**拒绝启动**（`runtime.ValidateStartupSecrets`），开发可显式打开 `WEKNORA_ALLOW_EPHEMERAL_JWT_SECRET=true`（启动时打警告说清后果）。③ `rand.Read` 的 panic 分支删除：Go 1.24 起它保证不返回 error，失败时是 runtime.fatal（不可 recover），那个分支既是死代码也救不回来 | 已结案 |
 | 18 | **`ProcessWikiIngest` 770 行 / CC=108 / 嵌套 10 层** | `wiki_ingest_batch.go:260-1029` | 一个函数同时做 payload 解析、租户校验、并发闸门、模型获取、行认领、map/reduce 双阶段编排、进度落盘、重试与尾随调度。同文件 `mapOneDocument` 446 行、`reduceSlugUpdates` 417 行同样超标 | L |
 | 19 | **i18n 门禁方向反了：代码引用但语言包缺失的 key 全部漏检** `[已复核方向，数字待定]` | `i18n/localeKeyAudit.ts:388`、`KLineWorkspace.vue:98,406` | `collectReferencedLocaleKeys` 先遍历**语言包已有**的 key 再筛引用 → 代码写了但语言包没有的 key 进不了待检集。`npm run check-i18n` 13/13 全绿，但 `kline.volumeLabel`、`kline.requestRejectedHint` 确实不在 en-US.ts。`KLineWorkspace.vue:406` 更糟：key 不存在 → vue-i18n 返回 key 本身 → `{message}` 插值丢失，而 `loadError.message` 来自服务端 body 且**未经 escape 进 v-html** | M |
 | 20 | ~~`financial_indicator_detail.go` 绕过统一排序来源且零测试~~ **主指控已证伪**（2026-10-05） | `hithink_finance/financial/financial_indicator_detail.go`、`period.go:21` | 实查 `financials.duckdb`：`v_financial_indicators_detail` 无 `period`/`period_end_ms`/`fiscal_year`/`fiscal_period` 四列，**照原文"统一排序来源"去改会 binder 报错**；该表 `report` 实测全表统一为 `'YYYY-N'`，字典序=时间序，现排序正确。已改为：补 `financial_indicator_detail_test.go`（含防误改断言）+ `Description()` 补 `YYYY-N`/`FY→-4`。**另修正 `query/sql_query.go` 描述里两条真·退化排序的趋势范例**（实测返回乱序且漏 2025FY） | 已结案 |

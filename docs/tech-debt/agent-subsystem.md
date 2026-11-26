@@ -101,7 +101,7 @@
   - ~~`Description()` 未说明 `report` 是 `YYYY-N` 格式且 `FY` 必须映射为 `-4`~~ → 已补。
 - **防复发**：SQL 已从 `Execute` 内联字面量提为包级常量 `financialIndicatorDetailQuery`（与 `period.go` 同样"提成常量是为了可测"），常量上方写明不可改排序及原因。
 
-- **顺带发现（这才是真的退化排序）**：`hithink_finance/query/sql_query.go` 的工具描述里，两条 financials 趋势范例（"利润率趋势""现金流质量"）当时仍在用 `ORDER BY period DESC`——**那三张表确实有这个病**，而范例是模型唯一能看到的 schema 目录，等于持续教模型写错查询。实测 600519.SH 照抄返回 `2026Q2, 2025Q4, 2025Q3, 2024Q4, 2026Q1, 2025Q1, 2025Q2, 2024Q3`：非升序也非降序，且漏掉最近的 2025FY、混入两个 2024 年季度。已改为 `ORDER BY period_end_ms DESC, period ASC`，描述里补了排序规则小节，并加 `sql_query_test.go` 防退回。
+- **顺带发现（这才是真的退化排序）**：`hithink_finance/spec/` 里自由 SQL 工具的描述中，两条 financials 趋势范例（"利润率趋势""现金流质量"）当时仍在用 `ORDER BY period DESC`——**那三张表确实有这个病**，而范例是模型唯一能看到的 schema 目录，等于持续教模型写错查询。实测 600519.SH 照抄返回 `2026Q2, 2025Q4, 2025Q3, 2024Q4, 2026Q1, 2025Q1, 2025Q2, 2024Q3`：非升序也非降序，且漏掉最近的 2025FY、混入两个 2024 年季度。已改为 `ORDER BY period_end_ms DESC, period ASC`，描述里补了排序规则小节，并加 `sql_query_test.go` 防退回。
 - **对本条的元教训**：#20 的"修复"栏写得很具体、看着很对，但目标表根本不具备所引用的列。债务条目描述**怎么改**时若不先核对真实 schema，就会把文档变成事故脚本。已在代码里留了防误改的测试断言。
 - **工作量**：S（已完成）
 
