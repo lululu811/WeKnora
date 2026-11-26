@@ -7,7 +7,7 @@
     2. 人气总榜：按综合关注度与热度排序，一览市场主线龙头与高辨识度核心标的。
 -->
 <template>
-  <article class="hot-radar">
+  <article class="hot-radar ledger-block">
     <header class="hot-radar__head">
       <div class="hot-radar__title-row">
         <div class="hot-radar__title-wrap">
@@ -201,11 +201,15 @@ onMounted(() => {
 </script>
 
 <style scoped lang="less">
+/*
+ * 墨账体例（achromatic-ledger）—— 规范见 src/finance/styles/ledger.less 文件头：
+ *   1. 无框块：块与块之间只靠留白与字号层级分开，不画卡片；
+ *   2. 图表用墨色；
+ *   3. 浓淡表用墨阶：--ledger-ink-1…5（名次徽标就是一张浓淡表）。
+ * 涨跌红绿是金融语义，只出现在数字上，保留。
+ */
 .hot-radar {
-  background: var(--td-bg-color-container);
-  border: 1px solid var(--app-border, rgba(0, 0, 0, 0.08));
-  border-radius: var(--td-radius-medium, 8px);
-  padding: 12px 14px;
+  /* 块根：去掉卡片外壳（底色 / 描边 / 圆角 / 阴影）；块距由父级 grid 的 gap 给。 */
   box-sizing: border-box;
 
   &__head {
@@ -230,7 +234,8 @@ onMounted(() => {
   }
 
   &__icon {
-    color: #ef4444;
+    /* 图标是装饰，不是数据 —— 墨账里用墨色，不占涨跌红绿与品牌珊瑚。 */
+    color: var(--td-text-color-secondary);
   }
 
   &__title {
@@ -241,7 +246,8 @@ onMounted(() => {
 
   &__tabs {
     display: inline-flex;
-    background: var(--app-bg-secondary, rgba(0, 0, 0, 0.04));
+    /* 与 BasisStrip 的 tab 条同一体例：中性底色，不占品牌珊瑚。 */
+    background: var(--td-bg-color-secondarycontainer);
     border-radius: 6px;
     padding: 2px;
     gap: 2px;
@@ -265,7 +271,7 @@ onMounted(() => {
       background: var(--td-bg-color-container);
       color: var(--td-text-color-primary);
       font-weight: 600;
-      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+      /* 墨账：去掉投影 —— 阴影是"这是一张卡片"的信号。 */
     }
   }
 
@@ -274,17 +280,18 @@ onMounted(() => {
     color: var(--td-text-color-placeholder);
   }
 
+  /* 「展开更多 / 收起」是次级动作：墨账里用文字链接，不画按钮框，也不占品牌珊瑚。 */
   &__toggle {
     font-size: 11px;
     border: none;
     background: transparent;
-    color: var(--td-brand-color, #0052d9);
+    color: var(--td-text-color-secondary);
     cursor: pointer;
-    padding: 2px 6px;
-    border-radius: 4px;
+    padding: 2px 4px;
 
     &:hover {
-      background: rgba(0, 82, 217, 0.08);
+      color: var(--td-text-color-primary);
+      text-decoration: underline;
     }
   }
 
@@ -300,9 +307,8 @@ onMounted(() => {
     display: flex;
     align-items: center;
     gap: 16px;
-    margin-bottom: 10px;
-    padding-bottom: 8px;
-    border-bottom: 1px solid var(--app-border, rgba(0, 0, 0, 0.05));
+    margin-bottom: 14px;
+    /* 墨账：块内不画分隔线，靠留白分层。 */
     font-size: 11px;
   }
 
@@ -322,28 +328,28 @@ onMounted(() => {
     color: var(--td-text-color-primary);
 
     &.is-surge {
-      color: #dc2626;
+      color: var(--app-quote-up);
     }
   }
 
   &__grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
-    gap: 8px;
+    gap: 10px 14px;
     transition: max-height 0.25s ease;
   }
 
+  /* 个股格子同样不画卡片：无框，靠留白与字重分层。 */
   &__card {
-    background: var(--app-bg-secondary, rgba(0, 0, 0, 0.02));
-    border: 1px solid var(--app-border, rgba(0, 0, 0, 0.06));
-    border-radius: 6px;
-    padding: 8px 10px;
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    padding: 6px 8px;
     cursor: pointer;
-    transition: border-color 0.15s ease, transform 0.15s ease;
+    transition: background-color 0.15s ease;
 
     &:hover {
-      border-color: #ef4444;
-      transform: translateY(-1px);
+      background: var(--ledger-ink-1);
     }
   }
 
@@ -354,26 +360,28 @@ onMounted(() => {
     margin-bottom: 4px;
   }
 
+  /* 名次徽标是一张"越浓越靠前"的浓淡表：用墨阶，不占用红绿与珊瑚。
+     底色是淡墨阶，文字仍用主墨色 —— 亮暗两套主题下都读得清。 */
   &__rank-badge {
-    font-size: 10px;
+    font-size: var(--app-text-xs);
     font-family: var(--app-font-mono, monospace);
     font-weight: 700;
     padding: 1px 4px;
     border-radius: 3px;
-    background: rgba(0, 0, 0, 0.06);
+    background: transparent;
     color: var(--td-text-color-secondary);
 
     &.is-first {
-      background: #ef4444;
-      color: #fff;
+      background: var(--ledger-ink-3);
+      color: var(--td-text-color-primary);
     }
     &.is-second {
-      background: #f97316;
-      color: #fff;
+      background: var(--ledger-ink-2);
+      color: var(--td-text-color-primary);
     }
     &.is-third {
-      background: #eab308;
-      color: #fff;
+      background: var(--ledger-ink-1);
+      color: var(--td-text-color-primary);
     }
   }
 
@@ -395,24 +403,25 @@ onMounted(() => {
   }
 
   &__card-code {
-    font-size: 10px;
+    font-size: var(--app-text-xs);
     font-family: var(--app-font-mono, monospace);
     color: var(--td-text-color-placeholder);
   }
 
+  /* 名次变化是方向数据：红涨绿跌保留，底色改用主题 soft 令牌。 */
   &__change-pill {
-    font-size: 10px;
+    font-size: var(--app-text-xs);
     font-family: var(--app-font-mono, monospace);
     font-weight: 700;
-    color: #dc2626;
-    background: rgba(220, 38, 38, 0.1);
+    color: var(--app-quote-up);
+    background: var(--app-quote-up-soft);
     padding: 1px 5px;
     border-radius: 4px;
     white-space: nowrap;
 
     &.is-down {
-      color: #059669;
-      background: rgba(5, 150, 105, 0.1);
+      color: var(--app-quote-down);
+      background: var(--app-quote-down-soft);
     }
   }
 
@@ -421,8 +430,8 @@ onMounted(() => {
     align-items: center;
     justify-content: space-between;
     font-size: 11px;
-    padding-top: 3px;
-    border-top: 1px dashed var(--app-border, rgba(0, 0, 0, 0.04));
+    margin-top: 4px;
+    /* 墨账：块内不画分隔线，靠留白分层。 */
   }
 
   &__heat-lbl {
@@ -435,18 +444,19 @@ onMounted(() => {
     color: var(--td-text-color-secondary);
   }
 
+  /* 趋势标签也是方向数据：红绿保留，走主题 soft 令牌。 */
   &__trend-tag {
-    font-size: 10px;
+    font-size: var(--app-text-xs);
     padding: 0 4px;
     border-radius: 2px;
 
     &.is-up {
-      color: #dc2626;
-      background: rgba(220, 38, 38, 0.08);
+      color: var(--app-quote-up);
+      background: var(--app-quote-up-soft);
     }
     &.is-down {
-      color: #059669;
-      background: rgba(5, 150, 105, 0.08);
+      color: var(--app-quote-down);
+      background: var(--app-quote-down-soft);
     }
     &.is-flat {
       color: var(--td-text-color-placeholder);

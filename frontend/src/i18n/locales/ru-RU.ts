@@ -9044,6 +9044,38 @@ export default {
         down: 'Падение'
       }
     },
+    ledger: {
+      title: 'Итоговая таблица',
+      col: {
+        name: 'Индекс',
+        close: 'Закрытие',
+        change: 'Изменение',
+        pct: 'Изменение %',
+        line: '60 дн.'
+      },
+      readTitle: 'Итог дня',
+      findingTitle: 'Вывод дня',
+      detailTitle: 'Детали настроений',
+      sealRate: 'Доля фиксации лимита',
+      sealFormula: 'Зафиксировано {up} / коснулись лимита {total}',
+      brokenNote: 'Доля срывов {rate}%',
+      downRatio: 'К верхнему пределу {up} : {down}',
+      lu5Note: 'Последние 5 дней {series}',
+      dragonCaption: 'Топ-{n} по нетто-покупкам · {date} · Весь рынок',
+      upCount: 'Растущие',
+      breadthNote: 'Без изм. {flat} · Падение {down}',
+      finding: {
+        limit: '{up} на верхнем пределе, {down} на нижнем пределе, {broken} со срывом лимита',
+        breadth: '{up} растут, {down} падают',
+        trend: {
+          up: 'Верхний предел за 5 дней: {from} → {to}, рост',
+          down: 'Верхний предел за 5 дней: {from} → {to}, снижение',
+          flat: 'Верхний предел за 5 дней: {from} → {to}, без изменений'
+        }
+      },
+      sourceName: 'fuyao · 同花順',
+      sourceLine: 'Источник: {source} · закрытие {date}'
+    },
     state: {
       open: 'Торги',
       closed: 'Торги завершены',

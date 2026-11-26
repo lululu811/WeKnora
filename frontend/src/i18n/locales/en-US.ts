@@ -477,6 +477,38 @@ export default {
         down: 'Down'
       }
     },
+    ledger: {
+      title: 'Close Ledger',
+      col: {
+        name: 'Index',
+        close: 'Close',
+        change: 'Chg',
+        pct: 'Chg %',
+        line: '60D'
+      },
+      readTitle: "Today's Read",
+      findingTitle: "Today's Finding",
+      detailTitle: 'Sentiment Detail',
+      sealRate: 'Seal rate',
+      sealFormula: 'Sealed {up} / touched {total}',
+      brokenNote: 'Break rate {rate}%',
+      downRatio: 'Ratio to limit-up {up} : {down}',
+      lu5Note: 'Last 5 days {series}',
+      dragonCaption: 'Top {n} net buys · {date} · All market',
+      upCount: 'Advancing',
+      breadthNote: 'Flat {flat} · Declining {down}',
+      finding: {
+        limit: '{up} limit-up, {down} limit-down, {broken} broken boards',
+        breadth: '{up} advancing, {down} declining',
+        trend: {
+          up: 'Limit-up count {from} → {to} over 5 days, rising',
+          down: 'Limit-up count {from} → {to} over 5 days, falling',
+          flat: 'Limit-up count {from} → {to} over 5 days, flat'
+        }
+      },
+      sourceName: 'fuyao · 同花順',
+      sourceLine: 'Source: {source} · close {date}'
+    },
     watchlist: {
       title: 'Watchlist',
       count: '{n}',

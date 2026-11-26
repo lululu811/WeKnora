@@ -9044,6 +9044,38 @@ export default {
         down: '下落'
       }
     },
+    ledger: {
+      title: '終値表',
+      col: {
+        name: '指数',
+        close: '終値',
+        change: '騰落',
+        pct: '騰落率',
+        line: '60日'
+      },
+      readTitle: '本日の計数',
+      findingTitle: '本日の発見',
+      detailTitle: 'ムード明細',
+      sealRate: '板ロック率',
+      sealFormula: '板ロック {up} ÷ 板到達 {total}',
+      brokenNote: '板割れ率 {rate}%',
+      downRatio: '涨停との比率 {up} : {down}',
+      lu5Note: '直近5日 {series}',
+      dragonCaption: '純買い上位{n} · {date} · 全市場',
+      upCount: '上昇銘柄数',
+      breadthNote: '平坦 {flat} · 下落 {down}',
+      finding: {
+        limit: '涨停 {up} 銘柄、跌停 {down} 銘柄、炸板 {broken} 銘柄',
+        breadth: '上昇 {up} 銘柄、下落 {down} 銘柄',
+        trend: {
+          up: '直近5日の涨停家数 {from} → {to} 銘柄、上昇',
+          down: '直近5日の涨停家数 {from} → {to} 銘柄、下落',
+          flat: '直近5日の涨停家数 {from} → {to} 銘柄、横ばい'
+        }
+      },
+      sourceName: 'fuyao · 同花順',
+      sourceLine: 'データソース：{source} · {date} 終値'
+    },
     state: {
       open: '取引中',
       closed: '取引終了',

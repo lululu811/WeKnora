@@ -9042,6 +9042,38 @@ export default {
         down: 'Down'
       }
     },
+    ledger: {
+      title: '收盤表',
+      col: {
+        name: '指數',
+        close: '收盤',
+        change: '漲跌',
+        pct: '漲跌幅',
+        line: '60 日'
+      },
+      readTitle: '今日讀數',
+      findingTitle: '今日發現',
+      detailTitle: '情緒明細',
+      sealRate: '封板率',
+      sealFormula: '封板 {up} ÷ 觸板 {total}',
+      brokenNote: '炸板率 {rate}%',
+      downRatio: '與漲停之比 {up} : {down}',
+      lu5Note: '近 5 日 {series}',
+      dragonCaption: '淨買入前 {n} · {date} · 全市場',
+      upCount: '上漲家數',
+      breadthNote: '平盤 {flat} · 下跌 {down}',
+      finding: {
+        limit: '漲停 {up} 家、跌停 {down} 家、炸板 {broken} 家',
+        breadth: '上漲 {up} 家，下跌 {down} 家',
+        trend: {
+          up: '近 5 日漲停家數 {from} → {to} 家，在升',
+          down: '近 5 日漲停家數 {from} → {to} 家，在退',
+          flat: '近 5 日漲停家數 {from} → {to} 家，持平'
+        }
+      },
+      sourceName: 'fuyao · 同花順',
+      sourceLine: '資料來源：{source} · {date} 收盤'
+    },
     state: {
       open: 'Trading',
       closed: 'Closed',

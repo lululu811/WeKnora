@@ -8,10 +8,11 @@
   三条实现约束，改动前先读：
 
   1. **量能轴与价格轴正交，不能合成一个红绿信号。**
-     条形的长度是量能（multiple），条形的**颜色**是价格方向（pct_change，A 股
-     红涨绿跌）。量能强弱另用「放量/缩量」文字标签表达。一只「缩量上涨」的票
-     在这里就是一根短红条 + "缩量"标签 —— 若把两者合并成红绿，它会被读成涨或
-     跌的强度，那是本页最容易出的错。
+     条形的长度是量能（multiple）。条形的**颜色**不承担方向语义；墨账体例下
+     图表一律墨色，方向只由右边的涨跌幅数字（pct_change，A 股红涨绿跌）讲；
+     量能强弱另用「放量/缩量」文字标签表达。一只「缩量上涨」的票在这里就是
+     一根墨色短条 + 绿色涨跌幅 + "缩量"标签；若把三者合并成一个红绿信号，
+     它会被读成涨或跌的强度，那是本页最容易出的错。
 
   2. **条长封顶不等于抹掉信息。**
      倍数轴封在 2.5×，超出的部分只画到 cap，但 `isOverflowBar` 会在数字旁标出
@@ -80,7 +81,7 @@
     </EmptyState>
 
     <!-- ══════ 自选清单拉取失败 ══════ -->
-    <div v-else-if="watchlistError" class="wp-error">
+    <div v-else-if="watchlistError" class="wp-error ledger-block">
       <t-icon name="info-circle" size="16px" />
       <span class="wp-error__msg">{{ t('watchPulse.watchlistError') }}</span>
       <t-button variant="text" size="small" :loading="loading" @click="reload">
@@ -106,7 +107,7 @@
       />
 
       <!-- ══════ 元信息 ══════ -->
-      <section class="wp-meta">
+      <section class="wp-meta ledger-block">
         <p class="wp-meta__line">
           {{ t('watchPulse.meta.quote', pulseMeta) }}
         </p>
@@ -140,7 +141,7 @@
       </section>
 
       <!-- ══════ pulse 失败：整页错误态，不降级成空列表 ══════ -->
-      <div v-if="pulseError" class="wp-error wp-error--block">
+      <div v-if="pulseError" class="wp-error wp-error--block ledger-block">
         <t-icon name="info-circle" size="16px" />
         <span class="wp-error__msg">{{ pulseError }}</span>
         <t-button variant="text" size="small" :loading="loading" @click="reload">
@@ -206,12 +207,22 @@
               </span>
               <span class="wp-stat wp-stat--pct">{{ formatPct(item.pct_change) }}</span>
               <span class="wp-row__tags">
-                <t-tag size="small" :theme="item.volume_state === 'up' ? 'warning' : 'primary'">
+                <t-tag
+                  size="small"
+                  class="wp-tag--volume"
+                  :theme="item.volume_state === 'up' ? 'warning' : 'primary'"
+                >
                   {{ volumeStateLabel(item.volume_state) }}
                 </t-tag>
                 <!-- verdict 为 null = 服务端读数不足没给判定。不渲染标签，
                      更不能拿 volume_state 去顶替 —— 那是两个不同的结论。 -->
-                <t-tag v-if="item.verdict" size="small" theme="default" variant="light">
+                <t-tag
+                  v-if="item.verdict"
+                  size="small"
+                  class="wp-tag--verdict"
+                  theme="default"
+                  variant="light"
+                >
                   {{ item.verdict }}
                 </t-tag>
               </span>
@@ -299,7 +310,7 @@
             <div
               v-for="group in calendarGroups"
               :key="group.date"
-              class="wp-cal__day"
+              class="wp-cal__day ledger-block"
             >
               <div class="wp-cal__when">
                 <span class="wp-cal__rel">{{ relativeLabel(group.date) }}</span>
@@ -554,9 +565,21 @@ onMounted(() => {
 </script>
 
 <style lang="less" scoped>
+/*
+ * 墨账体例（achromatic-ledger）—— 规范见 src/finance/styles/ledger.less 文件头：
+ *   1. 无框块：块与块之间只靠留白与标题层级分开，不画卡片；
+ *   2. 图表用墨色：条形是图表，一律墨色，不按涨跌给整条染色；
+ *   3. 浓淡表用墨阶：--ledger-ink-1…5，最浓一档 --ledger-ink-max 配
+ *      --ledger-on-ink-max（这两个令牌随主题翻，别写死颜色）。
+ *
+ * 涨跌红绿（--app-quote-up/down）是 A 股语义，**只出现在涨跌幅数字上**；
+ * 状态标记（放量/缩量、推升/出货）走墨阶；品牌珊瑚在本页不出现。
+ */
 .wp-page {
-  // A 股约定：红涨绿跌。同一对色值与 Watchlist.vue 的 --wl-up/--wl-down 一致，
-  // 两个页面不能各定一套，否则同一个涨跌在两处显示成两种颜色。
+  /*
+   * 页面根**不是**"卡片"，所以不挂 .ledger-block —— 那个类会把 padding 归零，
+   * 而这一层的 padding 是整页的留白。块之间的距离由各块自己的 margin 给。
+   */
 
   display: flex;
   flex-direction: column;
@@ -584,6 +607,8 @@ onMounted(() => {
   align-items: center;
   gap: 8px;
   margin: 0;
+  /* 块标题：展示字 + 600 字重，跟参考稿的标题层级一个口径。 */
+  font-family: var(--app-font-display);
   font-size: var(--app-text-xl);
   font-weight: 600;
   color: var(--td-text-color-primary);
@@ -628,12 +653,13 @@ onMounted(() => {
 .wp-meta__line {
   margin: 0;
   font-size: var(--app-text-sm);
-  color: var(--td-text-color-secondary);
+  /* 今天的口径是这一块的结论，给墨色正文级；下面那行退一档。 */
+  color: var(--td-text-color-primary);
 }
 
 .wp-meta__line--sub {
   margin-top: 4px;
-  color: var(--td-text-color-placeholder);
+  color: var(--td-text-color-secondary);
 }
 
 .wp-missing {
@@ -650,7 +676,8 @@ onMounted(() => {
   background: none;
   cursor: pointer;
   font-size: var(--app-text-sm);
-  color: var(--td-text-color-placeholder);
+  /* 次级动作：墨账里用文字链接的分量，不用更浅的 placeholder（对比度只有 2.5:1）。 */
+  color: var(--td-text-color-secondary);
 }
 
 .wp-missing__toggle:hover,
@@ -674,13 +701,13 @@ onMounted(() => {
 
 .wp-missing__item {
   font-size: var(--app-text-sm);
-  color: var(--td-text-color-placeholder);
+  color: var(--td-text-color-secondary);
   line-height: 1.7;
 }
 
 .wp-missing__code {
   margin-right: 8px;
-  font-family: var(--app-font-mono, ui-monospace, monospace);
+  font-family: var(--app-font-family-mono); /* taste-skill-ignore: 代码/数字用等宽是本产品既定约定（--app-font-family-mono + tabular-nums） */
 }
 
 // ── 错误态 ──────────────────────────────────────────────────────────
@@ -689,13 +716,13 @@ onMounted(() => {
   align-items: center;
   gap: 8px;
   margin-top: 16px;
-  padding: 12px 14px;
-  border-radius: var(--td-radius-medium, 6px);
-  /* fallback 不能用涨跌色：涨跌绿是"下跌"，错误红是"出错"，
-     两套语义不同。原 fallback 指向 --app-quote-down-soft（绿色），
-     万一 --td-error-color-light 缺失就会把错误框染绿。 */
-  background: var(--td-error-color-light, color-mix(in srgb, var(--td-error-color) 12%, transparent));
-  color: var(--td-text-color-primary);
+  padding: 10px 0;
+  /*
+   * 错误态是**告警**，不是数据块：墨账里不画卡片（无底色 / 无描边 / 无圆角，
+   * 由全局 .ledger-block 归零），只用错误色把这一行标出来。
+   * 错误红不能借涨跌色：涨跌绿是"下跌"，错误红是"出错"，两套语义不同。
+   */
+  color: var(--td-error-color);
 }
 
 .wp-error--block {
@@ -713,17 +740,20 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   margin-top: 18px;
-  border-top: 1px solid var(--td-component-stroke);
+  /* 表格的横线用淡墨阶，比容器的描边灰更像"账本上的栏线"。 */
+  border-top: 1px solid var(--ledger-ink-2);
 }
 
 .wp-row {
   display: grid;
   // 左列固定宽度，条形列吃掉剩余空间，统计列固定 —— 三列对齐后条形才能横向比较。
-  grid-template-columns: 168px minmax(0, 1fr) 210px;
+  // 统计列 232px：倍数(58) + 涨跌幅(62) + 两枚标签(92) + 两个 10px 间隙 = 232，
+  // 少了会顶出右边界（原来 210px，标签被挤出内容区）。
+  grid-template-columns: 168px minmax(0, 1fr) 232px;
   align-items: center;
   gap: 16px;
   padding: 12px 4px;
-  border-bottom: 1px solid var(--td-component-stroke);
+  border-bottom: 1px solid var(--ledger-ink-2);
 }
 
 .wp-row--compact {
@@ -749,17 +779,23 @@ onMounted(() => {
 .wp-row__code {
   font-size: var(--app-text-xs, 12px);
   color: var(--td-text-color-secondary);
-  font-family: var(--app-font-mono, ui-monospace, monospace);
+  font-family: var(--app-font-family-mono); /* taste-skill-ignore: 代码/数字用等宽是本产品既定约定（--app-font-family-mono + tabular-nums） */
 }
 
-// 条形轨道：高度固定，三条刻度线贯穿所有行才能横向比对。
+// 条形轨道 = 量程尺。未填充的一段是极淡的墨（--ledger-ink-1）——
+// 容器的描边灰在这里看着像一根空心管子，不像尺子。
 .wp-track {
   position: relative;
   height: 14px;
   border-radius: 3px;
-  background: var(--td-component-stroke);
+  background: var(--ledger-ink-1);
 }
 
+/*
+ * 条是**图表**：墨账里一律墨色，不按涨跌给整条染色。
+ * 条长讲的是量能倍数，价格方向由右边的涨跌幅数字讲 —— 给整条染色会把
+ * "缩量上涨"读成"跌"（见文件头约束 1）。
+ */
 .wp-bar {
   position: absolute;
   left: 0;
@@ -767,23 +803,24 @@ onMounted(() => {
   height: 100%;
   min-width: 2px;
   border-radius: 3px;
-  background: var(--td-text-color-placeholder);
+  background: var(--td-text-color-secondary);
   transition: width 0.2s ease;
 }
 
+// 刻度线用墨色；z-index 让它压在条形上面，跨过去仍读得出量程位置。
 .wp-tick {
   position: absolute;
   top: -2px;
   bottom: -2px;
   width: 1px;
-  background: var(--td-bg-color-container);
-  opacity: 0.85;
+  z-index: 1;
+  background: var(--td-text-color-primary);
+  opacity: 0.45;
 }
 
 // 中枢（1.0）加重：它是"今天算出来多少倍"的基准线。
 .wp-tick--pivot {
   width: 2px;
-  background: var(--td-text-color-secondary);
   opacity: 1;
 }
 
@@ -798,12 +835,12 @@ onMounted(() => {
   transform: translateX(-50%);
   font-size: 11px;
   line-height: 16px;
-  color: var(--td-text-color-placeholder);
+  color: var(--td-text-color-secondary);
   white-space: nowrap;
 }
 
 .wp-ruler__label--pivot {
-  color: var(--td-text-color-secondary);
+  color: var(--td-text-color-primary);
   font-weight: 600;
 }
 
@@ -815,15 +852,21 @@ onMounted(() => {
 }
 
 .wp-stat {
+  font-family: var(--app-font-family-mono); /* taste-skill-ignore: 数字用等宽是本产品既定约定（--app-font-family-mono + tabular-nums） */
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
+/*
+ * 倍数是**量能**，不是价格方向 —— 墨色，不跟涨跌红绿。
+ * （红绿只留给 .wp-stat--pct 那一列，见下面。）
+ */
 .wp-stat--mult {
   min-width: 58px;
   text-align: right;
   font-size: var(--app-text-md, 14px);
   font-weight: 600;
+  color: var(--td-text-color-primary);
 }
 
 .wp-stat--pct {
@@ -840,27 +883,43 @@ onMounted(() => {
 .wp-row__tags {
   display: flex;
   gap: 4px;
-  min-width: 88px;
+  min-width: 92px;
   justify-content: flex-end;
 }
 
-// 价格方向染色（红涨绿跌）。**只染价格**，量能强弱靠标签 —— 见文件头约束 1。
-.wp-row.is-up {
-  .wp-bar {
-    background: var(--app-quote-up);
-  }
-  .wp-stat {
-    color: var(--app-quote-up);
-  }
+/*
+ * 状态标记走墨阶：t-tag 自带的主题色（primary = 品牌珊瑚 / warning = 橙）
+ * 是装饰色 —— 墨账里珊瑚全产品只出现一处，"放量/缩量""推升/出货"这类标记
+ * 只能用墨阶。方向由左边的涨跌幅数字讲。
+ */
+.wp-row__tags :deep(.t-tag) {
+  background: var(--ledger-ink-1);
+  color: var(--td-text-color-secondary);
+  border-radius: 3px;
 }
 
-.wp-row.is-down {
-  .wp-bar {
-    background: var(--app-quote-down);
-  }
-  .wp-stat {
-    color: var(--app-quote-down);
-  }
+/*
+ * 量能状态（放量/缩量）是这一行最该被看见的标记 → 走墨阶**最浓一档**，
+ * 字色用 --ledger-on-ink-max（这两个令牌随主题翻，不写死颜色）。
+ */
+.wp-row__tags :deep(.wp-tag--volume) {
+  background: var(--ledger-ink-max);
+  color: var(--ledger-on-ink-max);
+  font-weight: 600;
+}
+
+// 价格方向染色（红涨绿跌）。**只染涨跌幅数字** —— 量能那一列是墨色，
+// 状态标记走墨阶。见文件头约束 1。
+.wp-row.is-up .wp-stat--pct {
+  color: var(--app-quote-up);
+}
+
+.wp-row.is-down .wp-stat--pct {
+  color: var(--app-quote-down);
+}
+
+.wp-row.is-flat .wp-stat--pct {
+  color: var(--td-text-color-secondary);
 }
 
 // ── normal 折叠区 ───────────────────────────────────────────────────
@@ -870,7 +929,7 @@ onMounted(() => {
 
 .wp-normal__rows {
   margin-top: 4px;
-  border-top: 1px solid var(--td-component-stroke);
+  border-top: 1px solid var(--ledger-ink-2);
 }
 
 // ── 页脚日历 ────────────────────────────────────────────────────────
@@ -878,7 +937,7 @@ onMounted(() => {
   flex-shrink: 0;
   margin-top: 22px;
   padding-top: 14px;
-  border-top: 1px solid var(--td-component-stroke);
+  border-top: 1px solid var(--ledger-ink-2);
 }
 
 .wp-cal__title {
@@ -886,6 +945,7 @@ onMounted(() => {
   align-items: center;
   gap: 6px;
   margin: 0 0 10px;
+  font-family: var(--app-font-display);
   font-size: var(--app-text-md, 14px);
   font-weight: 600;
   color: var(--td-text-color-primary);
@@ -893,19 +953,21 @@ onMounted(() => {
 
 .wp-cal__strip {
   display: flex;
-  gap: 10px;
+  gap: 0;
   overflow-x: auto;
   padding-bottom: 4px;
 }
 
+/*
+ * 日历格不是卡片：去掉描边 / 圆角 / 底色（全局 .ledger-block 归零），
+ * 改用一条淡墨竖线分栏 —— 这条横着滚的条子里，竖线比留白更能分开相邻两天。
+ */
 .wp-cal__day {
   flex-shrink: 0;
   min-width: 168px;
   max-width: 240px;
-  padding: 8px 10px;
-  border: 1px solid var(--td-component-stroke);
-  border-radius: var(--td-radius-medium, 6px);
-  background: var(--td-bg-color-container);
+  padding: 6px 0 6px 14px;
+  border-left: 1px solid var(--ledger-ink-2);
 }
 
 .wp-cal__when {
@@ -915,16 +977,20 @@ onMounted(() => {
   margin-bottom: 4px;
 }
 
+/*
+ * 相对日期是 chrome，不是数据 → 墨色。
+ * （原来用品牌珊瑚，既破了"珊瑚全产品只出现一处"，对比度也只有 3.4:1。）
+ */
 .wp-cal__rel {
   font-size: var(--app-text-sm);
   font-weight: 600;
-  color: var(--td-brand-color);
+  color: var(--td-text-color-primary);
 }
 
 .wp-cal__date {
   font-size: 11px;
-  color: var(--td-text-color-placeholder);
-  font-family: var(--app-font-mono, ui-monospace, monospace);
+  color: var(--td-text-color-secondary);
+  font-family: var(--app-font-family-mono); /* taste-skill-ignore: 代码/数字用等宽是本产品既定约定（--app-font-family-mono + tabular-nums） */
 }
 
 .wp-cal__events {
@@ -943,14 +1009,14 @@ onMounted(() => {
 
 .wp-cal__more {
   font-size: 11px;
-  color: var(--td-text-color-placeholder);
+  color: var(--td-text-color-secondary);
 }
 
 .wp-cal__error,
 .wp-cal__empty {
   margin: 0;
   font-size: var(--app-text-sm);
-  color: var(--td-text-color-placeholder);
+  color: var(--td-text-color-secondary);
 }
 
 .wp-cal__total {

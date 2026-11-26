@@ -25,10 +25,11 @@
   <main class="trk-page">
     <header class="trk-head" style="--wails-draggable: drag">
       <div class="trk-head__row">
-        <h2 class="trk-title" style="--wails-draggable: drag">
+        <!-- 这一屏的标题就是这一屏的 h1（inspect 查的就是它）。 -->
+        <h1 class="trk-title" style="--wails-draggable: drag">
           <t-icon name="watchlist" size="22px" />
           {{ $t('menu.watchlist') }}
-        </h2>
+        </h1>
 
         <div class="trk-head__actions" style="--wails-draggable: no-drag">
           <!--
@@ -177,9 +178,10 @@ const TABS = [
   align-items: center;
   gap: 5px;
   font-size: var(--app-text-sm);
-  color: var(--td-text-color-link);
+  /* 次级链接用次级墨色：--td-text-color-link 在暖纸底上只有 3.2:1，读不清。 */
+  color: var(--td-text-color-secondary);
   text-decoration: none;
-  border-bottom: 1px solid color-mix(in srgb, var(--td-text-color-link) 36%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--td-text-color-secondary) 36%, transparent);
 }
 
 /* ── tab 条 ── */

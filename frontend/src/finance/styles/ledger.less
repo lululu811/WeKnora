@@ -1,0 +1,85 @@
+/* 墨账体例 —— 金融工作台数据面的统一外观
+ * ============================================================================
+ *
+ * 风格是 achromatic-ledger（墨账），取自 tasteskill 的 app-screen 库，
+ * 2026-10-20 由大盘预览大屏（/dashboard 全屏态）定下，2026-10-20 推到个股追踪
+ * 的「大盘」tab。决策记录见 docs/design/dashboard-ledger-restyle.md。
+ *
+ * 三条规矩
+ * ---------------------------------------------------------------------------
+ *
+ * 1. **无框块** —— 块与块之间只靠留白和标题层级分开。
+ *    不画卡片：不描边、不加阴影、不用底色块、不用圆角。
+ *    一块"卡片"的读法是"这是个独立的东西"，而这里的块是同一张桌面上的几页纸，
+ *    纸之间靠桌面上的距离分开，不是靠各自的边框。
+ *
+ * 2. **图表用墨色** —— 折线、面积、柱状一律墨色，不按涨跌给线染色。
+ *    A 股的涨跌幅多在 ±1% 以内，整条线染成红色/绿色是把 0.39% 放大成一条
+ *    心理冲击。方向由**数字**讲，图表只讲形状。
+ *
+ *    ⚠️ 有一条**例外**：**分类分段条**（涨跌家数条 `.md-breadth`、竞价分布条
+ *    `.auc__seg`）保留红/绿/灰。它们不是连续量而是**分类**——段的位置就是标签
+ *    （左=上涨、中=平盘、右=下跌），三段都变成灰阶以后读者得分不清哪段是哪段，
+ *    可读性反而下降。红绿在这里是 A 股语义，不是"把 0.39% 放大"。
+ *    两条分段条必须用同一套颜色，否则同一屏里会出现两种体例。
+ *
+ * 3. **浓淡表用墨阶** —— 梯队矩阵、情绪柱状这类"越浓越多"的表，用墨色深浅
+ *    表示强度，不与品牌珊瑚和涨跌红绿抢颜色。涨跌红绿只允许出现在**数字**上
+ *    （那是金融语义，不是装饰）。
+ *
+ * 品牌珊瑚在全屏只出现一处：情绪明细里「最高空间板」那行前面的 8px 小方块。
+ * 它是品牌色，不是数据色 —— 铺开成区域色，读者会把"这是重点"读成"这是涨的"。
+ *
+ * 归属：金融模块（finance）。与 `.kline-ticker` 一样由 src/finance/index.ts
+ * 入口作为副作用 import —— 只要金融能力接入主应用，样式就生效。
+ */
+
+/* ── 墨阶：浓淡表用这 5 档 ──────────────────────────────────────────────
+   用 color-mix 从 --td-text-color-primary 派生，亮暗两套主题自动跟着变
+   （暗色下 primary 是暖白，墨阶就变成"亮的浓淡"）。 */
+:root {
+  --ledger-ink-1: color-mix(in srgb, var(--td-text-color-primary) 8%, transparent);
+  --ledger-ink-2: color-mix(in srgb, var(--td-text-color-primary) 16%, transparent);
+  --ledger-ink-3: color-mix(in srgb, var(--td-text-color-primary) 26%, transparent);
+  --ledger-ink-4: color-mix(in srgb, var(--td-text-color-primary) 38%, transparent);
+  --ledger-ink-5: color-mix(in srgb, var(--td-text-color-primary) 52%, transparent);
+
+  /* 最浓一档 + 压在它上面的字色。
+     墨阶的**方向随主题翻转**：亮色下「浓」= 深墨（压暖纸），暗色下「浓」= 浅墨
+     （压暖深棕）。所以浓档上的字色必须跟着翻 —— 用同一个颜色必然有一边读不清：
+     亮色用墨字（5.2:1），暗色用深字（4.6:1）。 */
+  --ledger-ink-max: var(--ledger-ink-4);
+  --ledger-on-ink-max: var(--td-text-color-primary);
+
+  /* 块的内缩。平台壳与 dev 路由都不给内缩，块根归零之后内容会贴到屏幕边缘
+     （inspect 的 edge-text），所以由页面统一给这一档。 */
+  --ledger-inset: 20px;
+}
+
+:root[theme-mode="dark"] {
+  --ledger-ink-max: var(--ledger-ink-5);
+  --ledger-on-ink-max: var(--td-bg-color-container);
+}
+
+/* ── 无框块 ──────────────────────────────────────────────────────────────
+   给块的根元素用。块的标题（展示字）与正文层级由各组件自己管，
+   这里只负责"不要看起来像一张卡片"。 */
+.ledger-block {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0;
+}
+
+/* ── 墨色图表 ───────────────────────────────────────────────────────────
+   折线与柱状统一墨色。涨跌方向交给数字，图表只讲形状。 */
+.ledger-chart {
+  --ledger-chart-ink: var(--td-text-color-secondary);
+  --ledger-chart-ink-strong: var(--td-text-color-primary);
+}
+
+/* 今日那一点可以带方向色 —— 它是一个点，不是一整条线。 */
+.ledger-chart__last-up { fill: var(--app-quote-up); }
+.ledger-chart__last-down { fill: var(--app-quote-down); }
+.ledger-chart__last-flat { fill: var(--td-text-color-placeholder); }

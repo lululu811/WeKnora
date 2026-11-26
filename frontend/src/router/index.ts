@@ -294,6 +294,19 @@ const router = createRouter({
         component: () => import('../views/design-lab/board/index.vue'),
         meta: { requiresAuth: false, requiresInit: false }
       },
+      // 大盘预览全屏大屏（/dashboard）的免鉴权预览。
+      //
+      // 为什么需要它：/dashboard 是 requiresAuth 的顶级路由，但这一屏的数据
+      // 全部来自 python-service（行情快照 / 龙虎榜 / ETF 份额，不鉴权），
+      // 只有「自选股」那一块走 Go（带鉴权）。没有这条 dev 路由，未登录状态下
+      // 就没法验收大屏的版式 —— 每次验收都要先建号或登录。
+      // 仅 DEV 存在，生产构建里这条路由不存在。
+      {
+        path: '/platform/dev/dashboard',
+        name: 'devDashboard',
+        component: () => import('@/finance/views/MarketDashboard.vue'),
+        meta: { requiresAuth: false, requiresInit: false }
+      },
     ] : []),
   ],
 });

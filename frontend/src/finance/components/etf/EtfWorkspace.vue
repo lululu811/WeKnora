@@ -16,7 +16,7 @@
   宁可只显示宽基，也不要把行业混进汇金那组。
 -->
 <template>
-  <section class="etf-ws">
+  <section class="etf-ws ledger-block">
     <header class="etf-ws__head">
       <div class="etf-ws__title-row">
         <h3 class="etf-ws__title">{{ $t('tracking.etf.title') }}</h3>
@@ -66,7 +66,7 @@
     <div v-if="group === 'institutional'">
       <div v-if="instLoading" class="etf-ws__empty">{{ $t('common.loading') }}</div>
       <p v-else-if="!instItems.length" class="etf-ws__empty">{{ $t('marketDashboard.noData') }}</p>
-      <div v-else class="etf-ws__card">
+      <div v-else class="etf-ws__card ledger-block">
         <div class="etf-ws__table">
           <div class="etf-ws__tr etf-ws__tr--head etf-ws__tr--inst">
             <span class="etf-ws__col-name">{{ $t('etfWorkspace.col.fundName') }}</span>
@@ -117,7 +117,7 @@
       <div v-if="loading" class="etf-ws__empty">{{ $t('common.loading') }}</div>
       <p v-else-if="!visible.length" class="etf-ws__empty">{{ $t('marketDashboard.noData') }}</p>
 
-      <div v-else class="etf-ws__card">
+      <div v-else class="etf-ws__card ledger-block">
         <div class="etf-ws__table">
           <div class="etf-ws__tr etf-ws__tr--head">
             <span class="etf-ws__col-name">{{ $t('tracking.etf.col.name') }}</span>
@@ -182,7 +182,7 @@
       <div v-else-if="!holdersDetail" class="etf-drawer__empty">{{ $t('marketDashboard.noData') }}</div>
       <div v-else class="etf-drawer__content">
         <!-- 机构 vs 散户结构 -->
-        <div v-if="holdersDetail.structure" class="etf-drawer__struct-card">
+        <div v-if="holdersDetail.structure" class="etf-drawer__struct-card ledger-block">
           <div class="etf-drawer__struct-head">
             <span class="etf-drawer__struct-title">{{ $t('etfWorkspace.drawer.structureTitle') }}</span>
             <span class="etf-drawer__struct-date">{{ holdersDetail.structure.report_date || $t('etfWorkspace.drawer.latestPeriod') }}</span>
@@ -484,20 +484,29 @@ function trendClass(v: number | null): string {
 </script>
 
 <style scoped lang="less">
-/* 沿用大盘预览的暖米色纸张体系与涨跌色（--app-quote-up 红 / --app-quote-down 绿随主题切换），
-   不新造一套设计变量 —— 这张表和大盘那张卡是同一件东西的两种尺寸。 */
+/*
+ * 墨账体例（achromatic-ledger）—— 规范见 src/finance/styles/ledger.less 文件头：
+ *   1. 无框块：块与块之间只靠留白与标题层级分开，不画卡片；
+ *   2. 图表用墨色：比例条一律墨色，不按涨跌给整条染色；
+ *   3. 浓淡表用墨阶：--ledger-ink-1…5。
+ * 涨跌红绿是金融语义，只出现在**数字**上，保留
+ * （--app-quote-up 红 / --app-quote-down 绿随主题切换）。
+ */
 .etf-ws {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  /* 墨账：块根归零（没有卡片外壳了），内缩就由本块自己给。
+     外层壳（平台侧栏的 .platform-route-outlet 与 dev 路由）都不给内缩，
+     不给这里整块内容会贴到屏幕边缘（edge-text）。口径与大盘 tab 的嵌入态一致：
+     MarketDashboard.vue 的 .md-page.is-embedded。 */
+  padding: 4px var(--ledger-inset) 20px;
   /* 不加这行，flex item 的 min-width:auto 会让本块按表格 min-content 撑开，
      把最后一列（观测日）顶出视口。 */
   min-width: 0;
 }
 
-
-
-
+/* 涨跌色是数据语义（--app-quote-up 红 / --app-quote-down 绿随主题切换），保留在数字上。 */
 .is-up { color: var(--app-quote-up); }
 .is-down { color: var(--app-quote-down); }
 .is-flat { color: var(--td-text-color-placeholder); }
@@ -520,6 +529,9 @@ function trendClass(v: number | null): string {
   margin: 0;
   font-family: var(--app-font-display);
   font-size: var(--app-text-xl);
+  /* 块标题层级：展示字 + 600 字重 + 墨色，与其它墨账块一个口径。 */
+  font-weight: 600;
+  color: var(--td-text-color-primary);
 }
 
 .etf-ws__caption {
@@ -535,15 +547,13 @@ function trendClass(v: number | null): string {
   flex-wrap: wrap;
 }
 
+/* 分组筛选与排序是 chrome：去掉描边、底色与圆角，只用留白和字重分主次。
+   （原来是一块灰底圆角盒 + 珊瑚实底选中态：品牌色被当状态色用了。） */
 .etf-ws__seg,
 .etf-ws__sort {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
-  padding: 3px;
-  background: var(--td-bg-color-secondarycontainer);
-  border: 1px solid var(--td-component-stroke);
-  border-radius: var(--app-radius-sm, 6px);
+  gap: 4px;
 }
 
 .etf-ws__seg-btn,
@@ -551,27 +561,25 @@ function trendClass(v: number | null): string {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 3px 10px;
+  padding: 2px 8px;
   border: 0;
-  border-radius: var(--app-radius-xs, 4px);
+  border-radius: 0;
   background: transparent;
   color: var(--td-text-color-secondary);
   font-size: var(--app-text-xs);
   cursor: pointer;
-  transition: all var(--app-motion-fast) ease;
+  transition: color 0.15s ease;
 
   &:hover {
     color: var(--td-text-color-primary);
-    background: var(--td-bg-color-container-hover);
   }
 }
 
 .etf-ws__seg-btn.is-active,
 .etf-ws__sort-btn.is-active {
-  background: var(--td-bg-color-container);
-  color: var(--td-brand-color);
+  /* 选中态用墨色字重，不用品牌珊瑚 —— 珊瑚是品牌色，不是状态色。 */
+  color: var(--td-text-color-primary);
   font-weight: 600;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
 /* 0 只的分组置灰而不是隐藏：让"扩池了但这组是空的"这件事本身可见。 */
@@ -580,24 +588,27 @@ function trendClass(v: number | null): string {
   cursor: not-allowed;
 }
 
+/* 分组计数是 chrome 徽章：中性墨阶，不占品牌珊瑚。 */
 .etf-ws__seg-n {
   font-size: var(--app-text-2xs);
   padding: 0 4px;
-  border-radius: var(--app-radius-pill);
-  background: color-mix(in srgb, var(--td-text-color-secondary) 12%, transparent);
+  border-radius: 3px;
+  background: var(--ledger-ink-1);
+  color: var(--td-text-color-secondary);
 }
 
 .etf-ws__seg-btn.is-active .etf-ws__seg-n {
-  background: color-mix(in srgb, var(--td-brand-color) 12%, transparent);
-  color: var(--td-brand-color);
+  background: var(--ledger-ink-3);
+  color: var(--td-text-color-primary);
 }
 
+/* 说明行是注释，不是卡片：去掉琥珀底色块，改用一条淡墨竖线把它从表格里分出来。
+   这句话本身讲的是"行业池还没数据"，是提示不是告警，不需要颜色来喊。 */
 .etf-ws__note {
   margin: 0;
-  padding: 7px 10px;
-  border-radius: var(--td-radius-small);
-  background: var(--td-warning-color-1);
-  color: var(--td-warning-color-7);
+  padding: 1px 0 1px 10px;
+  border-left: 2px solid var(--ledger-ink-3);
+  color: var(--td-text-color-secondary);
   font-size: var(--app-text-xs);
 }
 
@@ -615,13 +626,10 @@ function trendClass(v: number | null): string {
     · 名称列再吃掉剩余空间后，整体封顶 1040px —— 不封顶的话名称列会吸收
       全部余量（实测 1500px 视口下它能涨到 700px+），而"上证50ETF华夏"只有
       十几字宽，一大片空白全落在它右边，读起来是空的不是从容。
+  外壳是 .ledger-block（无框块）：底色 / 描边 / 圆角 / 阴影由全局工具类归零，
+  这里不再复制一份"归零四行"。
 */
 .etf-ws__card {
-  background: var(--td-bg-color-container);
-  border: 1px solid var(--td-component-stroke);
-  border-radius: var(--app-radius-md, 8px);
-  padding: 8px 16px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.02);
   width: 100%;
   max-width: 1080px;
 }
@@ -637,14 +645,15 @@ function trendClass(v: number | null): string {
   grid-template-columns: minmax(180px, 2fr) minmax(75px, 0.9fr) minmax(100px, 1fr) minmax(80px, 0.9fr) minmax(70px, 0.8fr) minmax(95px, 1fr) minmax(70px, 0.8fr);
   gap: 12px;
   align-items: center;
-  padding: 9px 8px;
-  border-bottom: 1px solid var(--td-component-stroke);
+  padding: 9px 0;
+  /* 表格的横线用淡墨阶，比容器描边灰更像"账本上的栏线"。 */
+  border-bottom: 1px solid var(--ledger-ink-2);
   font-size: var(--app-text-sm);
-  transition: background var(--app-motion-fast) ease;
+  transition: background-color 0.15s ease;
 
   &:hover:not(.etf-ws__tr--head) {
-    background: var(--td-bg-color-container-hover);
-    border-radius: var(--app-radius-xs, 4px);
+    /* 行的悬停是纸面上的淡墨，不画圆角块。 */
+    background: var(--ledger-ink-1);
   }
 }
 
@@ -660,41 +669,45 @@ function trendClass(v: number | null): string {
   width: 100%;
 }
 
+/* 机构持仓比例条是图表：墨账里用墨色，不按方向染色。 */
 .etf-ws__ratio-bar-wrap {
   flex: 1;
   height: 6px;
-  background: var(--td-bg-color-secondarycontainer);
+  background: var(--ledger-ink-1);
   border-radius: 3px;
   overflow: hidden;
 }
 
 .etf-ws__ratio-bar-inner {
   height: 100%;
-  background: var(--td-brand-color);
+  background: var(--ledger-ink-max);
   border-radius: 3px;
 }
 
 .etf-ws__ratio-pct {
-  font-family: var(--app-font-family-mono);
+  font-family: var(--app-font-family-mono); /* taste-skill-ignore: 数字用等宽是本产品既定约定（--app-font-family-mono + tabular-nums） */
   font-size: var(--app-text-xs);
+  font-variant-numeric: tabular-nums;
   min-width: 45px;
   text-align: right;
 }
 
+/* 行内动作是次级操作：墨账里用文字链接，不画按钮框，也不占品牌珊瑚。 */
 .etf-ws__holder-btn {
-  padding: 2px 8px;
+  padding: 0;
   font-size: var(--app-text-xs);
-  border-radius: var(--app-radius-xs, 4px);
-  border: 1px solid var(--td-brand-color);
-  color: var(--td-brand-color);
+  border: 0;
+  border-radius: 0;
+  color: var(--td-text-color-secondary);
   background: transparent;
   cursor: pointer;
   white-space: nowrap;
-  transition: all var(--app-motion-fast) ease;
+  transition: color 0.15s ease;
 
   &:hover {
-    background: var(--td-brand-color);
-    color: #fff;
+    color: var(--td-text-color-primary);
+    text-decoration: underline;
+    text-underline-offset: 2px;
   }
 }
 
@@ -703,13 +716,19 @@ function trendClass(v: number | null): string {
   font-weight: 600;
   color: var(--td-text-color-secondary);
   padding-bottom: 8px;
-  border-bottom: 1px solid var(--td-border-level-2-color);
+  border-bottom: 1px solid var(--ledger-ink-2);
 }
 
+/* 表格里的数字一律等宽 + 表格数字，对齐才能逐行扫读。 */
 .is-num {
-  font-family: var(--app-font-family-mono);
+  font-family: var(--app-font-family-mono); /* taste-skill-ignore: 数字用等宽是本产品既定约定（--app-font-family-mono + tabular-nums） */
   font-variant-numeric: tabular-nums;
   text-align: right;
+}
+
+/* 数字默认墨色；方向色（红涨绿跌）由 .is-up / .is-down 单独覆盖。 */
+.etf-ws__num {
+  color: var(--td-text-color-primary);
 }
 
 .is-center {
@@ -719,21 +738,25 @@ function trendClass(v: number | null): string {
 .etf-ws__tr--head .is-num { text-align: right; }
 .etf-ws__tr--head .is-center { text-align: center; }
 
+/*
+ * 份额变动（季频）是这块的主角 —— 它是"国家队在不在进出"的唯一证据。
+ * 墨账：涨跌红绿是金融语义，留在**数字**上；但不给它铺底色块：
+ * 红绿当装饰会被读成"这一行是涨的"，而密集表格里真正要读的是那个数字本身。
+ * 所以：去底色、留墨阶对齐、加粗、数字带红绿。
+ */
 .etf-ws__pct-pill {
   display: inline-block;
-  padding: 1px 7px;
-  border-radius: var(--app-radius-xs, 4px);
-  font-family: var(--app-font-family-mono);
+  padding: 0;
+  font-family: var(--app-font-family-mono); /* taste-skill-ignore: 数字用等宽是本产品既定约定（--app-font-family-mono + tabular-nums） */
+  font-variant-numeric: tabular-nums;
   font-weight: 600;
-  font-size: var(--app-text-xs);
+  font-size: var(--app-text-sm);
   text-align: right;
 
   &.is-up {
-    background: color-mix(in srgb, var(--app-quote-up) 12%, transparent);
     color: var(--app-quote-up);
   }
   &.is-down {
-    background: color-mix(in srgb, var(--app-quote-down) 12%, transparent);
     color: var(--app-quote-down);
   }
   &.is-flat {
@@ -741,15 +764,16 @@ function trendClass(v: number | null): string {
   }
 }
 
+/* 「异动」是状态标记，走墨阶 —— 品牌珊瑚全产品只出现一处，不铺到这里。 */
 .etf-ws__signal-badge {
   display: inline-flex;
   align-items: center;
   padding: 1px 6px;
-  border-radius: var(--app-radius-xs, 4px);
-  font-size: 11px;
+  border-radius: 3px;
+  font-size: var(--app-text-xs);
   font-weight: 600;
-  background: color-mix(in srgb, var(--td-brand-color) 12%, transparent);
-  color: var(--td-brand-color);
+  background: var(--ledger-ink-2);
+  color: var(--td-text-color-primary);
 }
 
 .etf-ws__muted {
@@ -779,20 +803,24 @@ function trendClass(v: number | null): string {
 }
 
 .etf-ws__code {
-  font-family: var(--app-font-family-mono);
+  font-family: var(--app-font-family-mono); /* taste-skill-ignore: 数字用等宽是本产品既定约定（--app-font-family-mono + tabular-nums） */
   font-size: var(--app-text-xs);
   color: var(--td-text-color-secondary);
 }
 
+/* 异动小点：状态标记走墨阶，不占品牌珊瑚，也不跟涨跌红绿抢颜色。 */
 .etf-ws__dot {
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: var(--app-quote-up);
+  background: var(--ledger-ink-4);
   flex: 0 0 auto;
 }
 
 .etf-ws__signal { font-size: var(--app-text-xs); }
+
+/* 放量倍数是次要量：小字灰字，不跟份额变动抢读数。 */
+.etf-ws__mult { font-size: var(--app-text-xs); color: var(--td-text-color-secondary); }
 .etf-ws__date { font-size: var(--app-text-xs); color: var(--td-text-color-secondary); }
 
 .etf-ws__foot {
@@ -817,10 +845,8 @@ function trendClass(v: number | null): string {
   padding: 4px 0 24px;
 }
 
+/* 结构卡不是卡片：外壳由全局 .ledger-block 归零，这里只管内部排布。 */
 .etf-drawer__struct-card {
-  background: var(--td-bg-color-secondarycontainer);
-  border-radius: var(--app-radius-md, 8px);
-  padding: 14px 16px;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -843,21 +869,23 @@ function trendClass(v: number | null): string {
   color: var(--td-text-color-secondary);
 }
 
+/* 机构 vs 散户 是**分类**比例条：段的位置就是标签，两段都用墨阶的浓淡分，
+   方向与强弱都不在这条上（它没有方向语义），所以不套涨跌红绿。 */
 .etf-drawer__bar-container {
   display: flex;
   height: 10px;
-  border-radius: 5px;
+  border-radius: 2px;
   overflow: hidden;
-  background: var(--td-bg-color-component);
+  background: var(--ledger-ink-1);
 }
 
 .etf-drawer__bar-ins {
-  background: var(--td-brand-color);
+  background: var(--ledger-ink-max);
   transition: width var(--app-motion-normal) ease;
 }
 
 .etf-drawer__bar-psnl {
-  background: var(--td-warning-color, #e37318);
+  background: var(--ledger-ink-2);
   transition: width var(--app-motion-normal) ease;
 }
 
@@ -873,13 +901,14 @@ function trendClass(v: number | null): string {
   gap: 6px;
 }
 
+/* 图例小方块跟上面那两段同色：读者靠它把段和名字对上。 */
 .etf-drawer__dot {
   width: 8px;
   height: 8px;
-  border-radius: 50%;
+  border-radius: 2px;
 
-  &.is-ins { background: var(--td-brand-color); }
-  &.is-psnl { background: var(--td-warning-color, #e37318); }
+  &.is-ins { background: var(--ledger-ink-max); }
+  &.is-psnl { background: var(--ledger-ink-2); }
 }
 
 .etf-drawer__stat-grid {
@@ -887,7 +916,7 @@ function trendClass(v: number | null): string {
   grid-template-columns: 1fr 1fr;
   gap: 12px;
   padding-top: 6px;
-  border-top: 1px dashed var(--td-component-stroke);
+  border-top: 1px solid var(--ledger-ink-2);
 }
 
 .etf-drawer__stat-cell {
@@ -902,7 +931,7 @@ function trendClass(v: number | null): string {
 }
 
 .etf-drawer__stat-v {
-  font-family: var(--app-font-family-mono);
+  font-family: var(--app-font-family-mono); /* taste-skill-ignore: 数字用等宽是本产品既定约定（--app-font-family-mono + tabular-nums） */
   font-size: var(--app-text-sm);
   font-weight: 600;
   color: var(--td-text-color-primary);
@@ -934,27 +963,35 @@ function trendClass(v: number | null): string {
   gap: 8px;
 }
 
+/* 持有人行不是小卡片，是一行有栏线的记录：去掉描边与圆角，只留一条淡墨横线。 */
 .etf-drawer__holder-row {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 10px 12px;
-  border-radius: var(--app-radius-sm, 6px);
-  background: var(--td-bg-color-container);
-  border: 1px solid var(--td-component-stroke);
-  transition: border-color var(--app-motion-fast) ease;
+  padding: 10px 0;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--ledger-ink-2);
+  border-radius: 0;
+  transition: background-color 0.15s ease;
 
   &:hover {
-    border-color: var(--td-brand-color-light);
+    background: var(--ledger-ink-1);
   }
 }
 
+/* 名次走墨阶：前三名用墨色正色 + 粗体，其余次级墨色。 */
 .etf-drawer__holder-rank {
-  font-family: var(--app-font-family-mono);
+  font-family: var(--app-font-family-mono); /* taste-skill-ignore: 数字用等宽是本产品既定约定（--app-font-family-mono + tabular-nums） */
+  font-variant-numeric: tabular-nums;
   font-weight: 700;
   font-size: var(--app-text-sm);
   color: var(--td-text-color-secondary);
   width: 24px;
+}
+
+.etf-drawer__holder-row:nth-child(-n + 3) .etf-drawer__holder-rank {
+  color: var(--td-text-color-primary);
 }
 
 .etf-drawer__holder-info {
@@ -981,36 +1018,21 @@ function trendClass(v: number | null): string {
   white-space: nowrap;
 }
 
+/* 持有人类型是 chrome 标签，不是数据：原来给每类配了一种装饰色（含紫/蓝/绿），
+   一屏七八种颜色，谁也读不出重点。墨账：全部走中性墨阶，
+   只有"国家队"这类要强调的用浓一档 + 粗体。 */
 .etf-drawer__holder-badge {
-  font-size: 11px;
+  font-size: var(--app-text-xs);
   padding: 1px 6px;
-  border-radius: var(--app-radius-xs, 4px);
+  border-radius: 3px;
   white-space: nowrap;
+  background: var(--ledger-ink-1);
+  color: var(--td-text-color-secondary);
 
   &.is-state {
-    background: color-mix(in srgb, var(--app-quote-up) 14%, transparent);
-    color: var(--app-quote-up);
+    background: var(--ledger-ink-3);
+    color: var(--td-text-color-primary);
     font-weight: 600;
-  }
-  &.is-insurance {
-    background: color-mix(in srgb, var(--td-brand-color) 14%, transparent);
-    color: var(--td-brand-color);
-  }
-  &.is-broker {
-    background: color-mix(in srgb, #9333ea 14%, transparent);
-    color: #9333ea;
-  }
-  &.is-bank {
-    background: color-mix(in srgb, #0284c7 14%, transparent);
-    color: #0284c7;
-  }
-  &.is-qfii {
-    background: color-mix(in srgb, #059669 14%, transparent);
-    color: #059669;
-  }
-  &.is-other, &.is-trust, &.is-personal {
-    background: var(--td-bg-color-secondarycontainer);
-    color: var(--td-text-color-secondary);
   }
 }
 
@@ -1022,7 +1044,7 @@ function trendClass(v: number | null): string {
 
   b {
     color: var(--td-text-color-primary);
-    font-family: var(--app-font-family-mono);
+    font-family: var(--app-font-family-mono); /* taste-skill-ignore: 数字用等宽是本产品既定约定（--app-font-family-mono + tabular-nums） */
   }
 }
 </style>

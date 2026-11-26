@@ -7,7 +7,7 @@
     3. 炸板与跌停监控：盘中触及涨停被砸开的炸板股亏钱效应，以及跌停核按钮排雷。
 -->
 <template>
-  <article class="lad">
+  <article class="lad ledger-block">
     <header class="lad__head">
       <div class="lad__title-row">
         <span class="bas-title">{{ $t('marketDashboard.ladder.title') }}</span>
@@ -291,10 +291,7 @@ function fmtMoney(num: number | null): string {
 
 <style scoped lang="less">
 .lad {
-  background: var(--td-bg-color-container);
-  border: 1px solid var(--td-component-stroke);
-  border-radius: var(--td-radius-medium);
-  padding: 12px 14px;
+  /* 墨账：块不画卡片。块之间的距离由父级栅格的 gap 给，不是靠各自的边框。 */
 }
 
 .lad__head { margin-bottom: 10px; }
@@ -302,29 +299,25 @@ function fmtMoney(num: number | null): string {
 .bas-title { font-family: var(--app-font-display); font-size: var(--app-text-md); }
 .lad__caption { font-size: var(--app-text-xs); color: var(--td-text-color-secondary); }
 
+/* tab 条是 chrome：去掉底色与圆角，选中态靠字重与墨色讲。
+   （原来选中态是珊瑚字，亮底上对比度只有 3.4:1，读不清。） */
 .lad__tabs {
   display: inline-flex;
-  background: var(--td-bg-color-secondarycontainer);
-  border-radius: var(--td-radius-small);
-  padding: 2px;
   gap: 2px;
 }
 
 .lad__tab {
   border: none;
   background: transparent;
-  padding: 2px 10px;
+  padding: 2px 8px;
   font-size: var(--app-text-xs);
   color: var(--td-text-color-secondary);
-  border-radius: var(--td-radius-small);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: color 0.15s ease;
 
   &.is-active {
-    background: var(--td-bg-color-container);
-    color: var(--td-brand-color);
+    color: var(--td-text-color-primary);
     font-weight: 600;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
   }
 }
 
@@ -338,7 +331,7 @@ function fmtMoney(num: number | null): string {
 
 .lad__col-head,
 .lad__row-head {
-  font-size: var(--app-text-2xs, 10px);
+  font-size: var(--app-text-xs);
   color: var(--td-text-color-placeholder);
   text-align: center;
 }
@@ -349,36 +342,41 @@ function fmtMoney(num: number | null): string {
   display: flex; align-items: center; justify-content: center;
   height: 22px; border-radius: 3px;
   font-family: var(--app-font-family-mono);
-  font-size: var(--app-text-2xs, 10px);
+  font-size: var(--app-text-xs);
   font-variant-numeric: tabular-nums;
 }
 
+/* 浓淡表用墨阶：越浓越多。原来是品牌色深浅（珊瑚），那是装饰色，
+   会跟涨跌红绿抢读。墨阶由 --td-text-color-primary 派生，亮暗主题自动跟随。
+   浓格上的字用容器底色（亮主题=白字压深墨，暗主题=暗字压亮墨），淡格上用墨字。 */
 .lad__cell.is-void { background: transparent; }
-.lad__cell.is-zero { background: var(--td-bg-color-container-hover); color: var(--td-text-color-placeholder); }
-.lad__cell.is-lo { background: color-mix(in srgb, var(--td-brand-color) 14%, transparent); color: var(--td-text-color-primary); }
-.lad__cell.is-mid { background: color-mix(in srgb, var(--td-brand-color) 34%, transparent); color: var(--td-text-color-primary); }
-.lad__cell.is-hi { background: color-mix(in srgb, var(--td-brand-color) 62%, transparent); color: #fff; font-weight: 600; }
+.lad__cell.is-zero { background: var(--ledger-ink-1); color: var(--td-text-color-placeholder); }
+.lad__cell.is-lo { background: var(--ledger-ink-2); color: var(--td-text-color-primary); }
+.lad__cell.is-mid { background: var(--ledger-ink-3); color: var(--td-text-color-primary); }
+/* 最浓档：底色与字色都取随主题翻的令牌（见 ledger.less 的说明）。
+   之前这里是 ink-5 底 + 白字，亮色主题下只有 3.08:1（11px 要 4.5）。 */
+.lad__cell.is-hi { background: var(--ledger-ink-max); color: var(--ledger-on-ink-max); font-weight: 600; }
 
 /* 连板个股清单面板 */
 .lad__stocks-wrap {
   margin-top: 4px;
 }
 
+/* 最高空间板是 chrome 徽章，不是数据色：去掉那层红底，字重与墨色来讲重点。 */
 .lad__max-board-bar {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: baseline;
   margin-bottom: 10px;
-  padding: 6px 10px;
-  background: rgba(227, 77, 89, 0.08);
-  border-radius: var(--td-radius-small);
+  padding: 0;
+  background: transparent;
 }
 
 .lad__max-badge {
   font-family: var(--app-font-display);
   font-size: var(--app-text-xs);
   font-weight: 600;
-  color: var(--app-quote-up);
+  color: var(--td-text-color-primary);
 }
 
 .lad__max-date {
@@ -406,14 +404,15 @@ function fmtMoney(num: number | null): string {
   gap: 6px;
 }
 
+/* 连板高度徽章是 chrome：品牌浅底改成淡墨阶，不与涨跌红绿抢颜色。 */
 .lad__level-badge {
   font-family: var(--app-font-display);
   font-size: 11px;
   font-weight: 600;
   padding: 1px 6px;
   border-radius: 3px;
-  background: var(--td-brand-color-light);
-  color: var(--td-brand-color);
+  background: var(--ledger-ink-2);
+  color: var(--td-text-color-primary);
 }
 
 .lad__level-count {
@@ -427,14 +426,16 @@ function fmtMoney(num: number | null): string {
   gap: 6px;
 }
 
+/* 个股卡不是卡片，是一行有栏线的记录：去掉描边与圆角，只留一条淡墨横线。 */
 .lad__stock-card {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 5px 8px;
-  background: var(--td-bg-color-container-hover);
-  border-radius: var(--td-radius-small);
-  border: 1px solid var(--td-component-stroke);
+  padding: 5px 8px 6px;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--ledger-ink-2);
+  border-radius: 0;
 }
 
 .lad__stock-top {
@@ -450,7 +451,7 @@ function fmtMoney(num: number | null): string {
 }
 
 .lad__stock-code {
-  font-size: 10px;
+  font-size: var(--app-text-xs);
   color: var(--td-text-color-placeholder);
 }
 
@@ -458,7 +459,7 @@ function fmtMoney(num: number | null): string {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 10px;
+  font-size: var(--app-text-xs);
 }
 
 .lad__stock-time {
@@ -466,7 +467,10 @@ function fmtMoney(num: number | null): string {
 }
 
 .lad__stock-money {
-  color: var(--td-brand-color);
+  /* 封单金额是**量级**，不是方向：涨停时封单只有买盘，没有红绿可讲。
+     原来用品牌珊瑚，一屏就是一片珊瑚 —— 品牌色被当装饰用了。
+     墨账：量级用墨色，方向留给真正有方向的数字。 */
+  color: var(--td-text-color-primary);
   font-weight: 500;
 }
 
@@ -492,7 +496,7 @@ function fmtMoney(num: number | null): string {
   font-weight: 600;
   color: var(--td-text-color-secondary);
   padding-bottom: 4px;
-  border-bottom: 1px solid var(--td-component-stroke);
+  border-bottom: 1px solid var(--ledger-ink-2);
 }
 
 .lad__empty-sub {
@@ -509,14 +513,16 @@ function fmtMoney(num: number | null): string {
   overflow-y: auto;
 }
 
+/* 同上：炸板 / 跌停条目也是一行记录，不是小卡片。 */
 .lad__break-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 4px 8px;
-  background: var(--td-bg-color-container-hover);
-  border-radius: var(--td-radius-small);
-  border: 1px solid var(--td-component-stroke);
+  padding: 4px 8px 5px;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--ledger-ink-2);
+  border-radius: 0;
   font-size: 11px;
 }
 
@@ -532,7 +538,7 @@ function fmtMoney(num: number | null): string {
 }
 
 .lad__break-code {
-  font-size: 10px;
+  font-size: var(--app-text-xs);
   color: var(--td-text-color-placeholder);
 }
 
@@ -544,7 +550,7 @@ function fmtMoney(num: number | null): string {
 }
 
 .lad__break-times {
-  font-size: 10px;
+  font-size: var(--app-text-xs);
   color: var(--td-text-color-placeholder);
 }
 
@@ -555,7 +561,7 @@ function fmtMoney(num: number | null): string {
 }
 
 .lad__down-time {
-  font-size: 10px;
+  font-size: var(--app-text-xs);
   color: var(--td-text-color-placeholder);
 }
 

@@ -6,7 +6,7 @@
     2. 大宗商品期股联动：铜/铝/金/银/螺纹/原油/集运/生猪等核心商品最新行情及 A 股产业链映射。
 -->
 <template>
-  <article class="bas">
+  <article class="bas ledger-block">
     <header class="bas__head">
       <div class="bas__title-row">
         <span class="bas__title">{{ $t('marketDashboard.basis.title') }}</span>
@@ -320,11 +320,15 @@ function pathOf(series: BasisPoint[], key: 'basis_pct' | 'spot_pct'): string {
 </script>
 
 <style scoped lang="less">
+/*
+ * 墨账体例（achromatic-ledger）—— 规范见 src/finance/styles/ledger.less 文件头：
+ *   1. 无框块：块与块之间只靠留白与字号层级分开，不画卡片；
+ *   2. 图表用墨色：折线一律墨色，方向交给数字讲；
+ *   3. 浓淡表用墨阶：--ledger-ink-1…5。
+ * 涨跌红绿是金融语义，只出现在数字上，保留。
+ */
 .bas {
-  background: var(--td-bg-color-container);
-  border: 1px solid var(--td-component-stroke);
-  border-radius: var(--td-radius-medium);
-  padding: 12px 14px;
+  /* 块根：去掉卡片外壳（底色 / 描边 / 圆角 / 阴影）；块距由父级 grid 的 gap 给。 */
 }
 
 .is-up { color: var(--app-quote-up); }
@@ -341,7 +345,8 @@ function pathOf(series: BasisPoint[], key: 'basis_pct' | 'spot_pct'): string {
 }
 
 .bas__title-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.bas__title { font-family: var(--app-font-display); font-size: var(--app-text-md); }
+/* 块的标题（展示字）：墨账靠字重与字号分层，不靠底色块。 */
+.bas__title { font-family: var(--app-font-display); font-size: var(--app-text-md); font-weight: 600; }
 .bas__caption { font-size: var(--app-text-xs); color: var(--td-text-color-secondary); }
 
 .bas__tabs {
@@ -366,18 +371,23 @@ function pathOf(series: BasisPoint[], key: 'basis_pct' | 'spot_pct'): string {
     background: var(--td-bg-color-container);
     color: var(--td-text-color-primary);
     font-weight: 500;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    /* 墨账：去掉投影 —— 阴影是"这是一张卡片"的信号。 */
   }
 }
 
+/* 「展开 / 收起」是次级动作：墨账里用文字链接，不画按钮框，也不占用品牌珊瑚。 */
 .bas__toggle {
-  border: 1px solid var(--td-component-border);
-  border-radius: var(--td-radius-small);
-  background: var(--td-bg-color-container);
+  border: 0;
+  background: transparent;
   color: var(--td-text-color-secondary);
   font-size: var(--app-text-xs);
-  padding: 3px 9px;
+  padding: 2px 4px;
   cursor: pointer;
+
+  &:hover {
+    color: var(--td-text-color-primary);
+    text-decoration: underline;
+  }
 }
 
 .bas__empty {
@@ -387,10 +397,11 @@ function pathOf(series: BasisPoint[], key: 'basis_pct' | 'spot_pct'): string {
   font-size: var(--app-text-sm);
 }
 
+/* 四个基差框：墨账里不是四张卡，是四组数 —— 靠留白与字重分组。 */
 .bas__row {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
+  gap: 24px;
   max-width: 640px;
 }
 
@@ -398,12 +409,10 @@ function pathOf(series: BasisPoint[], key: 'basis_pct' | 'spot_pct'): string {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 8px 10px;
-  border-radius: var(--td-radius-small);
-  background: var(--td-bg-color-container-hover);
+  padding: 0;
 }
 
-.bas__cell-k { font-size: var(--app-text-xs); color: var(--td-text-color-secondary); }
+.bas__cell-k { font-size: var(--app-text-xs); color: var(--td-text-color-secondary); font-weight: 500; }
 .bas__cell-v { font-family: var(--app-font-display); font-size: var(--app-text-xl); }
 .bas__cell-p { font-size: var(--app-text-xs); color: var(--td-text-color-placeholder); }
 
@@ -418,13 +427,19 @@ function pathOf(series: BasisPoint[], key: 'basis_pct' | 'spot_pct'): string {
 .bas__legend-item { display: inline-flex; align-items: center; gap: 5px; font-size: var(--app-text-xs); color: var(--td-text-color-secondary); }
 .bas__swatch { width: 10px; height: 2px; border-radius: 1px; display: inline-block; }
 .bas__swatch--basis { background: var(--td-text-color-primary); }
-.bas__swatch--spot { background: var(--td-brand-color); }
+/* 墨账：两条线都是墨色，靠实线 / 虚线区分，图例跟着线走。 */
+/* 虚线用虚线边框画，不用 repeating-linear-gradient —— 渐变是禁令，
+   而这条线要的就是"虚"这一个意思。 */
+.bas__swatch--spot {
+  height: 0;
+  border-top: 2px dashed var(--td-text-color-secondary);
+}
 
 .bas__svg { width: 100%; height: 96px; display: block; }
 .bas__zero { stroke: var(--td-component-stroke); stroke-width: 1; stroke-dasharray: 3 3; }
 .bas__line { stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; }
 .bas__line--basis { stroke: var(--td-text-color-primary); }
-.bas__line--spot { stroke: var(--td-brand-color); stroke-dasharray: 4 3; }
+.bas__line--spot { stroke: var(--td-text-color-secondary); stroke-dasharray: 4 3; }
 
 .bas__chart-foot { margin: 4px 0 0; font-size: var(--app-text-xs); color: var(--td-text-color-placeholder); }
 
@@ -436,17 +451,18 @@ function pathOf(series: BasisPoint[], key: 'basis_pct' | 'spot_pct'): string {
 .bas__comm-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
-  gap: 10px;
+  gap: 18px;
 }
 
+/* 同样是无框块：靠留白与字重分组，不画小卡。 */
 .bas__comm-card {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 8px 10px;
-  background: var(--td-bg-color-container-hover);
-  border-radius: var(--td-radius-small);
-  border: 1px solid var(--td-component-stroke);
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
 }
 
 .bas__comm-top {
@@ -473,7 +489,7 @@ function pathOf(series: BasisPoint[], key: 'basis_pct' | 'spot_pct'): string {
 }
 
 .bas__comm-tag {
-  font-size: 10px;
+  font-size: var(--app-text-xs);
   padding: 1px 5px;
   border-radius: 3px;
   background: var(--td-bg-color-secondarycontainer);
@@ -489,7 +505,7 @@ function pathOf(series: BasisPoint[], key: 'basis_pct' | 'spot_pct'): string {
 
 .bas__cat-btn {
   border: 1px solid var(--td-component-stroke);
-  background: var(--td-bg-color-container);
+  background: transparent;
   color: var(--td-text-color-secondary);
   font-size: 11px;
   padding: 3px 8px;
@@ -502,10 +518,11 @@ function pathOf(series: BasisPoint[], key: 'basis_pct' | 'spot_pct'): string {
     border-color: var(--td-border-level-2-color);
   }
 
+  /* 选中态用墨阶 + 字重标记，不占品牌珊瑚（珊瑚在墨账里是稀缺资源）。 */
   &.is-active {
-    background: var(--td-brand-color-light);
-    color: var(--td-brand-color);
-    border-color: var(--td-brand-color);
+    background: var(--ledger-ink-2);
+    color: var(--td-text-color-primary);
+    border-color: var(--td-text-color-primary);
     font-weight: 600;
   }
 }
@@ -523,6 +540,7 @@ function pathOf(series: BasisPoint[], key: 'basis_pct' | 'spot_pct'): string {
   color: var(--td-text-color-primary);
 }
 
+/* 涨跌幅是数据语义：红涨绿跌保留，底色改用主题的 soft 令牌（跟随亮暗主题）。 */
 .bas__comm-chg-pill {
   font-family: var(--app-font-display);
   font-size: 12px;
@@ -532,11 +550,11 @@ function pathOf(series: BasisPoint[], key: 'basis_pct' | 'spot_pct'): string {
 
   &.is-up {
     color: var(--app-quote-up);
-    background: rgba(227, 77, 89, 0.1);
+    background: var(--app-quote-up-soft);
   }
   &.is-down {
     color: var(--app-quote-down);
-    background: rgba(43, 164, 113, 0.1);
+    background: var(--app-quote-down-soft);
   }
   &.is-flat {
     color: var(--td-text-color-placeholder);
@@ -557,7 +575,7 @@ function pathOf(series: BasisPoint[], key: 'basis_pct' | 'spot_pct'): string {
 }
 
 .bas__comm-date {
-  font-size: 10px;
+  font-size: var(--app-text-xs);
 }
 
 .bas__comm-stocks {
@@ -565,12 +583,11 @@ function pathOf(series: BasisPoint[], key: 'basis_pct' | 'spot_pct'): string {
   flex-direction: column;
   gap: 4px;
   margin-top: 2px;
-  padding-top: 6px;
-  border-top: 1px dashed var(--td-component-stroke);
+  /* 墨账：块内不画分隔线，靠「关联个股」这个标签分组。 */
 }
 
 .bas__comm-hint-label {
-  font-size: 10px;
+  font-size: var(--app-text-xs);
   color: var(--td-text-color-placeholder);
 }
 
@@ -580,10 +597,11 @@ function pathOf(series: BasisPoint[], key: 'basis_pct' | 'spot_pct'): string {
   gap: 4px;
 }
 
+/* 关联个股只是"这是相关标的"的标示，不带方向语义 —— 用墨阶，不用品牌珊瑚。 */
 .bas__stk-chip {
   font-size: 11px;
-  color: var(--td-brand-color);
-  background: rgba(var(--td-brand-color-rgb, 0, 82, 217), 0.08);
+  color: var(--td-text-color-secondary);
+  background: var(--ledger-ink-1);
   padding: 1px 6px;
   border-radius: 3px;
   line-height: 1.4;
@@ -598,17 +616,18 @@ function pathOf(series: BasisPoint[], key: 'basis_pct' | 'spot_pct'): string {
 .bas__wh-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 10px;
+  gap: 18px;
 }
 
+/* 与大宗商品卡同一体例：无框块。 */
 .bas__wh-card {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 8px 10px;
-  background: var(--td-bg-color-container-hover);
-  border-radius: var(--td-radius-small);
-  border: 1px solid var(--td-component-stroke);
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
 }
 
 .bas__wh-top {
@@ -624,6 +643,7 @@ function pathOf(series: BasisPoint[], key: 'basis_pct' | 'spot_pct'): string {
   color: var(--td-text-color-primary);
 }
 
+/* 累库 / 去库是方向数据：红绿保留，底色走主题 soft 令牌。 */
 .bas__wh-change {
   font-size: 11px;
   font-weight: 600;
@@ -632,11 +652,11 @@ function pathOf(series: BasisPoint[], key: 'basis_pct' | 'spot_pct'): string {
 
   &.is-destock {
     color: var(--app-quote-down);
-    background: rgba(43, 164, 113, 0.1);
+    background: var(--app-quote-down-soft);
   }
   &.is-accumulate {
     color: var(--app-quote-up);
-    background: rgba(227, 77, 89, 0.1);
+    background: var(--app-quote-up-soft);
   }
   &.is-flat {
     color: var(--td-text-color-placeholder);

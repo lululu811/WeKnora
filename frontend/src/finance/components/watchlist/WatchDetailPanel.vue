@@ -4,8 +4,13 @@
     从未被父组件传入的 prop，运行时是 undefined，内联样式渲染成
     `width: undefinedpx` 被浏览器忽略 —— 纯死代码，且一旦有人补上传参就会
     绕开 CSS 里的宽度约束（和 max-width 抢）。宽度统一交给样式表。
+
+    墨账：这是与表格**并排的一栏**（不是浮在内容上的弹层），所以按密集表
+    的规矩来：保留白底（--td-bg-color-container，与暖纸地差一档色），
+    去掉描边、阴影、圆角，两个白底区之间靠留白分开。
+    归零四行由全局 .ledger-block 提供，这里只补回底色与内边距。
   -->
-  <aside class="wl-detail">
+  <aside class="wl-detail ledger-block">
     <header class="wl-detail__head">
       <div class="wl-detail__title">
         <span class="wl-detail__name">{{ displayName }}</span>
@@ -1085,16 +1090,14 @@ function qScoreClass(score: number): string {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  /* 墨账：并排的一栏，保留白底与内边距；描边/阴影/圆角由 .ledger-block 归零。 */
   background: var(--td-bg-color-container);
-  border: 1px solid var(--td-component-stroke);
-  border-radius: var(--app-radius-md, 8px);
   padding: 14px;
   overflow-y: auto;
   flex: 0 0 460px;
   width: 460px;
   min-width: 420px;
   max-width: 480px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
 }
 
 .wl-detail__head {
@@ -1105,7 +1108,12 @@ function qScoreClass(score: number): string {
 
 .wl-detail__title { display: flex; align-items: baseline; gap: 8px; }
 .wl-detail__name { font-size: var(--app-text-lg); font-weight: 600; }
-.wl-detail__code { font-size: var(--app-text-sm); opacity: 0.6; }
+.wl-detail__code {
+  font-size: var(--app-text-sm);
+  font-family: var(--app-font-family-mono); /* taste-skill-ignore: 数字/代码用等宽是本产品既定约定（--app-font-family-mono + tabular-nums） */
+  font-variant-numeric: tabular-nums;
+  color: var(--td-text-color-secondary);
+}
 
 .wl-detail__close {
   border: none; background: transparent; cursor: pointer;
@@ -1125,6 +1133,58 @@ function qScoreClass(score: number): string {
 .is-down { color: var(--app-quote-down); }
 
 .wl-detail__section { display: flex; flex-direction: column; gap: 6px; }
+
+/* ── 墨账：这一屏一处品牌珊瑚都不留 ──
+   账本体例里品牌色不是状态色（整屏只留大盘那个 8px 小方块），
+   而珊瑚字在亮底上只有 3.5:1（inspect 判 contrast WARN），
+   所以 TDesign 的 primary 按钮换成墨色。
+   （只改样式，不动按钮的 theme/variant 属性，交互与 DOM 都不变。）
+   选择器带上 t-button--variant-* 是为了压过 TDesign 自己的三段式规则。 */
+:deep(.t-button--variant-base.t-button--theme-primary) {
+  background-color: var(--td-text-color-primary);
+  border-color: var(--td-text-color-primary);
+  color: var(--td-text-color-anti);
+}
+
+:deep(.t-button--variant-base.t-button--theme-primary:hover),
+:deep(.t-button--variant-base.t-button--theme-primary:focus-visible) {
+  background-color: var(--td-text-color-secondary);
+  border-color: var(--td-text-color-secondary);
+  color: var(--td-text-color-anti);
+}
+
+:deep(.t-button--variant-base.t-button--theme-primary.t-is-disabled) {
+  background-color: var(--ledger-ink-1);
+  border-color: transparent;
+  color: var(--td-text-color-placeholder);
+}
+
+:deep(.t-button--variant-outline.t-button--theme-primary) {
+  background-color: transparent;
+  border-color: var(--td-component-stroke);
+  color: var(--td-text-color-primary);
+}
+
+:deep(.t-button--variant-outline.t-button--theme-primary:hover),
+:deep(.t-button--variant-outline.t-button--theme-primary:focus-visible) {
+  background-color: var(--ledger-ink-1);
+  border-color: var(--td-text-color-secondary);
+  color: var(--td-text-color-primary);
+}
+
+:deep(.t-button--variant-text.t-button--theme-primary) {
+  background-color: transparent;
+  border-color: transparent;
+  color: var(--td-text-color-primary);
+}
+
+:deep(.t-button--variant-text.t-button--theme-primary:hover),
+:deep(.t-button--variant-text.t-button--theme-primary:focus-visible) {
+  background-color: transparent;
+  border-color: transparent;
+  color: var(--td-text-color-primary);
+  text-decoration: underline;
+}
 .wl-detail__section-head {
   display: flex;
   align-items: center;
@@ -1135,50 +1195,66 @@ function qScoreClass(score: number): string {
   padding: 0 4px;
 }
 /* HALO 入口比「全功能工作台」更值得一个完整按钮：它是这份面板里唯一一个
-   「打开一份独立分析」的出口，而工作台按钮只是放大当前视图。 */
+   「打开一份独立分析」的出口，而工作台按钮只是放大当前视图。
+   墨账：它是一个区块，不是一张卡：去掉描边、底色、圆角，只留一条淡墨栏线。 */
 .wl-detail__halo {
-  padding: 8px 10px;
-  border: 1px solid var(--td-border-level-2-color);
-  border-radius: var(--app-radius-sm);
-  background: var(--td-bg-color-secondarycontainer);
+  padding: 8px 0;
+  border: 0;
+  border-bottom: 1px solid var(--ledger-ink-2);
+  background: transparent;
 }
 .wl-detail__halo-btn { font-size: var(--app-text-xs); flex: none; }
 .wl-detail__section--diary { flex: 1; }
-.wl-detail__h3 { margin: 0; font-size: var(--app-text-md); font-weight: 600; opacity: 0.75; }
-.wl-detail__hint { font-size: var(--app-text-sm); opacity: 0.6; margin: 0; }
+.wl-detail__h3 {
+  margin: 0;
+  font-size: var(--app-text-md);
+  font-weight: 600;
+  color: var(--td-text-color-secondary);
+}
+.wl-detail__hint { font-size: var(--app-text-sm); color: var(--td-text-color-secondary); margin: 0; }
 
 .wl-detail__empty { padding: 12px 0; }
 .wl-detail__empty-title { margin: 0 0 4px; font-size: var(--app-text-md); }
 .wl-detail__empty-hint { margin: 0; font-size: var(--app-text-sm); opacity: 0.6; line-height: 1.6; }
 
 .wl-diary { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+/* 墨账：日记条目是一行行有栏线的记录，不是一张张叠起来的卡。 */
 .wl-diary__item {
-  border: 1px solid var(--td-component-stroke);
-  border-radius: var(--app-radius-sm); padding: 8px 10px;
+  border: 0;
+  border-bottom: 1px solid var(--ledger-ink-2);
+  border-radius: 0;
+  padding: 8px 0 10px;
 }
 .wl-diary__head { display: flex; align-items: center; gap: 8px; font-size: var(--app-text-sm); }
-.wl-diary__date { opacity: 0.6; }
-.wl-diary__conf { margin-left: auto; opacity: 0.55; }
+.wl-diary__date { color: var(--td-text-color-secondary); }
+.wl-diary__conf { margin-left: auto; color: var(--td-text-color-placeholder); }
 
 .wl-diary__verdict {
-  font-size: var(--app-text-sm); padding: 1px 6px; border-radius: var(--app-radius-xs);
-  background: rgba(0, 0, 0, 0.05); font-weight: 600;
+  font-size: var(--app-text-sm);
+  padding: 1px 6px;
+  border-radius: var(--app-radius-xs);
+  background: var(--ledger-ink-1);
+  font-weight: 600;
 }
 /* 建议买入偏红、建议移除偏绿，与 A 股涨跌色相反是有意的：
-   这里说的是「该做什么」而不是「今天涨没涨」。 */
+   这里说的是「该做什么」而不是「今天涨没涨」： 这是**建议**这一类别的
+   方向色，不是行情数据色，所以保留。 */
 .wl-diary__verdict.is-buy, .wl-diary__verdict.is-keep { color: var(--app-quote-up); }
 .wl-diary__verdict.is-sell, .wl-diary__verdict.is-exit { color: var(--app-quote-down); }
-.wl-diary__verdict.is-tighten { color: #b45309; }
-.wl-diary__verdict.is-hold, .wl-diary__verdict.is-none { color: #475569; }
+/* 收紧止损 / 持有不是方向，是层级：走墨色，不占红绿。 */
+.wl-diary__verdict.is-tighten { color: var(--td-text-color-primary); }
+.wl-diary__verdict.is-hold, .wl-diary__verdict.is-none { color: var(--td-text-color-placeholder); }
 
 .wl-diary__body { margin: 6px 0 0; font-size: var(--app-text-md); line-height: 1.65; white-space: pre-wrap; }
 .wl-diary__actions { display: flex; gap: 8px; margin-top: 8px; }
 
+/* 墨账：成本/止损是一条账目带，不是卡片：上下两条淡墨栏线，零底色。 */
 .wl-targets-card {
-  padding: 10px 12px;
-  border: 1px solid var(--td-component-stroke);
-  border-radius: var(--app-radius-sm, 6px);
-  background: var(--td-bg-color-secondarycontainer);
+  padding: 10px 0;
+  border: 0;
+  border-top: 1px solid var(--ledger-ink-2);
+  border-bottom: 1px solid var(--ledger-ink-2);
+  background: transparent;
 }
 
 .wl-targets-card__view {
@@ -1206,11 +1282,13 @@ function qScoreClass(score: number): string {
 
   &__v {
     font-weight: 600;
-    font-family: monospace;
-    color: var(--td-brand-color);
+    font-family: var(--app-font-family-mono); /* taste-skill-ignore: 数字用等宽是本产品既定约定（--app-font-family-mono + tabular-nums） */
+    font-variant-numeric: tabular-nums;
+    color: var(--td-text-color-primary);
 
+    /* 止损位与成本位都是价格，标签已经说清了是哪一条，不靠颜色区分。 */
     &.is-stop {
-      color: var(--td-error-color);
+      color: var(--td-text-color-primary);
     }
   }
 
@@ -1253,12 +1331,13 @@ function qScoreClass(score: number): string {
   justify-content: flex-end;
 }
 
+/* 墨账：徽标走墨阶，不用品牌珊瑚。 */
 .wl-diary__stats-badge {
   font-size: var(--app-text-xs);
   padding: 2px 8px;
   border-radius: var(--app-radius-pill);
-  background: color-mix(in srgb, var(--td-brand-color) 12%, transparent);
-  color: var(--td-brand-color);
+  background: var(--ledger-ink-2);
+  color: var(--td-text-color-primary);
   font-weight: 500;
   white-space: nowrap;
 }
@@ -1267,33 +1346,34 @@ function qScoreClass(score: number): string {
   font-size: var(--app-text-xs);
   padding: 1px 6px;
   border-radius: var(--app-radius-xs);
-  font-family: monospace;
+  font-family: var(--app-font-family-mono); /* taste-skill-ignore: 数字用等宽是本产品既定约定（--app-font-family-mono + tabular-nums） */
+  font-variant-numeric: tabular-nums;
   font-weight: 600;
   margin-left: 4px;
 
+  /* 历史战绩是"记录"不是"行情"：走墨阶（赢=浓一档，输=淡一档）。 */
   &.is-win {
-    background: color-mix(in srgb, var(--td-brand-color) 14%, transparent);
-    color: var(--td-brand-color);
-    border: 1px solid color-mix(in srgb, var(--td-brand-color) 35%, transparent);
+    background: var(--ledger-ink-2);
+    color: var(--td-text-color-primary);
   }
 
   &.is-loss {
-    background: color-mix(in srgb, var(--td-error-color) 14%, transparent);
-    color: var(--td-error-color);
-    border: 1px solid color-mix(in srgb, var(--td-error-color) 35%, transparent);
+    background: var(--ledger-ink-1);
+    color: var(--td-text-color-secondary);
   }
 
   &.is-neutral {
-    background: var(--td-bg-color-component);
-    color: var(--td-text-color-secondary);
+    background: transparent;
+    color: var(--td-text-color-placeholder);
   }
 }
 .wl-scorecard {
   margin: 6px 0;
-  border: 1px solid var(--td-component-stroke);
-  border-radius: var(--app-radius-sm, 6px);
-  background: var(--td-bg-color-secondarycontainer, #f9f9f9);
-  padding: 8px 10px;
+  /* 墨账：评分卡是一段记录，不是一张卡：去掉描边、底色、圆角。 */
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 8px 0;
 
   &__summary {
     display: flex;
@@ -1317,27 +1397,30 @@ function qScoreClass(score: number): string {
     gap: 4px;
     padding: 2px 8px;
     border-radius: 4px;
-    background: color-mix(in srgb, var(--td-brand-color) 12%, transparent);
-    color: var(--td-brand-color);
+    background: var(--ledger-ink-2);
+    color: var(--td-text-color-primary);
   }
 
   &__val {
     font-size: 14px;
     font-weight: 700;
+    font-family: var(--app-font-family-mono); /* taste-skill-ignore: 数字用等宽是本产品既定约定（--app-font-family-mono + tabular-nums） */
     font-variant-numeric: tabular-nums;
   }
 
   &__lbl {
     font-size: 11px;
-    opacity: 0.85;
+    color: var(--td-text-color-secondary);
   }
 
   &__rank {
     font-size: 12px;
     font-weight: 600;
-    color: var(--td-text-color-secondary, #666);
-    background: var(--td-bg-color-container, #fff);
-    border: 1px solid var(--td-component-stroke);
+    font-family: var(--app-font-family-mono); /* taste-skill-ignore: 数字用等宽是本产品既定约定（--app-font-family-mono + tabular-nums） */
+    font-variant-numeric: tabular-nums;
+    color: var(--td-text-color-secondary);
+    background: var(--ledger-ink-1);
+    border: 0;
     padding: 1px 6px;
     border-radius: 3px;
   }
@@ -1357,10 +1440,11 @@ function qScoreClass(score: number): string {
     background: transparent;
     cursor: pointer;
     font-size: 11px;
-    color: var(--td-brand-color);
+    color: var(--td-text-color-secondary);
     padding: 2px 4px;
 
     &:hover {
+      color: var(--td-text-color-primary);
       text-decoration: underline;
     }
   }
@@ -1368,7 +1452,7 @@ function qScoreClass(score: number): string {
   &__details {
     margin-top: 8px;
     padding-top: 8px;
-    border-top: 1px dashed var(--td-component-stroke);
+    border-top: 1px dashed var(--ledger-ink-2);
     display: flex;
     flex-direction: column;
     gap: 6px;
@@ -1376,10 +1460,11 @@ function qScoreClass(score: number): string {
 
   &__q-row {
     font-size: 12px;
-    padding: 4px 6px;
-    background: var(--td-bg-color-container, #fff);
-    border-radius: 4px;
-    border: 1px solid var(--td-border-level-1-color, #f0f0f0);
+    padding: 4px 0;
+    background: transparent;
+    border-radius: 0;
+    border: 0;
+    border-bottom: 1px solid var(--ledger-ink-1);
   }
 
   &__q-head {
@@ -1391,29 +1476,31 @@ function qScoreClass(score: number): string {
       font-size: 10px;
       padding: 1px 4px;
       border-radius: 2px;
-      background: var(--td-bg-color-secondarycontainer, #f3f3f3);
-      color: var(--td-text-color-secondary, #666);
+      background: var(--ledger-ink-1);
+      color: var(--td-text-color-secondary);
     }
 
     .q-name {
       font-weight: 500;
-      color: var(--td-text-color-primary, #333);
+      color: var(--td-text-color-primary);
     }
 
     .q-score {
       margin-left: auto;
       font-weight: 600;
+      font-family: var(--app-font-family-mono); /* taste-skill-ignore: 数字用等宽是本产品既定约定（--app-font-family-mono + tabular-nums） */
       font-variant-numeric: tabular-nums;
 
-      &.is-high { color: var(--app-quote-up); }
-      &.is-low { color: var(--app-quote-down); }
-      &.is-mid { color: var(--td-brand-color); }
+      /* 得分是"量级"不是方向：走墨色深浅，不占红绿（红绿是行情语义）。 */
+      &.is-high { color: var(--td-text-color-primary); }
+      &.is-low { color: var(--td-text-color-placeholder); }
+      &.is-mid { color: var(--td-text-color-secondary); }
     }
   }
 
   &__q-reason {
     margin-top: 2px;
-    color: var(--td-text-color-secondary, #666);
+    color: var(--td-text-color-secondary);
     font-size: 11px;
     line-height: 1.4;
   }
@@ -1423,15 +1510,17 @@ function qScoreClass(score: number): string {
   font-size: 11px;
   padding: 1px 5px;
   border-radius: 3px;
-  background: var(--td-bg-color-container, #fff);
-  border: 1px solid var(--td-component-stroke);
-  color: var(--td-text-color-secondary, #666);
+  background: var(--ledger-ink-1);
+  border: 0;
+  color: var(--td-text-color-secondary);
 }
 .wl-resonance-card {
-  padding: 8px 10px;
-  border-radius: var(--app-radius-sm);
-  background: var(--td-bg-color-secondarycontainer);
-  border: 1px solid var(--td-component-stroke);
+  /* 墨账：共振卡是一段记录，不是一张卡。 */
+  padding: 8px 0;
+  border-radius: 0;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--ledger-ink-2);
   margin-bottom: 6px;
 
   &__head {
@@ -1457,28 +1546,30 @@ function qScoreClass(score: number): string {
     border-radius: 3px;
   }
 
+  /* 共振是"多/空"这个**类别**（不是连续量），所以多头/空头保留涨跌红绿；
+     回调/反弹/混合这类中间档没有涨跌语义，走墨阶。 */
   &.is-bull-all .wl-resonance-card__badge {
-    background: rgba(220, 38, 38, 0.12);
+    background: color-mix(in srgb, var(--app-quote-up) 12%, transparent);
     color: var(--app-quote-up);
   }
   &.is-bull-pullback .wl-resonance-card__badge {
-    background: color-mix(in srgb, var(--td-brand-color) 12%, transparent);
-    color: var(--td-brand-color);
+    background: var(--ledger-ink-2);
+    color: var(--td-text-color-primary);
   }
   &.is-bear-bounce .wl-resonance-card__badge {
-    background: rgba(237, 123, 47, 0.12);
-    color: #ed7b2f;
+    background: var(--ledger-ink-2);
+    color: var(--td-text-color-primary);
   }
   &.is-bear-all .wl-resonance-card__badge {
-    background: rgba(4, 120, 87, 0.12);
+    background: color-mix(in srgb, var(--app-quote-down) 12%, transparent);
     color: var(--app-quote-down);
   }
   &.is-mixed-up .wl-resonance-card__badge {
-    background: color-mix(in srgb, var(--td-brand-color) 8%, transparent);
-    color: var(--td-brand-color);
+    background: var(--ledger-ink-1);
+    color: var(--td-text-color-primary);
   }
   &.is-mixed-down .wl-resonance-card__badge {
-    background: rgba(100, 116, 139, 0.12);
+    background: var(--ledger-ink-1);
     color: var(--td-text-color-secondary);
   }
 
@@ -1493,10 +1584,11 @@ function qScoreClass(score: number): string {
     display: flex;
     align-items: center;
     gap: 4px;
-    padding: 3px 6px;
-    border-radius: 4px;
-    background: var(--td-bg-color-container);
-    border: 1px solid var(--td-border-level-1-color);
+    padding: 3px 0;
+    border-radius: 0;
+    background: transparent;
+    border: 0;
+    border-bottom: 1px solid var(--ledger-ink-1);
     font-size: 11px;
 
     .matrix-dot {
@@ -1526,8 +1618,8 @@ function qScoreClass(score: number): string {
 .wl-fund {
   &__count-badge {
     font-size: 11px;
-    color: var(--td-brand-color);
-    background: rgba(var(--td-brand-color-rgb, 0, 82, 217), 0.08);
+    color: var(--td-text-color-primary);
+    background: var(--ledger-ink-2);
     padding: 1px 6px;
     border-radius: 10px;
     margin-left: auto;
@@ -1536,10 +1628,12 @@ function qScoreClass(score: number): string {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 6px 10px;
-    background: var(--td-bg-color-secondarycontainer);
-    border-radius: var(--td-radius-small);
-    border: 1px solid var(--td-component-stroke);
+    padding: 6px 0;
+    /* 墨账：统计带不是卡片：去掉描边与底色，只留一条淡墨栏线。 */
+    background: transparent;
+    border-radius: 0;
+    border: 0;
+    border-bottom: 1px solid var(--ledger-ink-2);
     margin-top: 4px;
   }
   &__stat {
@@ -1554,6 +1648,8 @@ function qScoreClass(score: number): string {
   &__stat-val {
     font-size: 11px;
     font-weight: 600;
+    font-family: var(--app-font-family-mono); /* taste-skill-ignore: 数字用等宽是本产品既定约定（--app-font-family-mono + tabular-nums） */
+    font-variant-numeric: tabular-nums;
     color: var(--td-text-color-primary);
   }
   &__stat-flow {
@@ -1573,14 +1669,16 @@ function qScoreClass(score: number): string {
     max-height: 240px;
     overflow-y: auto;
   }
+  /* 墨账：持仓条目是一行有栏线的记录，不是一张张小卡。 */
   &__item {
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 6px 8px;
-    background: var(--td-bg-color-container-hover);
-    border-radius: var(--td-radius-small);
-    border: 1px solid var(--td-component-stroke);
+    padding: 6px 0 8px;
+    background: transparent;
+    border-radius: 0;
+    border: 0;
+    border-bottom: 1px solid var(--ledger-ink-2);
     font-size: var(--app-text-xs);
   }
   &__item-rank {
@@ -1592,8 +1690,9 @@ function qScoreClass(score: number): string {
     width: 20px;
     text-align: center;
 
+    /* 名次是 chrome，不是状态色：前三名用墨色字重讲。 */
     &.is-top {
-      color: var(--td-brand-color);
+      color: var(--td-text-color-primary);
     }
   }
   &__item-main {
@@ -1622,12 +1721,12 @@ function qScoreClass(score: number): string {
     line-height: 1.4;
 
     &.is-etf {
-      background: rgba(var(--td-brand-color-rgb, 0, 82, 217), 0.12);
-      color: var(--td-brand-color);
+      background: var(--ledger-ink-2);
+      color: var(--td-text-color-primary);
       font-weight: 500;
     }
     &.is-active {
-      background: var(--td-bg-color-secondarycontainer);
+      background: var(--ledger-ink-1);
       color: var(--td-text-color-secondary);
     }
   }
@@ -1652,11 +1751,14 @@ function qScoreClass(score: number): string {
   &__ratio {
     color: var(--td-text-color-secondary);
     font-size: 11px;
-    b { color: var(--td-brand-color); font-weight: 600; }
+    /* 持仓占比是量级，不是方向：数字用墨色。 */
+    b { color: var(--td-text-color-primary); font-weight: 600; }
   }
+  /* 季度增减仓是**方向数据**（增/减），保留涨跌红绿。 */
   &__chg {
     font-size: 10px;
-    font-family: var(--app-font-display);
+    font-family: var(--app-font-family-mono); /* taste-skill-ignore: 数字用等宽是本产品既定约定（--app-font-family-mono + tabular-nums） */
+    font-variant-numeric: tabular-nums;
     font-weight: 500;
   }
   &__mgr {
@@ -1666,10 +1768,12 @@ function qScoreClass(score: number): string {
 }
 
 .wl-detail__anomaly {
-  background: var(--td-bg-color-secondarycontainer);
-  border: 1px solid var(--td-component-stroke);
-  border-radius: var(--td-radius-small);
-  padding: 8px 10px;
+  /* 墨账：异动归因是一段记录，不是一张卡。 */
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--ledger-ink-2);
+  border-radius: 0;
+  padding: 8px 0;
 }
 
 .wl-anomaly {
@@ -1679,13 +1783,14 @@ function qScoreClass(score: number): string {
     padding: 1px 6px;
     border-radius: 3px;
 
+    /* 「大涨/大跌」是行情方向的事实（文本已经说了方向），保留涨跌红绿。 */
     &.is-up {
       color: var(--app-quote-up);
-      background: rgba(227, 77, 89, 0.1);
+      background: color-mix(in srgb, var(--app-quote-up) 10%, transparent);
     }
     &.is-down {
       color: var(--app-quote-down);
-      background: rgba(43, 164, 113, 0.1);
+      background: color-mix(in srgb, var(--app-quote-down) 10%, transparent);
     }
   }
 
@@ -1704,8 +1809,8 @@ function qScoreClass(score: number): string {
 
   &__kw-pill {
     font-size: 10px;
-    color: var(--td-brand-color);
-    background: rgba(var(--td-brand-color-rgb, 0, 82, 217), 0.08);
+    color: var(--td-text-color-secondary);
+    background: var(--ledger-ink-1);
     padding: 1px 6px;
     border-radius: 3px;
   }
@@ -1723,8 +1828,8 @@ function qScoreClass(score: number): string {
 .wl-detail__dividends {
   .wl-dividend__count-badge {
     font-size: 11px;
-    color: var(--td-brand-color, #0052d9);
-    background: rgba(var(--td-brand-color-rgb, 0, 82, 217), 0.08);
+    color: var(--td-text-color-primary);
+    background: var(--ledger-ink-2);
     padding: 1px 6px;
     border-radius: 4px;
     font-weight: 500;
@@ -1737,11 +1842,13 @@ function qScoreClass(score: number): string {
     margin-top: 6px;
   }
 
+  /* 墨账：分红条目是一行有栏线的记录，不是一张张小卡。 */
   .wl-dividend__item {
-    background: var(--app-bg-secondary, rgba(0, 0, 0, 0.02));
-    border: 1px solid var(--app-border, rgba(0, 0, 0, 0.06));
-    border-radius: 4px;
-    padding: 6px 8px;
+    background: transparent;
+    border: 0;
+    border-bottom: 1px solid var(--ledger-ink-2);
+    border-radius: 0;
+    padding: 6px 0 8px;
     display: flex;
     flex-direction: column;
     gap: 3px;
@@ -1755,16 +1862,19 @@ function qScoreClass(score: number): string {
 
   .wl-dividend__date {
     font-size: 11px;
-    font-family: var(--app-font-mono, monospace);
+    font-family: var(--app-font-family-mono); /* taste-skill-ignore: 数字用等宽是本产品既定约定（--app-font-family-mono + tabular-nums） */
+    font-variant-numeric: tabular-nums;
     color: var(--td-text-color-secondary);
   }
 
+  /* 股息率是"量级"不是方向：走墨色，不占涨跌红绿。 */
   .wl-dividend__yield {
     font-size: 10px;
-    font-family: var(--app-font-mono, monospace);
+    font-family: var(--app-font-family-mono); /* taste-skill-ignore: 数字用等宽是本产品既定约定（--app-font-family-mono + tabular-nums） */
+    font-variant-numeric: tabular-nums;
     font-weight: 600;
-    color: #059669;
-    background: rgba(16, 185, 129, 0.1);
+    color: var(--td-text-color-primary);
+    background: var(--ledger-ink-2);
     padding: 0 4px;
     border-radius: 3px;
   }
@@ -1778,32 +1888,37 @@ function qScoreClass(score: number): string {
 
   .wl-dividend__cash {
     color: var(--td-text-color-primary);
-    font-family: var(--app-font-mono, monospace);
+    font-family: var(--app-font-family-mono); /* taste-skill-ignore: 数字用等宽是本产品既定约定（--app-font-family-mono + tabular-nums） */
+    font-variant-numeric: tabular-nums;
   }
 
   .wl-dividend__bonus {
-    color: #b45309;
-    font-family: var(--app-font-mono, monospace);
+    color: var(--td-text-color-secondary);
+    font-family: var(--app-font-family-mono); /* taste-skill-ignore: 数字用等宽是本产品既定约定（--app-font-family-mono + tabular-nums） */
+    font-variant-numeric: tabular-nums;
     font-weight: 500;
   }
 }
 
 .wl-detail__hot-trend {
+  /* 热度名次是"名次"，走墨阶：不用红绿（名次不是行情方向）。 */
   .wl-hot__badge {
     font-size: 11px;
-    font-family: var(--app-font-mono, monospace);
-    color: #ef4444;
-    background: rgba(239, 68, 68, 0.08);
+    font-family: var(--app-font-family-mono); /* taste-skill-ignore: 数字用等宽是本产品既定约定（--app-font-family-mono + tabular-nums） */
+    font-variant-numeric: tabular-nums;
+    color: var(--td-text-color-primary);
+    background: var(--ledger-ink-2);
     padding: 1px 6px;
     border-radius: 4px;
     font-weight: 600;
   }
 
   .wl-hot__trend-box {
-    background: var(--app-bg-secondary, rgba(0, 0, 0, 0.02));
-    border: 1px solid var(--app-border, rgba(0, 0, 0, 0.06));
-    border-radius: 4px;
-    padding: 8px 10px;
+    background: transparent;
+    border: 0;
+    border-bottom: 1px solid var(--ledger-ink-2);
+    border-radius: 0;
+    padding: 8px 0;
     margin-top: 6px;
   }
 
@@ -1823,30 +1938,35 @@ function qScoreClass(score: number): string {
 
   .wl-hot__pt-rank {
     font-size: 11px;
-    font-family: var(--app-font-mono, monospace);
+    font-family: var(--app-font-family-mono); /* taste-skill-ignore: 数字用等宽是本产品既定约定（--app-font-family-mono + tabular-nums） */
+    font-variant-numeric: tabular-nums;
     font-weight: 700;
-    color: #ef4444;
+    color: var(--td-text-color-primary);
   }
 
   .wl-hot__pt-date {
     font-size: 9px;
-    font-family: var(--app-font-mono, monospace);
-    color: var(--td-text-color-secondary);
+    font-family: var(--app-font-family-mono); /* taste-skill-ignore: 数字用等宽是本产品既定约定（--app-font-family-mono + tabular-nums） */
+    font-variant-numeric: tabular-nums;
+    color: var(--td-text-color-placeholder);
   }
 }
 
 .wl-detail__squeeze {
   .wl-squeeze__date {
     font-size: 11px;
-    font-family: var(--app-font-mono, monospace);
+    font-family: var(--app-font-family-mono); /* taste-skill-ignore: 数字用等宽是本产品既定约定（--app-font-family-mono + tabular-nums） */
+    font-variant-numeric: tabular-nums;
     color: var(--td-text-color-secondary);
   }
 
+  /* 墨账：量化卡是一段记录，不是一张卡。 */
   .wl-squeeze__card {
-    background: var(--app-bg-secondary, rgba(0, 0, 0, 0.02));
-    border: 1px solid var(--app-border, rgba(0, 0, 0, 0.06));
-    border-radius: 6px;
-    padding: 10px 12px;
+    background: transparent;
+    border: 0;
+    border-bottom: 1px solid var(--ledger-ink-2);
+    border-radius: 0;
+    padding: 10px 0 12px;
     display: flex;
     flex-direction: column;
     gap: 10px;
@@ -1879,38 +1999,39 @@ function qScoreClass(score: number): string {
     font-weight: 600;
     width: fit-content;
 
+    /* 挤压状态是**状态标记**：走墨阶，不用玫瑰红/翠绿（那两色是行情语义，
+       在这里用会让读者把"状态"读成"涨跌"）。 */
     &.is-squeeze-on {
-      background: color-mix(in srgb, #e11d48 14%, transparent);
-      color: #e11d48;
-      border: 1px solid color-mix(in srgb, #e11d48 30%, transparent);
+      background: var(--ledger-ink-3);
+      color: var(--td-text-color-primary);
+      border: 0;
 
       .wl-squeeze__dot {
-        background: #e11d48;
-        box-shadow: 0 0 6px #e11d48;
+        background: var(--td-text-color-primary);
       }
     }
 
     &.is-squeeze-fired {
-      background: color-mix(in srgb, #059669 14%, transparent);
-      color: #059669;
-      border: 1px solid color-mix(in srgb, #059669 30%, transparent);
+      background: var(--ledger-ink-2);
+      color: var(--td-text-color-primary);
+      border: 0;
 
       .wl-squeeze__dot {
-        background: #059669;
-        box-shadow: 0 0 6px #059669;
+        background: var(--td-text-color-primary);
       }
     }
 
     &.is-squeeze-off {
-      background: var(--td-bg-color-secondarycontainer);
+      background: transparent;
       color: var(--td-text-color-secondary);
-      border: 1px solid var(--td-component-stroke);
+      border: 1px solid var(--ledger-ink-2);
 
       .wl-squeeze__dot {
         background: var(--td-text-color-placeholder);
       }
     }
 
+    /* 超级趋势方向是行情方向（和下面动量数字同一套红绿），保留。 */
     &.is-up {
       background: color-mix(in srgb, var(--app-quote-up) 12%, transparent);
       color: var(--app-quote-up);
@@ -1922,7 +2043,7 @@ function qScoreClass(score: number): string {
     }
 
     &.is-neutral {
-      background: var(--td-bg-color-secondarycontainer);
+      background: var(--ledger-ink-1);
       color: var(--td-text-color-secondary);
     }
   }
@@ -1944,7 +2065,7 @@ function qScoreClass(score: number): string {
     grid-template-columns: 1fr 1fr;
     gap: 8px;
     padding-top: 8px;
-    border-top: 1px dashed var(--td-component-stroke);
+    border-top: 1px dashed var(--ledger-ink-2);
   }
 
   .wl-squeeze__metric-cell {
@@ -1960,13 +2081,16 @@ function qScoreClass(score: number): string {
 
   .wl-squeeze__m-v {
     font-size: 12px;
-    font-family: var(--app-font-mono, monospace);
+    font-family: var(--app-font-family-mono); /* taste-skill-ignore: 数字用等宽是本产品既定约定（--app-font-family-mono + tabular-nums） */
+    font-variant-numeric: tabular-nums;
     font-weight: 600;
     display: flex;
     align-items: center;
     gap: 6px;
   }
 
+  /* Beta 档位是一张"浓淡表"（偏离越大越浓）：最浓一档用随主题翻的令牌，
+     底色与字色成对取，别写死颜色（原来这里是紫色，lint 直接判 FAIL）。 */
   .wl-squeeze__beta-tag {
     font-size: 10px;
     font-weight: normal;
@@ -1974,16 +2098,16 @@ function qScoreClass(score: number): string {
     border-radius: 3px;
 
     &.is-high-beta {
-      background: color-mix(in srgb, #9333ea 12%, transparent);
-      color: #9333ea;
+      background: var(--ledger-ink-max);
+      color: var(--ledger-on-ink-max);
     }
     &.is-low-beta {
-      background: color-mix(in srgb, #0284c7 12%, transparent);
-      color: #0284c7;
+      background: var(--ledger-ink-1);
+      color: var(--td-text-color-secondary);
     }
     &.is-mid-beta {
-      background: var(--td-bg-color-secondarycontainer);
-      color: var(--td-text-color-secondary);
+      background: var(--ledger-ink-2);
+      color: var(--td-text-color-primary);
     }
   }
 }

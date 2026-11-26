@@ -8,7 +8,7 @@
     3. 高送转红利：筛选转增股与送股比例 >= 0.3 的题材标的。
 -->
 <template>
-  <article class="div-cal">
+  <article class="div-cal ledger-block">
     <header class="div-cal__head">
       <div class="div-cal__title-row">
         <div class="div-cal__title-wrap">
@@ -213,11 +213,15 @@ onMounted(() => {
 </script>
 
 <style scoped lang="less">
+/*
+ * 墨账体例（achromatic-ledger）—— 规范见 src/finance/styles/ledger.less 文件头：
+ *   1. 无框块：块与块之间只靠留白与标题层级分开，不画卡片；
+ *   2. 图表用墨色；
+ *   3. 浓淡表用墨阶：--ledger-ink-1…5（股息率档位就是一张浓淡表）。
+ * 涨跌红绿是金融语义，只出现在数字上，保留。
+ */
 .div-cal {
-  background: var(--td-bg-color-container);
-  border: 1px solid var(--app-border, rgba(0, 0, 0, 0.08));
-  border-radius: var(--td-radius-medium, 8px);
-  padding: 12px 14px;
+  /* 块根：去掉卡片外壳（底色 / 描边 / 圆角 / 阴影）；块距由父级 grid 的 gap 给。 */
   box-sizing: border-box;
 
   &__head {
@@ -242,7 +246,8 @@ onMounted(() => {
   }
 
   &__icon {
-    color: #f59e0b;
+    /* 图标是装饰，不是数据 —— 墨账里用墨色，不占涨跌红绿与品牌珊瑚。 */
+    color: var(--td-text-color-secondary);
   }
 
   &__title {
@@ -253,7 +258,8 @@ onMounted(() => {
 
   &__tabs {
     display: inline-flex;
-    background: var(--app-bg-secondary, rgba(0, 0, 0, 0.04));
+    /* 与 BasisStrip / HotStockRadar 的 tab 条同一体例：中性底色，不占品牌珊瑚。 */
+    background: var(--td-bg-color-secondarycontainer);
     border-radius: 6px;
     padding: 2px;
     gap: 2px;
@@ -277,7 +283,7 @@ onMounted(() => {
       background: var(--td-bg-color-container);
       color: var(--td-text-color-primary);
       font-weight: 600;
-      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+      /* 墨账：去掉投影 —— 阴影是"这是一张卡片"的信号。 */
     }
   }
 
@@ -286,17 +292,20 @@ onMounted(() => {
     color: var(--td-text-color-placeholder);
   }
 
+  /* 「展开 / 收起」是次级动作：墨账里用文字链接，不画按钮框，也不占品牌珊瑚。 */
   &__toggle {
     font-size: 11px;
     border: none;
     background: transparent;
-    color: var(--td-brand-color, #0052d9);
+    color: var(--td-text-color-secondary);
     cursor: pointer;
-    padding: 2px 6px;
-    border-radius: 4px;
+    padding: 2px 4px;
+    /* 窄栏里标题行把按钮挤到两行宽，"收起"会断成两行 —— 不许断。 */
+    white-space: nowrap;
 
     &:hover {
-      background: rgba(0, 82, 217, 0.08);
+      color: var(--td-text-color-primary);
+      text-decoration: underline;
     }
   }
 
@@ -311,21 +320,18 @@ onMounted(() => {
   &__stats {
     display: flex;
     align-items: center;
-    gap: 12px;
-    margin-bottom: 10px;
-    padding-bottom: 8px;
-    border-bottom: 1px solid var(--app-border, rgba(0, 0, 0, 0.05));
+    gap: 16px;
+    margin-bottom: 12px;
+    /* 墨账：块内不画分隔线，靠留白分层。 */
     flex-wrap: wrap;
   }
 
+  /* 汇总不是三张 chip，是三组数 —— 去掉底色与圆角，靠留白与字重分组。 */
   &__stat-chip {
     display: flex;
-    align-items: center;
-    gap: 4px;
+    align-items: baseline;
+    gap: 5px;
     font-size: 11px;
-    background: var(--app-bg-secondary, rgba(0, 0, 0, 0.03));
-    padding: 2px 8px;
-    border-radius: 4px;
   }
 
   &__stat-lbl {
@@ -337,35 +343,38 @@ onMounted(() => {
     font-weight: 600;
     color: var(--td-text-color-primary);
 
+    /* 股息率是量级，不是涨跌方向：原来用绿色会被读成"跌"（红涨绿跌），
+       墨账里改成墨色，方向色只留给真正的涨跌数字。 */
     &.is-yield {
-      color: #059669;
+      color: var(--td-text-color-primary);
     }
   }
 
   &__stat-val {
     font-family: var(--app-font-mono, monospace);
     font-weight: 600;
-    color: #d97706;
+    /* 送转比例是量级，不是方向：去掉装饰橙，用墨色讲。 */
+    color: var(--td-text-color-primary);
   }
 
   &__grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
-    gap: 8px;
+    gap: 12px;
     transition: max-height 0.25s ease;
   }
 
+  /* 个股格子同样不画卡片：无框，靠留白与字重分层。 */
   &__card {
-    background: var(--app-bg-secondary, rgba(0, 0, 0, 0.02));
-    border: 1px solid var(--app-border, rgba(0, 0, 0, 0.06));
-    border-radius: 6px;
-    padding: 8px 10px;
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    padding: 6px 8px;
     cursor: pointer;
-    transition: border-color 0.15s ease, transform 0.15s ease;
+    transition: background-color 0.15s ease;
 
     &:hover {
-      border-color: var(--td-brand-color, #0052d9);
-      transform: translateY(-1px);
+      background: var(--ledger-ink-1);
     }
   }
 
@@ -389,13 +398,13 @@ onMounted(() => {
   }
 
   &__card-code {
-    font-size: 10px;
+    font-size: var(--app-text-xs);
     font-family: var(--app-font-mono, monospace);
     color: var(--td-text-color-placeholder);
   }
 
   &__card-date {
-    font-size: 10px;
+    font-size: var(--app-text-xs);
     font-family: var(--app-font-mono, monospace);
     color: var(--td-text-color-secondary);
   }
@@ -425,7 +434,8 @@ onMounted(() => {
   }
 
   &__payout-item.is-bonus &__payout-v {
-    color: #b45309;
+    /* 送转是量级不是方向：去掉装饰橙，字重留着讲重点。 */
+    color: var(--td-text-color-primary);
     font-weight: 600;
   }
 
@@ -434,11 +444,11 @@ onMounted(() => {
     align-items: center;
     justify-content: space-between;
     padding-top: 4px;
-    border-top: 1px dashed var(--app-border, rgba(0, 0, 0, 0.05));
+    /* 墨账：块内不画分隔线，靠留白分层。 */
   }
 
   &__price {
-    font-size: 10px;
+    font-size: var(--app-text-xs);
     display: flex;
     gap: 2px;
   }
@@ -452,26 +462,30 @@ onMounted(() => {
     color: var(--td-text-color-secondary);
   }
 
+  /* 股息率档位是一张"越浓越高"的浓淡表：用墨阶，不占用涨跌红绿与品牌珊瑚。
+     字一律用主墨色 —— 墨阶本身是由主墨色派生的浅/深墨，浅色主题压深墨、
+     深色主题压浅墨，两套主题都读得清（墨阶最深那档用 ink-5 会掉到 3.1:1）。 */
   &__yield-pill {
-    font-size: 10px;
+    font-size: var(--app-text-xs);
     font-family: var(--app-font-mono, monospace);
     font-weight: 600;
     padding: 1px 6px;
     border-radius: 4px;
 
     &.is-normal {
-      background: rgba(16, 185, 129, 0.1);
-      color: #059669;
+      background: var(--ledger-ink-1);
+      color: var(--td-text-color-primary);
     }
 
     &.is-high {
-      background: rgba(245, 158, 11, 0.12);
-      color: #d97706;
+      background: var(--ledger-ink-2);
+      color: var(--td-text-color-primary);
     }
 
     &.is-super {
-      background: rgba(239, 68, 68, 0.12);
-      color: #dc2626;
+      background: var(--ledger-ink-4);
+      color: var(--td-text-color-primary);
+      font-weight: 700;
     }
   }
 }

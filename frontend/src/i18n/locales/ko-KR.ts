@@ -9044,6 +9044,38 @@ export default {
         down: '하락'
       }
     },
+    ledger: {
+      title: '종가표',
+      col: {
+        name: '지수',
+        close: '종가',
+        change: '등락',
+        pct: '등락률',
+        line: '60일'
+      },
+      readTitle: '오늘의 집계',
+      findingTitle: '오늘의 발견',
+      detailTitle: '심리 상세',
+      sealRate: '상한가 체결률',
+      sealFormula: '상한가 체결 {up} ÷ 상한가 도달 {total}',
+      brokenNote: '상한가 이탈률 {rate}%',
+      downRatio: '상한가 대비 비율 {up} : {down}',
+      lu5Note: '최근 5일 {series}',
+      dragonCaption: '순매수 상위 {n} · {date} · 전 시장',
+      upCount: '상승 종목 수',
+      breadthNote: '보합 {flat} · 하락 {down}',
+      finding: {
+        limit: '상한가 {up}종목, 하한가 {down}종목, 상한가 이탈 {broken}종목',
+        breadth: '상승 {up}종목, 하락 {down}종목',
+        trend: {
+          up: '최근 5일 상한가 수 {from} → {to}종목, 상승',
+          down: '최근 5일 상한가 수 {from} → {to}종목, 하락',
+          flat: '최근 5일 상한가 수 {from} → {to}종목, 보합'
+        }
+      },
+      sourceName: 'fuyao · 同花順',
+      sourceLine: '데이터 소스: {source} · {date} 종가'
+    },
     state: {
       open: '장중',
       closed: '장 마감',

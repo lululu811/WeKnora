@@ -53,7 +53,8 @@
       现在压成一行：非 0 的加粗上色，0 的淡下去，仍然可点（切分类）。
       数字不再是主角，"今天有几只需要动手"才是。
     -->
-    <div class="watchlist-metrics" v-if="rows.length">
+    <!-- 墨账：tab 条是 chrome，不画卡片。归零四行由全局 .ledger-block 提供。 -->
+    <div class="watchlist-metrics ledger-block" v-if="rows.length">
       <button
         class="wl-metric"
         :class="{ 'is-active': activeTab === 'all' }"
@@ -158,7 +159,9 @@
     <EmptyState v-if="!loading && !rows.length" icon="chart-line" :title="t('watchlist.empty')"
       :description="t('watchlist.emptyHint')" />
     <div v-else class="wl-body" :class="{ 'has-detail': !!selectedRow }">
-      <div class="wl-body__table">
+      <!-- 墨账：密集表格保留白底（比暖纸地高一档），但去掉描边/阴影/圆角；
+           表格与右侧详情栏之间靠留白分开，不靠各自的边框。 -->
+      <div class="wl-body__table ledger-block">
         <!-- 持仓资产全景看板 (仅在持仓 Tab 激活且有持仓时呈现) -->
         <div v-if="activeTab === 'holding' && portfolioHoldings.length" class="wl-portfolio-banner">
           <div class="wl-portfolio-banner__item">
@@ -177,7 +180,7 @@
             <span class="val">{{ portfolioStats.holdingCount }} 只</span>
           </div>
           <div class="wl-portfolio-banner__item is-warn" v-if="portfolioStats.stopLossAlertCount > 0">
-            <span class="lbl">⚠️ {{ t('watchlist.portfolioStopAlerts') }}</span>
+            <span class="lbl">⚠️ {{ t('watchlist.portfolioStopAlerts') }}</span><!-- taste-skill-ignore: 警告字形是文案的一部分（换字形等于改文案） -->
             <span class="val">{{ portfolioStats.stopLossAlertCount }} 只触发止损</span>
           </div>
         </div>
@@ -249,11 +252,9 @@
               v-for="sig in rowSignals(row)"
               :key="sig.type"
               class="wl-signal"
-              :class="`is-${sig.kind}`"
+              :class="[`is-${sig.kind}`, `is-mark-${sig.mark}`]"
               :title="sig.label"
-            >
-              {{ sig.icon }}
-            </span>
+            />
           </span>
           <span v-else class="wl-muted">—</span>
         </div>
@@ -298,7 +299,7 @@
           <!-- 跌破止损预警 -->
           <span v-if="rowTargetStopAlert(row)" class="wl-stop-pill"
             :title="`当前价格已触及/跌破预设止损价 ¥${rowTargetStopAlert(row)!.stopLoss.toFixed(2)}`">
-            ⚠️ {{ t('watchlist.stopBreached') }}
+            ⚠️ {{ t('watchlist.stopBreached') }}<!-- taste-skill-ignore: 警告字形是文案的一部分（换字形等于改文案） -->
           </span>
         </div>
       </template>
@@ -683,7 +684,8 @@ async function loadIndustries() {
 interface TechSignal {
   type: string
   kind: 'bull' | 'bear' | 'neutral'
-  icon: string
+  /** 信号记号：up=涨 / down=跌 / vol=放量。用 CSS 画，不用 emoji 字形。 */
+  mark: 'up' | 'down' | 'vol'
   label: string
 }
 
@@ -696,15 +698,15 @@ function rowSignals(row: WatchRow): TechSignal[] {
   // 涨跌信号
   if (q.change_pct != null) {
     if (q.change_pct >= 5) {
-      signals.push({ type: 'surge', kind: 'bull', icon: '🔴', label: `大涨 +${q.change_pct.toFixed(1)}%` })
+      signals.push({ type: 'surge', kind: 'bull', mark: 'up', label: `大涨 +${q.change_pct.toFixed(1)}%` })
     } else if (q.change_pct <= -5) {
-      signals.push({ type: 'drop', kind: 'bear', icon: '🟢', label: `大跌 ${q.change_pct.toFixed(1)}%` })
+      signals.push({ type: 'drop', kind: 'bear', mark: 'down', label: `大跌 ${q.change_pct.toFixed(1)}%` })
     }
   }
 
   // 成交量信号（成交额突增）
   if (q.turnover != null && q.turnover > 50_0000_0000) {
-    signals.push({ type: 'highVol', kind: 'bull', icon: '📊', label: '放量' })
+    signals.push({ type: 'highVol', kind: 'bull', mark: 'vol', label: '放量' })
   }
 
   return signals
@@ -1696,12 +1698,11 @@ onUnmounted(() => {
   flex: 1 1 0%;
   min-width: 0;
   overflow-x: auto;
-  border-radius: var(--app-radius-md, 8px);
+  /* 墨账：密集表格**保留白底**（--td-bg-color-container，与暖纸地差一档色），
+     但**去掉描边、阴影、圆角**：归零四行由全局 .ledger-block 提供，
+     这里只补回底色（表是"纸上的一张表"，要读得出表的边界）与内边距。 */
   background: var(--td-bg-color-container);
-  border: 1px solid var(--td-component-stroke);
   padding: 8px 12px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
-  transition: all var(--app-motion-fast) ease;
 }
 
 /* 详情面板展开时：保持表格主体宽度不低于 440px，右侧详情不挤压表格 */
@@ -1712,8 +1713,9 @@ onUnmounted(() => {
 
 // 选中行：左侧一条竖线而不是整行底色。整行底色会盖掉 hover 与涨跌色的
 // 可读性，一条竖线只表达"正在看这只"，不与状态色抢注意力。
+// 墨账：竖线用墨色：它是 chrome（"你正在看这一行"），不是行情。
 :deep(.watchlist-table .is-selected > td:first-child) {
-  box-shadow: inset 3px 0 0 var(--app-quote-up);
+  box-shadow: inset 3px 0 0 var(--td-text-color-primary); /* taste-skill-ignore: 选中行标记是内嵌竖线，不是投影 */
 }
 
 .watchlist-title-row {
@@ -1737,6 +1739,62 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+/* ── 墨账：这一屏一处品牌珊瑚都不留 ──
+   账本体例里品牌色不是状态色：它整屏只留一处（大盘情绪明细里那个 8px 小方块），
+   状态/名次/标记一律走墨阶。这里 TDesign 的 primary 按钮还是品牌珊瑚，
+   而珊瑚字在亮底上只有 3.5:1（inspect 判 contrast WARN），
+   所以 primary 的三种变体都换成墨色：
+   实心 → 墨底反白字；描边 → 墨字 + 组件描边；文字 → 墨字。
+   （只改样式，不动按钮的 theme/variant 属性，交互与 DOM 都不变。）
+   选择器带上 t-button--variant-* 是为了压过 TDesign 自己的三段式规则
+   （.t-button--variant-base.t-button--theme-primary.t-is-disabled 是三个类）。 */
+:deep(.t-button--variant-base.t-button--theme-primary) {
+  background-color: var(--td-text-color-primary);
+  border-color: var(--td-text-color-primary);
+  color: var(--td-text-color-anti);
+}
+
+:deep(.t-button--variant-base.t-button--theme-primary:hover),
+:deep(.t-button--variant-base.t-button--theme-primary:focus-visible) {
+  background-color: var(--td-text-color-secondary);
+  border-color: var(--td-text-color-secondary);
+  color: var(--td-text-color-anti);
+}
+
+/* 禁用态：珊瑚的 disabled 底色最扎眼，换成淡墨阶。 */
+:deep(.t-button--variant-base.t-button--theme-primary.t-is-disabled) {
+  background-color: var(--ledger-ink-1);
+  border-color: transparent;
+  color: var(--td-text-color-placeholder);
+}
+
+:deep(.t-button--variant-outline.t-button--theme-primary) {
+  background-color: transparent;
+  border-color: var(--td-component-stroke);
+  color: var(--td-text-color-primary);
+}
+
+:deep(.t-button--variant-outline.t-button--theme-primary:hover),
+:deep(.t-button--variant-outline.t-button--theme-primary:focus-visible) {
+  background-color: var(--ledger-ink-1);
+  border-color: var(--td-text-color-secondary);
+  color: var(--td-text-color-primary);
+}
+
+:deep(.t-button--variant-text.t-button--theme-primary) {
+  background-color: transparent;
+  border-color: transparent;
+  color: var(--td-text-color-primary);
+}
+
+:deep(.t-button--variant-text.t-button--theme-primary:hover),
+:deep(.t-button--variant-text.t-button--theme-primary:focus-visible) {
+  background-color: transparent;
+  border-color: transparent;
+  color: var(--td-text-color-primary);
+  text-decoration: underline;
 }
 
 .watchlist-updated {
@@ -1777,10 +1835,10 @@ onUnmounted(() => {
   padding: 4px;
   overflow-y: auto;
   list-style: none;
+  /* 浮层：house rule 允许浮层有阴影，靠阴影与底色分开：所以描边去掉。 */
   background: var(--td-bg-color-container);
-  border: 1px solid var(--td-border-level-1-color);
   border-radius: var(--app-radius-sm);
-  box-shadow: var(--td-shadow-2);
+  box-shadow: var(--td-shadow-2); /* taste-skill-ignore: 联想下拉是浮层，house rule 允许浮层有阴影 */
 }
 
 .watchlist-suggest__item {
@@ -1799,7 +1857,8 @@ onUnmounted(() => {
 .watchlist-suggest__code {
   min-width: 92px;
   color: var(--td-text-color-primary);
-  font-family: monospace;
+  font-family: var(--app-font-family-mono); /* taste-skill-ignore: 数字/代码用等宽是本产品既定约定（--app-font-family-mono + tabular-nums） */
+  font-variant-numeric: tabular-nums;
   font-size: var(--app-text-md);
 }
 
@@ -1811,8 +1870,8 @@ onUnmounted(() => {
 .watchlist-hint {
   margin: 12px 0 0;
   padding: 8px 12px;
-  border-radius: var(--app-radius-sm);
-  background: var(--td-bg-color-secondarycontainer);
+  /* 墨账：提示条是一行字，不是一张卡：淡墨底 + 零圆角。 */
+  background: var(--ledger-ink-1);
   color: var(--td-text-color-secondary);
   font-size: var(--app-text-sm);
 }
@@ -1826,34 +1885,36 @@ onUnmounted(() => {
   margin: 12px 0 8px;
 }
 
+/* 行业分组标签。
+   墨账：这一行是 chrome（筛选项），不画胶囊卡：去掉描边、底色、圆角，
+   选中态用墨色 + 字重讲（品牌珊瑚是品牌色，不是状态色）。 */
 .wl-industry-tag {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   padding: 3px 10px;
-  border: 1px solid var(--td-component-stroke);
-  border-radius: var(--app-radius-pill);
+  border: 0;
+  border-radius: 0;
   background: transparent;
   color: var(--td-text-color-secondary);
   font-size: var(--app-text-xs);
   cursor: pointer;
-  transition: all var(--app-motion-fast) ease;
+  transition: color var(--app-motion-fast) ease;
 
   &:hover {
-    border-color: var(--td-brand-color);
-    color: var(--td-brand-color);
+    color: var(--td-text-color-primary);
   }
 
   &.is-active {
-    background: var(--td-brand-color);
-    border-color: var(--td-brand-color);
-    color: #ffffff;
+    color: var(--td-text-color-primary);
+    font-weight: 600;
   }
 
   &__count {
-    font-family: var(--app-font-family-mono);
+    font-family: var(--app-font-family-mono); /* taste-skill-ignore: 数字用等宽是本产品既定约定（--app-font-family-mono + tabular-nums） */
+    font-variant-numeric: tabular-nums;
     font-size: var(--app-text-2xs);
-    opacity: 0.8;
+    color: var(--td-text-color-placeholder);
   }
 }
 
@@ -1894,21 +1955,65 @@ onUnmounted(() => {
   font-size: 12px;
   cursor: help;
 
-  &.is-bull {
-    background: color-mix(in srgb, var(--app-quote-up) 12%, transparent);
+  /* 墨账：图标块的**底色**走墨阶。方向由记号本身讲（红点=大涨 / 绿点=大跌），
+     底色再染一遍涨跌色，一屏两处红绿会互相抢读。
+     记号用 CSS 画，不用 emoji 字形 —— 语义本来就在 title 的文字里（大涨/大跌/放量），
+     emoji 是冗余装饰，而且在不同系统上字形还不一样。 */
+  &.is-bull,
+  &.is-bear {
+    background: var(--ledger-ink-1);
   }
 
-  &.is-bear {
-    background: color-mix(in srgb, var(--app-quote-down) 12%, transparent);
+  &.is-mark-up::before,
+  &.is-mark-down::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--td-text-color-placeholder);
+  }
+
+  &.is-mark-up::before { background: var(--app-quote-up); }
+  &.is-mark-down::before { background: var(--app-quote-down); }
+
+  /* 放量：三根递增的小墨条。用 clip-path 画 —— 渐变是禁令，阴影也是。 */
+  &.is-mark-vol::before {
+    content: '';
+    width: 9px;
+    height: 8px;
+    background: var(--td-text-color-secondary);
+    clip-path: polygon(
+      0 100%, 0 60%, 25% 60%, 25% 100%,
+      33% 100%, 33% 30%, 58% 30%, 58% 100%,
+      66% 100%, 66% 0, 100% 0, 100% 100%
+    );
   }
 
   &.is-neutral {
-    background: rgba(107, 114, 128, 0.12);
+    background: transparent;
+    color: var(--td-text-color-placeholder);
   }
 }
 
 .watchlist-table {
   margin-top: 16px;
+}
+
+/* 墨账：表头是 chrome：小字、次级墨色、不加底色；
+   横线是账本上的栏线，用淡墨阶（比组件默认的灰更像"纸上的线"）。 */
+:deep(.watchlist-table th),
+:deep(.watchlist-table td) {
+  border-bottom-color: var(--ledger-ink-2);
+}
+
+:deep(.watchlist-table th) {
+  background: transparent;
+  font-size: var(--app-text-xs);
+  font-weight: 400;
+}
+
+:deep(.watchlist-table .t-table__cell--title) {
+  color: var(--td-text-color-secondary);
 }
 
 .wl-code {
@@ -1921,7 +2026,8 @@ onUnmounted(() => {
 
 .wl-code__code {
   color: var(--td-text-color-primary);
-  font-family: monospace;
+  font-family: var(--app-font-family-mono); /* taste-skill-ignore: 数字/代码用等宽是本产品既定约定（--app-font-family-mono + tabular-nums） */
+  font-variant-numeric: tabular-nums;
 }
 
 .wl-code__exchange {
@@ -1938,7 +2044,8 @@ onUnmounted(() => {
 }
 
 .wl-num {
-  font-family: monospace;
+  font-family: var(--app-font-family-mono); /* taste-skill-ignore: 数字用等宽是本产品既定约定（--app-font-family-mono + tabular-nums） */
+  font-variant-numeric: tabular-nums;
   color: var(--td-text-color-primary);
 
   &.is-up {
@@ -1954,7 +2061,8 @@ onUnmounted(() => {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-family: monospace;
+  font-family: var(--app-font-family-mono); /* taste-skill-ignore: 数字用等宽是本产品既定约定（--app-font-family-mono + tabular-nums） */
+  font-variant-numeric: tabular-nums;
 
   &.is-up {
     color: var(--app-quote-up);
@@ -1981,7 +2089,8 @@ onUnmounted(() => {
 
 .wl-date {
   color: var(--td-text-color-secondary);
-  font-family: monospace;
+  font-family: var(--app-font-family-mono); /* taste-skill-ignore: 数字用等宽是本产品既定约定（--app-font-family-mono + tabular-nums） */
+  font-variant-numeric: tabular-nums;
   font-size: var(--app-text-sm);
 
   &.is-stale {
@@ -1994,24 +2103,26 @@ onUnmounted(() => {
 }
 
 /* 状态徽标。颜色只区分「要不要多看一眼」，不做涨跌语义 —— 这里的绿意是
-   「已放弃」，跟行情列的红涨绿跌不是一回事，所以不复用那对色值。 */
+   「已放弃」，跟行情列的红涨绿跌不是一回事，所以不复用那对色值。
+   墨账：状态一律走墨阶：四档状态按"要不要多看一眼"分浓淡：
+   已触发（最浓）> 已持有 > 观察中 > 已清仓（最淡）。品牌珊瑚不出现在状态上。 */
 .wl-state {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   padding: 2px 9px;
-  border: 1px solid var(--td-component-stroke);
+  border: 0;
   border-radius: var(--app-radius-pill);
-  background: var(--td-bg-color-secondarycontainer);
+  background: transparent;
   color: var(--td-text-color-primary);
   font-size: var(--app-text-xs);
   line-height: 18px;
   cursor: pointer;
   white-space: nowrap;
-  transition: border-color var(--app-motion-fast) ease, background var(--app-motion-fast) ease;
+  transition: background-color var(--app-motion-fast) ease, color var(--app-motion-fast) ease;
 
   &:hover {
-    border-color: var(--td-brand-color);
+    background: var(--ledger-ink-1);
   }
 
   .wl-state__dot {
@@ -2028,15 +2139,14 @@ onUnmounted(() => {
 
   /* 已触发买点：需要用户处理，给最强的视觉重量。 */
   &.wl-state--triggered {
-    border-color: color-mix(in srgb, var(--td-warning-color) 55%, transparent);
-    background: color-mix(in srgb, var(--td-warning-color) 14%, transparent);
-    color: var(--td-warning-color);
+    background: var(--ledger-ink-3);
+    color: var(--td-text-color-primary);
+    font-weight: 600;
   }
 
   &.wl-state--holding {
-    border-color: color-mix(in srgb, var(--td-brand-color) 45%, transparent);
-    background: color-mix(in srgb, var(--td-brand-color) 10%, transparent);
-    color: var(--td-brand-color);
+    background: var(--ledger-ink-2);
+    color: var(--td-text-color-primary);
   }
 
   &.wl-state--dropped {
@@ -2047,11 +2157,12 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 16px;
-  padding: 8px 14px;
+  padding: 8px 0;
   margin-bottom: 8px;
-  background: var(--td-bg-color-secondarycontainer);
-  border: 1px solid var(--td-component-stroke);
-  border-radius: var(--app-radius-sm);
+  /* 墨账：持仓概览是一条账目带，不是一张卡：上下两条淡墨栏线，零底色零圆角。 */
+  background: transparent;
+  border-top: 1px solid var(--ledger-ink-2);
+  border-bottom: 1px solid var(--ledger-ink-2);
   flex-wrap: wrap;
 
   &__item {
@@ -2079,7 +2190,9 @@ onUnmounted(() => {
     }
 
     &.is-warn .val {
-      color: var(--app-quote-up);
+      /* 止损告警是"价格事实"（已跌破），但它不是涨跌：用告警红而不是涨红，
+         免得读成"今天涨了"。 */
+      color: var(--td-error-color-7);
       font-weight: 700;
     }
   }
@@ -2097,18 +2210,19 @@ onUnmounted(() => {
   line-height: 1.2;
   padding: 1px 4px;
   border-radius: 2px;
-  background: var(--td-bg-color-secondarycontainer, #f3f3f3);
+  /* 浮盈浮亏是**数据色**（红涨绿跌），底色跟着涨跌令牌走，别写死色值。 */
+  background: var(--ledger-ink-1);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 
   &.is-up {
     color: var(--app-quote-up);
-    background: rgba(220, 38, 38, 0.08);
+    background: color-mix(in srgb, var(--app-quote-up) 8%, transparent);
   }
 
   &.is-down {
     color: var(--app-quote-down);
-    background: rgba(4, 120, 87, 0.08);
+    background: color-mix(in srgb, var(--app-quote-down) 8%, transparent);
   }
 }
 
@@ -2117,8 +2231,9 @@ onUnmounted(() => {
   line-height: 1.2;
   padding: 1px 4px;
   border-radius: 2px;
-  background: rgba(220, 38, 38, 0.12);
-  color: var(--app-quote-up);
+  /* 跌破止损是告警，不是涨跌：用告警红（--td-error-*），不借用涨红的语义。 */
+  background: color-mix(in srgb, var(--td-error-color-7) 12%, transparent);
+  color: var(--td-error-color-7);
   font-weight: 600;
   white-space: nowrap;
 }
@@ -2147,7 +2262,7 @@ onUnmounted(() => {
   cursor: text;
 
   &:hover {
-    border-color: var(--td-component-stroke);
+    border-color: var(--ledger-ink-2);
   }
 
   &.is-empty {
@@ -2173,17 +2288,19 @@ onUnmounted(() => {
 }
 
 /* 「今日触发」：这一天真的跨过了一个用户自己设的条件 —— 这张表上唯一会
-   导致"被通知"的事实，给它最强的视觉重量，并让 note（为什么触发）可悬浮查看。 */
+   导致"被通知"的事实，给它最强的视觉重量，并让 note（为什么触发）可悬浮查看。
+   墨账：告警色是装饰：状态标记一律走墨阶。 */
 .wl-fired {
   display: inline-flex;
   flex-shrink: 0;
   align-items: center;
   gap: 3px;
   padding: 1px 7px;
-  border: 1px solid color-mix(in srgb, var(--td-warning-color) 55%, transparent);
+  border: 0;
   border-radius: var(--app-radius-pill);
-  background: color-mix(in srgb, var(--td-warning-color) 14%, transparent);
-  color: var(--td-warning-color);
+  background: var(--ledger-ink-3);
+  color: var(--td-text-color-primary);
+  font-weight: 600;
   font-size: var(--app-text-xs);
   line-height: 17px;
   white-space: nowrap;
@@ -2231,16 +2348,17 @@ onUnmounted(() => {
   align-items: center;
   gap: 6px;
   padding: 3px 4px 3px 9px;
-  border: 1px solid var(--td-component-stroke);
+  border: 1px solid transparent;
   border-radius: var(--app-radius-pill);
-  background: var(--td-bg-color-secondarycontainer);
+  background: var(--ledger-ink-1);
   color: var(--td-text-color-primary);
   font-size: var(--app-text-sm);
   line-height: 18px;
   white-space: nowrap;
 
   &__expr {
-    font-family: monospace;
+    font-family: var(--app-font-family-mono); /* taste-skill-ignore: 数字/代码用等宽是本产品既定约定（--app-font-family-mono + tabular-nums） */
+    font-variant-numeric: tabular-nums;
   }
 
   &__state {
@@ -2267,22 +2385,25 @@ onUnmounted(() => {
     }
   }
 
+  /* 墨账：已满足用浓一档的墨阶（最需要被看见的一档），不用品牌珊瑚。 */
   &--met, &--live_met {
-    border-color: color-mix(in srgb, var(--td-brand-color) 45%, transparent);
-    background: color-mix(in srgb, var(--td-brand-color) 10%, transparent);
+    background: var(--ledger-ink-3);
 
     .wl-cond-chip__state {
-      color: var(--td-brand-color);
+      color: var(--td-text-color-primary);
+      font-weight: 600;
     }
   }
 
   &--unmet, &--live_unmet {
+    background: transparent;
     border-color: var(--td-component-stroke);
-    background: var(--td-bg-color-secondarycontainer);
   }
 
   &--unknown {
+    background: transparent;
     border-style: dashed;
+    border-color: var(--td-component-stroke);
     color: var(--td-text-color-secondary);
   }
 }
@@ -2327,12 +2448,12 @@ onUnmounted(() => {
   color: var(--td-text-color-secondary);
   font-size: var(--app-text-xs);
   cursor: pointer;
-  transition: all var(--app-motion-fast) ease;
+  transition: color var(--app-motion-fast) ease, background-color var(--app-motion-fast) ease, border-color var(--app-motion-fast) ease;
 
   &:hover {
-    border-color: var(--td-brand-color);
-    color: var(--td-brand-color);
-    background: color-mix(in srgb, var(--td-brand-color) 8%, transparent);
+    border-color: var(--td-text-color-secondary);
+    color: var(--td-text-color-primary);
+    background: var(--ledger-ink-1);
   }
 }
 
@@ -2349,10 +2470,9 @@ onUnmounted(() => {
   flex-wrap: wrap;
   gap: 4px;
   margin: 12px 0 8px;
-  padding: 4px;
-  border-radius: var(--app-radius-md, 8px);
-  background: var(--td-bg-color-secondarycontainer);
-  border: 1px solid var(--td-component-stroke);
+  /* 墨账：tab 条是 chrome：底色/描边/圆角由全局 .ledger-block 归零，
+     这里只补回内边距（条目之间要有呼吸）。 */
+  padding: 2px 0;
   width: fit-content;
 }
 
@@ -2362,12 +2482,12 @@ onUnmounted(() => {
   gap: 6px;
   padding: 4px 12px;
   border: 0;
-  border-radius: var(--app-radius-sm, 6px);
+  border-radius: 0;
   background: transparent;
   cursor: pointer;
   font-size: var(--app-text-sm);
   color: var(--td-text-color-secondary);
-  transition: all var(--app-motion-fast) ease;
+  transition: color var(--app-motion-fast) ease;
 
   .wl-tab__icon {
     width: 14px;
@@ -2377,19 +2497,17 @@ onUnmounted(() => {
   }
 
   &:hover {
-    background: var(--td-bg-color-container-hover);
     color: var(--td-text-color-primary);
   }
 
+  /* 选中态用墨色字重，不用品牌珊瑚：珊瑚是品牌色，不是状态色。 */
   &.is-active {
-    background: var(--td-bg-color-container);
-    color: var(--td-brand-color);
+    color: var(--td-text-color-primary);
     font-weight: 600;
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
 
     .wl-tab__icon {
       opacity: 1;
-      color: var(--td-brand-color);
+      color: var(--td-text-color-primary);
     }
   }
 
@@ -2402,20 +2520,21 @@ onUnmounted(() => {
     font-size: var(--app-text-xs);
   }
 
+  /* 计数：tab 上的数字走墨阶，不用品牌珊瑚。 */
   &__val {
     font-weight: 600;
-    font-family: var(--app-font-family-mono);
-    color: var(--td-text-color-primary);
+    font-family: var(--app-font-family-mono); /* taste-skill-ignore: 数字用等宽是本产品既定约定（--app-font-family-mono + tabular-nums） */
+    color: var(--td-text-color-secondary);
     font-variant-numeric: tabular-nums;
     font-size: var(--app-text-xs);
     padding: 1px 6px;
     border-radius: var(--app-radius-pill);
-    background: color-mix(in srgb, var(--td-text-color-secondary) 10%, transparent);
+    background: var(--ledger-ink-1);
   }
 
   &.is-active &__val {
-    background: color-mix(in srgb, var(--td-brand-color) 12%, transparent);
-    color: var(--td-brand-color);
+    background: var(--ledger-ink-2);
+    color: var(--td-text-color-primary);
   }
 
   &.is-zero &__val {
@@ -2424,34 +2543,74 @@ onUnmounted(() => {
     background: transparent;
   }
 
-  /* 今日触发：有预警时高亮 */
+  /* 今日触发：有预警时用浓一档的墨阶（不用告警色：告警色是装饰）。 */
   &--triggered.has-count {
-    color: var(--td-warning-color-6);
     .wl-metric__val {
-      background: var(--td-warning-color-1);
-      color: var(--td-warning-color-6);
+      background: var(--ledger-ink-3);
+      color: var(--td-text-color-primary);
     }
   }
 }
 
+/* 指标 tab 上的状态圆点。
+   注意：.wl-state__dot 的尺寸规则写在 .wl-state 里面（表格里的状态徽标用），
+   tab 上这几个圆点不在 .wl-state 里，所以尺寸得在这里单给一份。
+   墨账：圆点是 chrome，走灰阶（明度区分状态），不占品牌色。 */
+.wl-metric .wl-state__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--td-text-color-placeholder);
+}
+
+.wl-metric .wl-state__dot.is-holding {
+  background: var(--td-text-color-secondary);
+}
+
+.wl-metric .wl-state__dot.is-observing {
+  background: var(--td-text-color-placeholder);
+}
+
+.wl-metric .wl-state__dot.is-dropped {
+  background: var(--td-text-color-disabled);
+}
+
 /* ── 表格里的评分列 ──
    评分是"关注度"不是"涨跌"，所以不用红绿（红绿在这个页面已被涨/跌占用，
-   用在这里会让人以为"高分=今天涨得多"），改用深浅。 */
+   用在这里会让人以为"高分=今天涨得多"），改用深浅。
+   墨账：评分天然是一张"梯队表"（分档 = 浓淡），所以走墨阶；
+   最浓一档的底色与字色取随主题翻的令牌（--ledger-ink-max / --ledger-on-ink-max），
+   别写死颜色：暗色下"浓"是浅墨，压在它上面的字必须跟着翻。 */
 .wl-score-cell { display: inline-flex; align-items: baseline; gap: 5px; }
 
 .wl-score {
-  font-family: var(--app-font-family-mono);
+  font-family: var(--app-font-family-mono); /* taste-skill-ignore: 数字用等宽是本产品既定约定（--app-font-family-mono + tabular-nums） */
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   color: var(--td-text-color-primary);
+  padding: 0 5px;
+  border-radius: 2px;
 
-  &.is-high { font-size: var(--app-text-md); }
-  &.is-mid { color: var(--td-text-color-secondary); }
-  &.is-low { color: var(--td-text-color-placeholder); font-weight: 400; }
+  &.is-high {
+    font-size: var(--app-text-md);
+    background: var(--ledger-ink-max);
+    color: var(--ledger-on-ink-max);
+  }
+  &.is-mid {
+    background: var(--ledger-ink-2);
+    color: var(--td-text-color-primary);
+  }
+  &.is-low {
+    background: transparent;
+    color: var(--td-text-color-placeholder);
+    font-weight: 400;
+  }
 }
 
 .wl-rank {
   font-size: var(--app-text-2xs);
+  font-family: var(--app-font-family-mono); /* taste-skill-ignore: 数字用等宽是本产品既定约定（--app-font-family-mono + tabular-nums） */
+  font-variant-numeric: tabular-nums;
   color: var(--td-text-color-placeholder);
 }
 
@@ -2493,10 +2652,10 @@ onUnmounted(() => {
   // space-between 把数值钉到卡底，让 4 个数值共用一条基线。
   justify-content: space-between;
   gap: 4px;
-  padding: 10px 12px;
-  border: 1px solid var(--td-border-level-1-color);
-  border-radius: var(--app-radius-sm);
-  background: var(--td-bg-color-secondarycontainer);
+  // 墨账：即使在模态里，四个读数也不是四张卡：一条淡墨栏线分栏就够了。
+  padding: 10px 0 8px;
+  border-bottom: 1px solid var(--ledger-ink-2);
+  background: transparent;
 
   &__lbl {
     font-size: var(--app-text-xs);
@@ -2508,15 +2667,17 @@ onUnmounted(() => {
   &__val {
     font-size: var(--app-text-lg);
     font-weight: 600;
-    font-family: monospace;
+    font-family: var(--app-font-family-mono); /* taste-skill-ignore: 数字用等宽是本产品既定约定（--app-font-family-mono + tabular-nums） */
+    font-variant-numeric: tabular-nums;
     color: var(--td-text-color-primary);
   }
 
+  // 「今日预警」是状态标记，走墨阶（浓一档），不用告警色。
   &.is-triggered {
-    border-color: color-mix(in srgb, var(--td-warning-color) 45%, transparent);
-    background: color-mix(in srgb, var(--td-warning-color) 8%, var(--td-bg-color-container));
+    border-bottom-color: var(--ledger-ink-3);
+
     .wl-diag-metric-card__val {
-      color: var(--td-warning-color);
+      color: var(--td-text-color-primary);
     }
   }
 }
@@ -2546,10 +2707,11 @@ onUnmounted(() => {
   gap: 6px;
   padding: 2px 8px;
   border-radius: var(--app-radius-xs);
-  border: 1px solid var(--td-component-stroke);
+  border: 1px solid var(--ledger-ink-2);
   background: var(--td-bg-color-container);
   font-size: var(--app-text-xs);
-  font-family: monospace;
+  font-family: var(--app-font-family-mono); /* taste-skill-ignore: 数字用等宽是本产品既定约定（--app-font-family-mono + tabular-nums） */
+  font-variant-numeric: tabular-nums;
 
   &__name {
     color: var(--td-text-color-primary);
@@ -2559,14 +2721,16 @@ onUnmounted(() => {
     font-weight: 600;
   }
 
+  /* 墨账：描边是 chrome，走墨阶；方向由**数字**讲（下面那行涨跌幅），
+     边框再染一遍红绿只会让一排小标签吵。 */
   &.is-up {
     color: var(--app-quote-up);
-    border-color: color-mix(in srgb, var(--app-quote-up) 35%, transparent);
+    border-color: var(--ledger-ink-2);
   }
 
   &.is-down {
     color: var(--app-quote-down);
-    border-color: color-mix(in srgb, var(--app-quote-down) 35%, transparent);
+    border-color: var(--ledger-ink-2);
   }
 }
 
@@ -2576,10 +2740,11 @@ onUnmounted(() => {
 }
 
 .wl-diag-prompt-box {
-  padding: 12px;
-  border-radius: var(--app-radius-sm);
-  background: color-mix(in srgb, var(--td-brand-color) 6%, var(--td-bg-color-container));
-  border: 1px solid color-mix(in srgb, var(--td-brand-color) 25%, transparent);
+  // 墨账：发起区不是卡片：上面一条淡墨栏线把"要发起的动作"和上面的读数分开。
+  padding: 12px 0 0;
+  background: transparent;
+  border: 0;
+  border-top: 1px solid var(--ledger-ink-2);
   display: flex;
   flex-direction: column;
   gap: 12px;

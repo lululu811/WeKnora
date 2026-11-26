@@ -175,7 +175,8 @@ function fmtBb(p: number | null): string {
 
 .tec__num {
   font-family: var(--app-font-family-mono);
-  font-size: var(--app-text-2xs, 10px);
+  /* 11px 是可读下限（inspect 的 tiny-text 规则）：10px 的数字在暖纸底上读不清。 */
+  font-size: var(--app-text-xs);
   font-variant-numeric: tabular-nums;
 }
 

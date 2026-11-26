@@ -9042,6 +9042,38 @@ export default {
         down: '下跌'
       }
     },
+    ledger: {
+      title: '收盘表',
+      col: {
+        name: '指数',
+        close: '收盘',
+        change: '涨跌',
+        pct: '涨跌幅',
+        line: '60 日'
+      },
+      readTitle: '今日读数',
+      findingTitle: '今日发现',
+      detailTitle: '情绪明细',
+      sealRate: '封板率',
+      sealFormula: '封板 {up} ÷ 触板 {total}',
+      brokenNote: '炸板率 {rate}%',
+      downRatio: '与涨停之比 {up} : {down}',
+      lu5Note: '近 5 日 {series}',
+      dragonCaption: '净买入前 {n} · {date} · 全市场',
+      upCount: '上涨家数',
+      breadthNote: '平盘 {flat} · 下跌 {down}',
+      finding: {
+        limit: '涨停 {up} 家、跌停 {down} 家、炸板 {broken} 家',
+        breadth: '上涨 {up} 家，下跌 {down} 家',
+        trend: {
+          up: '近 5 日涨停家数 {from} → {to} 家，在升',
+          down: '近 5 日涨停家数 {from} → {to} 家，在退',
+          flat: '近 5 日涨停家数 {from} → {to} 家，持平'
+        }
+      },
+      sourceName: 'fuyao · 同花顺',
+      sourceLine: '数据来源：{source} · {date} 收盘'
+    },
     state: {
       open: '盘中',
       closed: '盘后',

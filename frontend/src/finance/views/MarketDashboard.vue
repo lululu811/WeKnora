@@ -28,73 +28,248 @@
 <template>
   <div class="md-page" :class="{ 'is-flashing': flashing, 'is-embedded': embedded }">
     <!--
-      折线渐变（涨跌两色）。必须放在 template 内：SFC 里 `</style>` 之后的第二个
+      折线渐变。必须放在 template 内：SFC 里 `</style>` 之后的第二个
       顶层标签会被 vue-loader 当成 custom block 解析（vite 报 import-analysis 语法错），
       所以渐变定义随模板一起走，不能另起一段顶层 svg。
-      stop-color 用 var(--app-quote-up)/var(--app-quote-down)，随浅/深色主题自动切换。
+      墨账：折线与面积一律墨色，不再按涨跌染 —— A 股日涨跌幅多在 ±1% 以内，
+      整条线染成红绿是把 0.39% 放大成一条心理冲击。方向由数字讲。
+      stop-color 用 var(--td-text-color-secondary)，随浅/深色主题自动切换。
     -->
     <svg class="md-gradients" width="0" height="0" aria-hidden="true">
       <defs>
-        <linearGradient id="mdGradUp" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stop-color="var(--app-quote-up)" stop-opacity=".16" />
-          <stop offset="1" stop-color="var(--app-quote-up)" stop-opacity="0" />
-        </linearGradient>
-        <linearGradient id="mdGradDown" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stop-color="var(--app-quote-down)" stop-opacity=".16" />
-          <stop offset="1" stop-color="var(--app-quote-down)" stop-opacity="0" />
+        <linearGradient id="mdGradInk" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="var(--td-text-color-secondary)" stop-opacity=".18" />
+          <stop offset="1" stop-color="var(--td-text-color-secondary)" stop-opacity="0" />
         </linearGradient>
       </defs>
     </svg>
-    <!-- ══════ 顶栏 ══════ -->
-    <!-- 嵌入态（个股追踪 → 大盘 tab）：顶栏归外层壳，这里不画。
-         大屏态才需要返回 / 主题 / 刷新三个按钮。 -->
-    <header v-if="!embedded" class="md-topbar md-tile" style="--d: 0ms">
-      <button type="button" class="md-icon-btn" :title="$t('marketDashboard.back')"
-        :aria-label="$t('marketDashboard.back')" @click="goBack">
-        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-          <path d="M9 2.5 4.5 7 9 11.5" stroke="currentColor" stroke-width="1.6"
-            stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
-      </button>
-      <span class="md-topbar__title">{{ $t('marketDashboard.title') }}</span>
-      <span class="md-topbar__date">{{ dateLine }}</span>
-      <span class="md-topbar__spacer" />
-      <span class="md-topbar__clock md-num">
-        {{ $t('marketDashboard.dataTime') }} {{ clock }}
-      </span>
-      <span class="md-status-chip" :class="{ 'is-open': marketState === 'open' }">
-        <span class="md-status-chip__dot" />
-        <span>{{ stateLabel }}</span>
-      </span>
-      <button type="button" class="md-icon-btn" :title="themeTitle" :aria-label="themeTitle"
-        @click="toggleTheme">
-        <svg v-if="effectiveTheme !== 'dark'" width="14" height="14" viewBox="0 0 14 14" fill="none"
-          aria-hidden="true">
-          <circle cx="7" cy="7" r="3" stroke="currentColor" stroke-width="1.4" />
-          <path
-            d="M7 1v1.6M7 11.4V13M1 7h1.6M11.4 7H13M2.8 2.8l1.1 1.1M10.1 10.1l1.1 1.1M11.2 2.8l-1.1 1.1M3.9 10.1l-1.1 1.1"
-            stroke="currentColor" stroke-width="1.3" stroke-linecap="round" />
-        </svg>
-        <svg v-else width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-          <path d="M11.8 8.6A5.2 5.2 0 0 1 5.4 2.2a5.2 5.2 0 1 0 6.4 6.4Z" stroke="currentColor"
-            stroke-width="1.4" stroke-linejoin="round" />
-        </svg>
-      </button>
-      <button type="button" class="md-icon-btn" :disabled="refreshing"
-        :title="$t('marketDashboard.refresh')" :aria-label="$t('marketDashboard.refresh')"
-        @click="refresh">
-        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"
-          :class="{ 'is-spin': refreshing }">
-          <path d="M12 7A5 5 0 1 1 7 2c1.9 0 3.5 1 4.4 2.6M12 1.4v3.2H8.8" stroke="currentColor"
-            stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
-      </button>
-    </header>
-
     <!-- 数据源降级提示：非空才出现，不占常态布局 -->
     <p v-if="unavailable.length" class="md-notice" role="status">
       {{ $t('marketDashboard.sourceUnavailable', { sources: unavailable.join('、') }) }}
     </p>
+
+    <!-- ══════ 墨账版 · 全屏 /dashboard ══════
+         风格 achromatic-ledger（墨账）：chrome 里没有颜色，图表用墨色，
+         只在某个数字变了的地方给一个小小的信号色。块与块之间只靠留白和
+         字号层级分开 —— 不画卡片、不描边、不用分隔线。
+
+         为什么和下面的嵌入态分成两套标记：/dashboard 是独立全屏路由，一屏
+         看完，构图按"读数 + 账目"重排；个股追踪的「大盘」tab 是滚动工位，
+         块多且每块自带交互。第二轮已把嵌入态也换成墨账 —— 两边共用同一套
+         体例（只密度不同），见 docs/design/dashboard-ledger-restyle.md。 -->
+    <template v-if="!embedded">
+      <header class="lg-topbar">
+        <button type="button" class="lg-icon-btn" :title="$t('marketDashboard.back')"
+          :aria-label="$t('marketDashboard.back')" @click="goBack">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+            <path d="M9 2.5 4.5 7 9 11.5" stroke="currentColor" stroke-width="1.6"
+              stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </button>
+        <h1 class="lg-topbar__title">{{ $t('marketDashboard.title') }}</h1>
+        <span class="lg-topbar__date">{{ dateLine }}</span>
+        <span class="lg-topbar__spacer" />
+        <span class="lg-topbar__clock md-num">{{ $t('marketDashboard.dataTime') }} {{ clock }}</span>
+        <span class="lg-state" :class="{ 'is-open': marketState === 'open' }">
+          <span class="lg-state__dot" />
+          <span>{{ stateLabel }}</span>
+        </span>
+        <button type="button" class="lg-icon-btn" :title="themeTitle" :aria-label="themeTitle"
+          @click="toggleTheme">
+          <svg v-if="effectiveTheme !== 'dark'" width="14" height="14" viewBox="0 0 14 14" fill="none"
+            aria-hidden="true">
+            <circle cx="7" cy="7" r="3" stroke="currentColor" stroke-width="1.4" />
+            <path
+              d="M7 1v1.6M7 11.4V13M1 7h1.6M11.4 7H13M2.8 2.8l1.1 1.1M10.1 10.1l1.1 1.1M11.2 2.8l-1.1 1.1M3.9 10.1l-1.1 1.1"
+              stroke="currentColor" stroke-width="1.3" stroke-linecap="round" />
+          </svg>
+          <svg v-else width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+            <path d="M11.8 8.6A5.2 5.2 0 0 1 5.4 2.2a5.2 5.2 0 1 0 6.4 6.4Z" stroke="currentColor"
+              stroke-width="1.4" stroke-linejoin="round" />
+          </svg>
+        </button>
+        <button type="button" class="lg-primary-btn" :disabled="refreshing"
+          :title="$t('marketDashboard.refresh')" :aria-label="$t('marketDashboard.refresh')"
+          @click="refresh">
+          <svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden="true"
+            :class="{ 'is-spin': refreshing }">
+            <path d="M12 7A5 5 0 1 1 7 2c1.9 0 3.5 1 4.4 2.6M12 1.4v3.2H8.8" stroke="currentColor"
+              stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          <span>{{ $t('marketDashboard.refresh') }}</span>
+        </button>
+      </header>
+
+      <main class="lg-board">
+        <!-- ── 左栏：读数 · 发现 · 自选股 ── -->
+        <section class="lg-col lg-col--read">
+          <div class="lg-read">
+            <h2 class="lg-read__title">{{ $t('marketDashboard.ledger.readTitle') }}</h2>
+            <dl class="lg-read__list">
+              <div v-for="r in readRows" :key="r.key" class="lg-read__row">
+                <dt>{{ r.label }}</dt>
+                <dd class="md-num" :class="r.cls">{{ r.value }}</dd>
+              </div>
+            </dl>
+          </div>
+
+          <div class="lg-block">
+            <h2 class="lg-block__title">{{ $t('marketDashboard.ledger.findingTitle') }}</h2>
+            <p class="lg-finding">{{ findingMain }}</p>
+            <p v-for="(line, i) in findingSubs" :key="i" class="lg-finding__sub">{{ line }}</p>
+          </div>
+
+          <div class="lg-block">
+            <h2 class="lg-block__title">
+              {{ $t('marketDashboard.watchlist.title') }}
+              <span v-if="watchlistHasRows" class="lg-block__note md-num">
+                {{ $t('marketDashboard.watchlist.count', { n: watchRows.length }) }}
+              </span>
+            </h2>
+            <router-link v-if="watchlistHasRows" class="lg-block__link" to="/platform/watchlist">
+              {{ $t('marketDashboard.watchlist.all') }}
+            </router-link>
+
+            <div v-if="watchlistEmpty" class="lg-empty">
+              <span>{{ $t('marketDashboard.watchlist.empty') }}</span>
+              <router-link class="lg-empty__cta" to="/platform/watchlist">
+                {{ $t('marketDashboard.watchlist.emptyCta') }}
+              </router-link>
+            </div>
+            <ul v-else-if="watchlistHasRows" class="lg-rows">
+              <li v-for="w in watchRows" :key="w.thscode" class="lg-row lg-row--watch">
+                <span class="lg-row__name">
+                  <template v-if="w.name">{{ w.name }}</template>
+                  <span class="lg-row__code md-num">{{ w.thscode }}</span>
+                </span>
+                <span class="lg-row__num md-num">{{ fmtNum(w.close) }}</span>
+                <span class="lg-signal" :class="trendClass(w.change_pct)">
+                  <i class="lg-signal__dot" />
+                  <span class="md-num">{{ fmtPctSigned(w.change_pct) }}</span>
+                </span>
+                <span class="lg-row__tag">{{ watchStateLabel(w.state) }}</span>
+              </li>
+            </ul>
+          </div>
+
+          <p class="lg-source">{{ sourceLine }}</p>
+        </section>
+
+        <!-- ── 右栏：收盘表 · 情绪明细 · 龙虎榜 / 权重 ETF ── -->
+        <section class="lg-col lg-col--book">
+          <div class="lg-block">
+            <h2 class="lg-block__title">{{ $t('marketDashboard.ledger.title') }}</h2>
+            <table class="lg-ledger">
+              <colgroup>
+                <col />
+                <col style="width: 96px" />
+                <col style="width: 86px" />
+                <col style="width: 84px" />
+                <col style="width: 128px" />
+              </colgroup>
+              <thead>
+                <tr>
+                  <th>{{ $t('marketDashboard.ledger.col.name') }}</th>
+                  <th class="num">{{ $t('marketDashboard.ledger.col.close') }}</th>
+                  <th class="num">{{ $t('marketDashboard.ledger.col.change') }}</th>
+                  <th class="num">{{ $t('marketDashboard.ledger.col.pct') }}</th>
+                  <th class="line">{{ $t('marketDashboard.ledger.col.line') }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="r in ledgerRows" :key="r.thscode" class="lg-ledger__row">
+                  <td class="lg-ledger__name">{{ r.name }}</td>
+                  <td class="num md-num">{{ r.lastText }}</td>
+                  <td class="num md-num">{{ r.changeText }}</td>
+                  <td class="num">
+                    <span class="lg-signal" :class="r.trend">
+                      <i class="lg-signal__dot" />
+                      <span class="md-num">{{ r.pctText }}</span>
+                    </span>
+                  </td>
+                  <td class="line">
+                    <svg v-if="r.line" class="lg-spark" viewBox="0 0 100 20" preserveAspectRatio="none"
+                      aria-hidden="true" focusable="false">
+                      <path :d="r.line" fill="none" stroke="currentColor" stroke-width="1.4"
+                        stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke" />
+                    </svg>
+                    <span v-else class="lg-dash">—</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="lg-block">
+            <h2 class="lg-block__title">{{ $t('marketDashboard.ledger.detailTitle') }}</h2>
+            <ul class="lg-acct">
+              <li v-for="r in acctRows" :key="r.key" class="lg-acct__row" :class="{ 'is-signal': r.signal }">
+                <span class="lg-acct__k">
+                  <i v-if="r.signal" class="lg-acct__sig" />
+                  {{ r.label }}
+                </span>
+                <span class="lg-acct__v md-num" :class="r.cls">{{ r.value }}</span>
+                <span class="lg-acct__m">{{ r.note }}</span>
+              </li>
+            </ul>
+          </div>
+
+          <div class="lg-two">
+            <div class="lg-block">
+              <h2 class="lg-block__title">
+                {{ $t('marketDashboard.dragonTiger.title') }}
+                <span class="lg-block__note">
+                  {{ $t('marketDashboard.ledger.dragonCaption', { n: dragonTop.length, date: dragonDate }) }}
+                </span>
+              </h2>
+              <ul v-if="dragonRows.length" class="lg-rows">
+                <li v-for="(r, i) in dragonTop" :key="r.thscode" class="lg-row lg-row--rank">
+                  <span class="lg-row__rank md-num">{{ i + 1 }}</span>
+                  <span class="lg-row__name">
+                    {{ r.name }}
+                    <span class="lg-row__tag">{{ r.tag }}</span>
+                  </span>
+                  <span class="lg-row__num md-num">{{ $t('marketDashboard.dragonTiger.net') }} {{ fmtYi(r.net_value) }}</span>
+                </li>
+              </ul>
+              <p v-else-if="!loading" class="lg-empty">{{ $t('marketDashboard.dragonTiger.empty') }}</p>
+            </div>
+
+            <div class="lg-block">
+              <h2 class="lg-block__title">
+                {{ $t('marketDashboard.etf.title') }}
+                <span class="lg-block__note">{{ etfCaption }}</span>
+              </h2>
+              <ul v-if="etfRows.length" class="lg-rows">
+                <li v-for="r in etfTop" :key="r.thscode" class="lg-row lg-row--etf">
+                  <span class="lg-row__name">{{ r.name }}</span>
+                  <span class="lg-row__num md-num">{{ fmtPrice(r.price) }}</span>
+                  <span class="lg-signal" :class="trendClass(r.change_pct)">
+                    <i class="lg-signal__dot" />
+                    <span class="md-num">{{ fmtPctSigned(r.change_pct) }}</span>
+                  </span>
+                  <!-- 份额变动是"国家队在不在进出"的唯一证据，价格涨跌只是结果。
+                       少了这一列，这块就退回成一张涨跌榜。 -->
+                  <span class="lg-signal lg-signal--end" :class="trendClass(r.share_change_pct)">
+                    <i class="lg-signal__dot" />
+                    <span class="md-num">
+                      {{ r.share_change_pct != null ? fmtPctSigned(r.share_change_pct) : r.share_text }}
+                    </span>
+                  </span>
+                  <span class="lg-row__mult md-num">{{ r.multiple_text }}</span>
+                </li>
+              </ul>
+              <p v-else-if="!loading" class="lg-empty">{{ $t('marketDashboard.noData') }}</p>
+            </div>
+          </div>
+        </section>
+      </main>
+    </template>
+
+    <!-- ══════ 嵌入态（个股追踪 → 大盘 tab）══════
+         沿用方向 01「午后的工作室」的卡片版：它是可滚动的工位屏，块多且
+         每块自带交互，与 /dashboard 的墨账版是两种不同的用法。 -->
+    <template v-else>
 
     <!-- ══════ 指数快照条 ══════ -->
     <div class="md-ticker md-tile" style="--d: 60ms">
@@ -117,9 +292,7 @@
           <div class="md-index-panel__row">
             <span class="md-index-panel__name">{{ idx.name }}</span>
             <span class="md-index-panel__code md-num">{{ idx.thscode }}</span>
-            <span class="md-index-panel__last md-num" :class="trendClass(idx.change_pct)">
-              {{ fmtNum(idx.last) }}
-            </span>
+            <span class="md-index-panel__last md-num">{{ fmtNum(idx.last) }}</span>
             <span class="md-pill md-num" :class="trendClass(idx.change_pct)">
               {{ fmtPct(idx.change_pct) }}
             </span>
@@ -130,10 +303,10 @@
             <p v-if="!idx.line" class="md-tile-empty">{{ idx.emptyText }}</p>
             <svg v-else viewBox="0 0 260 64" preserveAspectRatio="none" role="img"
               :aria-label="`${idx.name} 60日走势`">
-              <path :d="idx.area" :fill="idx.areaFill" />
+              <path :d="idx.area" fill="url(#mdGradInk)" />
               <line v-if="idx.prevY != null" x1="3" x2="257" :y1="idx.prevY" :y2="idx.prevY"
                 class="md-chart-prev" vector-effect="non-scaling-stroke" />
-              <path :d="idx.line" fill="none" :class="idx.lineClass" stroke-width="1.6"
+              <path :d="idx.line" fill="none" class="md-chart-line" stroke-width="1.6"
                 stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke" />
             </svg>
           </div>
@@ -211,12 +384,14 @@
             <i :style="{ width: `${breadthW.down}%` }" class="md-breadth__down" />
           </div>
           <div class="md-breadth__legend">
+            <!-- 图例：方向由**点**讲，文字（含数字）一律墨色。
+                 竞价条那处图例也是同一套写法 —— 同屏两种写法会让读者以为两套数据。 -->
             <span><i class="md-dot md-breadth__up" />{{ $t('marketDashboard.sentiment.breadth.up') }}
-              <b class="md-num md-up">{{ fmtInt(sentiment.breadth.up) }}</b></span>
+              <b class="md-num">{{ fmtInt(sentiment.breadth.up) }}</b></span>
             <span><i class="md-dot md-breadth__flat" />{{ $t('marketDashboard.sentiment.breadth.flat') }}
               <b class="md-num">{{ fmtInt(sentiment.breadth.flat) }}</b></span>
             <span><i class="md-dot md-breadth__down" />{{ $t('marketDashboard.sentiment.breadth.down') }}
-              <b class="md-num md-down">{{ fmtInt(sentiment.breadth.down) }}</b></span>
+              <b class="md-num">{{ fmtInt(sentiment.breadth.down) }}</b></span>
           </div>
         </div>
       </section>
@@ -280,7 +455,7 @@
               <template v-if="w.name">{{ w.name }}</template>
               <span class="md-wl-row__code md-num">{{ w.thscode }}</span>
             </span>
-            <span class="md-wl-row__price md-num" :class="trendClass(w.change_pct)">{{ fmtNum(w.close) }}</span>
+            <span class="md-wl-row__price md-num">{{ fmtNum(w.close) }}</span>
             <span class="md-pill md-num" :class="trendClass(w.change_pct)">{{ fmtPct(w.change_pct) }}</span>
             <span class="md-badge" :class="{ 'is-trigger': w.state === 'triggered' }">
               {{ watchStateLabel(w.state) }}
@@ -304,12 +479,12 @@
               <span class="md-lhb-row__tag">{{ r.tag }}</span>
             </span>
             <span class="md-lhb-row__amt">
-              <span class="md-lhb-row__net md-num" :class="trendClass(r.net_value)">
+              <span class="md-lhb-row__net md-num">
                 {{ $t('marketDashboard.dragonTiger.net') }} {{ fmtYi(r.net_value) }}
               </span>
               <span class="md-lhb-row__org md-num">
                 {{ $t('marketDashboard.dragonTiger.org') }}
-                <span :class="trendClass(r.org_net_value)">{{ fmtYi(r.org_net_value) }}</span>
+                <span>{{ fmtYi(r.org_net_value) }}</span>
               </span>
             </span>
           </div>
@@ -378,6 +553,7 @@
         </template>
       </section>
     </main>
+    </template>
   </div>
 </template>
 
@@ -703,8 +879,6 @@ interface IndexPanel {
   line: string
   area: string
   prevY: number | null
-  lineClass: string
-  areaFill: string
   openPos: number | null
   lastPos: number | null
   prevPos: number | null
@@ -716,7 +890,6 @@ const indexPanels = computed<IndexPanel[]>(() =>
     const closes = usableCloses(idx.series)
     const norm = normalize(closes)
     const drawable = norm.length >= 2
-    const rising = trendOf(idx.change_pct) !== 'down'
     return {
       thscode: idx.thscode,
       name: idx.name,
@@ -728,8 +901,6 @@ const indexPanels = computed<IndexPanel[]>(() =>
       line: drawable ? linePath(norm, CHART.width, CHART.height, CHART.pad) : '',
       area: drawable ? areaPath(norm, CHART.width, CHART.height, CHART.pad) : '',
       prevY: drawable ? prevCloseY(norm, CHART.height, CHART.pad) : null,
-      lineClass: rising ? 'md-chart-line md-up-stroke' : 'md-chart-line md-down-stroke',
-      areaFill: rising ? 'url(#mdGradUp)' : 'url(#mdGradDown)',
       openPos: rangePosition(idx.open, idx.low, idx.high),
       lastPos: rangePosition(idx.last, idx.low, idx.high),
       prevPos: rangePosition(idx.prev_close, idx.low, idx.high),
@@ -886,6 +1057,18 @@ function fmtYi(v: number | null): string {
   return s == null ? DASH : `${s} 亿`
 }
 
+/**
+ * 墨账版专用的带符号百分比。
+ *
+ * 仓库的 fmtPct 用 ASCII 连字符表示负号（"-2.17%"），而同一行的涨跌额用的是
+ * 真减号 U+2212（"−26.09"）。两种减号并排出现，右侧对齐的列会参差；等宽
+ * 数字里 ASCII 连字符又比数字窄一格。墨账版统一用真减号。
+ */
+function fmtPctSigned(v: number | null): string {
+  if (v == null || !Number.isFinite(v)) return DASH
+  return `${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(2)}%`
+}
+
 /** 成交放大倍数（如 1.12×）。null 给破折号，理由同 fmtCount。 */
 function fmtMultiple(v: number | null): string {
   if (v == null || !Number.isFinite(v)) return DASH
@@ -895,6 +1078,257 @@ function fmtMultiple(v: number | null): string {
 function watchStateLabel(s: WatchState): string {
   return t(`marketDashboard.watchlist.state.${s}`)
 }
+
+// ── 墨账版（全屏 /dashboard）─────────────────────────────────────────────
+//
+// 这一段只服务 v-if="!embedded" 那条分支。风格是 achromatic-ledger：
+// chrome 无色、图表用墨色、涨跌只给一个 6px 小点 + 符号。
+// **所有数字都从上面的 computed 派生**，不重新取数、不写死值 ——
+// 同一个事实只有一处来源，账目和读数栏不会各算各的。
+
+/** 收盘表墨线的几何。与 market-geometry 的 CHART 同一套归一化，只是画得小。 */
+const LEDGER_CHART = { width: 100, height: 20, pad: 2 } as const
+
+interface LedgerRow {
+  thscode: string
+  name: string
+  lastText: string
+  changeText: string
+  pctText: string
+  /** 与其余行同一套 class（md-up / md-down / md-flat），小点才认得出红绿。 */
+  trend: string
+  line: string
+}
+
+/**
+ * 收盘表的一行：5 只宽基 + 4 大指数 = 9 行。
+ *
+ * 涨跌额带真减号（−，U+2212）而不是连字符 —— 后者在等宽数字里会被读成短横。
+ * 墨线只有一个点时**不画**（linePath 返回零长度 path）：横线会被读成
+ * "这段时间没波动"，而真相是"只有一个读数"。
+ */
+const ledgerRows = computed<LedgerRow[]>(() =>
+  [...tickers.value, ...indices.value].map((m) => {
+    const norm = normalize(usableCloses(m.series))
+    const last = m.last
+    const prev = m.prev_close
+    const change = last != null && prev != null ? last - prev : null
+    const pct = m.change_pct
+    return {
+      thscode: m.thscode,
+      name: m.name,
+      lastText: fmtNum(m.last),
+      changeText:
+        change == null ? DASH : `${change >= 0 ? '+' : '−'}${Math.abs(change).toFixed(2)}`,
+      pctText: fmtPctSigned(pct),
+      trend: trendClass(pct),
+      line:
+        norm.length >= 2
+          ? linePath(norm, LEDGER_CHART.width, LEDGER_CHART.height, LEDGER_CHART.pad)
+          : '',
+    }
+  }),
+)
+
+/** 触板数：涨停 + 炸板。封板率的分母。任一缺失就整体为 null（不拿 0 顶替）。 */
+const touchCount = computed(() => {
+  const lu = sentiment.value.limit_up
+  const bk = sentiment.value.broken
+  if (lu == null || bk == null) return null
+  return lu + bk
+})
+
+/** 封板率（%）。分母是触板数，不是涨停数 —— 炸板的那部分也算触过板。 */
+const sealRatePct = computed(() => {
+  const lu = sentiment.value.limit_up
+  const total = touchCount.value
+  if (lu == null || total == null || total <= 0) return null
+  return (lu / total) * 100
+})
+
+/**
+ * 左栏读数：五个数，不带副说明。
+ *
+ * 分项说明归右栏账目。同一组数（涨停 / 跌停 / 炸板 / 封板率 / 最高连板）在
+ * 这一屏出现三次 —— 读数栏（只给数）、今日发现（串成一句话）、情绪明细
+ * （给数 + 分项 + 算式）。三处**都从同一批 computed 派生**，值不会打架；
+ * 这是"摘要 + 叙述 + 账目"三种读法，不是把一件事画三遍。
+ */
+const readRows = computed(() => [
+  // 涨停红 / 跌停绿是 **A 股语义**（不是装饰）：这两个数是情绪的两端，
+  // 颜色在这里是读数的一部分。别的数字一律墨色，方向靠旁边的小点讲。
+  {
+    key: 'limitUp',
+    label: t('marketDashboard.sentiment.limitUp'),
+    value: fmtCount(sentiment.value.limit_up),
+    cls: 'md-up',
+  },
+  {
+    key: 'limitDown',
+    label: t('marketDashboard.sentiment.limitDown'),
+    value: fmtCount(sentiment.value.limit_down),
+    cls: 'md-down',
+  },
+  {
+    key: 'broken',
+    label: t('marketDashboard.sentiment.broken'),
+    value: fmtCount(sentiment.value.broken),
+    cls: '',
+  },
+  {
+    key: 'sealRate',
+    label: t('marketDashboard.ledger.sealRate'),
+    value: sealRatePct.value == null ? DASH : `${sealRatePct.value.toFixed(0)}%`,
+    cls: '',
+  },
+  {
+    key: 'maxStreak',
+    label: t('marketDashboard.sentiment.maxStreak'),
+    value:
+      sentiment.value.max_streak == null
+        ? DASH
+        : `${fmtCount(sentiment.value.max_streak)} ${t('marketDashboard.sentiment.streakUnit')}`,
+    cls: '',
+  },
+])
+
+/**
+ * 右栏情绪明细：科目 | 说明 | 金额。
+ *
+ * 说明列给的是**读数栏给不了的分项**（近 5 日序列、与涨停之比、炸板率、
+ * 封板率算式、最高空间板是谁、涨跌家数分项），金额列是那个总数。
+ * 最高空间板那一行前面挂全屏唯一一处品牌色小方块。
+ */
+const acctRows = computed(() => {
+  const s = sentiment.value
+  const lu5Series = lu5.value.map((p) => String(p.count)).join(' · ')
+  const rows: Array<{
+    key: string
+    label: string
+    note: string
+    value: string
+    signal?: boolean
+    cls?: string
+  }> = [
+    {
+      key: 'limitUp',
+      label: t('marketDashboard.sentiment.limitUp'),
+      note: lu5Series ? t('marketDashboard.ledger.lu5Note', { series: lu5Series }) : '',
+      value: fmtCount(s.limit_up),
+      cls: 'md-up',
+    },
+    {
+      key: 'limitDown',
+      label: t('marketDashboard.sentiment.limitDown'),
+      note:
+        s.limit_up != null && s.limit_down != null
+          ? t('marketDashboard.ledger.downRatio', { up: s.limit_up, down: s.limit_down })
+          : '',
+      value: fmtCount(s.limit_down),
+      cls: 'md-down',
+    },
+    {
+      key: 'broken',
+      label: t('marketDashboard.sentiment.broken'),
+      note: s.broken_rate != null ? t('marketDashboard.ledger.brokenNote', { rate: s.broken_rate }) : '',
+      value: fmtCount(s.broken),
+    },
+    {
+      key: 'sealRate',
+      label: t('marketDashboard.ledger.sealRate'),
+      note:
+        touchCount.value != null
+          ? t('marketDashboard.ledger.sealFormula', { up: s.limit_up, total: touchCount.value })
+          : '',
+      value: sealRatePct.value == null ? DASH : `${sealRatePct.value.toFixed(0)}%`,
+    },
+    {
+      key: 'topBoard',
+      label: t('marketDashboard.sentiment.maxStreak'),
+      note: s.streak_name || '',
+      value:
+        s.max_streak == null
+          ? DASH
+          : `${fmtCount(s.max_streak)} ${t('marketDashboard.sentiment.streakUnit')}`,
+      signal: true,
+    },
+    {
+      key: 'breadth',
+      label: t('marketDashboard.ledger.upCount'),
+      note:
+        s.breadth.flat != null || s.breadth.down != null
+          ? t('marketDashboard.ledger.breadthNote', {
+              flat: fmtInt(s.breadth.flat),
+              down: fmtInt(s.breadth.down),
+            })
+          : '',
+      value: fmtInt(s.breadth.up),
+    },
+  ]
+  return rows
+})
+
+/**
+ * 两个榜单在墨账版里各取前几行。
+ *
+ * 接口一次给 50 条龙虎榜、18 只 ETF（DRAGON_LIMIT = 50）。现状卡片是**靠固定
+ * 高度裁掉**多余的：1440 下露出 6 条龙虎榜、8 只 ETF，DOM 里却是 50 / 18 行。
+ * 墨账版没有卡片可裁 —— 每一行都占真高度，所以显式切到能列下的行数，并把
+ * caption 换成与实际列出内容相符的口径，免得写着「信号 18/18」却一行都没给。
+ */
+const DRAGON_TOP = 6
+const ETF_TOP = 6
+const dragonTop = computed(() => dragonRows.value.slice(0, DRAGON_TOP))
+const etfTop = computed(() => etfRows.value.slice(0, ETF_TOP))
+
+/** 龙虎榜的交易日。caption 要说清"这是哪一天的榜"，不能只说"全市场"。 */
+const dragonDate = computed(() => dragon.value?.trade_date ?? DASH)
+
+/**
+ * 今日发现：一行概况 + 两行分述，全部从数据算。
+ *
+ * 走向判定用近 5 日涨停家数的首尾比较（lu5 是升序，最早在前、今天在末）。
+ * 没有数据时整段为空，不写死任何一句 —— 宁可少一句，不说假话。
+ */
+const findingMain = computed(() => {
+  const s = sentiment.value
+  if (s.limit_up == null && s.limit_down == null && s.broken == null) return ''
+  return t('marketDashboard.ledger.finding.limit', {
+    up: fmtCount(s.limit_up),
+    down: fmtCount(s.limit_down),
+    broken: fmtCount(s.broken),
+  })
+})
+
+const findingSubs = computed(() => {
+  const s = sentiment.value
+  const out: string[] = []
+  if (s.breadth.up != null && s.breadth.down != null) {
+    out.push(
+      t('marketDashboard.ledger.finding.breadth', {
+        up: fmtInt(s.breadth.up),
+        down: fmtInt(s.breadth.down),
+      }),
+    )
+  }
+  if (lu5.value.length >= 2) {
+    const from = lu5.value[0].count
+    const to = lu5.value[lu5.value.length - 1].count
+    const mood = to > from ? 'up' : to < from ? 'down' : 'flat'
+    out.push(t(`marketDashboard.ledger.finding.trend.${mood}`, { from, to }))
+  }
+  return out
+})
+
+/** 来源行：数据出处 + 口径日期。没有快照就没有来源，不写死。 */
+const sourceLine = computed(() => {
+  const d = snapshot.value?.trade_date
+  if (!d) return ''
+  return t('marketDashboard.ledger.sourceLine', {
+    source: t('marketDashboard.ledger.sourceName'),
+    date: d,
+  })
+})
 </script>
 
 <style lang="less" scoped>
@@ -908,9 +1342,6 @@ function watchStateLabel(s: WatchState): string {
   height: 0;
   pointer-events: none;
 }
-
-
-
 
 .md-up { color: var(--app-quote-up); }
 .md-down { color: var(--app-quote-down); }
@@ -1003,7 +1434,6 @@ function watchStateLabel(s: WatchState): string {
   }
 
   &.is-open .md-status-chip__dot {
-
     background: var(--td-brand-color);
     animation: mdPulse 2s ease-out infinite;
   }
@@ -1045,9 +1475,9 @@ function watchStateLabel(s: WatchState): string {
 .md-ticker__label {
   flex: 0 0 auto;
   padding: 0 10px 0 6px;
-  font-size: var(--app-text-2xs);
+  font-size: var(--app-text-xs);
   font-weight: 600;
-  letter-spacing: 0.08em;
+  /* 不加字距：中文标签加 0.08em 会散成两截（inspect 的 micro-label 也是这么判的）。 */
   color: var(--td-text-color-disabled);
   text-transform: uppercase;
 }
@@ -1076,24 +1506,19 @@ function watchStateLabel(s: WatchState): string {
   gap: 12px;
 }
 
+/* 墨账：块与块之间只靠留白和标题层级分开 —— 不画卡片。
+   不描边、不加阴影、不用底色块、不用圆角。
+   也没有入场动画：应用屏的动效只做反馈，页面不表演进场。 */
 .md-tile {
   min-height: 0;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  background: var(--td-bg-color-container);
-  border: 1px solid var(--td-component-stroke);
-  border-radius: var(--app-radius-xl);
-  padding: 13px 16px;
-  box-shadow: var(--td-shadow-1);
-  /* 首次进入：各格从下方 12px 依次浮起（stagger 60ms） */
-  opacity: 0;
-  transform: translateY(12px);
-  animation: mdRise 0.48s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-  animation-delay: var(--d, 0ms);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
 }
-
-@keyframes mdRise { to { opacity: 1; transform: translateY(0); } }
 
 /* .md-tile 是 column flex，顶栏和快照条需要横排，显式掰回来 */
 .md-tile.md-topbar,
@@ -1115,14 +1540,17 @@ function watchStateLabel(s: WatchState): string {
   font-weight: 600;
 }
 
-.md-tile__caption { font-size: var(--app-text-2xs); color: var(--td-text-color-placeholder); }
+.md-tile__caption { font-size: var(--app-text-xs); color: var(--td-text-color-placeholder); }
 
+/* 次级链接用次级墨色，不用品牌珊瑚：墨账里珊瑚只留给那一处数据标记。 */
 .md-tile__link {
   margin-left: auto;
   font-size: var(--app-text-sm);
-  color: var(--td-brand-color-active);
+  color: var(--td-text-color-secondary);
   text-decoration: none;
 }
+
+.md-tile__link:hover { color: var(--td-text-color-primary); text-decoration: underline; }
 
 .md-tile-empty {
   margin: auto 0;
@@ -1155,7 +1583,7 @@ function watchStateLabel(s: WatchState): string {
 }
 
 .md-index-panel__code {
-  font-size: var(--app-text-2xs);
+  font-size: var(--app-text-xs);
   color: var(--td-text-color-secondary);
   min-width: 0;
   overflow: hidden;
@@ -1172,15 +1600,28 @@ function watchStateLabel(s: WatchState): string {
   line-height: 1;
 }
 
+/* 墨账：涨跌不靠胶囊底色喊，改成 6px 小点 + 墨色数字。
+   数字保持墨色 —— 方向由点讲，颜色留给真正需要被看见的场合。 */
 .md-pill {
-  font-size: var(--app-text-2xs);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--app-text-xs);
   font-weight: 600;
-  padding: 1px 7px;
-  border-radius: var(--app-radius-pill);
+  color: var(--td-text-color-primary);
 }
 
-.md-pill.md-up { background: color-mix(in srgb, var(--app-quote-up) 11%, transparent); }
-.md-pill.md-down { background: color-mix(in srgb, var(--app-quote-down) 11%, transparent); }
+.md-pill::before {
+  content: '';
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--td-text-color-disabled);
+}
+
+.md-pill.md-up::before { background: var(--app-quote-up); }
+.md-pill.md-down::before { background: var(--app-quote-down); }
 
 .md-index-panel__chart {
   flex: 1;
@@ -1191,14 +1632,15 @@ function watchStateLabel(s: WatchState): string {
 
 .md-index-panel__chart svg { width: 100%; height: 100%; display: block; }
 
-.md-chart-line { fill: none; }
+/* 墨账：折线用墨色。方向由数字讲，不给整条线染红绿。 */
+.md-chart-line { fill: none; stroke: var(--td-text-color-secondary); }
 .md-chart-prev { stroke: var(--td-text-color-disabled); stroke-width: 1; stroke-dasharray: 4 3; }
 
 /* 当日快照条：低—高轨道 + 今开刻度 + 昨收虚线 + 最新点 */
 .md-rangebar { display: flex; align-items: center; gap: 8px; }
 
 .md-rangebar__edge {
-  font-size: var(--app-text-4xs);
+  font-size: var(--app-text-xs);
   color: var(--td-text-color-placeholder);
   white-space: nowrap;
 }
@@ -1246,7 +1688,7 @@ function watchStateLabel(s: WatchState): string {
 
 .md-index-panel__legend {
   margin-top: 5px;
-  font-size: var(--app-text-2xs);
+  font-size: var(--app-text-xs);
   color: var(--td-text-color-disabled);
   letter-spacing: 0.02em;
 }
@@ -1261,7 +1703,7 @@ function watchStateLabel(s: WatchState): string {
   margin: 2px 0 10px;
 }
 
-.md-hero-metric__label { font-size: var(--app-text-2xs); color: var(--td-text-color-secondary); }
+.md-hero-metric__label { font-size: var(--app-text-xs); color: var(--td-text-color-secondary); }
 
 .md-hero-metric__value {
   font-size: 40px;
@@ -1276,18 +1718,18 @@ function watchStateLabel(s: WatchState): string {
   margin-bottom: 10px;
 }
 
-.md-metric__label { font-size: var(--app-text-2xs); color: var(--td-text-color-secondary); }
+.md-metric__label { font-size: var(--app-text-xs); color: var(--td-text-color-secondary); }
 .md-metric__value { font-size: var(--app-text-xl); font-weight: 700; line-height: 1.3; }
 
 .md-metric__unit {
-  font-size: var(--app-text-2xs);
+  font-size: var(--app-text-xs);
   font-weight: 400;
   color: var(--td-text-color-placeholder);
   margin-left: 3px;
 }
 
 .md-metric__note {
-  font-size: var(--app-text-4xs);
+  font-size: var(--app-text-xs);
   color: var(--td-text-color-disabled);
   white-space: nowrap;
   overflow: hidden;
@@ -1303,7 +1745,7 @@ function watchStateLabel(s: WatchState): string {
 }
 
 .md-lu5__label {
-  font-size: var(--app-text-2xs);
+  font-size: var(--app-text-xs);
   color: var(--td-text-color-placeholder);
   margin-bottom: 6px;
 }
@@ -1325,22 +1767,23 @@ function watchStateLabel(s: WatchState): string {
   border-bottom: 1px solid var(--td-component-stroke);
 }
 
+/* 墨账：浓淡表用墨阶，不与涨跌红绿抢颜色。今天那根用最浓的一档。 */
 .md-lu5__bar {
   flex: 1;
   min-height: 2px;
   border-radius: var(--app-radius-xs) var(--app-radius-xs) 1px 1px;
-  background: color-mix(in srgb, var(--app-quote-up) 32%, transparent);
+  background: var(--ledger-ink-2);
   position: relative;
 }
 
-.md-lu5__bar.is-last { background: var(--app-quote-up); }
+.md-lu5__bar.is-last { background: var(--ledger-ink-4); }
 
 .md-lu5__bar b {
   position: absolute;
   top: -16px;
   left: 50%;
   transform: translateX(-50%);
-  font-size: var(--app-text-2xs);
+  font-size: var(--app-text-xs);
   font-weight: 400;
   color: var(--td-text-color-placeholder);
 }
@@ -1365,7 +1808,7 @@ function watchStateLabel(s: WatchState): string {
   margin-top: 6px;
   /* 10.5px —— 评审 round 2 指出 9px 低于可读底线，这里取 theme 里的 --app-text-2xs(10px)
      之上一点点：字体本身 10px，行高 1.4 视觉上约合 10.5px 的可读高度 */
-  font-size: var(--app-text-2xs);
+  font-size: var(--app-text-xs);
   color: var(--td-text-color-placeholder);
 }
 
@@ -1422,7 +1865,7 @@ function watchStateLabel(s: WatchState): string {
 }
 
 .md-wl-row__code {
-  font-size: var(--app-text-4xs);
+  font-size: var(--app-text-xs);
   color: var(--td-text-color-secondary);
   display: block;
 }
@@ -1431,7 +1874,7 @@ function watchStateLabel(s: WatchState): string {
 .md-wl-row .md-pill { justify-self: end; }
 
 .md-badge {
-  font-size: var(--app-text-2xs);
+  font-size: var(--app-text-xs);
   padding: 1px 7px;
   border-radius: var(--app-radius-pill);
   border: 1px solid var(--td-component-border);
@@ -1439,10 +1882,13 @@ function watchStateLabel(s: WatchState): string {
   white-space: nowrap;
 }
 
+/* 「已触发」是状态，不是涨跌 —— 用墨阶底 + 墨色字，不占品牌珊瑚
+   （全屏版的同一状态是灰字，两视图口径一致；品牌珊瑚全产品只留一处）。 */
 .md-badge.is-trigger {
-  color: var(--td-brand-color-active);
-  border-color: color-mix(in srgb, var(--td-brand-color) 36%, var(--td-component-border));
-  background: color-mix(in srgb, var(--td-brand-color) 7%, transparent);
+  color: var(--td-text-color-primary);
+  border-color: var(--ledger-ink-2);
+  background: var(--ledger-ink-2);
+  font-weight: 600;
 }
 
 .md-wl-empty {
@@ -1493,12 +1939,13 @@ function watchStateLabel(s: WatchState): string {
   flex: 0 0 16px;
 }
 
-.md-lhb-row__rank.is-first { color: var(--td-brand-color); }
+/* 榜首用字重强调，不用珊瑚 —— 同上，品牌色只留那一处。 */
+.md-lhb-row__rank.is-first { color: var(--td-text-color-primary); font-weight: 600; }
 .md-lhb-row__name { font-size: var(--app-text-md); font-weight: 500; min-width: 0; }
 
 .md-lhb-row__tag {
   display: block;
-  font-size: var(--app-text-4xs);
+  font-size: var(--app-text-xs);
   color: var(--td-text-color-placeholder);
   white-space: nowrap;
   overflow: hidden;
@@ -1513,7 +1960,7 @@ function watchStateLabel(s: WatchState): string {
   display: block;
 }
 
-.md-lhb-row__org { font-size: var(--app-text-4xs); color: var(--td-text-color-placeholder); }
+.md-lhb-row__org { font-size: var(--app-text-xs); color: var(--td-text-color-placeholder); }
 
 /* ── ETF · 大资金动向 ── */
 .md-etf { grid-column: span 3; }
@@ -1534,7 +1981,7 @@ function watchStateLabel(s: WatchState): string {
 .md-etf-row__name { font-size: var(--app-text-sm); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .md-etf-row__code {
-  font-size: var(--app-text-4xs);
+  font-size: var(--app-text-xs);
   color: var(--td-text-color-secondary);
   display: block;
 }
@@ -1542,16 +1989,16 @@ function watchStateLabel(s: WatchState): string {
 .md-etf-row__price { font-size: var(--app-text-sm); text-align: right; }
 
 /* 份额列：季频口径。红 = 净流入，沿用本卡 --app-quote-up / --app-quote-down，不另造涨跌色。 */
-.md-etf-row__share { font-size: var(--app-text-2xs); text-align: right; }
+.md-etf-row__share { font-size: var(--app-text-xs); text-align: right; }
 
 /* 回退态（etf-flow 未同步）：写「未同步」而不是「—」，两者的意思不同 */
 .md-etf-row__share--off {
   color: var(--td-text-color-placeholder);
-  font-size: var(--app-text-4xs);
+  font-size: var(--app-text-xs);
 }
 
 .md-etf-row__mult {
-  font-size: var(--app-text-2xs);
+  font-size: var(--app-text-xs);
   color: var(--td-text-color-secondary);
   text-align: right;
 }
@@ -1563,7 +2010,7 @@ function watchStateLabel(s: WatchState): string {
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  font-size: var(--app-text-4xs);
+  font-size: var(--app-text-xs);
   color: var(--td-brand-color);
   white-space: nowrap;
 }
@@ -1641,7 +2088,9 @@ function watchStateLabel(s: WatchState): string {
   height: auto;
   min-height: 0;
   overflow: visible;
-  padding: 0;
+  /* 墨账：块根归零（没有卡片外壳了），内缩就由页面统一给。
+     外层壳不给内缩，不给这里的话整块内容会贴到屏幕边缘（edge-text）。 */
+  padding: 4px var(--ledger-inset) 20px;
   gap: 12px;
   background: transparent;
 }
@@ -1651,7 +2100,8 @@ function watchStateLabel(s: WatchState): string {
 .md-page.is-embedded .md-board {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  /* 墨账：块之间没有边框和底色了，靠留白分组 —— 12px 不够，读起来会糊成一片。 */
+  gap: 20px;
   flex: 0 0 auto;
 }
 
@@ -1665,13 +2115,13 @@ function watchStateLabel(s: WatchState): string {
 .md-full {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 20px;
 }
 
 .md-full__pair {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 12px;
+  gap: 20px;
   align-items: start;
 }
 
@@ -1716,7 +2166,18 @@ function watchStateLabel(s: WatchState): string {
   gap: 12px;
 }
 
-.md-page.is-embedded .md-tile { padding: 12px 14px; }
+/* 墨账：块根归零，与 6 个子组件的根类一致 —— 所有块的标题才会对齐在同一条左边缘。 */
+.md-page.is-embedded .md-tile { padding: 0; }
+
+/* 唯一保留纸面的一块：市场情绪（涨停红 / 跌停绿这两个数）。
+   理由有二：
+   1) 红绿压在暖纸底上是 4.4:1，差一点点过不了 AA；压在白纸上回到 4.6:1。
+   2) 全屏版的「今日读数」也是一块纸 —— 两个视图的读数块长得一样才叫同一套体例。 */
+.md-page.is-embedded .md-sentiment {
+  background: var(--td-bg-color-container);
+  border-radius: var(--app-radius-xl);
+  padding: 14px 20px 16px;
+}
 .md-page.is-embedded .md-tile__head { margin-bottom: 8px; }
 .md-page.is-embedded .md-wl-row { padding: 6px 2px; }
 .md-page.is-embedded .md-etf-row { padding: 7px 2px; }
@@ -1755,11 +2216,430 @@ function watchStateLabel(s: WatchState): string {
   color: var(--td-text-color-primary);
 }
 
+/* 次级链接用次级墨色：珊瑚在暖纸底上只有 3.2:1，而且墨账里品牌色只留给那一处数据标记。 */
 .md-etf-summary__cta {
   flex: 0 0 auto;
   font-size: var(--app-text-sm);
-  color: var(--td-brand-color);
+  color: var(--td-text-color-secondary);
   text-decoration: none;
-  border-bottom: 1px solid color-mix(in srgb, var(--td-brand-color) 40%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--td-text-color-secondary) 40%, transparent);
+}
+
+.md-etf-summary__cta:hover { color: var(--td-text-color-primary); }
+
+/* ══════════════════════════════════════════════════════════════════════
+   墨账版 · 全屏 /dashboard
+   风格 achromatic-ledger：外壳无色、图表用墨色、只给变化处一个小信号色。
+   块与块之间只靠留白和字号层级分开 —— 不画卡片、不描边、不加分隔线。
+   这一段只作用于 lg-* 类名，与上面的卡片版互不干扰。
+   ══════════════════════════════════════════════════════════════════════ */
+
+.lg-topbar {
+  flex: 0 0 40px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 2px;
+}
+
+.lg-topbar__title {
+  margin: 0;
+  font-family: var(--app-font-display);
+  font-size: var(--app-text-3xl);
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.lg-topbar__date { font-size: var(--app-text-sm); color: var(--td-text-color-secondary); }
+.lg-topbar__spacer { flex: 1; }
+.lg-topbar__clock { font-size: var(--app-text-sm); color: var(--td-text-color-placeholder); }
+
+.lg-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--app-text-sm);
+  color: var(--td-text-color-secondary);
+}
+
+/* 状态点用中性灰：这一屏唯一的品牌色留给「最高空间板」那一个方块。 */
+.lg-state__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--td-text-color-placeholder);
+}
+
+.lg-icon-btn {
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--app-radius-md);
+  background: transparent;
+  color: var(--td-text-color-secondary);
+  cursor: pointer;
+  transition: background-color var(--app-motion-base) ease, color var(--app-motion-base) ease,
+    transform 140ms cubic-bezier(0.16, 1, 0.3, 1);
+
+  &:hover {
+    background: color-mix(in srgb, var(--td-text-color-primary) 7%, transparent);
+    color: var(--td-text-color-primary);
+  }
+
+  &:active { transform: scale(0.94); }
+  &:disabled { opacity: 0.4; cursor: default; }
+}
+
+/* 唯一的主操作：实心墨色（近黑），不是珊瑚 —— 墨账版的强调色只出现一处。 */
+.lg-primary-btn {
+  height: 30px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  border-radius: var(--app-radius-md);
+  background: var(--td-text-color-primary);
+  color: var(--td-bg-color-container);
+  font-size: var(--app-text-sm);
+  cursor: pointer;
+  transition: opacity var(--app-motion-base) ease, transform 140ms cubic-bezier(0.16, 1, 0.3, 1);
+
+  &:hover { opacity: 0.86; }
+  &:active { transform: scale(0.97); }
+  &:disabled { opacity: 0.4; cursor: default; }
+}
+
+.lg-board {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(300px, 31%) minmax(0, 1fr);
+  gap: 34px;
+}
+
+.lg-col {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  overflow: hidden;
+}
+
+.lg-block {
+  /* flex: none —— 不许被压扁。压扁后内容会溢出到下一块上（实测三块叠在一起）。
+     min-height 也不能是 0：column flex 里 min-height:0 等于允许块比内容还矮。 */
+  flex: none;
+  display: flex;
+  flex-direction: column;
+}
+
+.lg-block__title {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 0 0 10px;
+  font-family: var(--app-font-display);
+  font-size: var(--app-text-lg);
+  font-weight: 600;
+  color: var(--td-text-color-primary);
+}
+
+.lg-block__note {
+  font-family: var(--app-font-family);
+  font-size: var(--app-text-xs);
+  font-weight: 400;
+  color: var(--td-text-color-placeholder);
+}
+
+.lg-block__link {
+  margin-left: auto;
+  font-size: var(--app-text-xs);
+  color: var(--td-text-color-secondary);
+  text-decoration: none;
+
+  &:hover { color: var(--td-text-color-primary); text-decoration: underline; }
+}
+
+/* ── 左栏：今日读数 ──
+   全屏唯一一块**有底色**的地方（纸面，比地面亮一档），用来托住那五个大数。
+   「不画卡片」说的是不画带边框 + 阴影的卡片；这里是一张纸，没有边框也没有
+   阴影，其余块都直接坐在地面上。 */
+.lg-read {
+  background: var(--td-bg-color-container);
+  border-radius: var(--app-radius-xl);
+  padding: 14px 22px 16px;
+}
+
+.lg-read__title {
+  margin: 0 0 4px;
+  font-family: var(--app-font-display);
+  font-size: var(--app-text-md);
+  font-weight: 600;
+  color: var(--td-text-color-primary);
+}
+
+.lg-read__list { margin: 0; }
+
+.lg-read__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 0;
+}
+
+.lg-read__row dt {
+  font-size: var(--app-text-md);
+  color: var(--td-text-color-secondary);
+}
+
+.lg-read__row dd {
+  margin: 0;
+  font-size: 30px;
+  font-weight: 500;
+  line-height: 1.05;
+  color: var(--td-text-color-primary);
+}
+
+/* 涨停红 / 跌停绿 —— A 股语义，不是装饰。
+   这两个数是情绪的两端，颜色在这里是读数的一部分；嵌入态的「市场情绪」块
+   也是同一套。规则写在 .md-up/.md-down 之后，用同样的特异度把颜色要回来。 */
+.lg-read__row dd.md-up { color: var(--app-quote-up); }
+.lg-read__row dd.md-down { color: var(--app-quote-down); }
+
+/* ── 今日发现 ── */
+.lg-finding {
+  margin: 0 0 8px;
+  font-family: var(--app-font-display);
+  font-size: var(--app-text-2xl);
+  line-height: 1.5;
+  color: var(--td-text-color-primary);
+}
+
+.lg-finding__sub {
+  margin: 0 0 6px;
+  font-size: var(--app-text-md);
+  line-height: 1.6;
+  color: var(--td-text-color-secondary);
+}
+
+.lg-source {
+  margin: 0;
+  font-size: var(--app-text-xs);
+  color: var(--td-text-color-placeholder);
+}
+
+/* ── 账目行：收盘表 / 情绪明细 / 榜单共用 ── */
+.lg-ledger {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.lg-ledger th {
+  padding: 0 0 6px;
+  font-size: var(--app-text-xs);
+  font-weight: 400;
+  color: var(--td-text-color-placeholder);
+  text-align: left;
+}
+
+.lg-ledger th.num,
+.lg-ledger td.num { text-align: right; }
+.lg-ledger th.line { text-align: right; }
+
+.lg-ledger td {
+  padding: 5px 0;
+  font-size: var(--app-text-md);
+  vertical-align: baseline;
+}
+
+.lg-ledger__name { color: var(--td-text-color-primary); }
+
+.lg-ledger__row:hover {
+  background: color-mix(in srgb, var(--td-text-color-primary) 4%, transparent);
+}
+
+/* 墨线：图表用墨色，不染色。 */
+.lg-spark {
+  display: block;
+  width: 100%;
+  height: 18px;
+  color: var(--td-text-color-secondary);
+}
+
+.lg-dash { color: var(--td-text-color-disabled); }
+
+/* 涨跌信号：6px 小点 + 带符号的数字，数字本身用墨色。 */
+.lg-signal {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  color: var(--td-text-color-primary);
+}
+
+.lg-signal .lg-signal__dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--td-text-color-disabled);
+}
+
+.lg-signal.md-up .lg-signal__dot { background: var(--app-quote-up); }
+.lg-signal.md-down .lg-signal__dot { background: var(--app-quote-down); }
+
+/* 右对齐变体：份额那列用它，数字贴着列的右边。 */
+.lg-signal--end { justify-content: flex-end; }
+
+/* 覆盖 .md-up / .md-down / .md-flat 的整段染色 —— 数字要用墨色。 */
+.lg-signal.md-up,
+.lg-signal.md-down,
+.lg-signal.md-flat { color: var(--td-text-color-primary); }
+
+/* ── 情绪明细：科目 | 金额 | 说明 ──
+   金额紧跟在科目右边（像账单：项目、金额、摘要），不推到最右 —— 推到最右时
+   科目与金额隔了半屏宽，那一行就断成两列，不再是一行账。 */
+.lg-acct { margin: 0; }
+
+.lg-acct__row {
+  display: grid;
+  grid-template-columns: 96px 78px minmax(0, 1fr);
+  align-items: baseline;
+  gap: 12px;
+  padding: 5px 0;
+  font-size: var(--app-text-md);
+}
+
+.lg-acct__k {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--td-text-color-primary);
+}
+
+/* 全屏唯一一处品牌色：最高空间板那行前面的小方块。 */
+.lg-acct__sig {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--td-brand-color);
+}
+
+.lg-acct__v {
+  text-align: right;
+  color: var(--td-text-color-primary);
+}
+
+/* 与读数栏同一套：涨停红 / 跌停绿。 */
+.lg-acct__v.md-up { color: var(--app-quote-up); }
+.lg-acct__v.md-down { color: var(--app-quote-down); }
+
+.lg-acct__m {
+  font-size: var(--app-text-sm);
+  color: var(--td-text-color-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── 榜单行 ── */
+.lg-rows { margin: 0; }
+
+.lg-row {
+  display: grid;
+  align-items: baseline;
+  gap: 10px;
+  padding: 5px 0;
+  font-size: var(--app-text-md);
+}
+
+.lg-row--watch { grid-template-columns: minmax(0, 1fr) 78px 68px 44px; }
+.lg-row--rank { grid-template-columns: 18px minmax(0, 1fr) 104px; }
+.lg-row--etf { grid-template-columns: minmax(0, 1fr) 52px 64px 64px 42px; }
+
+/* 倍数是次要量，灰小字右对齐；量能没放大的时候它就是噪声。 */
+.lg-row__mult {
+  text-align: right;
+  font-size: var(--app-text-xs);
+  color: var(--td-text-color-placeholder);
+}
+
+.lg-row__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--td-text-color-primary);
+}
+
+.lg-row__code {
+  margin-left: 6px;
+  font-size: var(--app-text-xs);
+  color: var(--td-text-color-placeholder);
+}
+
+.lg-row__tag {
+  margin-left: 6px;
+  font-size: var(--app-text-xs);
+  color: var(--td-text-color-placeholder);
+}
+
+.lg-row__num {
+  text-align: right;
+  color: var(--td-text-color-primary);
+}
+
+.lg-row__rank {
+  color: var(--td-text-color-placeholder);
+}
+
+.lg-two {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 34px;
+  min-height: 0;
+}
+
+.lg-empty {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: var(--app-text-md);
+  color: var(--td-text-color-placeholder);
+}
+
+.lg-empty__cta {
+  color: var(--td-text-color-secondary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* 矮视口（1366×768）收紧：与上面卡片版那套 @media(max-height:800px) 同一意图，
+   只是墨账版要收的是行距和最后一行，不是卡片内边距。收完仍是一屏无滚动。 */
+@media (max-height: 800px) {
+  .md-page { padding: 10px 16px 12px; gap: 10px; }
+  .lg-topbar { flex-basis: 36px; }
+  .lg-board { gap: 24px; }
+  .lg-col { gap: 16px; }
+  .lg-read { padding: 10px 20px 12px; }
+  .lg-read__row { padding: 6px 0; }
+  .lg-read__row dd { font-size: 26px; }
+  .lg-block__title { margin-bottom: 7px; }
+  .lg-ledger td { padding: 3px 0; }
+  .lg-acct__row { padding: 3px 0; }
+  .lg-row { padding: 3px 0; }
+  /* 自选股第 7 行在小视口隐藏 —— 与卡片版同一取舍 */
+  .lg-row--watch:nth-child(7) { display: none; }
+  .lg-row--etf:nth-child(6) { display: none; }
+  .lg-row--rank:nth-child(5) { display: none; }
+  .lg-finding { font-size: var(--app-text-xl); margin-bottom: 6px; }
+  .lg-finding__sub { margin-bottom: 4px; }
 }
 </style>

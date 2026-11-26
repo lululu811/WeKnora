@@ -14,7 +14,7 @@
   没有可核对性的助手视角会让人怀疑"它凭什么说这几个重要"。
 -->
 <template>
-  <article class="sec">
+  <article class="sec ledger-block">
     <header class="sec__head">
       <div class="sec__title-row">
         <span class="sec__title">{{ $t('marketDashboard.sectors.title') }}</span>
@@ -126,17 +126,15 @@ const caption = computed(() => {
 </script>
 
 <style scoped lang="less">
-/* 沿用大盘预览的暖米色纸张体系与涨跌色（--app-quote-up 红 / --app-quote-down 绿随主题切换）。 */
+/* 墨账：块不画卡片。块之间的距离由父级栅格的 gap 给，不是靠各自的边框。 */
 .sec {
-  background: var(--td-bg-color-container);
-  border: 1px solid var(--td-component-stroke);
-  border-radius: var(--td-radius-medium);
-  padding: 12px 14px;
+  /* 无框块：底色/边框/圆角/内边距由全局 .ledger-block 提供 */
 }
 
 
 
 
+/* 涨跌色是数据语义（--app-quote-up 红 / --app-quote-down 绿随主题切换），保留在数字上。 */
 .is-up { color: var(--app-quote-up); }
 .is-down { color: var(--app-quote-down); }
 .is-flat { color: var(--td-text-color-placeholder); }
@@ -151,28 +149,38 @@ const caption = computed(() => {
 }
 
 .sec__title-row { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
-.sec__title { font-family: var(--app-font-display); font-size: var(--app-text-md); }
+/* 标题层级：展示字 + 600 字重，跟参考稿的块标题一个口径。 */
+.sec__title {
+  font-family: var(--app-font-display);
+  font-size: var(--app-text-md);
+  font-weight: 600;
+  color: var(--td-text-color-primary);
+}
 .sec__caption { font-size: var(--app-text-xs); color: var(--td-text-color-secondary); }
 .sec__actions { display: flex; align-items: center; gap: 8px; }
 
 .sec__seg { display: flex; gap: 2px; }
 
+/* 分段器与「展开全部」都是 chrome：去掉描边与底色，用字重与墨色分主次。 */
 .sec__seg-btn,
 .sec__more {
-  border: 1px solid var(--td-component-border);
-  border-radius: var(--td-radius-small);
-  background: var(--td-bg-color-container);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   color: var(--td-text-color-secondary);
   font-size: var(--app-text-xs);
-  padding: 3px 9px;
+  padding: 2px 8px;
   cursor: pointer;
+  transition: color 0.15s ease;
 }
 
+.sec__seg-btn:hover,
+.sec__more:hover { color: var(--td-text-color-primary); }
+
 .sec__seg-btn.is-active {
-  /* 与 EtfWorkspace 的分段器保持一致：选中态用品牌色，不用近黑 */
-  background: var(--td-brand-color);
-  border-color: var(--td-brand-color);
-  color: var(--td-text-color-anti);
+  /* 选中态用墨色字重，不用品牌珊瑚 —— 珊瑚是品牌色，不是状态色。 */
+  color: var(--td-text-color-primary);
+  font-weight: 600;
 }
 
 .sec__empty {
@@ -186,7 +194,14 @@ const caption = computed(() => {
   列宽：数字列固定、名称列吃余量，整体封顶。
   数字位数可预期（-5.78% / 1.31× / 10），跟着视口拉伸只会被甩到屏幕最右端。
 */
-.sec__table { max-width: 720px; }
+/* 密集表格保留白底：与暖纸地差一档色 —— 表面用色阶分开，不用线和阴影。
+   顺带把红绿数字的对比度拉回 AA（红字压暖纸底 4.4:1，压白纸 4.6:1）。 */
+.sec__table {
+  max-width: 720px;
+  background: var(--td-bg-color-container);
+  border-radius: var(--app-radius-md);
+  padding: 4px 14px 8px;
+}
 
 .sec__tr {
   display: grid;
@@ -194,7 +209,8 @@ const caption = computed(() => {
   gap: 10px;
   align-items: baseline;
   padding: 6px 0;
-  border-bottom: 1px solid var(--td-bg-color-container-hover);
+  /* 表格的横线用淡墨阶，比容器 hover 灰更像"账本上的栏线"。 */
+  border-bottom: 1px solid var(--ledger-ink-2);
   font-size: var(--app-text-sm);
 }
 
